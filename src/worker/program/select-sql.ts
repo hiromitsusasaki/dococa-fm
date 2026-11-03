@@ -36,7 +36,7 @@ export const FAR_SQL = `WITH ${OWN},
   near AS (${NEAR}),
   neighbor AS (${NEIGHBOR})
   SELECT DISTINCT l.item_id FROM letters l
-  WHERE l.status = 'public'
+  WHERE ${OTHERS_TEXT}
     AND l.item_id NOT IN (SELECT item_id FROM own)
     AND l.item_id NOT IN (SELECT item_id FROM near)
     AND l.item_id NOT IN (SELECT item_id FROM neighbor)
@@ -51,7 +51,7 @@ export const FALLBACK_SQL = `WITH ${OWN}
 /** Own items whose letter got a reaction from someone else after the cutoff (?2). */
 export const ECHO_SQL = `SELECT DISTINCT r.item_id FROM letters r
   JOIN letters p ON p.id = r.parent_letter_id
-  WHERE p.listener_id = ?1 AND r.status = 'public' AND r.kind IN ('watashimo', 'reply')
+  WHERE p.listener_id = ?1 AND p.status = 'public' AND r.status = 'public' AND r.kind IN ('watashimo', 'reply')
     AND (r.listener_id IS NULL OR r.listener_id != ?1) AND r.created_at > ?2
   ORDER BY r.item_id`;
 

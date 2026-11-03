@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { insertEpisode } from "../../../src/worker/db/episodes";
 import { upsertHistory } from "../../../src/worker/db/history";
 import { insertItem } from "../../../src/worker/db/items";
-import { insertLetter } from "../../../src/worker/db/letters";
+import { insertLetter, setLetterStatus } from "../../../src/worker/db/letters";
 import { createListener } from "../../../src/worker/db/listeners";
 import { seededRng, selectProgram, shuffle } from "../../../src/worker/program/select";
 import type { Letter, Listener } from "../../../src/worker/types";
@@ -139,6 +139,16 @@ describe("selectProgram", () => {
     expect(differed).toBe(true);
   });
 
+  it("far never picks an item whose only public row is a watashimo", async () => {
+    const f = await buildFixture();
+    const lone = await insertItem(env.DB, itemDraft({ title: "lone" }));
+    await insertLetter(env.DB, letterDraft(lone.id, { kind: "watashimo", listenerId: f.c.id, parentLetterId: f.letters.own[0] as string }));
+    for (const seed of ["a", "b", "c", "d", "e", "f"]) {
+      const p = await selectProgram(env.DB, { ...f.a, dial: 1 }, { size: 12, seed });
+      expect(p.some((s) => s.itemId === lone.id)).toBe(false);
+    }
+  });
+
   describe("反響", () => {
     const addOwnLetterWithReaction = async (f: Fixture, episodeCreatedAt: string) => {
       const x = await insertItem(env.DB, itemDraft({ title: "echo" }));
@@ -182,6 +192,18 @@ describe("selectProgram", () => {
       expect(mid).toHaveLength(6);
       expect(mid[0]?.slot).toBe("near");
       expect(bySlot(mid, "near")).toBe(3);
+    });
+
+    it("ignores a reaction whose parent letter is no longer public", async () => {
+      const f = await buildFixture();
+      const { x, mine } = await addOwnLetterWithReaction(f, new Date(Date.now() - 60_000).toISOString());
+      await insertLetter(env.DB, letterDraft(x.id, { kind: "watashimo", listenerId: f.b.id, parentLetterId: mine.id }));
+      await setLetterStatus(env.DB, mine.id, "rejected");
+      // The fixture's own watashimo on item 0 is newer too, so only item 0 may lead.
+      for (const seed of ["s", "t", "u", "v", "w", "x", "y", "z"]) {
+        const p = await selectProgram(env.DB, { ...f.a, dial: 0.3 }, { seed });
+        expect(p[0]?.itemId).not.toBe(x.id);
+      }
     });
 
     it("ignores a reaction older than the last episode", async () => {
