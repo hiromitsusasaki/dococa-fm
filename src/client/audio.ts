@@ -6,8 +6,8 @@ const SILENT_WAV = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAE
 export type ClipPlayer = {
   /** Call synchronously inside the tap: starts the one shared element so later `play` calls are allowed. */
   unlock(): void;
-  /** Plays `url` until it ends, errors, `seconds` pass, or `signal` aborts. Always resolves. */
-  play(url: string, signal: AbortSignal, seconds?: number): Promise<void>;
+  /** Plays `url` until it ends, `seconds` pass, or `signal` aborts. Always resolves: false when the clip failed (error event, non-2xx, play refused), true otherwise. */
+  play(url: string, signal: AbortSignal, seconds?: number): Promise<boolean>;
 };
 
 /** One reusable element for every preview and TTS clip: a fresh `new Audio` per clip would lose the tap's permission. */
@@ -21,23 +21,25 @@ export function createClipPlayer(): ClipPlayer {
       a.play().catch(() => {});
     },
     play(url, signal, seconds) {
-      return new Promise((resolve) => {
+      return new Promise<boolean>((resolve) => {
         const a = element();
         let timer: ReturnType<typeof setTimeout> | undefined;
-        const finish = () => {
+        const finish = (ok = true) => {
           clearTimeout(timer);
-          signal.removeEventListener("abort", finish);
-          a.removeEventListener("ended", finish);
-          a.removeEventListener("error", finish);
+          signal.removeEventListener("abort", onEnded);
+          a.removeEventListener("ended", onEnded);
+          a.removeEventListener("error", onError);
           a.pause();
-          resolve();
+          resolve(ok);
         };
-        a.addEventListener("ended", finish);
-        a.addEventListener("error", finish);
-        signal.addEventListener("abort", finish);
-        if (seconds !== undefined) timer = setTimeout(finish, seconds * 1000);
+        const onEnded = () => finish();
+        const onError = () => finish(false);
+        a.addEventListener("ended", onEnded);
+        a.addEventListener("error", onError);
+        signal.addEventListener("abort", onEnded);
+        if (seconds !== undefined) timer = setTimeout(onEnded, seconds * 1000);
         a.src = url;
-        a.play().catch(finish);
+        a.play().catch(onError);
       });
     },
   };

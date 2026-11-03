@@ -49,6 +49,8 @@ export function mountPlayer(root: HTMLElement, episode: PlayerEpisode, opts: Pla
   let abort = new AbortController();
   let prefetch: Promise<Next> | null = null;
   let voices: SpeechSynthesisVoice[] | null = null;
+  /** Cleared after the first failed cloud clip: the rest of the episode is read by the browser voice. */
+  let ttsOk = opts.ttsUrl !== null;
 
   const lineOf = (seg: number, line: number): ScriptLine | undefined => segments[seg]?.lines[line];
   /** Index of a line across the whole episode, which is what the TTS endpoint takes. */
@@ -97,9 +99,10 @@ export function mountPlayer(root: HTMLElement, episode: PlayerEpisode, opts: Pla
       return;
     }
     bed.start();
-    if (opts.ttsUrl !== null) {
-      await clips.play(`${opts.ttsUrl}?episode=${encodeURIComponent(episode.id)}&line=${globalIndex(seg, index)}`, signal);
-      return;
+    if (ttsOk) {
+      const played = await clips.play(`${opts.ttsUrl}?episode=${encodeURIComponent(episode.id)}&line=${globalIndex(seg, index)}`, signal);
+      if (played || signal.aborted) return;
+      ttsOk = false;
     }
     voices ??= await loadVoices();
     if (!signal.aborted) await speak(line.text, pickVoice(voices, opts.voiceURI), signal);
@@ -128,13 +131,13 @@ export function mountPlayer(root: HTMLElement, episode: PlayerEpisode, opts: Pla
     if (!signal.aborted) await finish(signal);
   }
 
-  /** iOS Safari allows sound only for what a tap starts, and the first line comes after an await. So the tap itself starts the speech engine, the shared clip element and the bed. */
+  /** iOS Safari allows sound only for what a tap starts, and the first line comes after an await. So the tap itself starts the speech engine (also the fallback when a cloud clip fails), the shared clip element and the bed. */
   function unlockAudio() {
     if (unlocked) return;
     unlocked = true;
     clips.unlock();
     bed.unlock();
-    if (opts.ttsUrl === null && typeof speechSynthesis !== "undefined") speechSynthesis.speak(new SpeechSynthesisUtterance(""));
+    if (typeof speechSynthesis !== "undefined") speechSynthesis.speak(new SpeechSynthesisUtterance(""));
   }
 
   /** Cancels whatever is sounding and starts reading from (seg, line). Called from a tap, so audio may start. */

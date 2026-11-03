@@ -105,10 +105,21 @@ describe("GET /tts", () => {
 
   it("answers 502 when the API fails, and caches nothing", async () => {
     const { cookie, ep } = await setup();
-    vi.spyOn(console, "error").mockImplementation(() => {});
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     stubFetch([[GOOGLE, () => json({}, 500)]]);
     expect((await call(`/tts?episode=${ep.id}&line=0`, cookie)).status).toBe(502);
+    expect(JSON.stringify(errorSpy.mock.calls)).not.toContain("k-test");
     expect(await env.BUCKET.get(`tts/${ep.id}/0.mp3`)).toBeNull();
+  });
+
+  it("never logs the key when fetch itself throws", async () => {
+    const { cookie, ep } = await setup();
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.stubGlobal("fetch", async (url: string) => {
+      throw new TypeError(`failed to fetch ${url}`);
+    });
+    expect((await call(`/tts?episode=${ep.id}&line=0`, cookie)).status).toBe(502);
+    expect(JSON.stringify(errorSpy.mock.calls)).not.toContain("k-test");
   });
 
   it("picks the male voice by default and female when configured", async () => {

@@ -30,7 +30,9 @@ tts.get("/tts", async (c) => {
     await c.env.BUCKET.put(key, audio, { httpMetadata: { contentType: "audio/mpeg" } });
     return new Response(audio, { headers: HEADERS });
   } catch (e) {
-    console.error(`[dococa] tts failed: ${e instanceof Error ? e.message : "unknown"}`);
+    // Name and status only: a fetch TypeError can quote the request URL, which carries the key.
+    const status = e instanceof Error && /^tts \d+$/.test(e.message) ? ` ${e.message}` : "";
+    console.error(`[dococa] tts failed: ${e instanceof Error ? e.name : "unknown"}${status}`);
     return c.json({ error: "tts failed" }, 502);
   }
 });

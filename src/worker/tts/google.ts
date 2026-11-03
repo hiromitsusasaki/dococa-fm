@@ -38,7 +38,7 @@ function fromBase64(b64: string): Uint8Array {
 }
 
 async function synthesizeChunk(env: Env, text: string, voice: "male" | "female"): Promise<Uint8Array> {
-  const res = await fetch(`${ENDPOINT}?key=${env.GOOGLE_TTS_API_KEY}`, {
+  const res = await fetch(`${ENDPOINT}?${new URLSearchParams({ key: env.GOOGLE_TTS_API_KEY })}`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({

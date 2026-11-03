@@ -61,6 +61,11 @@ export async function claimCloudTts(db: D1Database, id: string): Promise<boolean
   return res.meta.changes > 0;
 }
 
+/** Gives the one cloud-voice episode back, after a failed insert. */
+export async function releaseCloudTts(db: D1Database, id: string): Promise<void> {
+  await db.prepare("UPDATE listeners SET cloud_tts_used = 0 WHERE id = ?").bind(id).run();
+}
+
 export async function getListener(db: D1Database, id: string): Promise<Listener | null> {
   const row = await db.prepare("SELECT * FROM listeners WHERE id = ?").bind(id).first<Row>();
   return row ? rowToListener(row) : null;

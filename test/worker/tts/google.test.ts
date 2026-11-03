@@ -27,6 +27,12 @@ describe("synthesize", () => {
     });
   });
 
+  it("encodes the key in the URL", async () => {
+    const { fn } = stubFetch([[URL_PREFIX, () => json({ audioContent: b64([1]) })]]);
+    await synthesize({ ...env, GOOGLE_TTS_API_KEY: "a&b=c" }, "あ", "male");
+    expect(String(fn.mock.calls[0]![0])).toBe(`${URL_PREFIX}?key=a%26b%3Dc`);
+  });
+
   it("uses Kore for female and GEMINI_TTS_MODEL when set", async () => {
     const { fn } = stubFetch([[URL_PREFIX, () => json({ audioContent: b64([9]) })]]);
     await synthesize({ ...env, GEMINI_TTS_MODEL: "gemini-x" }, "あ", "female");

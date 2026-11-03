@@ -378,7 +378,17 @@ describe("player", () => {
     audios.find((a) => a.src === "https://p/a.mp3")!.fire("ended");
     await vi.waitFor(() => expect(audios.some((a) => a.src === "/tts?episode=ep1&line=3")).toBe(true));
     expect(spoken).toEqual([]);
-    expect(unlockSpeaks).toBe(0);
+    // The engine is unlocked in the tap too, in case a cloud clip fails and the browser voice takes over.
+    expect(unlockSpeaks).toBe(1);
+  });
+
+  it("falls back to speech for a tts line whose clip fails, and stays on speech afterwards", async () => {
+    mountPlayer(root, one, opts({ ttsUrl: "/tts" }));
+    await tap("toggle");
+    await vi.waitFor(() => expect(audios.some((a) => a.src === "/tts?episode=ep1&line=0")).toBe(true));
+    audios.find((a) => a.src === "/tts?episode=ep1&line=0")!.fire("error");
+    await vi.waitFor(() => expect(spoken.slice(0, 2)).toEqual(["d1", "l1"]));
+    expect(audios.some((a) => a.src === "/tts?episode=ep1&line=1")).toBe(false);
   });
 
   it("次の作品 skips to the next segment", async () => {
