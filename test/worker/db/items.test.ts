@@ -1,7 +1,8 @@
 import { env } from "cloudflare:workers";
 import { beforeEach, describe, expect, it } from "vitest";
 import { findItemByExternalId, getItem, insertItem, searchItems } from "../../../src/worker/db/items";
-import { itemDraft, resetDb } from "./helpers";
+import { resetDb } from "../../helpers/db";
+import { itemDraft } from "./helpers";
 
 describe("items", () => {
   beforeEach(() => resetDb(env.DB));
@@ -24,6 +25,11 @@ describe("items", () => {
     await insertItem(env.DB, itemDraft({ title: "Other", externalIds: { itunes: "1" } }));
     expect((await findItemByExternalId(env.DB, "itunes", "1669547856"))?.id).toBe(a.id);
     expect(await findItemByExternalId(env.DB, "spotify", "1669547856")).toBeNull();
+  });
+
+  it("findItemByExternalId accepts hyphenated keys", async () => {
+    const a = await insertItem(env.DB, itemDraft({ externalIds: { "google-books": "abc123" } }));
+    expect((await findItemByExternalId(env.DB, "google-books", "abc123"))?.id).toBe(a.id);
   });
 
   it("findItemByExternalId rejects unsafe keys", async () => {

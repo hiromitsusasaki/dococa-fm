@@ -31,12 +31,3 @@ export const letterDraft = (
   status: "public",
   ...over,
 });
-
-/** Storage is shared by all tests in a file, so each test starts from empty tables (children first for FKs). */
-export async function resetDb(db: D1Database): Promise<void> {
-  await db.batch(
-    ["reports", "takedowns", "history", "episodes", "letters", "listeners", "items"].map((t) =>
-      db.prepare(`DELETE FROM ${t}`),
-    ),
-  );
-}

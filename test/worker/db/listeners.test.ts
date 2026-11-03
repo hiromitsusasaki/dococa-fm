@@ -6,7 +6,7 @@ import {
   getListenerByMcpToken,
   updateListener,
 } from "../../../src/worker/db/listeners";
-import { resetDb } from "./helpers";
+import { resetDb } from "../../helpers/db";
 
 describe("listeners", () => {
   beforeEach(() => resetDb(env.DB));

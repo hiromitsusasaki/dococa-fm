@@ -2,7 +2,7 @@ import { env } from "cloudflare:workers";
 import { beforeEach, describe, expect, it } from "vitest";
 import { countEpisodesToday, getEpisode, insertEpisode, jstDayStartIso, listEpisodes } from "../../../src/worker/db/episodes";
 import { createListener } from "../../../src/worker/db/listeners";
-import { resetDb } from "./helpers";
+import { resetDb } from "../../helpers/db";
 import type { Episode } from "../../../src/worker/types";
 
 const report = { verbatim: true, sources: true, topical: true, pii: true, details: [] };

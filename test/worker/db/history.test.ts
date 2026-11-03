@@ -3,7 +3,8 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { listHistory, upsertHistory } from "../../../src/worker/db/history";
 import { insertItem } from "../../../src/worker/db/items";
 import { createListener } from "../../../src/worker/db/listeners";
-import { itemDraft, resetDb } from "./helpers";
+import { resetDb } from "../../helpers/db";
+import { itemDraft } from "./helpers";
 
 describe("history", () => {
   beforeEach(() => resetDb(env.DB));

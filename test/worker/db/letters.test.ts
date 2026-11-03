@@ -11,7 +11,8 @@ import {
   setLetterStatus,
 } from "../../../src/worker/db/letters";
 import { createListener } from "../../../src/worker/db/listeners";
-import { itemDraft, letterDraft, resetDb } from "./helpers";
+import { resetDb } from "../../helpers/db";
+import { itemDraft, letterDraft } from "./helpers";
 
 const tick = () => new Promise((r) => setTimeout(r, 3));
 
