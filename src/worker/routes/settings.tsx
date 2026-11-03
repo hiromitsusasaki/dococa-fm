@@ -63,6 +63,14 @@ function SettingsPage(props: { values: FormValues; listenerId: string; mcpUrl: s
           <p class="muted">{t("settings.spotifyDevMode")}</p>
         </section>
 
+        <section class="settings-bookmarklet">
+          <h2>{t("settings.bookmarklet")}</h2>
+          <p>{t("settings.bookmarkletHelp")}</p>
+          <p>
+            <a href="/bookmarklet">{t("settings.bookmarkletLink")}</a>
+          </p>
+        </section>
+
         <section class="settings-mcp">
           <h2>{t("settings.mcp")}</h2>
           <p>{t("settings.mcpHelp")}</p>

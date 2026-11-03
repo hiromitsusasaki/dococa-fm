@@ -10,11 +10,16 @@ beforeEach(() => resetDb(env.DB));
 
 describe("GET /", () => {
   it("shows the tagline, the listen and put actions and the newest six items", async () => {
+    // The oldest item, so it falls outside the newest six.
+    const cookie = await newSession();
+    const seen = await insertItem(env.DB, itemDraft({ title: "聴いた曲", externalIds: { itunes: "999" } }));
+    await upsertHistory(env.DB, [{ listenerId: cookie.split("=")[1]!.split(".")[0]!, itemId: seen.id, source: "manual", occurredAt: null }]);
+    await new Promise((r) => setTimeout(r, 2));
     for (let i = 0; i < 7; i++) {
       await insertItem(env.DB, itemDraft({ title: `作品${i}`, externalIds: { itunes: String(i) } }));
       await new Promise((r) => setTimeout(r, 2));
     }
-    const res = await get("/", await newSession());
+    const res = await get("/", cookie);
     expect(res.status).toBe(200);
     const html = await res.text();
     expect(html).toContain("世界のどこかの、好きなものが流れてくるラジオ");

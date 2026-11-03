@@ -218,6 +218,7 @@ a.button,
 
 .letter-actions input[type="text"],
 .put input,
+.start-form input,
 .put textarea,
 .takedown input,
 .takedown textarea {
@@ -251,6 +252,44 @@ button.quiet {
   white-space: pre-wrap;
   word-break: break-all;
   color: var(--fg2);
+}
+
+.start {
+  display: grid;
+  gap: var(--sp-4);
+  max-width: 40rem;
+  margin: 0 auto;
+  padding: var(--sp-8) var(--sp-4);
+}
+
+.start-form {
+  display: grid;
+  gap: var(--sp-4);
+}
+
+.start-form fieldset {
+  display: grid;
+  gap: var(--sp-2);
+  margin: 0;
+  padding: var(--sp-3);
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--r-md);
+}
+
+.start-form input {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.start-form button {
+  justify-self: start;
+  padding: var(--sp-2) var(--sp-4);
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--r-pill);
+  background: var(--bg-card);
+  color: var(--fg1);
+  font: inherit;
+  cursor: pointer;
 }
 
 .home,

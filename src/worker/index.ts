@@ -11,6 +11,7 @@ import { letters } from "./routes/letters";
 import { mcp } from "./routes/mcp";
 import { put } from "./routes/put";
 import { settings } from "./routes/settings";
+import { start } from "./routes/start";
 import { tts } from "./routes/tts";
 
 const app = new Hono<{ Bindings: Env; Variables: Variables }>();
@@ -24,6 +25,7 @@ app.route("/", api);
 app.route("/", auth);
 app.route("/", settings);
 app.route("/", put);
+app.route("/", start);
 app.route("/", letters);
 app.route("/", items);
 app.route("/", episodes);

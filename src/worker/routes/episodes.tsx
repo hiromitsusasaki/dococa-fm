@@ -1,4 +1,4 @@
-import { Hono } from "hono";
+import { type Context, Hono } from "hono";
 import { raw } from "hono/html";
 import { isHttpUrl, ItemCard, whoOf } from "../../views/components";
 import { Layout } from "../../views/layout";
@@ -39,11 +39,15 @@ const playerStrings = (): Record<string, string> =>
 const readerOf = (l: Extract<ScriptLine, { type: "letter" }>): string =>
   l.kind === "found" ? (l.sourceAuthor ?? "") : whoOf(l);
 
-episodes.post("/episodes", async (c) => {
+const startEpisode = async (c: Context<{ Bindings: Env; Variables: Variables }>) => {
   const made = await makeEpisode(c.env, c.get("listener"));
   if (made.ok) return c.redirect(`/episodes/${made.id}`, 303);
   return c.html(<MessagePage message={t(made.reason === "limit" ? "episode.limit" : "episode.unavailable")} />, made.reason === "limit" ? 429 : 503);
-});
+};
+
+episodes.post("/episodes", startEpisode);
+/** The landing of POST /start: the redirect arrives as a GET, and must be matched before /episodes/:id. */
+episodes.get("/episodes/new", startEpisode);
 
 episodes.get("/episodes", async (c) => {
   const list = await listEpisodes(c.env.DB, c.get("listener").id, 50);

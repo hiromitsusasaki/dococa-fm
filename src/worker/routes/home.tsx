@@ -28,9 +28,15 @@ home.get("/", async (c) => {
             <a href="/start">{t("home.start")}</a>
           </p>
         )}
-        <form method="post" action="/episodes">
-          <button type="submit" class="button">{t("home.listen")}</button>
-        </form>
+        {isNew ? (
+          <p>
+            <a class="button" href="/start">{t("home.listen")}</a>
+          </p>
+        ) : (
+          <form method="post" action="/episodes">
+            <button type="submit" class="button">{t("home.listen")}</button>
+          </form>
+        )}
         <p>
           <a class="button" href="/put">{t("home.put")}</a>
         </p>
