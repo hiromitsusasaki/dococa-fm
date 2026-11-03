@@ -201,6 +201,12 @@ describe("POST /letters parent validation", () => {
     await badParent(await postForm("/letters", await newSession(), { itemId: item.id, kind: "reply", body: "わかる", parentLetterId: parent.id }));
   });
 
+  it("rejects a reaction to a parent that is no longer public", async () => {
+    const item = await seedItem();
+    const parent = await insertLetter(env.DB, letterDraft(item.id, { status: "rejected" }));
+    await badParent(await postForm("/letters", await newSession(), { itemId: item.id, kind: "reply", body: "わかる", parentLetterId: parent.id }));
+  });
+
   it("rejects a reaction to a reaction", async () => {
     const item = await seedItem();
     const parent = await insertLetter(env.DB, letterDraft(item.id));

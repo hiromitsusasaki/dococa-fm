@@ -58,8 +58,17 @@ export function renderItemCard(item: Item): string {
   return links.length > 0 ? `${head}\n\n${links.join("\n")}` : head;
 }
 
-/** The item card and its public letters; each letter carries its id in a comment so `react` can name it. */
+/** A reaction as one quoted line under its parent, so the assistant sees who answered what. */
+const renderReaction = (r: Letter): string =>
+  r.kind === "watashimo" ? `> ${t("reaction.from", { who: whoOf(r), body: r.bodyJa })}` : `${quote(r.bodyJa)}\n> — ${whoOf(r)}`;
+
+/** The item card and its public top-level letters; reactions sit under their parent, and only a top-level letter carries an id for `react`. */
 export function renderItemPage(item: Item, letters: Letter[]): string {
-  const body = letters.length === 0 ? t("mcp.nothing") : letters.map((l) => `${renderLetter(l)}\n<!-- letterId: ${l.id} -->`).join("\n\n");
+  const top = letters.filter((l) => l.parentLetterId === null);
+  const block = (l: Letter) => {
+    const reactions = letters.filter((r) => r.parentLetterId === l.id).map(renderReaction);
+    return [renderLetter(l), ...reactions, `<!-- letterId: ${l.id} -->`].join("\n\n");
+  };
+  const body = top.length === 0 ? t("mcp.nothing") : top.map(block).join("\n\n");
   return `${renderItemCard(item)}\n\n### ${t("item.letters")}\n\n${body}`;
 }

@@ -64,4 +64,15 @@ describe("renderItemPage", () => {
     expect(md).toContain("> ありがとう");
     expect(md).toContain("letterId: abc");
   });
+
+  it("lists only top-level letters and shows a reaction under its parent", () => {
+    const parent = letter({ id: "p1", bodyJa: "親のお便り" });
+    const reply = letter({ id: "r1", kind: "reply", parentLetterId: "p1", bodyJa: "わかる", radioName: "しずく", place: "" });
+    const md = renderItemPage(item, [parent, reply]);
+    expect(md.match(/letterId:/g)).toHaveLength(1);
+    expect(md).not.toContain("letterId: r1");
+    const at = (s: string) => md.indexOf(s);
+    expect(at("わかる")).toBeGreaterThan(at("親のお便り"));
+    expect(at("わかる")).toBeLessThan(at("letterId: p1"));
+  });
 });

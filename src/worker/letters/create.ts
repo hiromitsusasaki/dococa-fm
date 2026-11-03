@@ -46,10 +46,10 @@ export async function createLetter(env: Env, db: D1Database, listener: Listener,
   const draft = stored ?? (input.url ? await resolveUrl(input.url, env) : null);
   if (!draft) return fail(422, "put.notFound");
 
-  // A reaction hangs off a top-level letter of the same stored item; a plain letter has no parent.
+  // A reaction hangs off a public top-level letter of the same stored item; a plain letter has no parent.
   const parent = input.parentLetterId ? await getLetter(db, input.parentLetterId) : null;
   const isReaction = kind !== "letter";
-  const parentOk = parent !== null && stored !== null && parent.itemId === stored.id && parent.parentLetterId === null;
+  const parentOk = parent !== null && stored !== null && parent.itemId === stored.id && parent.parentLetterId === null && parent.status === "public";
   if (isReaction ? !parentOk : input.parentLetterId !== undefined) return fail(422, "letters.badParent", { draft });
   if (isWatashimo && (await hasWatashimo(db, listener.id, parent!.id))) return fail(409, "letters.watashimoDuplicate", { draft });
   // Every 私も has the same text, so only the same-parent rule above limits it.
