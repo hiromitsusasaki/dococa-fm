@@ -16,7 +16,7 @@ function rowToListener(r: Row): Listener {
   };
 }
 
-function newMcpToken(): string {
+export function newMcpToken(): string {
   const bytes = crypto.getRandomValues(new Uint8Array(24));
   return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
 }

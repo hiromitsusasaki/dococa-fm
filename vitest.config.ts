@@ -9,7 +9,7 @@ export default defineConfig(async () => {
       cloudflareTest({
         wrangler: { configPath: "./wrangler.jsonc" },
         miniflare: {
-          bindings: { TEST_MIGRATIONS: migrations },
+          bindings: { TEST_MIGRATIONS: migrations, SESSION_SECRET: "test-session-secret" },
           assets: { directory: path.join(import.meta.dirname, "public"), binding: "ASSETS" },
         },
       }),

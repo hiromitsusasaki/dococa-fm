@@ -66,3 +66,59 @@ h3 {
 a {
   color: var(--accent-active);
 }
+
+.settings {
+  max-width: 32rem;
+  margin: 0 auto;
+  padding: var(--sp-8) var(--sp-4);
+}
+
+.settings-form,
+.settings-mcp {
+  display: grid;
+  gap: var(--sp-4);
+  margin-top: var(--sp-6);
+}
+
+.settings label {
+  display: grid;
+  gap: var(--sp-1);
+  color: var(--fg2);
+}
+
+.settings input[type="text"] {
+  padding: var(--sp-2) var(--sp-3);
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--r-md);
+  background: var(--bg-card);
+  color: var(--fg1);
+  font: inherit;
+}
+
+.settings input[type="range"] {
+  accent-color: var(--accent-spark);
+}
+
+.settings small {
+  color: var(--fg3);
+  font-size: var(--fs-14);
+}
+
+.settings button {
+  justify-self: start;
+  padding: var(--sp-2) var(--sp-6);
+  border: 0;
+  border-radius: var(--r-pill);
+  background: var(--accent);
+  color: var(--fg1);
+  font: inherit;
+  cursor: pointer;
+}
+
+.settings-note {
+  color: var(--accent-active);
+}
+
+.settings-error {
+  color: var(--accent-spark);
+}

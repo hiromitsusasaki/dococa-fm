@@ -1,4 +1,17 @@
 export const ja = {
   "app.name": "Dococa FM",
   "app.tagline": "世界のどこかの、好きなものが流れてくるラジオ",
+  "listener.anonymous": "名無しのリスナー",
+  "settings.title": "設定",
+  "settings.radioName": "ラジオネーム",
+  "settings.place": "土地",
+  "settings.voice": "DJ の声",
+  "settings.dial": "遠くのダイヤル",
+  "settings.dialHelp": "右に回すほど、あなたと接点のない一通が増えます",
+  "settings.save": "保存",
+  "settings.saved": "保存しました",
+  "settings.invalid": "入力を確認してください",
+  "settings.mcp": "MCP の口",
+  "settings.mcpHelp": "Claude や ChatGPT にこの URL を登録すると、同じ番組をそこから取り出せます",
+  "settings.mcpRegenerate": "URL を作り直す",
 } as const;
