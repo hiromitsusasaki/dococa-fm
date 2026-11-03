@@ -60,7 +60,7 @@ function artistFromDescription(description: string | null | undefined): string |
 
 const normalizeName = (s: string) => s.toLowerCase().trim().replace(/\s+/g, " ");
 
-function sameArtist(a: string, b: string): boolean {
+export function sameArtist(a: string, b: string): boolean {
   const x = normalizeName(a);
   const y = normalizeName(b);
   return x !== "" && y !== "" && (x.includes(y) || y.includes(x));

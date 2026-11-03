@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { type Variables, sessionMiddleware } from "./auth/session";
 import type { Env } from "./env";
+import { auth } from "./routes/auth";
 import { api } from "./routes/api";
 import { items } from "./routes/items";
 import { letters } from "./routes/letters";
@@ -14,6 +15,7 @@ app.use("*", sessionMiddleware);
 app.get("/healthz", (c) => c.json({ ok: true }));
 
 app.route("/", api);
+app.route("/", auth);
 app.route("/", settings);
 app.route("/", put);
 app.route("/", letters);

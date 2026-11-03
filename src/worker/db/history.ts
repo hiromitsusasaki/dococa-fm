@@ -14,6 +14,11 @@ export async function upsertHistory(db: D1Database, rows: HistoryRow[]): Promise
   await db.batch(rows.map((r) => stmt.bind(r.listenerId, r.itemId, r.source, r.occurredAt)));
 }
 
+export async function isInHistory(db: D1Database, listenerId: string, itemId: string): Promise<boolean> {
+  const row = await db.prepare("SELECT 1 AS hit FROM history WHERE listener_id = ? AND item_id = ?").bind(listenerId, itemId).first();
+  return row !== null;
+}
+
 export async function listHistory(
   db: D1Database,
   listenerId: string,

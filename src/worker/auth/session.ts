@@ -3,6 +3,7 @@ import { getCookie, setCookie } from "hono/cookie";
 import { createListener, getListener } from "../db/listeners";
 import type { Env } from "../env";
 import type { Listener } from "../types";
+import { toBase64Url } from "./crypto";
 
 export type Variables = { listener: Listener };
 
@@ -10,12 +11,6 @@ export const SESSION_COOKIE = "dfm_sid";
 const ONE_YEAR_SECONDS = 31536000;
 
 const encoder = new TextEncoder();
-
-function toBase64Url(bytes: Uint8Array): string {
-  let binary = "";
-  for (const b of bytes) binary += String.fromCharCode(b);
-  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-}
 
 async function signature(id: string, secret: string): Promise<string> {
   const key = await crypto.subtle.importKey("raw", encoder.encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
