@@ -258,6 +258,9 @@ button.quiet {
 .archive {
   display: grid;
   gap: var(--sp-4);
+  max-width: 40rem;
+  margin: 0 auto;
+  padding: var(--sp-8) var(--sp-4);
 }
 
 .recent-items {

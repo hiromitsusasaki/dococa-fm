@@ -72,6 +72,8 @@ let audios: FakeAudio[];
 let voices: object[];
 let voiceListeners: Array<() => void>;
 let autoEnd: boolean;
+let unlockSpeaks: number;
+let audioCtor: number;
 let utterances: Array<{ text: string; lang: string; voice: unknown }>;
 
 class FakeAudio {
@@ -79,7 +81,7 @@ class FakeAudio {
   volume = 1;
   paused = true;
   private handlers = new Map<string, Array<() => void>>();
-  constructor(public src: string) {
+  constructor(public src = "") {
     audios.push(this);
   }
   play = vi.fn(() => {
@@ -109,6 +111,10 @@ class FakeUtterance {
 }
 
 const speak = vi.fn((u: FakeUtterance) => {
+  if (u.text === "") {
+    unlockSpeaks++;
+    return;
+  }
   spoken.push(u.text);
   utterances.push({ text: u.text, lang: u.lang, voice: u.voice });
   if (autoEnd) queueMicrotask(() => u.onend?.());
@@ -132,10 +138,12 @@ beforeEach(() => {
   voices = [{ voiceURI: "other", lang: "en-US" }, { voiceURI: "ja-1", lang: "ja-JP" }, { voiceURI: "mine", lang: "ja-JP" }];
   voiceListeners = [];
   autoEnd = true;
+  unlockSpeaks = 0;
+  audioCtor = 0;
   speak.mockClear();
   navigate = vi.fn();
   fetchMock = vi.fn(() => respond(200, { id: "next-ep" }));
-  vi.stubGlobal("Audio", FakeAudio);
+  vi.stubGlobal("Audio", class extends FakeAudio { constructor(src?: string) { super(src); audioCtor++; } });
   vi.stubGlobal("SpeechSynthesisUtterance", FakeUtterance);
   vi.stubGlobal("speechSynthesis", {
     speak,
@@ -167,7 +175,8 @@ describe("player", () => {
   it("plays nothing until the listener taps play", async () => {
     mountPlayer(root, one, opts());
     await flush();
-    expect(speak).not.toHaveBeenCalled();
+    expect(spoken).toEqual([]);
+    expect(unlockSpeaks).toBe(0);
     expect(audios).toHaveLength(0);
     expect(btn("toggle").textContent).toContain("再生");
     expect(root.textContent).toContain("曲A");
@@ -185,6 +194,27 @@ describe("player", () => {
     expect(utterances.every((u) => (u.voice as { voiceURI: string }).voiceURI === "mine")).toBe(true);
   });
 
+  it("unlocks audio synchronously in the tap: speech engine and the shared clip element, before any await", () => {
+    mountPlayer(root, one, opts());
+    btn("toggle").click();
+    expect(unlockSpeaks).toBe(1);
+    const clip = audios.find((a) => a.src.startsWith("data:audio"))!;
+    expect(clip.play).toHaveBeenCalledTimes(1);
+    expect(audios.find((a) => a.src === "/bed.mp3")!.play).toHaveBeenCalled();
+  });
+
+  it("reuses one clip element for every preview and tts clip", async () => {
+    mountPlayer(root, one, opts({ ttsUrl: "/tts" }));
+    await tap("toggle");
+    for (const src of ["/tts?episode=ep1&line=0", "/tts?episode=ep1&line=1", "https://p/a.mp3"]) {
+      await vi.waitFor(() => expect(audios.some((a) => a.src === src)).toBe(true));
+      audios.find((a) => a.src === src)!.fire("ended");
+    }
+    await vi.waitFor(() => expect(audios.some((a) => a.src === "/tts?episode=ep1&line=3")).toBe(true));
+    // one element for clips, one for the bed
+    expect(audioCtor).toBe(2);
+  });
+
   it("falls back to the first ja voice when the saved voice is gone", async () => {
     mountPlayer(root, one, opts({ voiceURI: "missing" }));
     await tap("toggle");
@@ -197,7 +227,7 @@ describe("player", () => {
     mountPlayer(root, one, opts());
     await tap("toggle");
     await vi.waitFor(() => expect(spoken).toEqual(["d1"]));
-    speak.mock.calls[0]![0].onend?.();
+    speak.mock.calls.at(-1)![0].onend?.();
     await vi.waitFor(() => expect(spoken).toEqual(["d1", "l1"]));
     expect(root.textContent).toContain("l1");
     expect(root.textContent).toContain("しずくさん（松本）");
@@ -235,7 +265,7 @@ describe("player", () => {
     mountPlayer(root, one, opts());
     await tap("toggle");
     await flush();
-    expect(speak).not.toHaveBeenCalled();
+    expect(spoken).toEqual([]);
     voices = [{ voiceURI: "mine", lang: "ja-JP" }];
     for (const fn of voiceListeners) fn();
     await vi.waitFor(() => expect(speak).toHaveBeenCalled());
@@ -248,9 +278,9 @@ describe("player", () => {
     mountPlayer(root, one, opts());
     await tap("toggle");
     await vi.advanceTimersByTimeAsync(1_900);
-    expect(speak).not.toHaveBeenCalled();
+    expect(spoken).toEqual([]);
     await vi.advanceTimersByTimeAsync(200);
-    expect(speak).toHaveBeenCalled();
+    expect(spoken.length).toBeGreaterThan(0);
     expect(utterances[0]!.voice).toBeFalsy();
   });
 
@@ -300,14 +330,15 @@ describe("player", () => {
     mountPlayer(root, one, opts({ ttsUrl: "/tts" }));
     await tap("toggle");
     await vi.waitFor(() => expect(audios.some((a) => a.src === "/tts?episode=ep1&line=0")).toBe(true));
-    expect(speak).not.toHaveBeenCalled();
+    expect(spoken).toEqual([]);
     audios.find((a) => a.src === "/tts?episode=ep1&line=0")!.fire("ended");
     await vi.waitFor(() => expect(audios.some((a) => a.src === "/tts?episode=ep1&line=1")).toBe(true));
     audios.find((a) => a.src === "/tts?episode=ep1&line=1")!.fire("ended");
     await vi.waitFor(() => expect(log).toContain("play:https://p/a.mp3"));
     audios.find((a) => a.src === "https://p/a.mp3")!.fire("ended");
     await vi.waitFor(() => expect(audios.some((a) => a.src === "/tts?episode=ep1&line=3")).toBe(true));
-    expect(speak).not.toHaveBeenCalled();
+    expect(spoken).toEqual([]);
+    expect(unlockSpeaks).toBe(0);
   });
 
   it("次の作品 skips to the next segment", async () => {
@@ -348,7 +379,7 @@ describe("player", () => {
     expect(btn("watashimo")).toBeNull();
     await tap("toggle");
     await vi.waitFor(() => expect(spoken).toEqual(["d1"]));
-    speak.mock.calls[0]![0].onend?.();
+    speak.mock.calls.at(-1)![0].onend?.();
     await vi.waitFor(() => expect(spoken).toEqual(["d1", "l1"]));
     fetchMock.mockClear();
     fetchMock.mockImplementation(() => respond(200));
@@ -365,7 +396,7 @@ describe("player", () => {
     mountPlayer(root, one, opts());
     await tap("toggle");
     await vi.waitFor(() => expect(spoken).toEqual(["d1"]));
-    speak.mock.calls[0]![0].onend?.();
+    speak.mock.calls.at(-1)![0].onend?.();
     await vi.waitFor(() => expect(spoken).toEqual(["d1", "l1"]));
     expect(root.querySelector("form.reply")).toBeNull();
     await tap("reply");

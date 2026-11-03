@@ -1,22 +1,46 @@
 /** Audio helpers: clips (previews, cloud TTS) and the bed under the DJ. */
 
-/** Plays `url` until it ends, errors, `seconds` pass, or `signal` aborts. Always resolves. */
-export function playClip(url: string, signal: AbortSignal, seconds?: number): Promise<void> {
-  return new Promise((resolve) => {
-    const audio = new Audio(url);
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const finish = () => {
-      clearTimeout(timer);
-      signal.removeEventListener("abort", finish);
-      audio.pause();
-      resolve();
-    };
-    audio.addEventListener("ended", finish);
-    audio.addEventListener("error", finish);
-    signal.addEventListener("abort", finish);
-    if (seconds !== undefined) timer = setTimeout(finish, seconds * 1000);
-    audio.play().catch(finish);
-  });
+/** A short silent clip: playing it inside a tap is what lets the element play later without one (iOS Safari). */
+const SILENT_WAV = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=";
+
+export type ClipPlayer = {
+  /** Call synchronously inside the tap: starts the one shared element so later `play` calls are allowed. */
+  unlock(): void;
+  /** Plays `url` until it ends, errors, `seconds` pass, or `signal` aborts. Always resolves. */
+  play(url: string, signal: AbortSignal, seconds?: number): Promise<void>;
+};
+
+/** One reusable element for every preview and TTS clip: a fresh `new Audio` per clip would lose the tap's permission. */
+export function createClipPlayer(): ClipPlayer {
+  let audio: HTMLAudioElement | null = null;
+  const element = () => (audio ??= new Audio());
+  return {
+    unlock() {
+      const a = element();
+      a.src = SILENT_WAV;
+      a.play().catch(() => {});
+    },
+    play(url, signal, seconds) {
+      return new Promise((resolve) => {
+        const a = element();
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        const finish = () => {
+          clearTimeout(timer);
+          signal.removeEventListener("abort", finish);
+          a.removeEventListener("ended", finish);
+          a.removeEventListener("error", finish);
+          a.pause();
+          resolve();
+        };
+        a.addEventListener("ended", finish);
+        a.addEventListener("error", finish);
+        signal.addEventListener("abort", finish);
+        if (seconds !== undefined) timer = setTimeout(finish, seconds * 1000);
+        a.src = url;
+        a.play().catch(finish);
+      });
+    },
+  };
 }
 
 const BED_URL = "/bed.mp3";
@@ -26,11 +50,7 @@ export function createBed(): { start(): void; stop(): void } {
   let bed: HTMLAudioElement | null = null;
   return {
     start() {
-      if (!bed) {
-        bed = new Audio(BED_URL);
-        bed.loop = true;
-        bed.volume = BED_VOLUME;
-      }
+      bed ??= Object.assign(new Audio(BED_URL), { loop: true, volume: BED_VOLUME });
       bed.play().catch(() => {});
     },
     stop() {

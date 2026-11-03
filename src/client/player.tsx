@@ -2,7 +2,7 @@
 import { flushSync } from "hono/jsx/dom";
 import { createRoot } from "hono/jsx/dom/client";
 import type { ScriptLine, Segment } from "../worker/types";
-import { createBed, playClip } from "./audio";
+import { createBed, createClipPlayer } from "./audio";
 import { loadVoices, pickVoice, speak } from "./speech";
 
 export type PlayerItem = { title: string; creator: string; imageUrl: string | null; outLinks: Record<string, string> };
@@ -41,6 +41,8 @@ export function mountPlayer(root: HTMLElement, episode: PlayerEpisode, opts: Pla
   const navigate = opts.navigate ?? ((url: string) => location.assign(url));
   const segments = episode.segments;
   const bed = createBed();
+  const clips = createClipPlayer();
+  let unlocked = false;
   const reactRoot = createRoot(root);
 
   let state: State = { status: "idle", seg: 0, line: 0, loading: false, message: null, replyOpen: false, sent: {} };
@@ -91,12 +93,12 @@ export function mountPlayer(root: HTMLElement, episode: PlayerEpisode, opts: Pla
   async function playLine(line: ScriptLine, seg: number, index: number, signal: AbortSignal) {
     if (line.type === "preview") {
       bed.stop();
-      await playClip(line.url, signal, line.seconds);
+      await clips.play(line.url, signal, line.seconds);
       return;
     }
     bed.start();
     if (opts.ttsUrl !== null) {
-      await playClip(`${opts.ttsUrl}?episode=${encodeURIComponent(episode.id)}&line=${globalIndex(seg, index)}`, signal);
+      await clips.play(`${opts.ttsUrl}?episode=${encodeURIComponent(episode.id)}&line=${globalIndex(seg, index)}`, signal);
       return;
     }
     voices ??= await loadVoices();
@@ -126,8 +128,17 @@ export function mountPlayer(root: HTMLElement, episode: PlayerEpisode, opts: Pla
     if (!signal.aborted) await finish(signal);
   }
 
+  /** iOS Safari allows sound only for what a tap starts, and the first line comes after an await. So the tap itself starts the speech engine, the shared clip element and the bed. */
+  function unlockAudio() {
+    if (unlocked) return;
+    unlocked = true;
+    clips.unlock();
+    if (opts.ttsUrl === null && typeof speechSynthesis !== "undefined") speechSynthesis.speak(new SpeechSynthesisUtterance(""));
+  }
+
   /** Cancels whatever is sounding and starts reading from (seg, line). Called from a tap, so audio may start. */
   function startAt(seg: number, line: number) {
+    unlockAudio();
     abort.abort();
     abort = new AbortController();
     setState({ status: "playing", seg, line, loading: false, message: null, replyOpen: false });
