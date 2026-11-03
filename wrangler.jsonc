@@ -1,0 +1,13 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "dococa-fm",
+  "main": "src/worker/index.ts",
+  "compatibility_date": "2026-11-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "d1_databases": [
+    { "binding": "DB", "database_name": "dococa", "migrations_dir": "migrations" }
+  ],
+  "r2_buckets": [{ "binding": "BUCKET", "bucket_name": "dococa-audio" }],
+  "assets": { "not_found_handling": "none", "run_worker_first": true },
+  "vars": { "PUBLIC_ORIGIN": "http://127.0.0.1:5173" }
+}

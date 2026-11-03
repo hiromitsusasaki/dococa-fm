@@ -1,0 +1,18 @@
+# Claude API のキー（台本生成）
+ANTHROPIC_API_KEY=
+# Spotify Developer Dashboard のアプリの Client ID（PKCE のため secret は不要）
+SPOTIFY_CLIENT_ID=
+# Google Cloud Text-to-Speech（Gemini-TTS）の API キー
+GOOGLE_TTS_API_KEY=
+# TMDB の API キー（映画の検索）
+TMDB_API_KEY=
+# YouTube Data API v3 のキー（見つけた声の収集）
+YOUTUBE_API_KEY=
+# 管理 API の Bearer トークン
+ADMIN_TOKEN=
+# セッション cookie の署名用ランダム文字列
+SESSION_SECRET=
+# 任意: 1 リスナー 1 日の番組生成の上限
+EPISODE_DAILY_LIMIT=10
+# 任意: 台本生成に使う Claude のモデル
+CLAUDE_MODEL=claude-sonnet-5-5
