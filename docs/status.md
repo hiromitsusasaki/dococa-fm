@@ -2,10 +2,10 @@
 
 > 新しいセッションはまずここを読む。更新はタスクの区切りごと（最新を上に）。
 
-## 2026-11-03 Task 1 完了。次は Task 2
+## 2026-11-03 Task 2 完了。次は Task 3
 
 - 設計書・計画は本人承認済み。実行方式は **Subagent-driven**（`superpowers:subagent-driven-development`）。
-- 次の一手: **Task 2（データ層）**。`docs/superpowers/plans/2026-11-03-dococa-fm.md` の Task 2 を開き、Step 1 から順に。
+- 次の一手: **Task 3（作品の解決）**。`docs/superpowers/plans/2026-11-03-dococa-fm.md` の Task 3 を開き、Step 1 から順に。
 - リポは private。main-mac と ops-mac の両方に clone 済み（`~/src/github.com/hiromitsusasaki/dococa-fm`）。
 
 ## タスクの進み
@@ -13,7 +13,7 @@
 | Task | 内容 | 状態 |
 |---|---|---|
 | 1 | Scaffold（Worker、Vite、D1、vitest、i18n） | 完了 |
-| 2 | データ層（型、マイグレーション、リポジトリ） | 未着手 |
+| 2 | データ層（型、マイグレーション、リポジトリ） | 完了 |
 | 3 | 作品の解決（URL 貼り付け、検索、プレビュー） | 未着手 |
 | 4 | リスナーのセッションと設定 | 未着手 |
 | 5 | お便り（投稿、判定、翻訳、作品ページ、リアクション） | 未着手 |
