@@ -2,10 +2,10 @@
 
 > 新しいセッションはまずここを読む。更新はタスクの区切りごと（最新を上に）。
 
-## 2026-11-04 Task 6 完了。次は Task 7
+## 2026-11-04 Task 7 完了。次は Task 8
 
 - 設計書・計画は本人承認済み。実行方式は **Subagent-driven**（`superpowers:subagent-driven-development`）。
-- 次の一手: **Task 7（番組の枠決め）**。`docs/superpowers/plans/2026-11-03-dococa-fm.md` の Task 7 を開き、Step 1 から順に。
+- 次の一手: **Task 8（台本・合成・検証）**。`docs/superpowers/plans/2026-11-03-dococa-fm.md` の Task 8 を開き、Step 1 から順に。
 - Spotify real check held: no client id（`SPOTIFY_CLIENT_ID` を入れたら Step 5 の実機確認をする）。
 - リポは private。main-mac と ops-mac の両方に clone 済み（`~/src/github.com/hiromitsusasaki/dococa-fm`）。
 
@@ -19,7 +19,7 @@
 | 4 | リスナーのセッションと設定 | 完了 |
 | 5 | お便り（投稿、判定、翻訳、作品ページ、リアクション） | 完了 |
 | 6 | Spotify 連携と履歴、問い係 | 完了（実機確認は Spotify アプリ待ち） |
-| 7 | 番組の枠決め（三枠とダイヤル） | 未着手 |
+| 7 | 番組の枠決め（三枠とダイヤル） | 完了 |
 | 8 | 台本（Claude）、合成、検証 | 未着手 |
 | 9 | 番組の API と画面、アーカイブ、先読み、上限 | 未着手 |
 | 10 | プレイヤー（hono/jsx/dom、Media Session、PWA） | 未着手 |
