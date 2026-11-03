@@ -31,6 +31,8 @@
 
 ## 決定の記録（設計書に反映済み）
 
+- 2026-11-03 **デモ用データは AI 生成の多国籍ダミーペルソナのお便りで作る**（本人）。ペルソナは国籍・土地・年代・好みが一貫した人物像を持たせ、日本語圏以外は英語で原文を投稿した体（`lang="en"`）にし、番組では聴く側の言語（v1 は日本語）に翻訳したものを DJ が読む（画面は原文併記）。本人の実お便りと「見つけた声」を置き換えるものではなく、デモの密度を出す追加。計画に Task 13 付近で「デモ用シード生成」（`scripts/seed-demo-letters.ts` → 管理 API）を追加する。設計書のアンチゴール「架空のお便り」との整理（README・画面で「デモ用」と明示）は本人に確認中。
+- 2026-11-03 Task 1 のレビューで、`run_worker_first: true` のまま `ASSETS` binding が無いと静的アセットが配信されないことが判明。計画の Task 1 の決めを `binding: "ASSETS"` + Worker 末尾のフォールスルーに修正（Claude の判断）。dev の `PUBLIC_ORIGIN` は Spotify の制約で `http://127.0.0.1:5173`。
 - 2026-11-03 クラウド TTS は Google Cloud Text-to-Speech の **Gemini-TTS**（スタイルをプロンプトで指定。既定モデル `gemini-2.5-flash-tts`、声は Charon / Kore）。API キーで通らなければサービスアカウント JWT に切り替える（Task 11 Step 5 で確認）。
 - 2026-11-03 v1 は Web + PWA（Media Session API）。**ネイティブ化は v2**（Capacitor、OS 音声、端末内モデル Kokoro Core ML、Personal Voice）。設計書 §2.1。
 - 2026-11-03 リポは private で作り、Task 16 の整備後に public へ。
