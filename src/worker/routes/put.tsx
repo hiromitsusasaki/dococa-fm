@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { ItemCard } from "../../views/components";
+import { ItemCard, whoOf } from "../../views/components";
 import { Layout } from "../../views/layout";
 import type { Variables } from "../auth/session";
 import { getItem } from "../db/items";
@@ -45,8 +45,7 @@ export function PutPage({ listener, card, itemId, url, body, error }: PutPagePro
               <small>{t("put.bodyHelp")}</small>
             </label>
             <p class="put-from">
-              {t("put.from")}: {listener.radioName || t("listener.anonymous")}
-              {listener.place && `（${listener.place}）`} <a href="/settings">{t("put.editSettings")}</a>
+              {t("put.from")}: {whoOf(listener)} <a href="/settings">{t("put.editSettings")}</a>
               <br />
               <small>{t("put.fromHelp")}</small>
             </p>

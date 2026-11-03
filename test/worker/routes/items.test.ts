@@ -83,4 +83,14 @@ describe("GET /items/:id", () => {
     await insertLetter(env.DB, letterDraft(item.id, { body: "消えた", bodyJa: "消えた", status: "rejected" }));
     expect(await (await get(`/items/${item.id}`, await newSession())).text()).not.toContain("消えた");
   });
+
+  it("renders a report form and the original for an english reply", async () => {
+    const item = await insertItem(env.DB, itemDraft());
+    const parent = await insertLetter(env.DB, letterDraft(item.id));
+    const reply = await insertLetter(env.DB, letterDraft(item.id, { kind: "reply", body: "Same here", bodyJa: "私もです", lang: "en", parentLetterId: parent.id }));
+    const html = await (await get(`/items/${item.id}`, await newSession())).text();
+    expect(html).toContain(`/letters/${reply.id}/report`);
+    expect(html).toContain("Same here");
+    expect(html).toContain("私もです");
+  });
 });

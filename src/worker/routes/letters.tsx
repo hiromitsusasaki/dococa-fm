@@ -1,7 +1,7 @@
 import { zValidator } from "@hono/zod-validator";
 import { type Context, Hono } from "hono";
 import { z } from "zod";
-import { whoOf } from "../../views/components";
+import { LetterText, whoOf } from "../../views/components";
 import { Layout } from "../../views/layout";
 import type { Variables } from "../auth/session";
 import { moderateLetter } from "../claude/moderate";
@@ -69,7 +69,8 @@ letters.post(
     if (isWatashimo && (await hasWatashimo(c.env.DB, listener.id, parent!.id))) {
       return putError(c, form, t("letters.watashimoDuplicate"), 409, draft);
     }
-    if ((await countRecentDuplicate(c.env.DB, listener.id, body, DUPLICATE_WINDOW_MINUTES)) >= 1) {
+    // Every 私も has the same text, so only the same-parent rule above limits it.
+    if (!isWatashimo && (await countRecentDuplicate(c.env.DB, listener.id, body, DUPLICATE_WINDOW_MINUTES)) >= 1) {
       return putError(c, form, t("letters.duplicate"), 429, draft);
     }
 
@@ -117,14 +118,14 @@ letters.get("/letters/:id/reactions", async (c) => {
     <Layout title={t("reaction.title")}>
       <main class="reactions-page">
         <h1>{t("reaction.title")}</h1>
-        <p class="letter-body">{letter.bodyJa}</p>
+        <LetterText letter={letter} />
         {reactions.length === 0 ? (
           <p class="muted">{t("reaction.none")}</p>
         ) : (
           <ul>
             {reactions.map((r) => (
               <li class="reaction">
-                <p>{r.bodyJa}</p>
+                <LetterText letter={r} />
                 <p class="letter-who">{whoOf(r)}</p>
               </li>
             ))}

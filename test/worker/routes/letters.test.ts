@@ -134,6 +134,19 @@ describe("POST /letters", () => {
     expect((await postForm("/letters", cookie, form)).status).toBe(409);
   });
 
+  it("watashimo on two different parents within 10 minutes is 303 both times", async () => {
+    const item = await seedItem();
+    const a = await insertLetter(env.DB, letterDraft(item.id, { body: "一通目" }));
+    const b = await insertLetter(env.DB, letterDraft(item.id, { body: "二通目" }));
+    const cookie = await newSession();
+    for (const p of [a, b]) {
+      const res = await postForm("/letters", cookie, { itemId: item.id, kind: "watashimo", parentLetterId: p.id, body: "x" });
+      expect(res.status).toBe(303);
+    }
+    const again = await postForm("/letters", cookie, { itemId: item.id, kind: "watashimo", parentLetterId: a.id, body: "x" });
+    expect(again.status).toBe(409);
+  });
+
   it("watashimo without a parent is 422", async () => {
     const item = await seedItem();
     const res = await postForm("/letters", await newSession(), { itemId: item.id, kind: "watashimo", body: "x" });
@@ -149,6 +162,16 @@ describe("GET /put", () => {
     expect(html).toContain('name="body"');
     expect(html).toContain('maxlength="200"');
     expect(html).toContain("/settings");
+  });
+
+  it("shows the sender line the same way the item page does", async () => {
+    const item = await seedItem();
+    const cookie = await newSession();
+    await postForm("/settings", cookie, { radioName: "ヒロ", place: "大船渡", voice: "", dial: "0.3" });
+    const who = t("letter.whoPlace", { who: t("letter.who", { name: "ヒロ" }), place: "大船渡" });
+    expect(await (await get(`/put?itemId=${item.id}`, cookie)).text()).toContain(who);
+    await postForm("/letters", cookie, { itemId: item.id, body: "いい曲" });
+    expect(await (await get(`/items/${item.id}`, cookie)).text()).toContain(who);
   });
 
   it("says not found for an unresolvable url", async () => {
@@ -173,6 +196,17 @@ describe("reactions, report, takedown, bookmarklet", () => {
     expect(html).toContain("高知");
     expect(html).toContain("わかる");
     expect((await get(`/letters/${parent!.id}/reactions`, await newSession())).status).toBe(404);
+  });
+
+  it("shows the original of an english reaction on the reactions page", async () => {
+    const item = await seedItem();
+    const cookie = await newSession();
+    await postForm("/letters", cookie, { itemId: item.id, body: "元の一通" });
+    const [parent] = await listLettersForItem(env.DB, item.id);
+    await insertLetter(env.DB, letterDraft(item.id, { kind: "reply", body: "Me too, truly", bodyJa: "私も、本当に", lang: "en", parentLetterId: parent!.id }));
+    const html = await (await get(`/letters/${parent!.id}/reactions`, cookie)).text();
+    expect(html).toContain("私も、本当に");
+    expect(html).toContain("Me too, truly");
   });
 
   it("report adds a row and leaves status alone", async () => {

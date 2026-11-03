@@ -56,13 +56,18 @@ export const whoOf = (l: Pick<Letter, "radioName" | "place">): string => {
   return l.place ? t("letter.whoPlace", { who, place: l.place }) : who;
 };
 
-function Reaction({ r }: { r: Letter }) {
-  return <li class="reaction">{t("reaction.from", { who: whoOf(r), body: r.bodyJa })}</li>;
+function ReportForm({ letterId }: { letterId: string }) {
+  return (
+    <form method="post" action={`/letters/${letterId}/report`}>
+      <button type="submit" class="quiet">{t("report.button")}</button>
+    </form>
+  );
 }
 
-function LetterCard({ letter, reactions, itemId }: { letter: Letter; reactions: Letter[]; itemId: string }) {
+/** The translation first, with the untouched original beside it when the letter was not written in Japanese. */
+export function LetterText({ letter }: { letter: Pick<Letter, "body" | "bodyJa" | "lang"> }) {
   return (
-    <li class="letter" id={`letter-${letter.id}`}>
+    <>
       <p class="letter-body">{letter.bodyJa}</p>
       {letter.lang !== "ja" && (
         <details class="letter-original">
@@ -70,6 +75,32 @@ function LetterCard({ letter, reactions, itemId }: { letter: Letter; reactions: 
           <p>{letter.body}</p>
         </details>
       )}
+    </>
+  );
+}
+
+function Reaction({ r }: { r: Letter }) {
+  if (r.kind === "watashimo") {
+    return (
+      <li class="reaction">
+        {t("reaction.from", { who: whoOf(r), body: r.bodyJa })}
+        <ReportForm letterId={r.id} />
+      </li>
+    );
+  }
+  return (
+    <li class="reaction reply">
+      <LetterText letter={r} />
+      <p class="letter-who">{whoOf(r)}</p>
+      <ReportForm letterId={r.id} />
+    </li>
+  );
+}
+
+function LetterCard({ letter, reactions, itemId }: { letter: Letter; reactions: Letter[]; itemId: string }) {
+  return (
+    <li class="letter" id={`letter-${letter.id}`}>
+      <LetterText letter={letter} />
       <p class="letter-who">{whoOf(letter)}</p>
       {letter.kind === "found" && (
         <p class="letter-source">
@@ -101,9 +132,7 @@ function LetterCard({ letter, reactions, itemId }: { letter: Letter; reactions: 
           <input type="text" name="body" maxlength={200} placeholder={t("reaction.replyPlaceholder")} aria-label={t("reaction.reply")} />
           <button type="submit">{t("reaction.replySubmit")}</button>
         </form>
-        <form method="post" action={`/letters/${letter.id}/report`}>
-          <button type="submit" class="quiet">{t("report.button")}</button>
-        </form>
+        <ReportForm letterId={letter.id} />
       </div>
     </li>
   );
