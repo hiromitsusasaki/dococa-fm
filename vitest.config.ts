@@ -25,6 +25,13 @@ export default defineConfig(async () => {
         },
         {
           test: {
+            name: "scripts",
+            environment: "node",
+            include: ["test/scripts/**/*.test.ts"],
+          },
+        },
+        {
+          test: {
             name: "client",
             environment: "happy-dom",
             include: ["test/client/**/*.test.ts"],

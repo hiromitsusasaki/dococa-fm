@@ -149,6 +149,13 @@ describe("settings", () => {
     expect(html).toContain("&lt;b&gt;");
   });
 
+  it("shows the listener id in the MCP section", async () => {
+    const cookie = cookieOf(await SELF.fetch(`${BASE}/settings`));
+    const html = await (await SELF.fetch(`${BASE}/settings`, { headers: { cookie } })).text();
+    expect(html).toContain("リスナー ID");
+    expect(html).toContain(cookie.split("=")[1]!.split(".")[0]!);
+  });
+
   it("regenerates the MCP token", async () => {
     const cookie = cookieOf(await SELF.fetch(`${BASE}/settings`));
     const before = await mcpUrlIn(await (await SELF.fetch(`${BASE}/settings`, { headers: { cookie } })).text());

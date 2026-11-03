@@ -14,6 +14,7 @@ export const ja = {
   "settings.mcp": "MCP の口",
   "settings.mcpHelp": "Claude や ChatGPT にこの URL を登録すると、同じ番組をそこから取り出せます",
   "settings.mcpRegenerate": "URL を作り直す",
+  "settings.listenerId": "リスナー ID",
   "kind.music": "音楽",
   "kind.book": "本",
   "kind.film": "映画",

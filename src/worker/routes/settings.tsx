@@ -21,8 +21,8 @@ const schema = z.object({
 
 type FormValues = Pick<Listener, "radioName" | "place" | "voice" | "dial">;
 
-function SettingsPage(props: { values: FormValues; mcpUrl: string; spotifyConnected: boolean; spotifyFailed?: boolean; saved?: boolean; invalid?: boolean }) {
-  const { values, mcpUrl, spotifyConnected, spotifyFailed, saved, invalid } = props;
+function SettingsPage(props: { values: FormValues; listenerId: string; mcpUrl: string; spotifyConnected: boolean; spotifyFailed?: boolean; saved?: boolean; invalid?: boolean }) {
+  const { values, listenerId, mcpUrl, spotifyConnected, spotifyFailed, saved, invalid } = props;
   return (
     <Layout title={t("settings.title")}>
       <main class="settings">
@@ -70,6 +70,9 @@ function SettingsPage(props: { values: FormValues; mcpUrl: string; spotifyConnec
           <form method="post" action="/settings/mcp-token">
             <button type="submit">{t("settings.mcpRegenerate")}</button>
           </form>
+          <p class="muted">
+            {t("settings.listenerId")}: <code>{listenerId}</code>
+          </p>
         </section>
       </main>
     </Layout>
@@ -85,7 +88,7 @@ export const settings = new Hono<{ Bindings: Env; Variables: Variables }>();
 settings.get("/settings", (c) => {
   const listener = c.get("listener");
   return c.html(
-    <SettingsPage values={listener} mcpUrl={mcpUrlOf(c.env, listener)} spotifyConnected={listener.spotifyRefreshToken !== null} spotifyFailed={c.req.query("spotify") === "failed"} saved={c.req.query("saved") === "1"} />,
+    <SettingsPage values={listener} listenerId={listener.id} mcpUrl={mcpUrlOf(c.env, listener)} spotifyConnected={listener.spotifyRefreshToken !== null} spotifyFailed={c.req.query("spotify") === "failed"} saved={c.req.query("saved") === "1"} />,
   );
 });
 
@@ -95,7 +98,7 @@ settings.post(
     if (result.success) return;
     const c = ctx as SettingsContext;
     const listener = c.get("listener");
-    return c.html(<SettingsPage values={listener} mcpUrl={mcpUrlOf(c.env, listener)} spotifyConnected={listener.spotifyRefreshToken !== null} invalid />, 422);
+    return c.html(<SettingsPage values={listener} listenerId={listener.id} mcpUrl={mcpUrlOf(c.env, listener)} spotifyConnected={listener.spotifyRefreshToken !== null} invalid />, 422);
   }),
   async (c) => {
     await updateListener(c.env.DB, c.get("listener").id, c.req.valid("form"));

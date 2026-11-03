@@ -15,5 +15,5 @@
     "resolveJsonModule": true
   },
   "include": ["src/worker", "src/views", "test", "vite.config.ts", "vitest.config.ts"],
-  "exclude": ["test/client"]
+  "exclude": ["test/client", "test/scripts"]
 }
