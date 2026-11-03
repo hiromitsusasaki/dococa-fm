@@ -122,3 +122,133 @@ a {
 .settings-error {
   color: var(--accent-spark);
 }
+
+.item-page,
+.put,
+.takedown,
+.bookmarklet,
+.reactions-page {
+  max-width: 40rem;
+  margin: 0 auto;
+  padding: var(--sp-8) var(--sp-4);
+}
+
+.item-card {
+  display: flex;
+  gap: var(--sp-4);
+  align-items: center;
+}
+
+.item-card img {
+  border-radius: var(--r-md);
+  object-fit: cover;
+}
+
+.item-kind,
+.item-creator,
+.muted,
+.letter-who,
+.letter-source {
+  color: var(--fg2);
+  font-size: var(--fs-14);
+  margin: 0;
+}
+
+.out-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  list-style: none;
+  padding: 0;
+}
+
+.out-links a,
+a.button,
+.item-page button,
+.put button,
+.takedown button {
+  display: inline-block;
+  padding: var(--sp-2) var(--sp-4);
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--r-pill);
+  background: var(--bg-card);
+  color: var(--fg1);
+  font: inherit;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.letters ul,
+.reactions-page ul {
+  list-style: none;
+  padding: 0;
+  display: grid;
+  gap: var(--sp-4);
+}
+
+.letter {
+  padding: var(--sp-4);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-md);
+  background: var(--bg-raised);
+}
+
+.letter-body {
+  margin: 0 0 var(--sp-2);
+  white-space: pre-wrap;
+}
+
+.reactions {
+  margin: var(--sp-2) 0;
+  color: var(--fg2);
+}
+
+.letter-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  align-items: center;
+  margin-top: var(--sp-3);
+}
+
+.letter-actions form {
+  display: flex;
+  gap: var(--sp-2);
+}
+
+.letter-actions input[type="text"],
+.put input,
+.put textarea,
+.takedown input,
+.takedown textarea {
+  padding: var(--sp-2) var(--sp-3);
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--r-md);
+  background: var(--bg-card);
+  color: var(--fg1);
+  font: inherit;
+}
+
+.put label,
+.takedown label,
+.put-form {
+  display: grid;
+  gap: var(--sp-1);
+  margin-top: var(--sp-4);
+}
+
+button.quiet {
+  border-color: transparent;
+  color: var(--fg3);
+  font-size: var(--fs-14);
+}
+
+.form-error {
+  color: var(--accent-spark);
+}
+
+.bookmarklet pre {
+  white-space: pre-wrap;
+  word-break: break-all;
+  color: var(--fg2);
+}
