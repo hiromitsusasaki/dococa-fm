@@ -1,7 +1,8 @@
 /**
  * Collects "voices found on the net" for one item and posts them through the admin API.
  *
- *   pnpm collect --item <itemId | url>
+ *   pnpm collect --item <itemId | url>   dry run: writes .found/<itemId>.json and posts nothing
+ *   pnpm collect --post <file>           posts a file you have reviewed (delete lines you do not want first)
  *
  * Env: YOUTUBE_API_KEY, ADMIN_TOKEN, DOCOCA_ORIGIN (default http://127.0.0.1:5173), and the
  * Claude credentials the Agent SDK uses (ANTHROPIC_API_KEY or a Claude Code login).
@@ -9,10 +10,12 @@
  *
  * What the AI does not do is built into the shape of the flow. Claude receives the candidate comments
  * and may answer only with ids. The text that is posted is the original of each picked id, taken
- * from this script's own list, so Claude has no path to change a word.
+ * from this script's own list, so Claude has no path to change a word. Claude can still pick a
+ * comment you would not, so a person reads the file before anything is posted.
  */
 import { query } from "@anthropic-ai/claude-agent-sdk";
-import { type Candidate, SELECTION_SYSTEM, type Voice, candidatesFromThreads, parseSelection, selectionPrompt, voicesFor } from "./lib/found.ts";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { type Candidate, type FoundBody, SELECTION_SYSTEM, candidatesFromThreads, parseArgs, parseFoundFile, parseSelection, selectionPrompt, voicesFor } from "./lib/found.ts";
 
 const YOUTUBE = "https://www.googleapis.com/youtube/v3";
 const VIDEOS = 3;
@@ -25,13 +28,6 @@ class CliError extends Error {}
 function need(name: string): string {
   const v = process.env[name];
   if (!v) throw new CliError(`${name} is not set`);
-  return v;
-}
-
-function itemArg(argv: string[]): string {
-  const i = argv.indexOf("--item");
-  const v = i >= 0 ? argv[i + 1] : undefined;
-  if (!v || v.startsWith("--")) throw new CliError("usage: pnpm collect --item <itemId|url>");
   return v;
 }
 
@@ -126,8 +122,10 @@ async function askForIds(item: ItemInfo, candidates: Candidate[]): Promise<{ ids
   return { ids: parseSelection(answer, candidates), deniedCalls };
 }
 
-async function main(): Promise<void> {
-  const item = await resolveItem(itemArg(process.argv.slice(2)));
+const FOUND_DIR = ".found";
+
+async function collect(arg: string): Promise<void> {
+  const item = await resolveItem(arg);
   console.log(`item: ${item.title} / ${item.creator} (${item.id})`);
 
   const candidates = await collectCandidates(item);
@@ -135,17 +133,32 @@ async function main(): Promise<void> {
   if (candidates.length === 0) return;
 
   const { ids, deniedCalls } = await askForIds(item, candidates);
-  const voices: Voice[] = voicesFor(ids, candidates);
+  const voices = voicesFor(ids, candidates);
   console.log(`picked: ${voices.length}, tool calls denied: ${deniedCalls}`);
   for (const v of voices) console.log(`- ${v.author}: ${v.body.replace(/\n/g, " ")}\n  ${v.url}`);
   if (voices.length === 0) return;
 
-  const posted = await admin<{ letterIds: string[]; skipped: string[] }>("POST", "/admin/found", { itemId: item.id, voices });
-  console.log(`posted: ${posted.letterIds.length}, already there: ${posted.skipped.length}`);
-  console.log(`${origin()}/items/${item.id}`);
+  const file = `${FOUND_DIR}/${item.id}.json`;
+  const body: FoundBody = { itemId: item.id, voices };
+  await mkdir(FOUND_DIR, { recursive: true });
+  await writeFile(file, `${JSON.stringify(body, null, 2)}\n`);
+  console.log(`wrote ${file}. Read it, delete what you do not want, then: pnpm collect --post ${file}`);
+}
+
+async function post(file: string): Promise<void> {
+  const body = parseFoundFile(await readFile(file, "utf8"));
+  const res = await admin<{ letterIds: string[]; skipped: string[]; rejected: Array<{ index: number; url: string; reason: string }> }>("POST", "/admin/found", body);
+  console.log(`posted: ${res.letterIds.length}, already there: ${res.skipped.length}, turned down by moderation: ${res.rejected.length}`);
+  for (const r of res.rejected) console.log(`- rejected (${r.reason}): ${r.url}`);
+  console.log(`${origin()}/items/${body.itemId}`);
+}
+
+async function main(): Promise<void> {
+  const args = parseArgs(process.argv.slice(2));
+  await (args.mode === "collect" ? collect(args.item) : post(args.file));
 }
 
 main().catch((e: unknown) => {
-  console.error(e instanceof CliError ? e.message : `unexpected error: ${e instanceof Error ? e.name : "unknown"}`);
+  console.error(e instanceof CliError || (e instanceof Error && e.message.startsWith("usage:")) ? (e as Error).message : `unexpected error: ${e instanceof Error ? e.name : "unknown"}`);
   process.exitCode = 1;
 });

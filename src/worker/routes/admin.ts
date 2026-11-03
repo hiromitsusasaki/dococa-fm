@@ -1,10 +1,11 @@
 import { type Context, Hono, type MiddlewareHandler } from "hono";
 import { z } from "zod";
 import type { Variables } from "../auth/session";
+import { moderateLetter } from "../claude/moderate";
 import { type Lang, detectLang, translateToJa } from "../claude/translate";
 import { getEpisode } from "../db/episodes";
 import { getItem } from "../db/items";
-import { getLetter, insertLetter, listLettersForItem, setLetterStatus } from "../db/letters";
+import { getLetter, insertLetter, listFoundSources, setLetterStatus } from "../db/letters";
 import { getListener } from "../db/listeners";
 import type { Env } from "../env";
 import { makeEpisode } from "../program/create";
@@ -63,8 +64,10 @@ function invalid(c: Context<AppEnv>, error: z.ZodError) {
 }
 
 /**
- * Found voices are curated by the operator, who reads each one before running this, so they skip the
- * letter moderation. The text is stored exactly as given (no trimming), with a translation beside it.
+ * Found voices go through the same fail-closed moderation as letters, before translation: a judgement
+ * that cannot be made answers 503 and stores nothing. A voice that is turned down is left out and
+ * reported in `rejected`, so one bad comment does not sink the batch. The text is never altered:
+ * it is stored exactly as given, with a translation beside it.
  */
 admin.post("/admin/found", async (c) => {
   const parsed = foundSchema.safeParse(await readJson(c));
@@ -72,27 +75,34 @@ admin.post("/admin/found", async (c) => {
   const { itemId, voices } = parsed.data;
   if (!(await getItem(c.env.DB, itemId))) return c.json({ error: "item not found" }, 404);
 
-  const existing = new Map((await listLettersForItem(c.env.DB, itemId)).filter((l) => l.kind === "found" && l.sourceUrl !== null).map((l) => [l.sourceUrl!, l.id]));
-  const fresh = new Map<string, (typeof voices)[number]>();
+  // Any status counts: a voice that was rejected must not come back with the next collection.
+  const existing = new Map((await listFoundSources(c.env.DB, itemId)).map((l) => [l.sourceUrl, l.id]));
+  const fresh = new Map<string, { index: number; v: (typeof voices)[number] }>();
   const skipped: string[] = [];
-  for (const v of voices) {
+  voices.forEach((v, index) => {
     const already = existing.get(v.url);
     if (already) skipped.push(already);
-    else if (!fresh.has(v.url)) fresh.set(v.url, v);
-  }
+    else if (!fresh.has(v.url)) fresh.set(v.url, { index, v });
+  });
 
-  // Translate everything before storing anything, so a failure leaves nothing half-inserted.
+  // Judge and translate everything before storing anything, so a failure leaves nothing half-inserted.
+  const rejected: Array<{ index: number; url: string; reason: string }> = [];
   let prepared: Array<{ v: (typeof voices)[number]; lang: Lang; bodyJa: string }>;
   try {
+    const judged = await Promise.all(
+      [...fresh.values()].map(async ({ index, v }) => ({ index, v, verdict: await moderateLetter(c.env, v.body) })),
+    );
+    const passed = judged.filter((j) => j.verdict.ok);
+    for (const j of judged) if (!j.verdict.ok) rejected.push({ index: j.index, url: j.v.url, reason: j.verdict.reason });
     prepared = await Promise.all(
-      [...fresh.values()].map(async (v) => {
+      passed.map(async ({ v }) => {
         const lang = v.lang ?? detectLang(v.body);
         return { v, lang, bodyJa: await translateToJa(c.env, v.body, lang) };
       }),
     );
   } catch (e) {
-    console.error(`[dococa] found voice translation failed: ${e instanceof Error ? e.name : "unknown"}`);
-    return c.json({ error: "translation unavailable" }, 503);
+    console.error(`[dococa] found voice judgement failed: ${e instanceof Error ? e.name : "unknown"}`);
+    return c.json({ error: "judgement unavailable" }, 503);
   }
 
   const letterIds: string[] = [];
@@ -114,10 +124,10 @@ admin.post("/admin/found", async (c) => {
     });
     letterIds.push(letter.id);
   }
-  return c.json({ letterIds, skipped });
+  return c.json({ letterIds, skipped, rejected });
 });
 
-const urlSchema = z.object({ url: z.string().max(2000) });
+const urlSchema = z.object({ url: z.string().max(2000).refine(isFetchableUrl, "url must be a public http(s) url") });
 
 admin.post("/admin/items", async (c) => {
   const parsed = urlSchema.safeParse(await readJson(c));

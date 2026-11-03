@@ -64,6 +64,15 @@ export async function listLettersForItem(db: D1Database, itemId: string): Promis
   return results.map(rowToLetter);
 }
 
+/** Source urls of every found voice of the item, whatever its status, so a rejected one is never collected again. */
+export async function listFoundSources(db: D1Database, itemId: string): Promise<Array<{ id: string; sourceUrl: string }>> {
+  const { results } = await db
+    .prepare("SELECT id, source_url FROM letters WHERE item_id = ? AND kind = 'found' AND source_url IS NOT NULL")
+    .bind(itemId)
+    .all<{ id: string; source_url: string }>();
+  return results.map((r) => ({ id: r.id, sourceUrl: r.source_url }));
+}
+
 export async function listLettersByListener(db: D1Database, listenerId: string): Promise<Letter[]> {
   const { results } = await db
     .prepare("SELECT * FROM letters WHERE listener_id = ? ORDER BY created_at DESC, id DESC")

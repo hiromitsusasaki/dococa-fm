@@ -7,3 +7,4 @@ dist/
 *.pem
 .superpowers/
 .DS_Store
+.found/

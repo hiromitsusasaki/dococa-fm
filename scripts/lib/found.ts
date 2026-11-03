@@ -98,3 +98,39 @@ export function voicesFor(ids: string[], candidates: Candidate[]): Voice[] {
     return c && isUsableBody(c.text) ? [{ body: c.text, author: c.author, url: c.url }] : [];
   });
 }
+
+export const USAGE = "usage: pnpm collect --item <itemId|url>   (dry run: writes .found/<itemId>.json)\n       pnpm collect --post <file>          (posts a file you have reviewed)";
+
+export type Args = { mode: "collect"; item: string } | { mode: "post"; file: string };
+
+/** `--item` only collects and writes a file; nothing is posted unless `--post <file>` is given on its own. */
+export function parseArgs(argv: string[]): Args {
+  const value = (flag: string): string | undefined => {
+    const i = argv.indexOf(flag);
+    const v = i >= 0 ? argv[i + 1] : undefined;
+    return v !== undefined && !v.startsWith("--") ? v : undefined;
+  };
+  const known = argv.every((a) => !a.startsWith("--") || a === "--item" || a === "--post");
+  const item = value("--item");
+  const file = value("--post");
+  const wantsItem = argv.includes("--item");
+  const wantsPost = argv.includes("--post");
+  if (!known || wantsItem === wantsPost || (wantsItem && !item) || (wantsPost && !file)) throw new Error(USAGE);
+  return item ? { mode: "collect", item } : { mode: "post", file: file! };
+}
+
+export type FoundBody = { itemId: string; voices: Voice[] };
+
+/** Reads a reviewed file back into the body of `/admin/found`, re-checking the shape and the length rule. */
+export function parseFoundFile(text: string): FoundBody {
+  const raw: unknown = JSON.parse(text);
+  const o = raw as { itemId?: unknown; voices?: unknown };
+  if (typeof o?.itemId !== "string" || !Array.isArray(o.voices)) throw new Error("file must be { itemId, voices }");
+  const voices = o.voices.map((v: Partial<Voice>, i: number): Voice => {
+    if (typeof v?.body !== "string" || typeof v.author !== "string" || typeof v.url !== "string" || !isUsableBody(v.body)) {
+      throw new Error(`voices[${i}] is not a valid voice`);
+    }
+    return { body: v.body, author: v.author, url: v.url };
+  });
+  return { itemId: o.itemId, voices };
+}

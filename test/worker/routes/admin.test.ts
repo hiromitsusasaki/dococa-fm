@@ -105,26 +105,65 @@ describe("POST /admin/found", () => {
     expect(await listLettersForItem(env.DB, item.id)).toHaveLength(2);
   });
 
-  it("translates a non-japanese voice and keeps the original", async () => {
-    (env as { ANTHROPIC_API_KEY: string }).ANTHROPIC_API_KEY = "sk-test";
+  const keyed = { ...e, ANTHROPIC_API_KEY: "sk-test" };
+  const judge = (input: unknown) => ({ content: [{ type: "tool_use", id: "j", name: "judge_letter", input }] });
+  const translated = (ja: string) => ({ content: [{ type: "tool_use", id: "t", name: "translate", input: { ja } }] });
+  /** Answers by the tool the request offers: judgement, then translation. */
+  const stubClaude = (verdict: (body: string) => unknown, translation: unknown = translated("十五歳の夏を思い出す")) => {
     const create = stubAnthropic();
-    create.mockResolvedValue({ content: [{ type: "tool_use", id: "t", name: "translate", input: { ja: "十五歳の夏を思い出す" } }] });
+    create.mockImplementation((req: any) => (req.tools[0].name === "judge_letter" ? verdict(String(req.messages[0].content)) : translation));
+    return create;
+  };
+
+  it("translates a non-japanese voice and keeps the original", async () => {
+    const create = stubClaude(() => judge({ ok: true }));
     const item = await insertItem(env.DB, itemDraft());
-    const res = await call("POST", "/admin/found", { itemId: item.id, voices: [voice({ body: "Reminds me of being fifteen", author: "sam" })] }, undefined, { ...e, ANTHROPIC_API_KEY: "sk-test" });
+    const res = await call("POST", "/admin/found", { itemId: item.id, voices: [voice({ body: "Reminds me of being fifteen", author: "sam" })] }, undefined, keyed);
     expect(res.status).toBe(200);
     const [stored] = await listLettersForItem(env.DB, item.id);
     expect(stored).toMatchObject({ lang: "en", body: "Reminds me of being fifteen", bodyJa: "十五歳の夏を思い出す" });
-    expect(create).toHaveBeenCalledTimes(1);
-    (env as { ANTHROPIC_API_KEY: string }).ANTHROPIC_API_KEY = "";
+    expect(create).toHaveBeenCalledTimes(2);
   });
 
   it("answers 503 and stores nothing when the translation never comes", async () => {
     vi.spyOn(console, "error").mockImplementation(() => {});
-    const create = stubAnthropic();
-    create.mockResolvedValue({ content: [] });
+    stubClaude(() => judge({ ok: true }), { content: [] });
     const item = await insertItem(env.DB, itemDraft());
-    const res = await call("POST", "/admin/found", { itemId: item.id, voices: [voice({ body: "Reminds me of being fifteen" })] }, undefined, { ...e, ANTHROPIC_API_KEY: "sk-test" });
+    const res = await call("POST", "/admin/found", { itemId: item.id, voices: [voice({ body: "Reminds me of being fifteen" })] }, undefined, keyed);
     expect(res.status).toBe(503);
+    expect(await listLettersForItem(env.DB, item.id)).toHaveLength(0);
+  });
+
+  it("leaves out a voice that moderation turns down, stores the others untouched and reports it", async () => {
+    stubClaude((prompt) => (prompt.includes("宣伝です") ? judge({ ok: false, reason: "ad" }) : judge({ ok: true })));
+    const item = await insertItem(env.DB, itemDraft());
+    const good = voice({ body: "  そのまま <b>残る</b>  " });
+    const bad = voice({ body: "宣伝です", url: "https://example.com/ad" });
+    const res = await call("POST", "/admin/found", { itemId: item.id, voices: [bad, good] }, undefined, keyed);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { letterIds: string[]; rejected: unknown[] };
+    expect(body.letterIds).toHaveLength(1);
+    expect(body.rejected).toEqual([{ index: 0, url: "https://example.com/ad", reason: "ad" }]);
+    const stored = await listLettersForItem(env.DB, item.id);
+    expect(stored.map((l) => l.body)).toEqual([good.body]);
+  });
+
+  it("answers 503 and stores nothing when moderation gives no verdict", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    stubClaude(() => ({ content: [] }));
+    const item = await insertItem(env.DB, itemDraft());
+    const res = await call("POST", "/admin/found", { itemId: item.id, voices: [voice(), voice({ url: "https://example.com/2" })] }, undefined, keyed);
+    expect(res.status).toBe(503);
+    expect(await listLettersForItem(env.DB, item.id)).toHaveLength(0);
+  });
+
+  it("does not collect a rejected voice again", async () => {
+    const item = await insertItem(env.DB, itemDraft());
+    const first = (await (await post({ itemId: item.id, voices: [voice()] })).json()) as { letterIds: string[] };
+    expect((await call("POST", `/admin/letters/${first.letterIds[0]}/reject`)).status).toBe(200);
+    const again = (await (await post({ itemId: item.id, voices: [voice()] })).json()) as { letterIds: string[]; skipped: string[] };
+    expect(again.letterIds).toEqual([]);
+    expect(again.skipped).toEqual([first.letterIds[0]]);
     expect(await listLettersForItem(env.DB, item.id)).toHaveLength(0);
   });
 });
@@ -150,6 +189,7 @@ describe("admin items", () => {
     stubFetch([]);
     expect((await call("POST", "/admin/items", { url: "https://example.com/nothing" })).status).toBe(422);
     expect((await call("POST", "/admin/items", { url: "not a url" })).status).toBe(422);
+    expect((await call("POST", "/admin/items", { url: "http://127.0.0.1/x" })).status).toBe(422);
     expect((await call("GET", "/admin/items/nope")).status).toBe(404);
   });
 });

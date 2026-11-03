@@ -6,7 +6,7 @@
 
 - 設計書・計画は本人承認済み。実行方式は **Subagent-driven**（`superpowers:subagent-driven-development`）。
 - 次の一手: **Task 13b（デモ用シード）**。`docs/superpowers/plans/2026-11-03-dococa-fm.md` の Task 13b を開き、Step 1 から順に。
-- YouTube collection real run held: no key（`YOUTUBE_API_KEY` と `ANTHROPIC_API_KEY` を入れたら `pnpm collect --item <url>` を 1 作品で流し、`/items/:id` の「ネットで見つけた声」を確かめる）。管理 API は `ADMIN_TOKEN`（Bearer）。デモ回は `POST /admin/episodes`（`listenerId` は `/settings` の MCP の欄に出る）。
+- YouTube collection real run held: no key（`YOUTUBE_API_KEY` と `ANTHROPIC_API_KEY` を入れたら `pnpm collect --item <url>` を 1 作品で流す。既定は dry-run で `.found/<itemId>.json` に書くだけ。中身を読んで不要な行を消し、`pnpm collect --post .found/<itemId>.json` で投入して、`/items/:id` の「ネットで見つけた声」を確かめる）。`/admin/found` はお便りと同じモデレーションを通り、reject 済みの出典 URL は再投入されない。管理 API は `ADMIN_TOKEN`（Bearer）。デモ回は `POST /admin/episodes`（`listenerId` は `/settings` の MCP の欄に出る）。
 - Gemini-TTS real check held: no key (API-key vs service-account unverified)。`GET /tts` は鍵が空なら 503。鍵が入ったら Task 11 Step 5（Charon / Kore の聴き比べと `DJ_STYLE_PROMPT` の調整）をする。クラウド TTS は各リスナーの最初の回（`claimCloudTts`）と、`makeEpisode(env, listener, { cloudTts: true })`（Task 13 のデモ回）だけ。
 - Real-API episode held: no key（`ANTHROPIC_API_KEY` が空。`docs/examples/episode-1.json` は鍵が入ってから作る）。
 - 要対応: Sonnet 5.5 は強制 `tool_choice` を 400 で拒む。Task 8 は `auto` + `strict` に直したが、Task 5/6 の `moderate.ts` `elicit.ts``translate.ts` は強制のまま。実 API では失敗する。
