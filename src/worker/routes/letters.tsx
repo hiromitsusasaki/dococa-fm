@@ -4,27 +4,16 @@ import { z } from "zod";
 import { LetterText, ReportForm, whoOf } from "../../views/components";
 import { Layout } from "../../views/layout";
 import type { Variables } from "../auth/session";
-import { moderateLetter } from "../claude/moderate";
-import { type Lang, detectLang, translateToJa } from "../claude/translate";
 import { getItem } from "../db/items";
-import {
-  countRecentDuplicate,
-  getLetter,
-  hasWatashimo,
-  insertLetter,
-  insertReport,
-  insertTakedown,
-  listReactionsForLetter,
-} from "../db/letters";
+import { getLetter, insertReport, insertTakedown, listReactionsForLetter } from "../db/letters";
 import type { Env } from "../env";
+import type { ja } from "../i18n/ja";
 import { t } from "../i18n/t";
-import { type ItemDraft, resolveOrCreate, resolveUrl } from "../resolve";
+import { createLetter } from "../letters/create";
+import type { ItemDraft } from "../resolve";
 import { PutPage } from "./put";
 
 type AppContext = Context<{ Bindings: Env; Variables: Variables }>;
-
-const MAX_BODY = 200;
-const DUPLICATE_WINDOW_MINUTES = 10;
 
 const letterSchema = z.object({
   url: z.string().trim().max(2000).optional(),
@@ -51,65 +40,10 @@ letters.post(
   }),
   async (c) => {
     const form = c.req.valid("form");
-    const listener = c.get("listener");
-    const isWatashimo = form.kind === "watashimo";
-    const body = isWatashimo ? t("reaction.watashimo") : form.body.trim();
-
-    if (body === "") return putError(c, form, t("letters.empty"), 422);
-    if (Array.from(body).length > MAX_BODY) return putError(c, form, t("letters.tooLong"), 422);
-
-    const stored = form.itemId ? await getItem(c.env.DB, form.itemId) : null;
-    const draft = stored ?? (form.url ? await resolveUrl(form.url, c.env) : null);
-    if (!draft) return putError(c, form, t("put.notFound"), 422);
-
-    // A reaction hangs off a top-level letter of the same stored item; a plain letter has no parent.
-    const parent = form.parentLetterId ? await getLetter(c.env.DB, form.parentLetterId) : null;
-    const isReaction = form.kind !== "letter";
-    const parentOk = parent !== null && stored !== null && parent.itemId === stored.id && parent.parentLetterId === null;
-    if (isReaction ? !parentOk : form.parentLetterId !== undefined) {
-      return putError(c, form, t("letters.badParent"), 422, draft);
-    }
-    if (isWatashimo && (await hasWatashimo(c.env.DB, listener.id, parent!.id))) {
-      return putError(c, form, t("letters.watashimoDuplicate"), 409, draft);
-    }
-    // Every 私も has the same text, so only the same-parent rule above limits it.
-    if (!isWatashimo && (await countRecentDuplicate(c.env.DB, listener.id, body, DUPLICATE_WINDOW_MINUTES)) >= 1) {
-      return putError(c, form, t("letters.duplicate"), 429, draft);
-    }
-
-    let lang: Lang = "ja";
-    let bodyJa = body;
-    if (!isWatashimo) {
-      try {
-        const verdict = await moderateLetter(c.env, body);
-        if (!verdict.ok) {
-          return putError(c, form, `${t("letters.rejected")} ${t(`letters.reason.${verdict.reason}`)}`, 422, draft);
-        }
-        lang = detectLang(body);
-        bodyJa = await translateToJa(c.env, body, lang);
-      } catch (e) {
-        console.error("[dococa] letter judgement failed", e);
-        return putError(c, form, t("letters.unavailable"), 503, draft);
-      }
-    }
-
-    const item = stored ?? (await resolveOrCreate(c.env.DB, draft));
-    await insertLetter(c.env.DB, {
-      itemId: item.id,
-      kind: form.kind,
-      body,
-      bodyJa,
-      lang,
-      radioName: listener.radioName,
-      place: listener.place,
-      year: null,
-      listenerId: listener.id,
-      parentLetterId: parent?.id ?? null,
-      sourceUrl: null,
-      sourceAuthor: null,
-      status: "public",
-    });
-    return c.redirect(`/items/${item.id}`, 303);
+    const result = await createLetter(c.env, c.env.DB, c.get("listener"), form);
+    if (result.ok) return c.redirect(`/items/${result.itemId}`, 303);
+    const message = result.reason ? `${t(result.key)} ${t(`letters.reason.${result.reason}` as keyof typeof ja)}` : t(result.key);
+    return putError(c, form, message, result.status, result.draft);
   },
 );
 
