@@ -254,6 +254,12 @@ describe("POST /admin/listeners", () => {
     expect((await call("POST", "/admin/listeners", { radioName: "A", place: "a@b.co", demo: true })).status).toBe(422);
   });
 
+  it("keeps to the settings screen's limits (20 and 30)", async () => {
+    expect((await call("POST", "/admin/listeners", { radioName: "a".repeat(21), place: "x", demo: true })).status).toBe(422);
+    expect((await call("POST", "/admin/listeners", { radioName: "a".repeat(20), place: "x".repeat(31), demo: true })).status).toBe(422);
+    expect((await call("POST", "/admin/listeners", { radioName: "a".repeat(20), place: "x".repeat(30), demo: true })).status).toBe(200);
+  });
+
   it("is behind the admin token", async () => {
     expect((await call("POST", "/admin/listeners", { radioName: "A", place: "x", demo: true }, {})).status).toBe(401);
   });

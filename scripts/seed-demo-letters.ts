@@ -29,6 +29,8 @@ import {
   type SeedItem,
   letterPrompt,
   pageShows,
+  placeOf,
+  uniqueById,
   parseArgs,
   parseItemUrls,
   parseLetters,
@@ -115,6 +117,16 @@ async function loadOrMakePersonas(client: Anthropic): Promise<Persona[]> {
   return personas;
 }
 
+let cookie: string | null = null;
+/** One anonymous session for all the page checks, so they do not each add a listener row. */
+async function sessionCookie(): Promise<string> {
+  if (cookie === null) {
+    const res = await fetch(`${args.origin}/settings`);
+    cookie = /dfm_sid=[^;]+/.exec(res.headers.get("set-cookie") ?? "")?.[0] ?? "";
+  }
+  return cookie;
+}
+
 async function seedPersona(client: Anthropic, persona: Persona, assigned: SeedItem[]): Promise<{ posted: number; skipped: number; mismatched: number }> {
   const raw = await callTool(client, { system: LETTER_SYSTEM, user: letterPrompt(persona, assigned), tool: LETTER_TOOL, maxTokens: 2000 });
   const { letters, dropped } = parseLetters(raw, persona, assigned);
@@ -129,7 +141,11 @@ async function seedPersona(client: Anthropic, persona: Persona, assigned: SeedIt
     return { posted: 0, skipped, mismatched };
   }
 
-  const made = await admin("POST", "/admin/listeners", { radioName: persona.radioName, place: `${persona.place}、${persona.country}`, demo: true });
+  const made = await admin("POST", "/admin/listeners", { radioName: persona.radioName, place: placeOf(persona), demo: true });
+  if (made.status === 422) {
+    console.warn(`  skip ${persona.radioName}: listener refused (${JSON.stringify(made.json).slice(0, 120)})`);
+    return { posted, skipped: skipped + letters.length, mismatched };
+  }
   if (made.status !== 200) return fail("POST /admin/listeners", made);
   for (const l of letters) {
     const r = await admin("POST", "/admin/letters", { listenerId: made.json.id, itemId: l.itemId, body: l.body });
@@ -139,7 +155,7 @@ async function seedPersona(client: Anthropic, persona: Persona, assigned: SeedIt
       continue;
     }
     posted++;
-    const page = await (await fetch(`${args.origin}/items/${r.json.itemId}`)).text();
+    const page = await (await fetch(`${args.origin}/items/${r.json.itemId}`, { headers: { cookie: await sessionCookie() } })).text();
     if (!pageShows(page, l.body)) {
       mismatched++;
       console.error(`  ORIGINAL NOT SHOWN VERBATIM on /items/${r.json.itemId}: ${l.body}`);
@@ -156,8 +172,9 @@ async function main(): Promise<void> {
 
   const urls = parseItemUrls(await readFile(args.items, "utf8"));
   if (urls.length === 0) throw new CliError(`no item urls in ${args.items}`);
-  const items = await resolveItems(urls);
-  if (items.length === 0) throw new CliError("none of the item urls could be resolved");
+  const resolved = await resolveItems(urls);
+  if (resolved.length === 0) throw new CliError("none of the item urls could be resolved");
+  const items = uniqueById(resolved);
   console.log(`items: ${items.length}`);
 
   const personas = await loadOrMakePersonas(client);

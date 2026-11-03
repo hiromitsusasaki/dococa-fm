@@ -52,7 +52,9 @@ export async function insertLetter(db: D1Database, l: Omit<Letter, "id" | "creat
       letter.createdAt,
     )
     .run();
-  return (await getLetter(db, letter.id)) as Letter;
+  const stored = await getLetter(db, letter.id);
+  if (!stored) throw new Error(`letter ${letter.id} vanished after insert`);
+  return stored;
 }
 
 export async function getLetter(db: D1Database, id: string): Promise<Letter | null> {

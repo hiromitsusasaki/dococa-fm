@@ -165,8 +165,9 @@ admin.post("/admin/letters/:id/reject", async (c) => {
   return c.json({ ok: true });
 });
 
-const MAX_NAME = 40;
-const MAX_PLACE = 80;
+// The same limits as the settings screen.
+const MAX_NAME = 20;
+const MAX_PLACE = 30;
 
 const noContact = (s: string) => !looksLikeContact(s);
 const listenerSchema = z.object({

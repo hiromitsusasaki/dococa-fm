@@ -25,20 +25,26 @@ const REAL_PEOPLE = [
 ];
 const norm = (s: string): string => normalizeText(s).toLowerCase();
 const REAL_NORMALIZED = REAL_PEOPLE.map(norm);
+const LATIN = /^[a-z0-9 .'-]+$/;
+const escapeRe = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+/** A latin name must stand as whole words (Prince is not princess); a name in another script is matched as a substring. */
+const mentions = (text: string, name: string): boolean =>
+  LATIN.test(name) ? new RegExp(`(?<![\\p{L}\\p{N}])${escapeRe(name)}(?![\\p{L}\\p{N}])`, "u").test(text) : text.includes(name);
 
 /** Names that belong to the work itself (its creator) are allowed in a letter about it. */
 const hitsRealPerson = (text: string, allow: string[] = []): boolean => {
   let t = norm(text);
   for (const a of allow) if (a.trim() !== "") t = t.split(norm(a)).join(" ");
-  return REAL_NORMALIZED.some((n) => t.includes(n));
+  return REAL_NORMALIZED.some((n) => mentions(t, n));
 };
 
 /** Talk that measures a work or a person by numbers or rank. The program never does, so a letter that does is not seeded. */
 const MEASURE =
-  /(?:number|no\.?|#)\s*(?:one|1)\b|\btop\s*\d+|\b\d[\d,.]*\s*(?:million|billion|thousand|k)\b|\b\d[\d,.]*\s*(?:views|plays|streams|likes|stars|followers|copies|downloads|ratings?)\b|\b\d+\s*(?:\/|out of)\s*(?:10|5|100)\b|\branked?\b|\bchart[- ]?topp|\bbillboard\b|歴代|ランキング|ランク|再生回数|[0-9０-９]+\s*(?:位|万回|回再生|票|点満点|冊目)|満点|売上|累計/iu;
+  /(?:number\s*(?:one|1)|no\.\s*(?:one|1)|#\s*1)\b|\btop\s*\d+|\b\d[\d,.]*\s*(?:million|billion|thousand|k)\b|\b\d[\d,.]*\s*(?:views|plays|streams|likes|stars|followers|copies|downloads|ratings?)\b|\b\d+\s*(?:\/|out of)\s*(?:10|5|100)\b|\branked?\b|\bchart[- ]?topp|\bbillboard\b|歴代|ランキング|ランク|再生回数|[0-9０-９]+\s*(?:位|万回|回再生|票|点満点|冊目)|満点|売上|累計/iu;
 
 export function checkLetter(text: string, lang?: PersonaLang, allow: string[] = []): Check {
   if (text.trim() === "") return { ok: false, reason: "empty" };
+  if (text !== text.trim()) return { ok: false, reason: "surrounding whitespace" };
   if (codePoints(text) > MAX_LETTER) return { ok: false, reason: "too long" };
   if (text.includes("\n")) return { ok: false, reason: "not one line" };
   if (containsTopical(text)) return { ok: false, reason: "topical" };
@@ -52,6 +58,11 @@ export function checkLetter(text: string, lang?: PersonaLang, allow: string[] = 
 }
 
 const FIELD_MAX = 60;
+/** The limits of the settings screen, which `POST /admin/listeners` shares. */
+export const MAX_RADIO_NAME = 20;
+export const MAX_PLACE = 30;
+/** The place as posted: town and country together, so it has to fit the 30 characters as a whole. */
+export const placeOf = (p: Pick<Persona, "place" | "country">): string => `${p.place}、${p.country}`;
 const isText = (v: unknown, max = FIELD_MAX): v is string => typeof v === "string" && v.trim() !== "" && codePoints(v) <= max;
 
 export function checkPersona(p: Persona): Check {
@@ -59,6 +70,8 @@ export function checkPersona(p: Persona): Check {
     if (!isText(v, k === "taste" ? 120 : FIELD_MAX)) return { ok: false, reason: `${k} is missing or too long` };
     if (looksLikeContact(v) || /^@|^#/.test(v.trim())) return { ok: false, reason: `${k} looks like a handle or contact` };
   }
+  if (codePoints(p.radioName.trim()) > MAX_RADIO_NAME) return { ok: false, reason: `radioName is over ${MAX_RADIO_NAME} characters` };
+  if (codePoints(placeOf({ place: p.place.trim(), country: p.country.trim() })) > MAX_PLACE) return { ok: false, reason: `place and country are over ${MAX_PLACE} characters together` };
   if (p.lang !== "ja" && p.lang !== "en") return { ok: false, reason: "lang must be ja or en" };
   if (hitsRealPerson(`${p.radioName}`)) return { ok: false, reason: "real person" };
   return { ok: true };
@@ -116,7 +129,7 @@ export const pageShows = (html: string, text: string): boolean => stripHtml(html
 
 export const PERSONA_SYSTEM = `あなたは、世界中のリスナーが集まるラジオ番組のデモ用に、架空のリスナーを作る係です。
 作るのはすべて架空の人物です。実在の人物（有名人、作家、音楽家、政治家、身近な人）の名前・ハンドル・SNS アカウント名は使わないこと。
-名前・土地・年代・好みが一貫した、その土地にいそうな普通の人にします。ラジオネームは本名ではなく、ニックネームです。
+名前・土地・年代・好みが一貫した、その土地にいそうな普通の人にします。ラジオネームは本名ではなく、ニックネームです（20 字以内）。町の名前と国の名前は合わせて 28 字以内に収めます。
 連絡先、URL、メールアドレス、@ から始まる名前は書かないこと。`;
 
 export function personaPrompt(count: number, existing: Persona[]): string {
@@ -232,6 +245,9 @@ export function parseItemUrls(text: string): string[] {
 }
 
 /** 2 to 5 distinct items for the persona at `index`: a rotating window, so the same list gives the same assignment and every item is reached. */
+/** The first of each item id, so one work is never assigned twice to the same persona. */
+export const uniqueById = (items: SeedItem[]): SeedItem[] => items.filter((it, i) => items.findIndex((o) => o.id === it.id) === i);
+
 export function pickItems(urls: string[], index: number): string[] {
   const count = Math.min(urls.length, MIN_ITEMS + (index % (MAX_ITEMS - MIN_ITEMS + 1)));
   const start = (index * 3) % Math.max(urls.length, 1);

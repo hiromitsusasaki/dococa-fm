@@ -11,6 +11,8 @@ import {
   pickItems,
   parseItemUrls,
   letterPrompt,
+  placeOf,
+  uniqueById,
   pageShows,
   parseLetters,
   type SeedItem,
@@ -61,7 +63,32 @@ describe("checkLetter", () => {
   });
 });
 
+describe("checkLetter edge cases", () => {
+  it("does not take a plain 'No one' for a ranking, but does take No. 1 and #1", () => {
+    expect(checkLetter("No one sings it like she does.").ok).toBe(true);
+    expect(checkLetter("It is No. 1 for me")).toMatchObject({ reason: "measure" });
+    expect(checkLetter("my #1 song")).toMatchObject({ reason: "measure" });
+  });
+
+  it("matches a latin name as whole words only", () => {
+    expect(checkLetter("The princess in the song waits by the sea.").ok).toBe(true);
+    expect(checkLetter("It sounds like Prince, a little.")).toMatchObject({ reason: "real person" });
+  });
+
+  it("rejects a body with surrounding whitespace, since the server trims it", () => {
+    expect(checkLetter(" a quiet song")).toMatchObject({ ok: false });
+    expect(checkLetter("a quiet song\n")).toMatchObject({ ok: false });
+  });
+});
+
 describe("checkPersona", () => {
+  it("keeps to the settings screen's limits: 20 for the name, 30 for town and country together", () => {
+    expect(checkPersona(persona({ radioName: "a".repeat(21) }))).toMatchObject({ ok: false });
+    expect(checkPersona(persona({ radioName: "a".repeat(20) })).ok).toBe(true);
+    expect(checkPersona(persona({ place: "あ".repeat(20), country: "い".repeat(10) }))).toMatchObject({ ok: false });
+    expect(placeOf(persona())).toBe("Oaxaca、México");
+  });
+
   it("accepts a consistent fictional persona", () => {
     expect(checkPersona(persona())).toEqual({ ok: true });
   });
@@ -190,5 +217,12 @@ describe("prompts", () => {
 
   it("list the assigned items by id", () => {
     expect(letterPrompt(persona(), [{ id: "i1", title: "T", creator: "C", kind: "music", url: "u" }])).toContain("itemId: i1");
+  });
+});
+
+describe("uniqueById", () => {
+  it("keeps the first of each id", () => {
+    const it = (id: string, url: string): SeedItem => ({ id, title: "t", creator: "c", kind: "music", url });
+    expect(uniqueById([it("a", "u1"), it("b", "u2"), it("a", "u3")]).map((x) => x.url)).toEqual(["u1", "u2"]);
   });
 });
