@@ -32,7 +32,7 @@ function renderLine(line: ScriptLine, data: EpisodeData): string {
   if (line.type === "dj") return line.text;
   if (line.type === "preview") return isHttpUrl(line.url) ? `[${t("mcp.preview")}](${line.url})` : "";
   const stored = data.letters.get((line as LetterLine).letterId);
-  return letterBlock(line.text, stored && stored.lang !== "ja" ? stored.body : null, line);
+  return letterBlock(line.text, stored && stored.lang !== "ja" ? stored.body : null, { ...line, demo: stored?.demo ?? line.demo === true });
 }
 
 /** What the assistant reads to the listener: the instruction, then each segment in order. No counts, no numbering. */

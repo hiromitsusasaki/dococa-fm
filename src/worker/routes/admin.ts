@@ -6,9 +6,11 @@ import { type Lang, detectLang, translateToJa } from "../claude/translate";
 import { getEpisode } from "../db/episodes";
 import { getItem } from "../db/items";
 import { getLetter, insertLetter, listFoundSources, setLetterStatus } from "../db/letters";
-import { getListener } from "../db/listeners";
+import { createListener, getListener } from "../db/listeners";
 import type { Env } from "../env";
+import { createLetter } from "../letters/create";
 import { makeEpisode } from "../program/create";
+import { looksLikeContact } from "../program/pii-patterns";
 import { resolveOrCreate, resolveUrl } from "../resolve";
 import { isFetchableUrl } from "../resolve/url";
 
@@ -161,4 +163,48 @@ admin.post("/admin/letters/:id/reject", async (c) => {
   if (!(await getLetter(c.env.DB, id))) return c.json({ error: "letter not found" }, 404);
   await setLetterStatus(c.env.DB, id, "rejected");
   return c.json({ ok: true });
+});
+
+const MAX_NAME = 40;
+const MAX_PLACE = 80;
+
+const noContact = (s: string) => !looksLikeContact(s);
+const listenerSchema = z.object({
+  radioName: z.string().trim().min(1).max(MAX_NAME).refine(noContact, "radioName must not look like contact details"),
+  place: z.string().trim().max(MAX_PLACE).refine(noContact, "place must not look like contact details"),
+  // Only demo accounts can be made here, so this route cannot mint a listener that passes for a real one.
+  demo: z.literal(true),
+});
+
+/** A demo account: an AI-made persona for seeding, marked `demo` so every surface says so. */
+admin.post("/admin/listeners", async (c) => {
+  const parsed = listenerSchema.safeParse(await readJson(c));
+  if (!parsed.success) return invalid(c, parsed.error);
+  const listener = await createListener(c.env.DB, parsed.data);
+  return c.json({ id: listener.id });
+});
+
+const letterSchema = z
+  .object({
+    listenerId: z.string().min(1),
+    itemId: z.string().min(1).optional(),
+    url: z.string().max(2000).refine(isFetchableUrl, "url must be a public http(s) url").optional(),
+    body: z.string(),
+  })
+  .refine((v) => (v.itemId === undefined) !== (v.url === undefined), "give exactly one of itemId and url");
+
+/**
+ * A letter in the name of a demo account, through the same pipeline as `POST /letters`: the same checks,
+ * the same fail-closed moderation, the same translation and duplicate rules. Real listeners cannot be used.
+ */
+admin.post("/admin/letters", async (c) => {
+  const parsed = letterSchema.safeParse(await readJson(c));
+  if (!parsed.success) return invalid(c, parsed.error);
+  const { listenerId, itemId, url, body } = parsed.data;
+  const listener = await getListener(c.env.DB, listenerId);
+  if (!listener) return c.json({ error: "listener not found" }, 404);
+  if (!listener.demo) return c.json({ error: "not a demo listener" }, 403);
+  const made = await createLetter(c.env, c.env.DB, listener, { itemId, url, body });
+  if (!made.ok) return c.json({ error: made.key, ...(made.reason ? { reason: made.reason } : {}) }, made.status);
+  return c.json({ letterId: made.letter.id, itemId: made.itemId });
 });

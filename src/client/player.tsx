@@ -259,7 +259,8 @@ function foundLabel(l: LetterLine, url: string, str: View["str"]): string {
 function whoOf(l: LetterLine, str: View["str"]): string {
   if (l.kind === "found") return l.sourceAuthor ?? "";
   const who = l.radioName ? fmt(str("letter.who"), { name: l.radioName }) : str("listener.anonymous");
-  return l.place ? fmt(str("letter.whoPlace"), { who, place: l.place }) : who;
+  const named = l.place ? fmt(str("letter.whoPlace"), { who, place: l.place }) : who;
+  return l.demo ? fmt(str("letter.whoDemo"), { who: named, demo: str("listener.demo") }) : named;
 }
 
 function Screen({ s, view }: { s: State; view: View }) {

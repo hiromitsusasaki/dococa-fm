@@ -34,6 +34,7 @@ const read = (l: Letter): ScriptLine => ({
   kind: l.kind,
   sourceUrl: l.sourceUrl,
   sourceAuthor: l.sourceAuthor,
+  ...(l.demo ? { demo: true as const } : {}),
 });
 
 function who(l: Letter): string {

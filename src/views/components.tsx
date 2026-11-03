@@ -51,9 +51,11 @@ export function isHttpUrl(s: string | null): s is string {
   return s !== null && /^https?:\/\//i.test(s);
 }
 
-export const whoOf = (l: Pick<Letter, "radioName" | "place">): string => {
+/** The radio-name line; a demo account carries the 「デモ用」 mark at the end so nobody mistakes its letters for a real listener's. */
+export const whoOf = (l: Pick<Letter, "radioName" | "place"> & { demo?: boolean }): string => {
   const who = l.radioName ? t("letter.who", { name: l.radioName }) : t("listener.anonymous");
-  return l.place ? t("letter.whoPlace", { who, place: l.place }) : who;
+  const named = l.place ? t("letter.whoPlace", { who, place: l.place }) : who;
+  return l.demo ? t("letter.whoDemo", { who: named, demo: t("listener.demo") }) : named;
 };
 
 export function ReportForm({ letterId }: { letterId: string }) {

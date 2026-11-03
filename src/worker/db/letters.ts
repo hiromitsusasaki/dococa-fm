@@ -18,12 +18,16 @@ function rowToLetter(r: Row): Letter {
     sourceUrl: (r.source_url as string | null) ?? null,
     sourceAuthor: (r.source_author as string | null) ?? null,
     status: r.status as Letter["status"],
+    demo: r.demo === 1,
     createdAt: r.created_at as string,
   };
 }
 
-export async function insertLetter(db: D1Database, l: Omit<Letter, "id" | "createdAt">): Promise<Letter> {
-  const letter: Letter = { ...l, id: crypto.randomUUID(), createdAt: new Date().toISOString() };
+/** Every read of letters joins the listener, so a letter knows whether a demo account sent it. */
+const SELECT = "SELECT letters.*, COALESCE(listeners.demo, 0) AS demo FROM letters LEFT JOIN listeners ON listeners.id = letters.listener_id";
+
+export async function insertLetter(db: D1Database, l: Omit<Letter, "id" | "createdAt" | "demo">): Promise<Letter> {
+  const letter = { ...l, id: crypto.randomUUID(), createdAt: new Date().toISOString() };
   await db
     .prepare(
       `INSERT INTO letters (id, item_id, kind, body, body_ja, lang, radio_name, place, year,
@@ -48,17 +52,17 @@ export async function insertLetter(db: D1Database, l: Omit<Letter, "id" | "creat
       letter.createdAt,
     )
     .run();
-  return letter;
+  return (await getLetter(db, letter.id)) as Letter;
 }
 
 export async function getLetter(db: D1Database, id: string): Promise<Letter | null> {
-  const row = await db.prepare("SELECT * FROM letters WHERE id = ?").bind(id).first<Row>();
+  const row = await db.prepare(`${SELECT} WHERE letters.id = ?`).bind(id).first<Row>();
   return row ? rowToLetter(row) : null;
 }
 
 export async function listLettersForItem(db: D1Database, itemId: string): Promise<Letter[]> {
   const { results } = await db
-    .prepare("SELECT * FROM letters WHERE item_id = ? AND status = 'public' ORDER BY created_at ASC, id ASC")
+    .prepare(`${SELECT} WHERE letters.item_id = ? AND letters.status = 'public' ORDER BY letters.created_at ASC, letters.id ASC`)
     .bind(itemId)
     .all<Row>();
   return results.map(rowToLetter);
@@ -75,7 +79,7 @@ export async function listFoundSources(db: D1Database, itemId: string): Promise<
 
 export async function listLettersByListener(db: D1Database, listenerId: string): Promise<Letter[]> {
   const { results } = await db
-    .prepare("SELECT * FROM letters WHERE listener_id = ? ORDER BY created_at DESC, id DESC")
+    .prepare(`${SELECT} WHERE letters.listener_id = ? ORDER BY letters.created_at DESC, letters.id DESC`)
     .bind(listenerId)
     .all<Row>();
   return results.map(rowToLetter);
@@ -83,7 +87,7 @@ export async function listLettersByListener(db: D1Database, listenerId: string):
 
 export async function listReactionsForLetter(db: D1Database, letterId: string): Promise<Letter[]> {
   const { results } = await db
-    .prepare("SELECT * FROM letters WHERE parent_letter_id = ? AND status = 'public' ORDER BY created_at ASC, id ASC")
+    .prepare(`${SELECT} WHERE letters.parent_letter_id = ? AND letters.status = 'public' ORDER BY letters.created_at ASC, letters.id ASC`)
     .bind(letterId)
     .all<Row>();
   return results.map(rowToLetter);

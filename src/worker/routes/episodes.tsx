@@ -32,7 +32,7 @@ function MessagePage({ message }: { message: string }) {
 const jsonForScript = (value: unknown): string => JSON.stringify(value).replace(/</g, "\\u003c");
 
 /** What the client player needs to know: the labels it shows, as `t()` values, since `t()` is server-only. */
-const PLAYER_KEY = /^(player\.|out\.|letter\.who|listener\.anonymous$)/;
+const PLAYER_KEY = /^(player\.|out\.|letter\.who|listener\.(?:anonymous|demo)$)/;
 const playerStrings = (): Record<string, string> =>
   Object.fromEntries(Object.keys(ja).filter((k) => PLAYER_KEY.test(k)).map((k) => [k, t(k as keyof typeof ja)]));
 

@@ -13,6 +13,7 @@ function rowToListener(r: Row): Listener {
     mcpToken: r.mcp_token as string,
     spotifyRefreshToken: (r.spotify_refresh_token as string | null) ?? null,
     cloudTtsUsed: r.cloud_tts_used === 1,
+    demo: r.demo === 1,
     createdAt: r.created_at as string,
   };
 }
@@ -22,23 +23,24 @@ export function newMcpToken(): string {
   return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
 }
 
-export async function createListener(db: D1Database): Promise<Listener> {
+export async function createListener(db: D1Database, init: Partial<Pick<Listener, "radioName" | "place" | "demo">> = {}): Promise<Listener> {
   const listener: Listener = {
     id: crypto.randomUUID(),
-    radioName: "",
-    place: "",
+    radioName: init.radioName ?? "",
+    place: init.place ?? "",
     voice: "",
     dial: 0.3,
     lang: "ja",
     mcpToken: newMcpToken(),
     spotifyRefreshToken: null,
     cloudTtsUsed: false,
+    demo: init.demo ?? false,
     createdAt: new Date().toISOString(),
   };
   await db
     .prepare(
-      `INSERT INTO listeners (id, radio_name, place, voice, dial, lang, mcp_token, spotify_refresh_token, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO listeners (id, radio_name, place, voice, dial, lang, mcp_token, spotify_refresh_token, demo, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .bind(
       listener.id,
@@ -49,6 +51,7 @@ export async function createListener(db: D1Database): Promise<Listener> {
       listener.lang,
       listener.mcpToken,
       listener.spotifyRefreshToken,
+      Number(listener.demo),
       listener.createdAt,
     )
     .run();

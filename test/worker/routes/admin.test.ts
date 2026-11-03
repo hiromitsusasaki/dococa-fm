@@ -1,7 +1,7 @@
 import { env } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import app from "../../../src/worker/index";
-import { createListener } from "../../../src/worker/db/listeners";
+import { createListener, getListener } from "../../../src/worker/db/listeners";
 import { insertItem } from "../../../src/worker/db/items";
 import { insertLetter, listLettersForItem } from "../../../src/worker/db/letters";
 import { t } from "../../../src/worker/i18n/t";
@@ -237,5 +237,76 @@ describe("POST /admin/letters/:id/reject", () => {
 
   it("answers 404 for a missing letter", async () => {
     expect((await call("POST", "/admin/letters/nope/reject")).status).toBe(404);
+  });
+});
+
+describe("POST /admin/listeners", () => {
+  it("creates a demo listener with the given radio name and place", async () => {
+    const res = await call("POST", "/admin/listeners", { radioName: "Marisol", place: "Oaxaca, México", demo: true });
+    expect(res.status).toBe(200);
+    const { id } = (await res.json()) as { id: string };
+    expect(await getListener(env.DB, id)).toMatchObject({ radioName: "Marisol", place: "Oaxaca, México", demo: true });
+  });
+
+  it("refuses a listener that is not marked as demo, a blank name and a contact-like place", async () => {
+    expect((await call("POST", "/admin/listeners", { radioName: "A", place: "x", demo: false })).status).toBe(422);
+    expect((await call("POST", "/admin/listeners", { radioName: " ", place: "x", demo: true })).status).toBe(422);
+    expect((await call("POST", "/admin/listeners", { radioName: "A", place: "a@b.co", demo: true })).status).toBe(422);
+  });
+
+  it("is behind the admin token", async () => {
+    expect((await call("POST", "/admin/listeners", { radioName: "A", place: "x", demo: true }, {})).status).toBe(401);
+  });
+});
+
+describe("POST /admin/letters", () => {
+  const verdict = (input: unknown) => ({ content: [{ type: "tool_use", id: "j", name: "judge_letter", input }] });
+  const translation = (ja: string) => ({ content: [{ type: "tool_use", id: "t", name: "translate", input: { ja } }] });
+  const withKey = { ...e, ANTHROPIC_API_KEY: "sk-test" };
+
+  async function demoListener() {
+    const res = await call("POST", "/admin/listeners", { radioName: "Marisol", place: "Oaxaca", demo: true });
+    return ((await res.json()) as { id: string }).id;
+  }
+
+  it("answers JSON { letterId, itemId } and shows the demo mark beside the radio name on the item page", async () => {
+    const item = await insertItem(env.DB, itemDraft());
+    const listenerId = await demoListener();
+    const create = stubAnthropic();
+    create.mockResolvedValueOnce(verdict({ ok: true })).mockResolvedValueOnce(translation("15 歳のときに大好きだった"));
+    const res = await call("POST", "/admin/letters", { listenerId, itemId: item.id, body: "I loved this at 15" }, undefined, withKey);
+    expect(res.status).toBe(200);
+    const out = (await res.json()) as { letterId: string; itemId: string };
+    expect(out.itemId).toBe(item.id);
+    const [l] = await listLettersForItem(env.DB, item.id);
+    expect(l).toMatchObject({ id: out.letterId, body: "I loved this at 15", bodyJa: "15 歳のときに大好きだった", lang: "en", listenerId, radioName: "Marisol", demo: true });
+
+    const page = await (await get(`/items/${item.id}`, await newSession())).text();
+    expect(page).toContain("Marisolさん（Oaxaca）");
+    expect(page).toContain(t("listener.demo"));
+    expect(page).toContain("I loved this at 15");
+  });
+
+  it("answers 422 when moderation turns the letter down, and stores nothing", async () => {
+    const item = await insertItem(env.DB, itemDraft());
+    const listenerId = await demoListener();
+    stubAnthropic().mockResolvedValue(verdict({ ok: false, reason: "personal" }));
+    const res = await call("POST", "/admin/letters", { listenerId, itemId: item.id, body: "x" }, undefined, withKey);
+    expect(res.status).toBe(422);
+    expect(await res.json()).toMatchObject({ error: "letters.rejected" });
+    expect(await listLettersForItem(env.DB, item.id)).toHaveLength(0);
+  });
+
+  it("answers 404 for an unknown listener, and 422 without itemId or url", async () => {
+    const item = await insertItem(env.DB, itemDraft());
+    expect((await call("POST", "/admin/letters", { listenerId: "nope", itemId: item.id, body: "x" })).status).toBe(404);
+    const listenerId = await demoListener();
+    expect((await call("POST", "/admin/letters", { listenerId, body: "x" })).status).toBe(422);
+  });
+
+  it("refuses to post as a listener that is not a demo account", async () => {
+    const item = await insertItem(env.DB, itemDraft());
+    const real = await createListener(env.DB);
+    expect((await call("POST", "/admin/letters", { listenerId: real.id, itemId: item.id, body: "x" })).status).toBe(403);
   });
 });

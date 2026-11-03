@@ -29,6 +29,7 @@ export const letter = (over: Partial<Letter> = {}): Letter => ({
   sourceUrl: null,
   sourceAuthor: null,
   status: "public",
+  demo: false,
   createdAt: "2026-01-01T00:00:00Z",
   ...over,
 });
@@ -43,6 +44,7 @@ export const listener = (over: Partial<Listener> = {}): Listener => ({
   cloudTtsUsed: false,
   mcpToken: "mcp-token-secret-0001",
   spotifyRefreshToken: null,
+  demo: false,
   createdAt: "2026-01-01T00:00:00Z",
   ...over,
 });

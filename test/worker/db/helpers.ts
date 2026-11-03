@@ -14,8 +14,8 @@ export const itemDraft = (over: Partial<Omit<Item, "id" | "createdAt">> = {}): O
 
 export const letterDraft = (
   itemId: string,
-  over: Partial<Omit<Letter, "id" | "createdAt">> = {},
-): Omit<Letter, "id" | "createdAt"> => ({
+  over: Partial<Omit<Letter, "id" | "createdAt" | "demo">> = {},
+): Omit<Letter, "id" | "createdAt" | "demo"> => ({
   itemId,
   kind: "letter",
   body: "ありがとう",

@@ -28,6 +28,7 @@ const read = (l: typeof plain, text = l.bodyJa): ScriptLine => ({
   kind: l.kind,
   sourceUrl: l.sourceUrl,
   sourceAuthor: l.sourceAuthor,
+  ...(l.demo ? { demo: true as const } : {}),
 });
 const dj = (text: string): ScriptLine => ({ type: "dj", text });
 const fixedDj = (text: string): ScriptLine => ({ type: "dj", text, fixed: true });
@@ -49,6 +50,13 @@ describe("verifyEpisode", () => {
     expect(verifyEpisode(episode(read(plain, `${plain.bodyJa} `)), letters, me).verbatim).toBe(false);
     expect(verifyEpisode(episode(read(letter({ id: "zz" }))), letters, me).verbatim).toBe(false);
     expect(verifyEpisode(episode({ ...(read(plain) as object), radioName: "別人" } as ScriptLine), letters, me).verbatim).toBe(false);
+  });
+
+  it("verbatim is false when the demo mark of a demo account's letter is dropped", () => {
+    const demo = letter({ id: "d", demo: true });
+    const all = byId([demo]);
+    expect(verifyEpisode(episode(read(demo)), all, me).verbatim).toBe(true);
+    expect(verifyEpisode(episode({ ...(read(demo) as object), demo: undefined } as ScriptLine), all, me).verbatim).toBe(false);
   });
 
   it("sources is false for a found voice without sourceUrl or sourceAuthor", () => {

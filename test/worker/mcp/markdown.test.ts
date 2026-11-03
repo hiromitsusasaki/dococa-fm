@@ -9,7 +9,7 @@ const item: Item = {
 };
 const letter = (over: Partial<Letter>): Letter => ({
   id: "l1", itemId: "i1", kind: "letter", body: "原文", bodyJa: "原文", lang: "ja", radioName: "ヒロ", place: "大船渡", year: null,
-  listenerId: null, parentLetterId: null, sourceUrl: null, sourceAuthor: null, status: "public", createdAt: "2026-11-04T00:00:00Z", ...over,
+  listenerId: null, parentLetterId: null, sourceUrl: null, sourceAuthor: null, status: "public", demo: false, createdAt: "2026-11-04T00:00:00Z", ...over,
 });
 const lines = {
   letter: (l: Letter) => ({ type: "letter" as const, letterId: l.id, text: l.bodyJa, radioName: l.radioName, place: l.place, kind: l.kind, sourceUrl: l.sourceUrl, sourceAuthor: l.sourceAuthor }),
@@ -30,6 +30,13 @@ describe("renderEpisode", () => {
     expect(md).toContain(`— ${t("letter.whoPlace", { who: t("letter.who", { name: "ヒロ" }), place: "大船渡" })}`);
     expect(md).toContain("Blue in Green");
     expect(md).toContain("次の一曲です。");
+  });
+
+  it("puts the demo mark beside the radio name of a demo account's letter", () => {
+    const l = letter({ demo: true });
+    expect(renderEpisode(episodeOf([l]), data([l]))).toContain(`［${t("listener.demo")}］`);
+    const real = letter({});
+    expect(renderEpisode(episodeOf([real]), data([real]))).not.toContain(t("listener.demo"));
   });
 
   it("adds the original beside the translation for a non-japanese letter", () => {

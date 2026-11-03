@@ -30,6 +30,8 @@ export type Letter = {
   sourceUrl: string | null;
   sourceAuthor: string | null;
   status: "public" | "rejected";
+  /** The letter was sent by a demo account (read from the listener, never stored on the letter). */
+  demo: boolean;
   createdAt: string;
 };
 
@@ -44,6 +46,8 @@ export type Listener = {
   spotifyRefreshToken: string | null;
   /** The listener has already had their one cloud-voice episode. */
   cloudTtsUsed: boolean;
+  /** An AI-made persona for the demo, shown with a mark wherever its letters appear. */
+  demo: boolean;
   createdAt: string;
 };
 
@@ -66,6 +70,7 @@ export type ScriptLine =
       kind: LetterKind;
       sourceUrl: string | null;
       sourceAuthor: string | null;
+      demo?: true;
     }
   | { type: "preview"; url: string; seconds: 30 };
 
