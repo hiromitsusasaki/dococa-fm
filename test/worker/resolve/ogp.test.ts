@@ -19,12 +19,18 @@ describe("fetchOgp", () => {
     expect(await fetchOgp("https://example.com/a")).toEqual({
       title: `Tom & Jerry "Q" 's <b>`,
       image: "https://example.com/img/x.png",
+      description: null,
     });
+  });
+
+  it("reads og:description", async () => {
+    stubFetch([["https://example.com/", () => meta({ "og:title": "T", "og:description": "A &amp; B · Song · 2019" })]]);
+    expect(await fetchOgp("https://example.com/a")).toEqual({ title: "T", image: null, description: "A & B · Song · 2019" });
   });
 
   it("returns image null when absent and null when there is no title", async () => {
     stubFetch([["https://example.com/a", () => meta({ "og:title": "T" })], ["https://example.com/b", () => meta({ "og:image": "https://x/y.png" })]]);
-    expect(await fetchOgp("https://example.com/a")).toEqual({ title: "T", image: null });
+    expect(await fetchOgp("https://example.com/a")).toEqual({ title: "T", image: null, description: null });
     expect(await fetchOgp("https://example.com/b")).toBeNull();
   });
 

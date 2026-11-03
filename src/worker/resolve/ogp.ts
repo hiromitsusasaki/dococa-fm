@@ -1,7 +1,7 @@
 import { fetchText } from "./http";
 import type { Provider } from "./url";
 
-export type Ogp = { title: string; image: string | null };
+export type Ogp = { title: string; image: string | null; description: string | null };
 
 const decodeEntities = (s: string) =>
   s.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, "&");
@@ -16,7 +16,7 @@ export async function fetchOgp(url: string): Promise<Ogp | null> {
       attrs[m[1]!.toLowerCase()] = m[2] ?? m[3] ?? "";
     }
     const key = attrs.property ?? attrs.name;
-    if ((key === "og:title" || key === "og:image") && attrs.content !== undefined && !(key in found)) {
+    if ((key === "og:title" || key === "og:image" || key === "og:description") && attrs.content !== undefined && !(key in found)) {
       found[key] = decodeEntities(attrs.content);
     }
   }
@@ -30,7 +30,7 @@ export async function fetchOgp(url: string): Promise<Ogp | null> {
       image = null;
     }
   }
-  return { title, image };
+  return { title, image, description: found["og:description"]?.trim() || null };
 }
 
 /** Strips each site's boilerplate from og:title (and pulls out a year when the site puts one there). */

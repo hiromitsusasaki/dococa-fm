@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Env } from "../../../src/worker/env";
 import { resolveOrCreate, resolveUrl, searchByText, type ItemDraft } from "../../../src/worker/resolve";
 import { resetDb } from "../../helpers/db";
-import { json, meta, stubFetch } from "../../helpers/fetch";
+import { html, json, meta, stubFetch } from "../../helpers/fetch";
 
 const testEnv = { ...env, TMDB_API_KEY: "KEY" } as Env;
 const noTmdbEnv = { ...env, TMDB_API_KEY: "" } as Env;
@@ -41,8 +41,11 @@ describe("resolveUrl", () => {
     });
     expect(calls()).toEqual([
       `https://open.spotify.com/oembed?url=${encodeURIComponent(url)}`,
+      url,
       "https://itunes.apple.com/search?term=Blue+in+Green&media=music&entity=song&limit=5&country=JP",
     ]);
+    // The pasted provider's id comes first so it dedupes before an iTunes guess.
+    expect(Object.keys(draft!.externalIds)).toEqual(["spotify", "itunes"]);
   });
 
   it("spotify: still returns a music draft from oembed alone when itunes finds nothing", async () => {
@@ -72,6 +75,7 @@ describe("resolveUrl", () => {
     const draft = await resolveUrl(url, testEnv);
     expect(draft).toMatchObject({ outLinks: { youtube: url }, externalIds: { itunes: "20", youtube: "dQw4w9WgXcQ" } });
     expect(calls()[1]).toContain("term=Song+Artist");
+    expect(Object.keys(draft!.externalIds)).toEqual(["youtube", "itunes"]);
   });
 
   it("youtube: falls back to oembed data when itunes finds nothing", async () => {
@@ -183,6 +187,115 @@ describe("resolveUrl", () => {
     expect(await resolveUrl("https://example.com/x", noTmdbEnv)).toBeNull();
   });
 
+  describe("spotify artist check", () => {
+    const url = "https://open.spotify.com/track/abc";
+    const spotifyRoutes = (description: string | null, hits: unknown[]): Array<[string, () => Response]> => [
+      ["https://open.spotify.com/oembed", () => json({ title: "Home", thumbnail_url: "https://i.scdn.co/t.jpg" })],
+      [url, () => (description ? meta({ "og:title": "Home", "og:description": description }) : new Response("", { status: 500 }))],
+      ["https://itunes.apple.com/search", () => json({ results: hits })],
+    ];
+
+    it("searches with the artist and picks the hit whose artist matches, not the first hit", async () => {
+      const { calls } = stubFetch(
+        spotifyRoutes("Edward Sharpe · Up from Below · Song · 2009", [
+          itunesTrack(1, "Home", "Michael Bublé"),
+          itunesTrack(2, "Home", "Edward Sharpe & The Magnetic Zeros"),
+        ]),
+      );
+      const draft = await resolveUrl(url, testEnv);
+      expect(calls()[2]).toContain("term=Home+Edward+Sharpe");
+      expect(draft?.externalIds).toEqual({ spotify: "abc", itunes: "2" });
+    });
+
+    it("returns the oembed-only draft with the artist as creator when no hit matches", async () => {
+      stubFetch(spotifyRoutes("Edward Sharpe · Song · 2009", [itunesTrack(1, "Home", "Michael Bublé")]));
+      expect(await resolveUrl(url, testEnv)).toEqual({
+        kind: "music",
+        title: "Home",
+        creator: "Edward Sharpe",
+        year: null,
+        imageUrl: "https://i.scdn.co/t.jpg",
+        previewUrl: null,
+        outLinks: { spotify: url },
+        externalIds: { spotify: "abc" },
+      });
+    });
+
+    it("falls back to the title-only search when the page ogp cannot be fetched", async () => {
+      const { calls } = stubFetch(spotifyRoutes(null, [itunesTrack(1, "Home", "Michael Bublé")]));
+      const draft = await resolveUrl(url, testEnv);
+      expect(calls()[2]).toContain("term=Home&");
+      expect(draft?.externalIds).toEqual({ spotify: "abc", itunes: "1" });
+    });
+
+    it("matches artists case-insensitively, either side containing the other", async () => {
+      stubFetch(spotifyRoutes("MILES  DAVIS · Song · 1959", [itunesTrack(5, "Home", "Miles Davis Quintet")]));
+      expect((await resolveUrl(url, testEnv))?.externalIds.itunes).toBe("5");
+    });
+  });
+
+  describe("provider failures inside fallback chains", () => {
+    const boom = () => {
+      throw new TypeError("timeout");
+    };
+
+    it("spotify: itunes throwing still returns the oembed-only draft", async () => {
+      stubFetch([
+        ["https://open.spotify.com/oembed", () => json({ title: "Obscure", thumbnail_url: "https://i.scdn.co/t.jpg" })],
+        ["https://itunes.apple.com/", boom],
+      ]);
+      expect(await resolveUrl("https://open.spotify.com/track/abc", testEnv)).toMatchObject({
+        title: "Obscure",
+        imageUrl: "https://i.scdn.co/t.jpg",
+        externalIds: { spotify: "abc" },
+      });
+    });
+
+    it("youtube: itunes throwing still returns the oembed-only draft", async () => {
+      stubFetch([
+        ["https://www.youtube.com/oembed", () => json({ title: "Vid", author_name: "Chan", thumbnail_url: "https://i.ytimg.com/x.jpg" })],
+        ["https://itunes.apple.com/", boom],
+      ]);
+      expect(await resolveUrl("https://youtu.be/abcdefghijk", testEnv)).toMatchObject({ title: "Vid", creator: "Chan", externalIds: { youtube: "abcdefghijk" } });
+    });
+
+    it("apple music: a failing lookup falls through to ogp", async () => {
+      const url = "https://music.apple.com/jp/album/x/1?i=77";
+      stubFetch([
+        ["https://itunes.apple.com/lookup", boom],
+        [url, () => meta({ "og:title": "Blue in Green" })],
+        ["https://itunes.apple.com/search", () => json({ results: [itunesTrack(77, "Blue in Green")] })],
+      ]);
+      expect(await resolveUrl(url, testEnv)).toMatchObject({ title: "Blue in Green", outLinks: { apple: url }, externalIds: { "apple-music": "77", itunes: "77" } });
+    });
+
+    it("amazon isbn: a failing google books call falls through to the ogp book draft", async () => {
+      const url = "https://www.amazon.co.jp/dp/4101010013";
+      stubFetch([
+        ["https://www.googleapis.com/", boom],
+        [url, () => meta({ "og:title": "こころ" })],
+      ]);
+      expect(await resolveUrl(url, testEnv)).toMatchObject({ kind: "book", title: "こころ", externalIds: { isbn: "4101010013", amazon: "4101010013" } });
+    });
+  });
+
+  describe("ssrf guard", () => {
+    it.each(["http://127.0.0.1/x", "http://[::1]/", "http://localhost:5173/", "http://foo.internal/", "ftp://example.com/"])(
+      "%s returns null without fetching",
+      async (u) => {
+        const { fn } = stubFetch([]);
+        expect(await resolveUrl(u, testEnv)).toBeNull();
+        expect(fn).not.toHaveBeenCalled();
+      },
+    );
+
+    it("a public https url proceeds to ogp", async () => {
+      const { calls } = stubFetch([["https://example.com/x", () => html("<html></html>")]]);
+      expect(await resolveUrl("https://example.com/x", testEnv)).toBeNull();
+      expect(calls()).toEqual(["https://example.com/x"]);
+    });
+  });
+
   it("returns null for non-urls, http errors and network failures instead of throwing", async () => {
     stubFetch([]);
     expect(await resolveUrl("not a url", testEnv)).toBeNull();
@@ -249,11 +362,20 @@ describe("resolveOrCreate", () => {
     expect(await count()).toBe(1);
   });
 
-  it("matches on a later external id too", async () => {
-    const first = await resolveOrCreate(env.DB, draft({ externalIds: { itunes: "10", spotify: "s1" } }));
-    const again = await resolveOrCreate(env.DB, draft({ externalIds: { itunes: "99", spotify: "s1" } }));
+  it("matches on a later external id when the stored item has no conflicting earlier id", async () => {
+    const first = await resolveOrCreate(env.DB, draft({ externalIds: { itunes: "10" } }));
+    const again = await resolveOrCreate(env.DB, draft({ externalIds: { spotify: "s9", itunes: "10" } }));
     expect(again.id).toBe(first.id);
     expect(await count()).toBe(1);
+  });
+
+  it("dedupes on the pasted provider id before an iTunes guess", async () => {
+    const withSpotify = (s: string) => draft({ externalIds: { spotify: s, itunes: "10" } });
+    const a = await resolveOrCreate(env.DB, withSpotify("s1"));
+    const b = await resolveOrCreate(env.DB, withSpotify("s2"));
+    expect(b.id).not.toBe(a.id);
+    expect((await resolveOrCreate(env.DB, withSpotify("s1"))).id).toBe(a.id);
+    expect(await count()).toBe(2);
   });
 
   it("creates a new item when nothing matches", async () => {

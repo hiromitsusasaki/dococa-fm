@@ -40,3 +40,20 @@ export function parseKnownUrl(raw: string): ParsedUrl {
   }
   return { provider: "unknown" };
 }
+
+const BLOCKED_SUFFIXES = [".localhost", ".local", ".internal"];
+
+/** Guards the server-side fetch of pasted urls: public-looking http(s) hostnames only, no IP literals. */
+export function isFetchableUrl(raw: string): boolean {
+  let u: URL;
+  try {
+    u = new URL(raw);
+  } catch {
+    return false;
+  }
+  if (u.protocol !== "http:" && u.protocol !== "https:") return false;
+  const h = u.hostname.toLowerCase().replace(/\.$/, "");
+  if (h.startsWith("[") || /^\d+(\.\d+){3}$/.test(h)) return false;
+  if (!h.includes(".") || h === "localhost") return false;
+  return !BLOCKED_SUFFIXES.some((suffix) => h.endsWith(suffix));
+}

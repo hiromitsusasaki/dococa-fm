@@ -6,7 +6,7 @@ import { lookupItunes, searchItunes } from "./itunes";
 import { fetchOembed } from "./oembed";
 import { cleanOgpTitle, fetchOgp } from "./ogp";
 import { searchTmdb } from "./tmdb";
-import { parseKnownUrl, type ParsedUrl, type Provider } from "./url";
+import { isFetchableUrl, parseKnownUrl, type ParsedUrl, type Provider } from "./url";
 
 export type ItemDraft = Omit<Item, "id" | "createdAt">;
 
@@ -44,6 +44,28 @@ export async function searchByText(q: string, kind: ItemKind | "any", env: Env):
   return results.flat().slice(0, MAX_RESULTS);
 }
 
+async function orNull<T>(op: Promise<T>): Promise<T | null> {
+  try {
+    return await op;
+  } catch {
+    return null;
+  }
+}
+
+/** Spotify's og:description reads "Artist · Song · 2019" or "Artist · Album · Song · 2019". */
+function artistFromDescription(description: string | null | undefined): string | null {
+  const parts = (description ?? "").split(" · ");
+  return parts.length >= 2 && parts[0]!.trim() ? parts[0]!.trim() : null;
+}
+
+const normalizeName = (s: string) => s.toLowerCase().trim().replace(/\s+/g, " ");
+
+function sameArtist(a: string, b: string): boolean {
+  const x = normalizeName(a);
+  const y = normalizeName(b);
+  return x !== "" && y !== "" && (x.includes(y) || y.includes(x));
+}
+
 /** First kind that has a hit, in the order iTunes, Google Books, TMDB. */
 async function searchFirstKind(q: string, env: Env): Promise<ItemDraft | null> {
   const by = searchers(q, env);
@@ -60,19 +82,26 @@ function withOrigin(draft: ItemDraft, parsed: ParsedUrl, url: string): ItemDraft
   return {
     ...draft,
     outLinks: { ...draft.outLinks, [OUT_LINK_KEY[parsed.provider]]: url },
-    externalIds: { ...draft.externalIds, ...(parsed.id ? { [parsed.provider]: parsed.id } : {}) },
+    // The pasted provider's own id goes first: resolveOrCreate dedupes in this order, so it outranks an iTunes guess.
+    externalIds: { ...(parsed.id ? { [parsed.provider]: parsed.id } : {}), ...draft.externalIds },
   };
 }
 
 async function resolveOembed(provider: "spotify" | "youtube", parsed: ParsedUrl, url: string): Promise<ItemDraft | null> {
-  const oembed = await fetchOembed(provider, url);
+  const [oembed, ogp] = await Promise.all([
+    orNull(fetchOembed(provider, url)),
+    provider === "spotify" ? orNull(fetchOgp(url)) : Promise.resolve(null),
+  ]);
   if (!oembed) return null;
-  const term = provider === "youtube" && oembed.author ? `${oembed.title} ${oembed.author}` : oembed.title;
-  const [found] = await searchItunes(term);
+  const artist = provider === "spotify" ? artistFromDescription(ogp?.description) : null;
+  const author = provider === "youtube" ? oembed.author : artist;
+  // YouTube's author is a channel, not an artist, so only a Spotify artist is checked against the hit.
+  const hits = await orEmpty(searchItunes(author ? `${oembed.title} ${author}` : oembed.title));
+  const found = artist ? hits.find((h) => sameArtist(h.creator, artist)) : hits[0];
   const base: ItemDraft = found ?? {
     kind: "music",
     title: oembed.title,
-    creator: provider === "youtube" ? (oembed.author ?? "") : "",
+    creator: author ?? "",
     year: null,
     imageUrl: oembed.thumbnail,
     previewUrl: null,
@@ -108,11 +137,11 @@ async function resolveKnown(url: string, env: Env): Promise<ItemDraft | null> {
     return resolveOembed(parsed.provider, parsed, url);
   }
   if (parsed.provider === "apple-music" && parsed.id) {
-    const track = await lookupItunes(parsed.id);
-    if (track) return withOrigin({ ...track, externalIds: { ...track.externalIds, "apple-music": parsed.id } }, parsed, url);
+    const track = await orNull(lookupItunes(parsed.id));
+    if (track) return withOrigin(track, parsed, url);
   }
   if (parsed.provider === "amazon" && parsed.id && /^\d/.test(parsed.id)) {
-    const [book] = await searchBooks(`isbn:${parsed.id}`);
+    const [book] = await orEmpty(searchBooks(`isbn:${parsed.id}`));
     if (book) return withOrigin({ ...book, externalIds: { ...book.externalIds, isbn: book.externalIds.isbn ?? parsed.id } }, parsed, url);
     return resolveOgp(parsed, url, env, parsed.id);
   }
@@ -121,6 +150,7 @@ async function resolveKnown(url: string, env: Env): Promise<ItemDraft | null> {
 
 /** Turns a pasted url into an item draft, or null when it cannot be understood. Never throws. */
 export async function resolveUrl(url: string, env: Env): Promise<ItemDraft | null> {
+  if (!isFetchableUrl(url)) return null;
   try {
     return await resolveKnown(url, env);
   } catch {
@@ -128,11 +158,19 @@ export async function resolveUrl(url: string, env: Env): Promise<ItemDraft | nul
   }
 }
 
-/** Returns the stored item that shares any external id with the draft, or stores the draft as new. */
+/**
+ * Returns the stored item that shares an external id with the draft, or stores the draft as new.
+ * Keys are tried in order, and a hit is rejected when it holds a different value for a key tried
+ * before it. So a different Spotify id is never merged into another track through a shared iTunes guess.
+ */
 export async function resolveOrCreate(db: D1Database, draft: ItemDraft): Promise<Item> {
+  const tried: Array<[string, string]> = [];
   for (const [key, value] of Object.entries(draft.externalIds)) {
     const existing = await findItemByExternalId(db, key, value);
-    if (existing) return existing;
+    if (existing && tried.every(([k, v]) => existing.externalIds[k] === undefined || existing.externalIds[k] === v)) {
+      return existing;
+    }
+    tried.push([key, value]);
   }
   return insertItem(db, draft);
 }

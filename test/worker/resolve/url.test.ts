@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseKnownUrl } from "../../../src/worker/resolve/url";
+import { isFetchableUrl, parseKnownUrl } from "../../../src/worker/resolve/url";
 
 describe("parseKnownUrl", () => {
   it.each([
@@ -28,5 +28,28 @@ describe("parseKnownUrl", () => {
 
   it("treats an apple music url without ?i= as apple-music with no id", () => {
     expect(parseKnownUrl("https://music.apple.com/jp/album/x/1669547800")).toEqual({ provider: "apple-music" });
+  });
+});
+
+describe("isFetchableUrl", () => {
+  it.each(["https://example.com/x", "http://sub.example.co.jp/a?b=1", "https://foo.localhost.example.com/"])("allows %s", (u) => {
+    expect(isFetchableUrl(u)).toBe(true);
+  });
+
+  it.each([
+    "http://127.0.0.1/x",
+    "http://10.0.0.5/",
+    "http://[::1]/",
+    "http://localhost:5173/",
+    "http://app.localhost/",
+    "http://foo.internal/",
+    "http://printer.local/",
+    "http://intranet/",
+    "ftp://example.com/",
+    "file:///etc/passwd",
+    "javascript:alert(1)",
+    "not a url",
+  ])("rejects %s", (u) => {
+    expect(isFetchableUrl(u)).toBe(false);
   });
 });
