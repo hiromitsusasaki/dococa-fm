@@ -1,0 +1,11 @@
+{
+  "name": "Dococa FM",
+  "short_name": "Dococa FM",
+  "description": "世界のどこかの、好きなものが流れてくるラジオ",
+  "lang": "ja",
+  "display": "standalone",
+  "start_url": "/",
+  "background_color": "#0f0f1e",
+  "theme_color": "#0f0f1e",
+  "icons": [{ "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }]
+}

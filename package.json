@@ -9,7 +9,7 @@
     "build": "vite build",
     "deploy": "vite build && wrangler deploy",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.client.json --noEmit",
     "db:migrate:local": "wrangler d1 migrations apply dococa --local",
     "db:migrate": "wrangler d1 migrations apply dococa --remote"
   },
@@ -25,6 +25,7 @@
     "@cloudflare/vite-plugin": "^1.67.0",
     "@cloudflare/vitest-plugin": "^1.5.1",
     "@cloudflare/workers-types": "^5.20261103.1",
+    "happy-dom": "^21.0.4",
     "typescript": "^7.0.2",
     "vite": "^8.3.5",
     "vitest": "^5.1.0",

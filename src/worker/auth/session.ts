@@ -36,7 +36,7 @@ export async function verifySession(cookie: string | undefined, secret: string):
 }
 
 const EXEMPT_PREFIXES = ["/admin", "/mcp", "/assets", "/src"];
-const EXEMPT_PATHS = new Set(["/healthz", "/app.css", "/favicon.ico", "/manifest.webmanifest"]);
+const EXEMPT_PATHS = new Set(["/healthz", "/app.css", "/favicon.ico", "/manifest.webmanifest", "/icon.svg", "/bed.mp3"]);
 
 /** Token-authenticated routes and static assets must not mint a listener per request. */
 export function isSessionExempt(path: string): boolean {
