@@ -12,6 +12,7 @@ function rowToListener(r: Row): Listener {
     lang: r.lang as "ja",
     mcpToken: r.mcp_token as string,
     spotifyRefreshToken: (r.spotify_refresh_token as string | null) ?? null,
+    cloudTtsUsed: r.cloud_tts_used === 1,
     createdAt: r.created_at as string,
   };
 }
@@ -31,6 +32,7 @@ export async function createListener(db: D1Database): Promise<Listener> {
     lang: "ja",
     mcpToken: newMcpToken(),
     spotifyRefreshToken: null,
+    cloudTtsUsed: false,
     createdAt: new Date().toISOString(),
   };
   await db
@@ -53,6 +55,12 @@ export async function createListener(db: D1Database): Promise<Listener> {
   return listener;
 }
 
+/** Atomically takes the listener's one cloud-voice episode: true for the single caller that flips the flag. */
+export async function claimCloudTts(db: D1Database, id: string): Promise<boolean> {
+  const res = await db.prepare("UPDATE listeners SET cloud_tts_used = 1 WHERE id = ? AND cloud_tts_used = 0").bind(id).run();
+  return res.meta.changes > 0;
+}
+
 export async function getListener(db: D1Database, id: string): Promise<Listener | null> {
   const row = await db.prepare("SELECT * FROM listeners WHERE id = ?").bind(id).first<Row>();
   return row ? rowToListener(row) : null;
@@ -71,6 +79,7 @@ const COLUMNS = {
   lang: "lang",
   mcpToken: "mcp_token",
   spotifyRefreshToken: "spotify_refresh_token",
+  cloudTtsUsed: "cloud_tts_used",
 } as const;
 
 export async function updateListener(db: D1Database, id: string, patch: Partial<Listener>): Promise<Listener | null> {
@@ -79,7 +88,7 @@ export async function updateListener(db: D1Database, id: string, patch: Partial<
     const sets = entries.map((k) => `${COLUMNS[k]} = ?`).join(", ");
     await db
       .prepare(`UPDATE listeners SET ${sets} WHERE id = ?`)
-      .bind(...entries.map((k) => patch[k] ?? null), id)
+      .bind(...entries.map((k) => (typeof patch[k] === "boolean" ? Number(patch[k]) : (patch[k] ?? null))), id)
       .run();
   }
   return getListener(db, id);

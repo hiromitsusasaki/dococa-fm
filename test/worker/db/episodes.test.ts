@@ -27,6 +27,13 @@ describe("episodes", () => {
     expect(await getEpisode(env.DB, "nope")).toBeNull();
   });
 
+  it("insertEpisode stores cloudTts (default false)", async () => {
+    const me = await createListener(env.DB);
+    expect((await getEpisode(env.DB, (await insertEpisode(env.DB, draft(me.id))).id))?.cloudTts).toBe(false);
+    const on = await insertEpisode(env.DB, { ...draft(me.id), cloudTts: true });
+    expect((await getEpisode(env.DB, on.id))?.cloudTts).toBe(true);
+  });
+
   it("insertEpisode keeps a given id and mints one otherwise", async () => {
     const me = await createListener(env.DB);
     const given = await insertEpisode(env.DB, { ...draft(me.id), id: "11111111-1111-1111-1111-111111111111" });

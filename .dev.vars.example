@@ -16,3 +16,7 @@ SESSION_SECRET=
 EPISODE_DAILY_LIMIT=10
 # 任意: 台本生成に使う Claude のモデル
 CLAUDE_MODEL=claude-sonnet-5-5
+# 任意: クラウド TTS のモデル（既定 gemini-2.5-flash-tts）
+GEMINI_TTS_MODEL=gemini-2.5-flash-tts
+# 任意: クラウド TTS の声。male = Charon、female = Kore（既定 male）
+GEMINI_TTS_VOICE=male

@@ -9,6 +9,7 @@ import { items } from "./routes/items";
 import { letters } from "./routes/letters";
 import { put } from "./routes/put";
 import { settings } from "./routes/settings";
+import { tts } from "./routes/tts";
 
 const app = new Hono<{ Bindings: Env; Variables: Variables }>();
 
@@ -23,6 +24,7 @@ app.route("/", put);
 app.route("/", letters);
 app.route("/", items);
 app.route("/", episodes);
+app.route("/", tts);
 app.route("/", home);
 
 app.get("*", (c) => c.env.ASSETS.fetch(c.req.raw));

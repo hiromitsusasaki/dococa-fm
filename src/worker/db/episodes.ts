@@ -12,6 +12,7 @@ function rowToEpisode(r: Row): Episode {
     segments: JSON.parse(r.segments as string),
     verified: r.verified === 1,
     report: JSON.parse(r.report as string),
+    cloudTts: r.cloud_tts === 1,
     createdAt: r.created_at as string,
   };
 }
@@ -24,17 +25,18 @@ export function jstDayStartIso(now: Date): string {
 
 export async function insertEpisode(
   db: D1Database,
-  e: Omit<Episode, "id" | "createdAt"> & { id?: string; createdAt?: string },
+  e: Omit<Episode, "id" | "createdAt" | "cloudTts"> & { id?: string; createdAt?: string; cloudTts?: boolean },
 ): Promise<Episode> {
-  const episode: Episode = { ...e, id: e.id ?? crypto.randomUUID(), createdAt: e.createdAt ?? new Date().toISOString() };
+  const episode: Episode = { ...e, cloudTts: e.cloudTts ?? false, id: e.id ?? crypto.randomUUID(), createdAt: e.createdAt ?? new Date().toISOString() };
   await db
-    .prepare("INSERT INTO episodes (id, listener_id, segments, verified, report, created_at) VALUES (?, ?, ?, ?, ?, ?)")
+    .prepare("INSERT INTO episodes (id, listener_id, segments, verified, report, cloud_tts, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)")
     .bind(
       episode.id,
       episode.listenerId,
       JSON.stringify(episode.segments),
       episode.verified ? 1 : 0,
       JSON.stringify(episode.report),
+      episode.cloudTts ? 1 : 0,
       episode.createdAt,
     )
     .run();

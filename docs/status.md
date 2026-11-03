@@ -2,10 +2,11 @@
 
 > 新しいセッションはまずここを読む。更新はタスクの区切りごと（最新を上に）。
 
-## 2026-11-04 Task 10 完了。次は Task 11
+## 2026-11-04 Task 11 完了。次は Task 12
 
 - 設計書・計画は本人承認済み。実行方式は **Subagent-driven**（`superpowers:subagent-driven-development`）。
-- 次の一手: **Task 11（クラウド TTS: Gemini-TTS）**。`docs/superpowers/plans/2026-11-03-dococa-fm.md` の Task 11 を開き、Step 1 から順に。プレイヤーは `data-tts-url` が非空なら `?episode=&line=`（行は番組全体の通し番号）の mp3 を鳴らす。
+- 次の一手: **Task 12（MCP の口）**。`docs/superpowers/plans/2026-11-03-dococa-fm.md` の Task 12 を開き、Step 1 から順に。
+- Gemini-TTS real check held: no key (API-key vs service-account unverified)。`GET /tts` は鍵が空なら 503。鍵が入ったら Task 11 Step 5（Charon / Kore の聴き比べと `DJ_STYLE_PROMPT` の調整）をする。クラウド TTS は各リスナーの最初の回（`claimCloudTts`）と、`makeEpisode(env, listener, { cloudTts: true })`（Task 13 のデモ回）だけ。
 - Real-API episode held: no key（`ANTHROPIC_API_KEY` が空。`docs/examples/episode-1.json` は鍵が入ってから作る）。
 - 要対応: Sonnet 5.5 は強制 `tool_choice` を 400 で拒む。Task 8 は `auto` + `strict` に直したが、Task 5/6 の `moderate.ts` `elicit.ts``translate.ts` は強制のまま。実 API では失敗する。
 - Spotify real check held: no client id（`SPOTIFY_CLIENT_ID` を入れたら Step 5 の実機確認をする）。
@@ -25,7 +26,7 @@
 | 8 | 台本（Claude）、合成、検証 | 完了（実 API での 1 回は鍵待ち） |
 | 9 | 番組の API と画面、アーカイブ、先読み、上限 | 完了 |
 | 10 | プレイヤー（hono/jsx/dom、Media Session、PWA） | 完了（実機での音出しは本人確認待ち） |
-| 11 | クラウド TTS（Gemini-TTS） | 未着手 |
+| 11 | クラウド TTS（Gemini-TTS） | 完了（実 API の合成は鍵待ち） |
 | 12 | MCP の口 | 未着手 |
 | 13 | 見つけた声（収集バッチと管理 API） | 未着手 |
 | 14 | はじめの一歩（好きなもの 3 つ、ブックマークレット、ホーム） | 未着手 |

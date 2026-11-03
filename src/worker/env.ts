@@ -11,5 +11,7 @@ export type Env = {
   SESSION_SECRET: string;
   EPISODE_DAILY_LIMIT?: string;
   CLAUDE_MODEL?: string;
+  GEMINI_TTS_MODEL?: string;
+  GEMINI_TTS_VOICE?: string;
   PUBLIC_ORIGIN: string;
 };

@@ -40,6 +40,7 @@ export const listener = (over: Partial<Listener> = {}): Listener => ({
   voice: "",
   dial: 0.3,
   lang: "ja",
+  cloudTtsUsed: false,
   mcpToken: "mcp-token-secret-0001",
   spotifyRefreshToken: null,
   createdAt: "2026-01-01T00:00:00Z",

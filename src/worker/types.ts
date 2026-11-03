@@ -42,6 +42,8 @@ export type Listener = {
   lang: "ja";
   mcpToken: string;
   spotifyRefreshToken: string | null;
+  /** The listener has already had their one cloud-voice episode. */
+  cloudTtsUsed: boolean;
   createdAt: string;
 };
 
@@ -87,5 +89,7 @@ export type Episode = {
   segments: Segment[];
   verified: boolean;
   report: VerifyReport;
+  /** dj and letter lines of this episode may be read by the cloud voice (`GET /tts`). */
+  cloudTts: boolean;
   createdAt: string;
 };

@@ -1,6 +1,7 @@
 import { env } from "cloudflare:workers";
 import { beforeEach, describe, expect, it } from "vitest";
 import {
+  claimCloudTts,
   createListener,
   getListener,
   getListenerByMcpToken,
@@ -20,6 +21,7 @@ describe("listeners", () => {
       dial: 0.3,
       lang: "ja",
       spotifyRefreshToken: null,
+      cloudTtsUsed: false,
     });
     expect(l.mcpToken).toMatch(/^[0-9a-f]{48}$/);
     expect(await getListener(env.DB, l.id)).toEqual(l);
@@ -42,5 +44,18 @@ describe("listeners", () => {
   it("updateListener with an empty patch returns the listener unchanged", async () => {
     const l = await createListener(env.DB);
     expect(await updateListener(env.DB, l.id, {})).toEqual(l);
+  });
+
+  it("updateListener writes cloudTtsUsed as a boolean", async () => {
+    const l = await createListener(env.DB);
+    expect((await updateListener(env.DB, l.id, { cloudTtsUsed: true }))?.cloudTtsUsed).toBe(true);
+    expect((await updateListener(env.DB, l.id, { cloudTtsUsed: false }))?.cloudTtsUsed).toBe(false);
+  });
+
+  it("claimCloudTts succeeds exactly once", async () => {
+    const l = await createListener(env.DB);
+    expect(await claimCloudTts(env.DB, l.id)).toBe(true);
+    expect(await claimCloudTts(env.DB, l.id)).toBe(false);
+    expect((await getListener(env.DB, l.id))?.cloudTtsUsed).toBe(true);
   });
 });

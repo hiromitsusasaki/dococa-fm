@@ -3,37 +3,17 @@ import { raw } from "hono/html";
 import { isHttpUrl, ItemCard, whoOf } from "../../views/components";
 import { Layout } from "../../views/layout";
 import type { Variables } from "../auth/session";
-import { countEpisodesToday, getEpisode, insertEpisode, listEpisodes } from "../db/episodes";
+import { getEpisode, listEpisodes } from "../db/episodes";
 import { getItem } from "../db/items";
 import type { Env } from "../env";
 import { ja } from "../i18n/ja";
 import { t } from "../i18n/t";
-import { buildEpisode } from "../program/build";
+import { makeEpisode } from "../program/create";
 import type { Episode, Item, Listener, ScriptLine } from "../types";
 
 export const episodes = new Hono<{ Bindings: Env; Variables: Variables }>();
 
-const DEFAULT_DAILY_LIMIT = 10;
 const JST_OFFSET_MS = 9 * 60 * 60 * 1000;
-
-function dailyLimit(env: Env): number {
-  const n = Number.parseInt(env.EPISODE_DAILY_LIMIT ?? "", 10);
-  return Number.isFinite(n) && n > 0 ? n : DEFAULT_DAILY_LIMIT;
-}
-
-type Made = { ok: true; id: string } | { ok: false; reason: "limit" | "unavailable" };
-
-/** Limit check, build, store. Failures are logged by error name only: report details can quote lines. */
-async function makeEpisode(env: Env, listener: Listener): Promise<Made> {
-  if ((await countEpisodesToday(env.DB, listener.id)) >= dailyLimit(env)) return { ok: false, reason: "limit" };
-  try {
-    const episode = await insertEpisode(env.DB, await buildEpisode(env, env.DB, listener));
-    return { ok: true, id: episode.id };
-  } catch (e) {
-    console.error(`[dococa] episode build failed: ${e instanceof Error ? e.name : "unknown"}`);
-    return { ok: false, reason: "unavailable" };
-  }
-}
 
 function MessagePage({ message }: { message: string }) {
   return (
@@ -129,7 +109,7 @@ episodes.get("/episodes/:id", async (c) => {
   return c.html(
     <Layout title={t("episode.title")} script>
       <main class="episode-page">
-        <div id="player" data-episode-id={episode.id} data-voice={listener.voice} data-next-url={`/episodes/${episode.id}/next`} data-tts-url="" data-dial={String(listener.dial)}></div>
+        <div id="player" data-episode-id={episode.id} data-voice={listener.voice} data-next-url={`/episodes/${episode.id}/next`} data-tts-url={episode.cloudTts ? "/tts" : ""} data-dial={String(listener.dial)}></div>
         <ol class="program">
           {rows.map((r) => (
             <li>

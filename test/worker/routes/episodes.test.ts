@@ -5,7 +5,8 @@ import { getEpisode, listEpisodes } from "../../../src/worker/db/episodes";
 import { upsertHistory } from "../../../src/worker/db/history";
 import { insertItem } from "../../../src/worker/db/items";
 import { insertLetter } from "../../../src/worker/db/letters";
-import { createListener } from "../../../src/worker/db/listeners";
+import { makeEpisode } from "../../../src/worker/program/create";
+import { createListener, getListener } from "../../../src/worker/db/listeners";
 import type { Episode } from "../../../src/worker/types";
 import { resetDb } from "../../helpers/db";
 import { itemDraft, letterDraft } from "../db/helpers";
@@ -83,6 +84,40 @@ describe("POST /episodes", () => {
     expect(await listEpisodes(env.DB, me, 10)).toHaveLength(0);
     expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining("EpisodeUnverifiedError"));
     expect(JSON.stringify(errorSpy.mock.calls)).not.toContain(me);
+  });
+});
+
+describe("cloud tts rule", () => {
+  it("gives the first episode of a listener the cloud voice, and only that one", async () => {
+    const cookie = await newSession();
+    await seed(cookie);
+    const firstId = locationId(await postForm("/episodes", cookie, {}));
+    expect((await getEpisode(env.DB, firstId))!.cloudTts).toBe(true);
+    expect(await (await get(`/episodes/${firstId}`, cookie)).text()).toContain('data-tts-url="/tts"');
+    const row = await env.DB.prepare("SELECT cloud_tts_used AS u FROM listeners WHERE id = ?").bind(idOf(cookie)).first<{ u: number }>();
+    expect(row!.u).toBe(1);
+
+    const secondId = ((await (await post(`/episodes/${firstId}/next`, cookie)).json()) as { id: string }).id;
+    expect((await getEpisode(env.DB, secondId))!.cloudTts).toBe(false);
+    expect(await (await get(`/episodes/${secondId}`, cookie)).text()).toContain('data-tts-url=""');
+  });
+
+  it("does not use up the first-episode voice when a build fails", async () => {
+    const cookie = await newSession();
+    const { me, near, mine } = await seed(cookie);
+    await insertLetter(env.DB, letterDraft(near.id, { kind: "watashimo", listenerId: null, radioName: me, place: "", parentLetterId: mine.id, body: "私も", bodyJa: "私も" }));
+    expect((await postForm("/episodes", cookie, {})).status).toBe(503);
+    const row = await env.DB.prepare("SELECT cloud_tts_used AS u FROM listeners WHERE id = ?").bind(me).first<{ u: number }>();
+    expect(row!.u).toBe(0);
+  });
+
+  it("lets a demo episode (cloudTts option) have the voice without using up the listener's first", async () => {
+    const cookie = await newSession();
+    await seed(cookie);
+    const listener = (await getListener(env.DB, idOf(cookie)))!;
+    const made = await makeEpisode(env, listener, { cloudTts: true });
+    expect(made.ok).toBe(true);
+    expect((await getListener(env.DB, listener.id))!.cloudTtsUsed).toBe(false);
   });
 });
 
