@@ -290,3 +290,117 @@ button.quiet {
   padding: 0;
   list-style: none;
 }
+
+/* Player */
+.player {
+  display: grid;
+  gap: var(--sp-4);
+}
+
+.player-card h2 {
+  margin: 0;
+  font-size: var(--fs-24);
+}
+
+.player-line {
+  min-height: 7rem;
+  padding: var(--sp-4);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-xl);
+  background: var(--bg-raised);
+}
+
+.player-dj {
+  margin: 0;
+  font-size: var(--fs-20);
+}
+
+.player-letter {
+  margin: 0;
+  border-left: 3px solid var(--accent-spark);
+  padding-left: var(--sp-4);
+}
+
+.player-letter p {
+  margin: 0 0 var(--sp-2);
+  white-space: pre-wrap;
+}
+
+.player-message {
+  margin: 0;
+  color: var(--accent-spark);
+}
+
+.player-controls,
+.player-react {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  align-items: center;
+}
+
+.player button,
+.player a.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  justify-self: start;
+  min-height: 44px;
+  padding: var(--sp-2) var(--sp-6);
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--r-pill);
+  background: var(--bg-card);
+  color: var(--fg1);
+  font: inherit;
+  text-decoration: none;
+  text-align: center;
+  cursor: pointer;
+}
+
+.player button.primary {
+  border-color: transparent;
+  background: var(--accent);
+}
+
+.player button:disabled {
+  color: var(--fg3);
+  cursor: default;
+}
+
+.player button:focus-visible,
+.player a:focus-visible,
+.player input:focus-visible {
+  outline: 2px solid var(--accent-active);
+  outline-offset: 2px;
+}
+
+.player .reply {
+  display: flex;
+  flex: 1 1 100%;
+  gap: var(--sp-2);
+}
+
+.player .reply input {
+  flex: 1;
+  min-width: 0;
+  padding: var(--sp-2) var(--sp-3);
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--r-md);
+  background: var(--bg-card);
+  color: var(--fg1);
+  font: inherit;
+}
+
+.player-again p {
+  margin: 0 0 var(--sp-2);
+}
+
+.player-dial {
+  display: grid;
+  gap: var(--sp-1);
+  color: var(--fg2);
+}
+
+.player-dial input {
+  accent-color: var(--accent-spark);
+}

@@ -107,3 +107,9 @@ settings.post("/settings/mcp-token", async (c) => {
   await updateListener(c.env.DB, c.get("listener").id, { mcpToken: newMcpToken() });
   return c.redirect("/settings", 303);
 });
+
+/** The player's dial: saves only the dial, effective from the next episode. */
+settings.post("/settings/dial", zValidator("form", schema.pick({ dial: true }), (r, c) => (r.success ? undefined : c.body(null, 422))), async (c) => {
+  await updateListener(c.env.DB, c.get("listener").id, c.req.valid("form"));
+  return c.body(null, 204);
+});

@@ -1,12 +1,12 @@
 import { Hono } from "hono";
 import { raw } from "hono/html";
-import { ItemCard } from "../../views/components";
-import { whoOf } from "../../views/components";
+import { isHttpUrl, ItemCard, whoOf } from "../../views/components";
 import { Layout } from "../../views/layout";
 import type { Variables } from "../auth/session";
 import { countEpisodesToday, getEpisode, insertEpisode, listEpisodes } from "../db/episodes";
 import { getItem } from "../db/items";
 import type { Env } from "../env";
+import { ja } from "../i18n/ja";
 import { t } from "../i18n/t";
 import { buildEpisode } from "../program/build";
 import type { Episode, Item, Listener, ScriptLine } from "../types";
@@ -50,6 +50,11 @@ function MessagePage({ message }: { message: string }) {
 
 /** JSON inside a script element: every `<` becomes a unicode escape so no `</script>` or `<!--` can occur. */
 const jsonForScript = (value: unknown): string => JSON.stringify(value).replace(/</g, "\\u003c");
+
+/** What the client player needs to know: the labels it shows, as `t()` values, since `t()` is server-only. */
+const PLAYER_KEY = /^(player\.|out\.|letter\.who|listener\.anonymous$)/;
+const playerStrings = (): Record<string, string> =>
+  Object.fromEntries(Object.keys(ja).filter((k) => PLAYER_KEY.test(k)).map((k) => [k, t(k as keyof typeof ja)]));
 
 const readerOf = (l: Extract<ScriptLine, { type: "letter" }>): string =>
   l.kind === "found" ? (l.sourceAuthor ?? "") : whoOf(l);
@@ -104,10 +109,19 @@ episodes.get("/episodes/:id", async (c) => {
   if (asJson) return c.json(episode);
 
   const listener = c.get("listener");
+  const items: Record<string, { title: string; creator: string; imageUrl: string | null; outLinks: Record<string, string> }> = {};
   const rows = (
     await Promise.all(
       episode.segments.map(async (s) => {
         const item: Item | null = await getItem(c.env.DB, s.itemId);
+        if (item) {
+          items[item.id] = {
+            title: item.title,
+            creator: item.creator,
+            imageUrl: isHttpUrl(item.imageUrl) ? item.imageUrl : null,
+            outLinks: Object.fromEntries(Object.entries(item.outLinks).filter(([, href]) => isHttpUrl(href))),
+          };
+        }
         return item ? [{ item, slot: s.slot, readers: s.lines.filter((l): l is Extract<ScriptLine, { type: "letter" }> => l.type === "letter") }] : [];
       }),
     )
@@ -115,7 +129,7 @@ episodes.get("/episodes/:id", async (c) => {
   return c.html(
     <Layout title={t("episode.title")} script>
       <main class="episode-page">
-        <div id="player" data-episode-id={episode.id} data-voice={listener.voice} data-next-url={`/episodes/${episode.id}/next`} data-tts-url=""></div>
+        <div id="player" data-episode-id={episode.id} data-voice={listener.voice} data-next-url={`/episodes/${episode.id}/next`} data-tts-url="" data-dial={String(listener.dial)}></div>
         <ol class="program">
           {rows.map((r) => (
             <li>
@@ -133,7 +147,10 @@ episodes.get("/episodes/:id", async (c) => {
           <a href="/episodes">{t("episode.archive")}</a>
         </p>
         <script type="application/json" id="episode-json">
-          {raw(jsonForScript(episode))}
+          {raw(jsonForScript({ id: episode.id, segments: episode.segments, items }))}
+        </script>
+        <script type="application/json" id="player-i18n">
+          {raw(jsonForScript(playerStrings()))}
         </script>
       </main>
     </Layout>,

@@ -99,6 +99,22 @@ describe("settings", () => {
     expect(row).toEqual({ radio_name: "", dial: 0.3 });
   });
 
+  it("saves only the dial from the player with 204", async () => {
+    const cookie = cookieOf(await SELF.fetch(`${BASE}/settings`));
+    await postForm("/settings", cookie, { radioName: "ヒロ", place: "大船渡", voice: "v", dial: "0.2" });
+    const res = await postForm("/settings/dial", cookie, { dial: "0.9" });
+    expect(res.status).toBe(204);
+    const row = await env.DB.prepare("SELECT radio_name, voice, dial FROM listeners").first();
+    expect(row).toEqual({ radio_name: "ヒロ", voice: "v", dial: 0.9 });
+  });
+
+  it("rejects a dial outside 0 to 1 from the player", async () => {
+    const cookie = cookieOf(await SELF.fetch(`${BASE}/settings`));
+    for (const dial of ["1.5", "-0.1", "x"]) expect((await postForm("/settings/dial", cookie, { dial })).status).toBe(422);
+    const row = await env.DB.prepare("SELECT dial FROM listeners").first<{ dial: number }>();
+    expect(row!.dial).toBe(0.3);
+  });
+
   it("rejects a radio name over 20 characters", async () => {
     const cookie = cookieOf(await SELF.fetch(`${BASE}/settings`));
     const res = await postForm("/settings", cookie, { radioName: "あ".repeat(21), place: "", voice: "", dial: "0.5" });

@@ -101,6 +101,7 @@ describe("GET /episodes/:id", () => {
     expect(html).toContain('id="player"');
     expect(html).toContain(`data-episode-id="${id}"`);
     expect(html).toContain(`data-next-url="/episodes/${id}/next"`);
+    expect(html).toContain('data-dial="0.3"');
     expect(html).toContain('id="episode-json"');
     expect(html).toContain("しずく");
     expect(html).toContain("松本");
@@ -123,9 +124,28 @@ describe("GET /episodes/:id", () => {
     expect(body).not.toContain("</");
     expect(body).not.toContain("<!--");
     expect(html).not.toContain("<script>alert(1)");
-    const parsed = JSON.parse(body) as Episode;
-    expect(parsed).toEqual(ep);
-    expect(parsed.listenerId).toBe(me);
+    const parsed = JSON.parse(body) as { id: string; segments: Episode["segments"]; items: Record<string, unknown> } & Record<string, unknown>;
+    expect(parsed.id).toBe(ep.id);
+    expect(parsed.segments).toEqual(ep.segments);
+    // The page carries only what the player shows: no listener id, no verification report.
+    expect(Object.keys(parsed).sort()).toEqual(["id", "items", "segments"]);
+    expect(html).not.toContain(me);
+    expect(Object.keys(parsed.items).sort()).toEqual(ep.segments.map((s) => s.itemId).sort());
+  });
+
+  it("projects each item to title, creator, image and http outlinks, and ships the player strings", async () => {
+    const { cookie, id, near } = await make();
+    await env.DB.prepare("UPDATE items SET out_links = ? WHERE id = ?").bind(JSON.stringify({ spotify: "https://open.spotify.com/x", youtube: "javascript:alert(1)" }), near.id).run();
+    const html = await (await get(`/episodes/${id}`, cookie)).text();
+    const items = JSON.parse(html.match(/id="episode-json">([\s\S]*?)<\/script>/)![1]!).items;
+    expect(Object.keys(items[near.id]).sort()).toEqual(["creator", "imageUrl", "outLinks", "title"]);
+    expect(items[near.id].title).toBe("手元の曲");
+    expect(items[near.id].outLinks).toEqual({ spotify: "https://open.spotify.com/x" });
+    const strings = JSON.parse(html.match(/id="player-i18n">([\s\S]*?)<\/script>/)![1]!);
+    expect(strings["player.play"]).toBe("再生");
+    expect(strings["out.spotify"]).toBe("Spotify で聴く");
+    expect(strings["letter.who"]).toBe("{name}さん");
+    expect(strings["listener.anonymous"]).toBe("名無しのリスナー");
   });
 
   it("serves the episode as json", async () => {
