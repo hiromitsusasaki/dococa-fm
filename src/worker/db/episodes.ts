@@ -24,9 +24,9 @@ export function jstDayStartIso(now: Date): string {
 
 export async function insertEpisode(
   db: D1Database,
-  e: Omit<Episode, "id" | "createdAt"> & { createdAt?: string },
+  e: Omit<Episode, "id" | "createdAt"> & { id?: string; createdAt?: string },
 ): Promise<Episode> {
-  const episode: Episode = { ...e, id: crypto.randomUUID(), createdAt: e.createdAt ?? new Date().toISOString() };
+  const episode: Episode = { ...e, id: e.id ?? crypto.randomUUID(), createdAt: e.createdAt ?? new Date().toISOString() };
   await db
     .prepare("INSERT INTO episodes (id, listener_id, segments, verified, report, created_at) VALUES (?, ?, ?, ?, ?, ?)")
     .bind(

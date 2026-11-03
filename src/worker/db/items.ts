@@ -67,3 +67,11 @@ export async function searchItems(db: D1Database, q: string, limit: number): Pro
     .all<Row>();
   return results.map(rowToItem);
 }
+
+export async function listRecentItems(db: D1Database, limit: number): Promise<Item[]> {
+  const { results } = await db
+    .prepare("SELECT * FROM items ORDER BY created_at DESC, id LIMIT ?")
+    .bind(Math.max(0, Math.min(limit, 20)))
+    .all<Row>();
+  return results.map(rowToItem);
+}

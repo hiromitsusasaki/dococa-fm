@@ -252,3 +252,41 @@ button.quiet {
   word-break: break-all;
   color: var(--fg2);
 }
+
+.home,
+.episode-page,
+.archive {
+  display: grid;
+  gap: var(--sp-4);
+}
+
+.recent-items {
+  display: grid;
+  gap: var(--sp-3);
+  padding: 0;
+  list-style: none;
+}
+
+.recent-items a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.program {
+  display: grid;
+  gap: var(--sp-4);
+  padding: 0;
+  list-style: none;
+}
+
+.slot {
+  color: var(--fg3);
+  font-size: var(--fs-14);
+}
+
+.archive-list {
+  display: grid;
+  gap: var(--sp-2);
+  padding: 0;
+  list-style: none;
+}

@@ -2,11 +2,11 @@
 
 > 新しいセッションはまずここを読む。更新はタスクの区切りごと（最新を上に）。
 
-## 2026-11-04 Task 8 完了。次は Task 9
+## 2026-11-04 Task 9 完了。次は Task 10
 
 - 設計書・計画は本人承認済み。実行方式は **Subagent-driven**（`superpowers:subagent-driven-development`）。
-- 次の一手: **Task 9（番組の API と画面、アーカイブ、先読み、上限）**。`docs/superpowers/plans/2026-11-03-dococa-fm.md` の Task 9 を開き、Step 1 から順に。
-- Real-API episode held: no key（`ANTHROPIC_API_KEY` が空。`docs/examples/episode-1.json` は Task 9 で鍵が入ってから作る）。
+- 次の一手: **Task 10（プレイヤー: hono/jsx/dom、Media Session、PWA）**。`docs/superpowers/plans/2026-11-03-dococa-fm.md` の Task 10 を開き、Step 1 から順に。
+- Real-API episode held: no key（`ANTHROPIC_API_KEY` が空。`docs/examples/episode-1.json` は鍵が入ってから作る）。
 - 要対応: Sonnet 5.5 は強制 `tool_choice` を 400 で拒む。Task 8 は `auto` + `strict` に直したが、Task 5/6 の `moderate.ts` `elicit.ts``translate.ts` は強制のまま。実 API では失敗する。
 - Spotify real check held: no client id（`SPOTIFY_CLIENT_ID` を入れたら Step 5 の実機確認をする）。
 - リポは private。main-mac と ops-mac の両方に clone 済み（`~/src/github.com/hiromitsusasaki/dococa-fm`）。
@@ -23,7 +23,7 @@
 | 6 | Spotify 連携と履歴、問い係 | 完了（実機確認は Spotify アプリ待ち） |
 | 7 | 番組の枠決め（三枠とダイヤル） | 完了 |
 | 8 | 台本（Claude）、合成、検証 | 完了（実 API での 1 回は鍵待ち） |
-| 9 | 番組の API と画面、アーカイブ、先読み、上限 | 未着手 |
+| 9 | 番組の API と画面、アーカイブ、先読み、上限 | 完了 |
 | 10 | プレイヤー（hono/jsx/dom、Media Session、PWA） | 未着手 |
 | 11 | クラウド TTS（Gemini-TTS） | 未着手 |
 | 12 | MCP の口 | 未着手 |

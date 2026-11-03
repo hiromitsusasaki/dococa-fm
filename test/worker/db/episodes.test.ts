@@ -27,6 +27,14 @@ describe("episodes", () => {
     expect(await getEpisode(env.DB, "nope")).toBeNull();
   });
 
+  it("insertEpisode keeps a given id and mints one otherwise", async () => {
+    const me = await createListener(env.DB);
+    const given = await insertEpisode(env.DB, { ...draft(me.id), id: "11111111-1111-1111-1111-111111111111" });
+    expect(given.id).toBe("11111111-1111-1111-1111-111111111111");
+    expect((await getEpisode(env.DB, given.id))?.id).toBe(given.id);
+    expect((await insertEpisode(env.DB, draft(me.id))).id).toMatch(/^[0-9a-f-]{36}$/);
+  });
+
   it("listEpisodes returns newest first with a limit", async () => {
     const me = await createListener(env.DB);
     const other = await createListener(env.DB);
