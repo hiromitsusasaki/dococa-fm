@@ -192,17 +192,35 @@ letters.post("/takedown", zValidator("form", takedownSchema, (r, c) => (r.succes
   return c.html(<TakedownPage received />);
 });
 
+/** The origin the bookmarklet sends people to; null when the configured one is not a plain http(s) origin. */
+function bookmarkletOrigin(publicOrigin: string): string | null {
+  try {
+    const url = new URL(publicOrigin);
+    const plain = /^https?:\/\/[A-Za-z0-9.:[\]-]+$/.test(url.origin);
+    return (url.protocol === "http:" || url.protocol === "https:") && plain ? url.origin : null;
+  } catch {
+    return null;
+  }
+}
+
 letters.get("/bookmarklet", (c) => {
-  const code = `javascript:location.href='${c.env.PUBLIC_ORIGIN}/put?url='+encodeURIComponent(location.href)`;
+  const origin = bookmarkletOrigin(c.env.PUBLIC_ORIGIN);
+  const code = origin && `javascript:location.href='${origin}/put?url='+encodeURIComponent(location.href)`;
   return c.html(
     <Layout title={t("bookmarklet.title")}>
       <main class="bookmarklet">
         <h1>{t("bookmarklet.title")}</h1>
-        <p>{t("bookmarklet.help")}</p>
-        <p>
-          <a class="button" href={code}>{t("bookmarklet.drag")}</a>
-        </p>
-        <pre><code>{code}</code></pre>
+        {code ? (
+          <>
+            <p>{t("bookmarklet.help")}</p>
+            <p>
+              <a class="button" href={code}>{t("bookmarklet.drag")}</a>
+            </p>
+            <pre><code>{code}</code></pre>
+          </>
+        ) : (
+          <p>{t("bookmarklet.unavailable")}</p>
+        )}
       </main>
     </Layout>,
   );

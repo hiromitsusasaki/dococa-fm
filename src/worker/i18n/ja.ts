@@ -57,6 +57,7 @@ export const ja = {
   "bookmarklet.title": "ブックマークレット",
   "bookmarklet.help": "下のリンクをブックマークバーへドラッグするか、文字をコピーして新しいブックマークの URL 欄に貼ってください。",
   "bookmarklet.drag": "Dococa FM に置く",
+  "bookmarklet.unavailable": "ブックマークレットはいま用意できていません。",
   "letters.invalid": "入力を確認してください。",
   "letters.empty": "お便りを書いてください。",
   "letters.tooLong": "お便りは 200 字までです。",

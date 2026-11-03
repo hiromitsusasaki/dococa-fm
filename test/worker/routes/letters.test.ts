@@ -1,5 +1,6 @@
 import { env } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import app from "../../../src/worker/index";
 import { insertItem } from "../../../src/worker/db/items";
 import { insertLetter, listLettersForItem } from "../../../src/worker/db/letters";
 import { t } from "../../../src/worker/i18n/t";
@@ -307,5 +308,18 @@ describe("reactions, report, takedown, bookmarklet", () => {
     const html = await (await get("/bookmarklet", await newSession())).text();
     expect(html).toContain("javascript:location.href=");
     expect(html).toContain("/put?url=");
+  });
+
+  it("bookmarklet builds its origin from a parsed url and refuses a non-http one", async () => {
+    const via = async (origin: string) => {
+      const res = await app.request("/bookmarklet", {}, { ...env, PUBLIC_ORIGIN: origin });
+      return res.text();
+    };
+    expect(await via("https://dococa.example/some/path?x=1")).toContain("location.href=&#39;https://dococa.example/put?url=&#39;");
+    for (const bad of ["javascript:alert(1)", "not a url", "https://x.example';alert(1);'"]) {
+      const html = await via(bad);
+      expect(html).not.toContain("javascript:location");
+      expect(html).toContain("ブックマークレットはいま用意できていません");
+    }
   });
 });
