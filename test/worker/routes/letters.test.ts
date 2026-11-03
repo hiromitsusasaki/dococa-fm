@@ -108,6 +108,16 @@ describe("POST /letters", () => {
     expect(await res.text()).toContain(t("letters.unavailable"));
   });
 
+  it("returns 503 and stores nothing when moderation gives no verdict", async () => {
+    const item = await seedItem();
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    create.mockResolvedValue({ content: [{ type: "text", text: "はい" }] });
+    const res = await postForm("/letters", await newSession(), { itemId: item.id, body: "いい曲" });
+    expect(res.status).toBe(503);
+    expect(await res.text()).toContain(t("letters.unavailable"));
+    expect(await listLettersForItem(env.DB, item.id)).toHaveLength(0);
+  });
+
   it("returns 503 and stores nothing when the translation never comes", async () => {
     const item = await seedItem();
     vi.spyOn(console, "error").mockImplementation(() => {});

@@ -4,7 +4,7 @@ import { insertItem } from "../../../src/worker/db/items";
 import { insertLetter } from "../../../src/worker/db/letters";
 import { createListener } from "../../../src/worker/db/listeners";
 import type { Env } from "../../../src/worker/env";
-import { buildEpisode } from "../../../src/worker/program/build";
+import { buildEpisode, EpisodeUnverifiedError } from "../../../src/worker/program/build";
 import type { Letter, Listener, ScriptLine } from "../../../src/worker/types";
 import { stubAnthropic, toolUse } from "../../helpers/anthropic";
 import { resetDb } from "../../helpers/db";
@@ -68,9 +68,7 @@ describe("buildEpisode", () => {
     expect(create).toHaveBeenCalledTimes(2);
     expect(ep.verified).toBe(true);
     for (const seg of ep.segments) {
-      for (const t of djTexts(seg.lines)) {
-        expect(["お便りを読みます。", "ネットで見つけた声です。"].includes(t) || t.includes("が届いています")).toBe(true);
-      }
+      expect(seg.lines.filter((l) => l.type === "dj").every((l) => l.type === "dj" && l.fixed === true)).toBe(true);
     }
   });
 
@@ -86,8 +84,8 @@ describe("buildEpisode", () => {
     const second = String(create.mock.calls[1]![0].messages[0].content);
     expect(first).not.toContain("前回の台本");
     expect(second).toContain("前回の台本で次の語が規則に触れました。言い換えてください");
-    expect(second).toContain("topical:");
-    expect(second).toContain("「今年」");
+    expect(second).toContain("topical: segment 1 line 1: 今年");
+    expect(second).not.toContain("今年の一曲です。");
   });
 
   it("lets the DJ say the work's own year", async () => {
@@ -110,7 +108,7 @@ describe("buildEpisode", () => {
     vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ type: "error", error: { type: "authentication_error", message: "bad key" } }), { status: 401, headers: { "content-type": "application/json" } })));
     const ep = await buildEpisode(keyed, env.DB, f.a, { size: 2, seed: "s" });
     expect(ep.verified).toBe(true);
-    expect(ep.segments[0]!.lines[0]).toEqual({ type: "dj", text: "お便りを読みます。" });
+    expect(ep.segments[0]!.lines[0]).toEqual({ type: "dj", text: "お便りを読みます。", fixed: true });
     expect(warn.mock.calls.some((c) => c.includes("status 401"))).toBe(true);
   });
 
@@ -119,7 +117,7 @@ describe("buildEpisode", () => {
     const ep = await buildEpisode(keyless, env.DB, f.a, { size: 2, seed: "s" });
     expect(create).not.toHaveBeenCalled();
     expect(ep.verified).toBe(true);
-    for (const seg of ep.segments) expect(seg.lines[0]).toEqual({ type: "dj", text: "お便りを読みます。" });
+    for (const seg of ep.segments) expect(seg.lines[0]).toEqual({ type: "dj", text: "お便りを読みます。", fixed: true });
   });
 
   it("falls back to readings only when Claude keeps returning a broken script", async () => {
@@ -127,14 +125,33 @@ describe("buildEpisode", () => {
     create.mockResolvedValue({ content: [{ type: "text", text: "はい" }] });
     const ep = await buildEpisode(keyed, env.DB, f.a, { size: 2, seed: "s" });
     expect(ep.verified).toBe(true);
-    for (const seg of ep.segments) expect(seg.lines[0]).toEqual({ type: "dj", text: "お便りを読みます。" });
+    for (const seg of ep.segments) expect(seg.lines[0]).toEqual({ type: "dj", text: "お便りを読みます。", fixed: true });
   });
 
-  it("returns verified=false when a found voice in the data has no source", async () => {
+  it("drops a found voice without a source and still verifies", async () => {
     const f = await fixture();
-    await insertLetter(env.DB, letterDraft(f.i1, { kind: "found", listenerId: null, sourceAuthor: "@x", sourceUrl: null, body: "no link", bodyJa: "出典なし" }));
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const bad = await insertLetter(env.DB, letterDraft(f.i1, { kind: "found", listenerId: null, sourceAuthor: "@x", sourceUrl: null, body: "no link", bodyJa: "出典なし" }));
     const ep = await buildEpisode(keyless, env.DB, f.a, { size: 2, seed: "s" });
-    expect(ep.verified).toBe(false);
-    expect(ep.report.sources).toBe(false);
+    expect(ep.verified).toBe(true);
+    expect(ep.segments.flatMap((s) => s.lines).some((l) => l.type === "letter" && l.letterId === bad.id)).toBe(false);
+    expect(warn.mock.calls.some((c) => String(c[0]).includes("without a source"))).toBe(true);
+  });
+
+  it("speaks a found voice's author and site", async () => {
+    const f = await fixture();
+    await insertLetter(env.DB, letterDraft(f.i1, { kind: "found", listenerId: null, sourceAuthor: "@jazzcat", sourceUrl: "https://youtu.be/x", body: "so good", bodyJa: "とてもいい" }));
+    const ep = await buildEpisode(keyless, env.DB, f.a, { size: 2, seed: "s" });
+    const texts = ep.segments.flatMap((s) => djTexts(s.lines));
+    expect(texts).toContain("ネットで見つけた声です。@jazzcatさん、YouTubeのコメントから。");
+  });
+
+  it("throws EpisodeUnverifiedError when even the readings-only episode fails", async () => {
+    const f = await fixture();
+    // A reply from someone whose radio name is an email address: its fixed reaction line cannot pass pii.
+    await insertLetter(env.DB, letterDraft(f.i0, { kind: "watashimo", listenerId: null, radioName: "x@example.com", place: "", parentLetterId: f.mine.id, body: "私も", bodyJa: "私も" }));
+    const err = await buildEpisode(keyless, env.DB, f.a, { size: 2, seed: "s" }).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(EpisodeUnverifiedError);
+    expect((err as EpisodeUnverifiedError).report.pii).toBe(false);
   });
 });

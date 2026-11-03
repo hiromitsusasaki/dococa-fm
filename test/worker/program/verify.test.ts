@@ -30,8 +30,9 @@ const read = (l: typeof plain, text = l.bodyJa): ScriptLine => ({
   sourceAuthor: l.sourceAuthor,
 });
 const dj = (text: string): ScriptLine => ({ type: "dj", text });
+const fixedDj = (text: string): ScriptLine => ({ type: "dj", text, fixed: true });
 const episode = (...lines: ScriptLine[]): Segment[] => [{ itemId: "i1", slot: "near", lines }];
-const clean = () => episode(dj("静かな一曲から。"), read(plain), read(translated, translated.body), dj("ネットで見つけた声です。"), read(found), dj("次は遠くの一通へ。"));
+const clean = () => episode(dj("静かな一曲から。"), read(plain), read(translated, translated.body), fixedDj("ネットで見つけた声です。@jazzcatさん、YouTubeのコメントから。"), read(found), dj("次は遠くの一通へ。"));
 
 describe("verifyEpisode", () => {
   it("passes a clean episode on all four points", () => {
@@ -67,7 +68,23 @@ describe("verifyEpisode", () => {
     expect(verifyEpisode(episode(dj(text)), letters, me).topical).toBe(false);
   });
 
-  it.each(["3人から届きました。", "３人から届きました。", "5通のお便りが来ています。", "二通目のお便りです。", "1位の曲です。", "ランキングの上の曲です。", "一致率の高い一曲。"])(
+  it.each([
+    "3人から届きました。",
+    "３人から届きました。",
+    "3名の方から届きました。",
+    "5通のお便りが来ています。",
+    "1位の曲です。",
+    "何通も届いています。",
+    "何人もの方が。",
+    "五人の方から届きました。",
+    "十人から届きました。",
+    "一通届きました。",
+    "二通目のお便りです。",
+    "1万回再生の曲。",
+    "第一位の曲です。",
+    "ランキングの上の曲です。",
+    "一致率の高い一曲。",
+  ])(
     "a count or ranking fails: %s",
     (text) => {
       const r = verifyEpisode(episode(dj(text)), letters, me);
@@ -76,15 +93,23 @@ describe("verifyEpisode", () => {
     },
   );
 
-  it.each(["二人で聴きたい曲です。", "三人組のバンドです。", "百人一首のような短さ。", "世界のどこかの一通を。"])("a phrase that does not count passes: %s", (text) => {
+  it.each(["二人で聴きたい曲です。", "三人組のバンドです。", "百人一首のような短さ。", "二人の時間に。", "世界のどこかの一通を。", "3回聴いた曲です。", "2回目のサビで。"])(
+    "a phrase that does not count passes: %s",
+    (text) => {
     expect(verifyEpisode(episode(dj(text)), letters, me).topical).toBe(true);
   });
 
-  it("topical is false for 今夜, and the detail names the word and the line", () => {
+  it("topical is false for 今夜, and the detail names the check, the place and the word, not the line", () => {
     const r = verifyEpisode(episode(dj("今夜はこの曲から。")), letters, me);
     expect(r.topical).toBe(false);
-    expect(r.details[0]).toContain("「今夜」");
-    expect(r.details[0]).toContain("今夜はこの曲から。");
+    expect(r.details).toEqual(["topical: segment 1 line 1: 今夜"]);
+    expect(r.details[0]).not.toContain("今夜はこの曲から。");
+  });
+
+  it("skips the word and count checks for fixed template lines, but not pii", () => {
+    expect(verifyEpisode(episode(fixedDj("3人家族さん（那覇）から『私も』が届いています")), letters, me)).toMatchObject({ topical: true, pii: true });
+    expect(verifyEpisode(episode(dj("3人家族さん（那覇）から『私も』が届いています")), letters, me).topical).toBe(false);
+    expect(verifyEpisode(episode(fixedDj("ネットで見つけた声です。a@b.coさん、YouTubeのコメントから。")), letters, me).pii).toBe(false);
   });
 
   describe("years from the data", () => {
@@ -112,7 +137,20 @@ describe("verifyEpisode", () => {
   });
 
   it("lets the work's own year and the program's phrases through", () => {
-    expect(verifyEpisode(episode(dj("1959年の録音です。世界のどこかの一通を。")), letters, me).topical).toBe(true);
+    const items = byId([item({ id: "i1", year: 1959 })]);
+    expect(verifyEpisode(episode(dj("1959年の録音です。世界のどこかの一通を。")), letters, me, items).topical).toBe(true);
+  });
+
+  it.each(["1999年の夏を思い出す曲。", "令和3年に出た曲です。", "平成元年の録音。"])("topical is false for a year not in the data: %s", (text) => {
+    const items = byId([item({ id: "i1", year: 2016 })]);
+    expect(verifyEpisode(episode(dj(text)), letters, me, items).topical).toBe(false);
+  });
+
+  it("still catches 年末 right after the work's own year", () => {
+    const items = byId([item({ id: "i1", year: 2016 })]);
+    const r = verifyEpisode(episode(dj("2016年末に出た一枚です。")), letters, me, items);
+    expect(r.topical).toBe(false);
+    expect(r.details).toEqual(["topical: segment 1 line 1: 年末"]);
   });
 
   it.each([
@@ -122,6 +160,12 @@ describe("verifyEpisode", () => {
     "詳しくは https://example.com で",
     "listener-0001 さんへ",
     "mcp-token-secret-0001",
+    "電話は +81 90 1234 5678 へ",
+    "www.example.org を見て",
+    "example.com で検索",
+    "dococa.fm にどうぞ",
+    "hiro\u200b@example.com まで",
+    "listener-\u200b0001 さんへ",
   ])("pii is false for %s", (text) => {
     expect(verifyEpisode(episode(dj(text)), letters, me).pii).toBe(false);
   });
@@ -154,11 +198,28 @@ describe("verifyEpisode", () => {
       expect(verifyEpisode(episode(dj("車の中で何度も聴いた、家族の思い出の一曲です。")), all, me).pii).toBe(true);
     });
 
-    it("lets the DJ name the work even when a letter names it too", () => {
-      const items = byId([item({ id: "i1", title: "Blue in Green", creator: "Miles Davis" })]);
-      const names = letter({ id: "n", body: "Blue in Green by Miles Davis saved me.", bodyJa: "Blue in Green に救われた。" });
+    const items = byId([item({ id: "i1", title: "Blue in Green", creator: "Miles Davis" })]);
+    const names = letter({ id: "n", body: "Blue in Green by Miles Davis saved me.", bodyJa: "Blue in Green に救われた。" });
+
+    it("lets the DJ name the work and its creator when nothing else overlaps", () => {
       const r = verifyEpisode(episode(dj("Miles Davis の Blue in Green です。")), byId([names]), me, items);
       expect(r.details).toEqual([]);
+    });
+
+    it("catches a letter copied whole even when it is mostly names", () => {
+      const r = verifyEpisode(episode(dj("Blue in Green by Miles Davis saved me.")), byId([names]), me, items);
+      expect(r.pii).toBe(false);
+    });
+
+    it("catches a quote around a short title", () => {
+      const thanks = byId([item({ id: "i1", title: "ありがとう", creator: "いきものがかり" })]);
+      const l = letter({ id: "t", body: "本当にありがとうと伝えたかった", bodyJa: "本当にありがとうと伝えたかった" });
+      expect(verifyEpisode(episode(dj("「本当にありがとうと伝えたかった」そうです。")), byId([l]), me, thanks).pii).toBe(false);
+    });
+
+    it("catches a fragment hidden with a zero-width space", () => {
+      const r = verifyEpisode(episode(dj("「カセットを何度も\u200b巻き戻して」")), byId([long]), me);
+      expect(r.pii).toBe(false);
     });
   });
 

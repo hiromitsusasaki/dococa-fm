@@ -2,7 +2,8 @@ import type { Env } from "../env";
 import { escapeTags, skipWithoutKey } from "./client";
 import { callTool, type ToolSpec } from "./tool-call";
 
-export type Verdict = { ok: true } | { ok: false; reason: "abuse" | "ad" | "pii" | "offtopic" };
+type Reason = "abuse" | "ad" | "pii" | "offtopic";
+export type Verdict = { ok: true } | { ok: false; reason: Reason };
 
 const SYSTEM = `あなたは、作品について一般のリスナーが書いた短いお便りを、公開してよいか判定する係です。
 次の 4 つの理由に当てはまるときだけ ok=false とし、reason に対応する値を入れてください。
@@ -28,17 +29,22 @@ const TOOL: ToolSpec = {
 };
 
 const REASONS = new Set(["abuse", "ad", "pii", "offtopic"]);
+const ATTEMPTS = 2;
 
+/**
+ * Fails closed: without a verdict after two tries it throws, and `POST /letters` answers 503 and stores
+ * nothing. Only local dev without a key lets letters through unjudged.
+ */
 export async function moderateLetter(env: Env, body: string): Promise<Verdict> {
   if (skipWithoutKey(env, "moderation")) return { ok: true };
-  const input = (await callTool(env, { system: SYSTEM, user: `<letter>${escapeTags(body)}</letter>`, tool: TOOL, maxTokens: 200 })) as
-    | { ok?: unknown; reason?: unknown }
-    | null;
-  if (input === null || typeof input.ok !== "boolean") {
-    console.warn("[dococa] judge_letter returned no verdict; letting the letter through");
-    return { ok: true };
+  for (let attempt = 0; attempt < ATTEMPTS; attempt++) {
+    const input = (await callTool(env, { system: SYSTEM, user: `<letter>${escapeTags(body)}</letter>`, tool: TOOL, maxTokens: 200 })) as
+      | { ok?: unknown; reason?: unknown }
+      | null;
+    if (input === null || typeof input.ok !== "boolean") continue;
+    if (input.ok) return { ok: true };
+    const reason = typeof input.reason === "string" && REASONS.has(input.reason) ? (input.reason as Reason) : "offtopic";
+    return { ok: false, reason };
   }
-  if (input.ok) return { ok: true };
-  const reason = typeof input.reason === "string" && REASONS.has(input.reason) ? (input.reason as "abuse" | "ad" | "pii" | "offtopic") : "offtopic";
-  return { ok: false, reason };
+  throw new Error("moderation missing");
 }

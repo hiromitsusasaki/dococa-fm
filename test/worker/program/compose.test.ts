@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { composeEpisode } from "../../../src/worker/program/compose";
+import { composeEpisode, siteName } from "../../../src/worker/program/compose";
 import { byId, item, letter } from "./fixtures";
 
 const plain = letter({ id: "a" });
@@ -21,7 +21,7 @@ const letters = byId([plain, found, w("w1", "あおい"), w("w2", "いつき"), 
 const items = byId([item({ id: "i1" }), item({ id: "i2", previewUrl: null })]);
 
 describe("composeEpisode", () => {
-  it("lays out dj, letters, found prefix, preview, reactions and the closing dj line", () => {
+  it("lays out dj, letters, the spoken found-voice source, preview, reactions and the closing dj line", () => {
     const [seg] = composeEpisode(
       [{ itemId: "i1", slot: "near", letterIds: ["a", "f"], reactionIds: ["w1", "r"] }],
       [{ sayBefore: "はじめ", sayAfter: "おわり" }],
@@ -32,11 +32,11 @@ describe("composeEpisode", () => {
     expect(seg!.lines).toEqual([
       { type: "dj", text: "はじめ" },
       { type: "letter", letterId: "a", text: plain.bodyJa, radioName: "みなと", place: "函館", kind: "letter", sourceUrl: null, sourceAuthor: null },
-      { type: "dj", text: "ネットで見つけた声です。" },
+      { type: "dj", text: "ネットで見つけた声です。@jazzcatさん、YouTubeのコメントから。", fixed: true },
       { type: "letter", letterId: "f", text: "故郷を思い出す。", radioName: "", place: "", kind: "found", sourceUrl: "https://www.youtube.com/watch?v=x", sourceAuthor: "@jazzcat" },
       { type: "preview", url: "https://example.com/a.m4a", seconds: 30 },
-      { type: "dj", text: "あおいさん（那覇）から『私も』が届いています" },
-      { type: "dj", text: "そらさん（熊本）から一言が届いています" },
+      { type: "dj", text: "あおいさん（那覇）から『私も』が届いています", fixed: true },
+      { type: "dj", text: "そらさん（熊本）から一言が届いています", fixed: true },
       { type: "letter", letterId: "r", text: "わかります", radioName: "そら", place: "熊本", kind: "reply", sourceUrl: null, sourceAuthor: null },
       { type: "dj", text: "おわり" },
     ]);
@@ -60,7 +60,7 @@ describe("composeEpisode", () => {
   it("names a reaction without a radio name or place gently", () => {
     const anon = letter({ id: "x", kind: "watashimo", body: "私も", bodyJa: "私も", radioName: "", place: "" });
     const [seg] = composeEpisode([{ itemId: "i2", slot: "near", letterIds: [], reactionIds: ["x"] }], null, byId([anon]), items);
-    expect(seg!.lines).toContainEqual({ type: "dj", text: "どなたかから『私も』が届いています" });
+    expect(seg!.lines).toContainEqual({ type: "dj", text: "どなたかから『私も』が届いています", fixed: true });
   });
 
   it("compose_falls_back_to_readings_only", () => {
@@ -74,11 +74,21 @@ describe("composeEpisode", () => {
       items,
     );
     for (const seg of segs) {
-      expect(seg.lines[0]).toEqual({ type: "dj", text: "お便りを読みます。" });
-      const dj = seg.lines.filter((l) => l.type === "dj").map((l) => (l as { text: string }).text);
-      expect(dj.every((t) => t === "お便りを読みます。" || t === "ネットで見つけた声です。")).toBe(true);
+      expect(seg.lines[0]).toEqual({ type: "dj", text: "お便りを読みます。", fixed: true });
+      // Only template lines: the reading cue and the spoken found-voice source.
+      expect(seg.lines.filter((l) => l.type === "dj").every((l) => l.type === "dj" && l.fixed === true)).toBe(true);
     }
     expect(segs[0]!.lines.filter((l) => l.type === "letter")).toHaveLength(2);
+  });
+
+  it.each([
+    ["https://www.youtube.com/watch?v=x", "YouTube"],
+    ["https://youtu.be/x", "YouTube"],
+    ["https://m.youtube.com/watch?v=x", "YouTube"],
+    ["https://www.reddit.com/r/jazz/1", "reddit.com"],
+    ["not a url", "ウェブ"],
+  ])("siteName(%s) is %s", (url, site) => {
+    expect(siteName(url)).toBe(site);
   });
 
   it("throws when the dj lines do not match the segments", () => {

@@ -42,17 +42,33 @@ describe("moderateLetter", () => {
     expect(await moderateLetter(keyed, "この曲で泣いた")).toEqual({ ok: true });
   });
 
-  it("does not block a human when the judge returns no tool_use", async () => {
-    vi.spyOn(console, "warn").mockImplementation(() => {});
-    create.mockResolvedValue({ content: [{ type: "text", text: "hmm" }] });
+  it("asks once more when the first reply has no verdict", async () => {
+    create.mockResolvedValueOnce({ content: [{ type: "text", text: "hmm" }] }).mockResolvedValueOnce(judged({ ok: true }));
     expect(await moderateLetter(keyed, "x")).toEqual({ ok: true });
+    expect(create).toHaveBeenCalledTimes(2);
   });
 
-  it("lets the letter through with a warning when the verdict is not a boolean", async () => {
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+  it("fails closed after two replies without a verdict", async () => {
+    create.mockResolvedValue({ content: [{ type: "text", text: "hmm" }] });
+    await expect(moderateLetter(keyed, "x")).rejects.toThrow("moderation missing");
+    expect(create).toHaveBeenCalledTimes(2);
+  });
+
+  it("treats two judge_letter calls in one reply as no verdict", async () => {
+    const two = {
+      content: [
+        { type: "tool_use", id: "a", name: "judge_letter", input: { ok: true } },
+        { type: "tool_use", id: "b", name: "judge_letter", input: { ok: false, reason: "ad" } },
+      ],
+    };
+    create.mockResolvedValue(two);
+    await expect(moderateLetter(keyed, "x")).rejects.toThrow("moderation missing");
+    expect(create).toHaveBeenCalledTimes(2);
+  });
+
+  it("treats a non-boolean verdict as no verdict", async () => {
     create.mockResolvedValue(judged({ ok: "no", reason: "ad" }));
-    expect(await moderateLetter(keyed, "x")).toEqual({ ok: true });
-    expect(warn).toHaveBeenCalledTimes(1);
+    await expect(moderateLetter(keyed, "x")).rejects.toThrow("moderation missing");
   });
 
   it("skips Claude in dev when the key is empty", async () => {

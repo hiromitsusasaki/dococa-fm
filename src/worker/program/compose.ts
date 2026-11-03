@@ -9,6 +9,20 @@ export type SegmentPlan = Selection & { reactionIds: string[] };
 export const MAX_REACTIONS = 3;
 
 const dj = (text: string): ScriptLine => ({ type: "dj", text });
+/** A line from a template and data, never from the model. */
+const fixed = (text: string): ScriptLine => ({ type: "dj", text, fixed: true });
+
+/** Where a found voice was found, said aloud: YouTube by name, otherwise the host without www. */
+export function siteName(sourceUrl: string | null): string {
+  let host = "";
+  try {
+    host = new URL(sourceUrl ?? "").hostname.toLowerCase();
+  } catch {
+    return t("script.web");
+  }
+  if (host === "youtu.be" || host === "youtube.com" || host.endsWith(".youtube.com")) return "YouTube";
+  return host.replace(/^www\./, "") || t("script.web");
+}
 
 /** The letter as stored: the reader reads `bodyJa`, word for word. */
 const read = (l: Letter): ScriptLine => ({
@@ -29,8 +43,8 @@ function who(l: Letter): string {
 }
 
 function reaction(l: Letter): ScriptLine[] {
-  if (l.kind === "reply") return [dj(t("script.replyReaction", { who: who(l) })), read(l)];
-  return [dj(t("script.reaction", { who: who(l) }))];
+  if (l.kind === "reply") return [fixed(t("script.replyReaction", { who: who(l) })), read(l)];
+  return [fixed(t("script.reaction", { who: who(l) }))];
 }
 
 /**
@@ -49,12 +63,14 @@ export function composeEpisode(
     if (!item) throw new Error(`item missing: ${p.itemId}`);
     const said = djLines?.[i];
     const lines: ScriptLine[] = [];
-    if (!said) lines.push(dj(t("script.readingOnly")));
+    if (!said) lines.push(fixed(t("script.readingOnly")));
     else if (said.sayBefore !== "") lines.push(dj(said.sayBefore));
     for (const id of p.letterIds) {
       const l = letters.get(id);
       if (!l) continue;
-      if (l.kind === "found") lines.push(dj(t("script.foundVoicePrefix")));
+      if (l.kind === "found") {
+        lines.push(fixed(t("script.foundVoice", { author: l.sourceAuthor ?? "", site: siteName(l.sourceUrl) })));
+      }
       lines.push(read(l));
     }
     if (item.previewUrl) lines.push({ type: "preview", url: item.previewUrl, seconds: 30 });

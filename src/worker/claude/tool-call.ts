@@ -11,8 +11,8 @@ export type ToolSpec = {
 export const callInstruction = (name: string): string => `必ず ${name} ツールを 1 回だけ呼んで答える。ほかの文章は書かない。`;
 
 /**
- * One request with a single strict tool and `tool_choice: auto`. Returns the tool's input, or null when
- * the model answered without calling it; callers validate the input and decide what null means.
+ * One request with a single strict tool and `tool_choice: auto`. Returns the tool's input, or null unless
+ * the reply holds exactly one call to that tool; callers validate the input and decide what null means.
  */
 export async function callTool(
   env: Env,
@@ -26,6 +26,7 @@ export async function callTool(
     tool_choice: { type: "auto" },
     messages: [{ role: "user", content: req.user }],
   });
-  const block = res.content.find((b) => b.type === "tool_use" && b.name === req.tool.name);
-  return block?.type === "tool_use" ? block.input : null;
+  const calls = res.content.filter((b) => b.type === "tool_use" && b.name === req.tool.name);
+  const [only] = calls;
+  return calls.length === 1 && only?.type === "tool_use" ? only.input : null;
 }
