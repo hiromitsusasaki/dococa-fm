@@ -94,4 +94,9 @@ export const ja = {
   "takedown.reason": "理由",
   "takedown.submit": "送る",
   "takedown.received": "受け付けました。確認します。",
+  "script.readingOnly": "お便りを読みます。",
+  "script.foundVoicePrefix": "ネットで見つけた声です。",
+  "script.reaction": "{who}から『私も』が届いています",
+  "script.replyReaction": "{who}から一言が届いています",
+  "script.someone": "どなたか",
 } as const;

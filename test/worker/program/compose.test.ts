@@ -1,0 +1,87 @@
+import { describe, expect, it } from "vitest";
+import { composeEpisode } from "../../../src/worker/program/compose";
+import { byId, item, letter } from "./fixtures";
+
+const plain = letter({ id: "a" });
+const found = letter({
+  id: "f",
+  kind: "found",
+  body: "Reminds me of home.",
+  bodyJa: "故郷を思い出す。",
+  lang: "en",
+  radioName: "",
+  place: "",
+  listenerId: null,
+  sourceUrl: "https://www.youtube.com/watch?v=x",
+  sourceAuthor: "@jazzcat",
+});
+const w = (id: string, radioName: string) => letter({ id, kind: "watashimo", body: "私も", bodyJa: "私も", radioName, place: "那覇", parentLetterId: "mine" });
+const reply = letter({ id: "r", kind: "reply", body: "わかります", bodyJa: "わかります", radioName: "そら", place: "熊本", parentLetterId: "mine" });
+const letters = byId([plain, found, w("w1", "あおい"), w("w2", "いつき"), w("w3", "うみ"), w("w4", "えま"), reply]);
+const items = byId([item({ id: "i1" }), item({ id: "i2", previewUrl: null })]);
+
+describe("composeEpisode", () => {
+  it("lays out dj, letters, found prefix, preview, reactions and the closing dj line", () => {
+    const [seg] = composeEpisode(
+      [{ itemId: "i1", slot: "near", letterIds: ["a", "f"], reactionIds: ["w1", "r"] }],
+      [{ sayBefore: "はじめ", sayAfter: "おわり" }],
+      letters,
+      items,
+    );
+    expect(seg).toMatchObject({ itemId: "i1", slot: "near" });
+    expect(seg!.lines).toEqual([
+      { type: "dj", text: "はじめ" },
+      { type: "letter", letterId: "a", text: plain.bodyJa, radioName: "みなと", place: "函館", kind: "letter", sourceUrl: null, sourceAuthor: null },
+      { type: "dj", text: "ネットで見つけた声です。" },
+      { type: "letter", letterId: "f", text: "故郷を思い出す。", radioName: "", place: "", kind: "found", sourceUrl: "https://www.youtube.com/watch?v=x", sourceAuthor: "@jazzcat" },
+      { type: "preview", url: "https://example.com/a.m4a", seconds: 30 },
+      { type: "dj", text: "あおいさん（那覇）から『私も』が届いています" },
+      { type: "dj", text: "そらさん（熊本）から一言が届いています" },
+      { type: "letter", letterId: "r", text: "わかります", radioName: "そら", place: "熊本", kind: "reply", sourceUrl: null, sourceAuthor: null },
+      { type: "dj", text: "おわり" },
+    ]);
+  });
+
+  it("has no preview line when previewUrl is null", () => {
+    const [seg] = composeEpisode([{ itemId: "i2", slot: "far", letterIds: ["a"], reactionIds: [] }], [{ sayBefore: "は", sayAfter: "お" }], letters, items);
+    expect(seg!.lines.some((l) => l.type === "preview")).toBe(false);
+  });
+
+  it("reads at most three reactions", () => {
+    const [seg] = composeEpisode(
+      [{ itemId: "i2", slot: "near", letterIds: [], reactionIds: ["w1", "w2", "w3", "w4"] }],
+      [{ sayBefore: "は", sayAfter: "お" }],
+      letters,
+      items,
+    );
+    expect(seg!.lines.filter((l) => l.type === "dj" && l.text.includes("私も"))).toHaveLength(3);
+  });
+
+  it("names a reaction without a radio name or place gently", () => {
+    const anon = letter({ id: "x", kind: "watashimo", body: "私も", bodyJa: "私も", radioName: "", place: "" });
+    const [seg] = composeEpisode([{ itemId: "i2", slot: "near", letterIds: [], reactionIds: ["x"] }], null, byId([anon]), items);
+    expect(seg!.lines).toContainEqual({ type: "dj", text: "どなたかから『私も』が届いています" });
+  });
+
+  it("compose_falls_back_to_readings_only", () => {
+    const segs = composeEpisode(
+      [
+        { itemId: "i1", slot: "near", letterIds: ["a", "f"], reactionIds: [] },
+        { itemId: "i2", slot: "far", letterIds: ["a"], reactionIds: [] },
+      ],
+      null,
+      letters,
+      items,
+    );
+    for (const seg of segs) {
+      expect(seg.lines[0]).toEqual({ type: "dj", text: "お便りを読みます。" });
+      const dj = seg.lines.filter((l) => l.type === "dj").map((l) => (l as { text: string }).text);
+      expect(dj.every((t) => t === "お便りを読みます。" || t === "ネットで見つけた声です。")).toBe(true);
+    }
+    expect(segs[0]!.lines.filter((l) => l.type === "letter")).toHaveLength(2);
+  });
+
+  it("throws when the dj lines do not match the segments", () => {
+    expect(() => composeEpisode([{ itemId: "i1", slot: "near", letterIds: [], reactionIds: [] }], [], letters, items)).toThrow();
+  });
+});
