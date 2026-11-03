@@ -11,6 +11,9 @@ export const hasClaude = (env: Env): boolean => Boolean(env.ANTHROPIC_API_KEY);
 
 const isDevOrigin = (env: Env) => env.PUBLIC_ORIGIN.startsWith("http://127.0.0.1") || env.PUBLIC_ORIGIN.startsWith("http://localhost");
 
+/** Letters sit inside <letter> tags in prompts, so a body must not be able to close or open one. */
+export const escapeTags = (s: string): string => s.replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
 /** With no key, local dev may skip the call (returns true); anywhere else it is an error. */
 export function skipWithoutKey(env: Env, what: string): boolean {
   if (hasClaude(env)) return false;

@@ -1,7 +1,7 @@
 import { zValidator } from "@hono/zod-validator";
 import { type Context, Hono } from "hono";
 import { z } from "zod";
-import { LetterText, whoOf } from "../../views/components";
+import { LetterText, ReportForm, whoOf } from "../../views/components";
 import { Layout } from "../../views/layout";
 import type { Variables } from "../auth/session";
 import { moderateLetter } from "../claude/moderate";
@@ -62,9 +62,12 @@ letters.post(
     const draft = stored ?? (form.url ? await resolveUrl(form.url, c.env) : null);
     if (!draft) return putError(c, form, t("put.notFound"), 422);
 
+    // A reaction hangs off a top-level letter of the same stored item; a plain letter has no parent.
     const parent = form.parentLetterId ? await getLetter(c.env.DB, form.parentLetterId) : null;
-    if (form.kind !== "letter" && (!parent || (stored && parent.itemId !== stored.id))) {
-      return putError(c, form, t("letters.invalidReaction"), 422, draft);
+    const isReaction = form.kind !== "letter";
+    const parentOk = parent !== null && stored !== null && parent.itemId === stored.id && parent.parentLetterId === null;
+    if (isReaction ? !parentOk : form.parentLetterId !== undefined) {
+      return putError(c, form, t("letters.badParent"), 422, draft);
     }
     if (isWatashimo && (await hasWatashimo(c.env.DB, listener.id, parent!.id))) {
       return putError(c, form, t("letters.watashimoDuplicate"), 409, draft);
@@ -127,6 +130,7 @@ letters.get("/letters/:id/reactions", async (c) => {
               <li class="reaction">
                 <LetterText letter={r} />
                 <p class="letter-who">{whoOf(r)}</p>
+                <ReportForm letterId={r.id} />
               </li>
             ))}
           </ul>

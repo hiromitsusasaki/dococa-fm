@@ -1,5 +1,5 @@
 import type { Env } from "../env";
-import { claude, model, skipWithoutKey } from "./client";
+import { claude, escapeTags, model, skipWithoutKey } from "./client";
 
 export type Lang = "ja" | "en" | "other";
 
@@ -27,7 +27,7 @@ export async function translateToJa(env: Env, body: string, lang: Lang): Promise
     system: SYSTEM,
     tools: [TOOL],
     tool_choice: { type: "tool", name: TOOL.name },
-    messages: [{ role: "user", content: `<letter>${body}</letter>` }],
+    messages: [{ role: "user", content: `<letter>${escapeTags(body)}</letter>` }],
   });
   const block = res.content.find((b) => b.type === "tool_use");
   const ja = block?.type === "tool_use" ? (block.input as { ja?: unknown }).ja : undefined;

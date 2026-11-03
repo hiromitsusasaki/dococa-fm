@@ -154,6 +154,39 @@ describe("POST /letters", () => {
   });
 });
 
+describe("POST /letters parent validation", () => {
+  const badParent = async (res: Response) => {
+    expect(res.status).toBe(422);
+    expect(await res.text()).toContain(t("letters.badParent"));
+    expect((await env.DB.prepare("SELECT COUNT(*) AS n FROM letters WHERE listener_id IS NOT NULL").first())?.n).toBe(0);
+  };
+
+  it("rejects a plain letter that names a parent", async () => {
+    const item = await seedItem();
+    const parent = await insertLetter(env.DB, letterDraft(item.id));
+    await badParent(await postForm("/letters", await newSession(), { itemId: item.id, body: "いい曲", parentLetterId: parent.id }));
+  });
+
+  it("rejects a reply to a parent that does not exist", async () => {
+    const item = await seedItem();
+    await badParent(await postForm("/letters", await newSession(), { itemId: item.id, kind: "reply", body: "わかる", parentLetterId: "nope" }));
+  });
+
+  it("rejects a reply whose parent belongs to another item", async () => {
+    const item = await seedItem();
+    const other = await insertItem(env.DB, itemDraft({ title: "Other", externalIds: { itunes: "2" } }));
+    const parent = await insertLetter(env.DB, letterDraft(other.id));
+    await badParent(await postForm("/letters", await newSession(), { itemId: item.id, kind: "reply", body: "わかる", parentLetterId: parent.id }));
+  });
+
+  it("rejects a reaction to a reaction", async () => {
+    const item = await seedItem();
+    const parent = await insertLetter(env.DB, letterDraft(item.id));
+    const reply = await insertLetter(env.DB, letterDraft(item.id, { kind: "reply", parentLetterId: parent.id }));
+    await badParent(await postForm("/letters", await newSession(), { itemId: item.id, kind: "watashimo", body: "x", parentLetterId: reply.id }));
+  });
+});
+
 describe("GET /put", () => {
   it("shows the item card and the form for itemId", async () => {
     const item = await seedItem();
@@ -196,6 +229,16 @@ describe("reactions, report, takedown, bookmarklet", () => {
     expect(html).toContain("高知");
     expect(html).toContain("わかる");
     expect((await get(`/letters/${parent!.id}/reactions`, await newSession())).status).toBe(404);
+  });
+
+  it("puts a report form on every reaction", async () => {
+    const item = await seedItem();
+    const cookie = await newSession();
+    await postForm("/letters", cookie, { itemId: item.id, body: "元の一通" });
+    const [parent] = await listLettersForItem(env.DB, item.id);
+    const r = await insertLetter(env.DB, letterDraft(item.id, { kind: "reply", parentLetterId: parent!.id }));
+    const html = await (await get(`/letters/${parent!.id}/reactions`, cookie)).text();
+    expect(html).toContain(`/letters/${r.id}/report`);
   });
 
   it("shows the original of an english reaction on the reactions page", async () => {

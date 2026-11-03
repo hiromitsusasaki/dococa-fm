@@ -59,6 +59,14 @@ describe("GET /items/:id", () => {
     expect(html.indexOf("ふつうの一通")).toBeLessThan(at);
   });
 
+  it("labels a found voice by its source author, never as an anonymous listener", async () => {
+    const item = await insertItem(env.DB, itemDraft());
+    await insertLetter(env.DB, letterDraft(item.id, { kind: "found", radioName: "", place: "", body: "見つけた声", bodyJa: "見つけた声", sourceUrl: "https://example.org/post/1", sourceAuthor: "山田" }));
+    const html = await (await get(`/items/${item.id}`, await newSession())).text();
+    expect(html).toContain("山田");
+    expect(html).not.toContain(t("listener.anonymous"));
+  });
+
   it("shows reactions under the parent as 'who から 私も' without counts", async () => {
     const item = await insertItem(env.DB, itemDraft());
     const parent = await insertLetter(env.DB, letterDraft(item.id));

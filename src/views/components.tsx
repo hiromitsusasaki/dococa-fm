@@ -56,7 +56,7 @@ export const whoOf = (l: Pick<Letter, "radioName" | "place">): string => {
   return l.place ? t("letter.whoPlace", { who, place: l.place }) : who;
 };
 
-function ReportForm({ letterId }: { letterId: string }) {
+export function ReportForm({ letterId }: { letterId: string }) {
   return (
     <form method="post" action={`/letters/${letterId}/report`}>
       <button type="submit" class="quiet">{t("report.button")}</button>
@@ -101,7 +101,7 @@ function LetterCard({ letter, reactions, itemId }: { letter: Letter; reactions: 
   return (
     <li class="letter" id={`letter-${letter.id}`}>
       <LetterText letter={letter} />
-      <p class="letter-who">{whoOf(letter)}</p>
+      {letter.kind !== "found" && <p class="letter-who">{whoOf(letter)}</p>}
       {letter.kind === "found" && (
         <p class="letter-source">
           {t("item.source")}: {letter.sourceAuthor ?? ""}

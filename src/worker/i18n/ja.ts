@@ -55,7 +55,7 @@ export const ja = {
   "letters.reason.pii": "個人を特定できる情報が含まれています。",
   "letters.reason.offtopic": "作品の話から離れているようです。",
   "letters.watashimoDuplicate": "この一通にはもう「私も」を置いています。",
-  "letters.invalidReaction": "反応を置く一通が見つかりません。",
+  "letters.badParent": "反応を置く一通が見つかりません。",
   "item.letters": "この番組へのお便り",
   "item.noLetters": "まだお便りはありません。",
   "item.foundVoices": "ネットで見つけた声",

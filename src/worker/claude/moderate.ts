@@ -1,5 +1,5 @@
 import type { Env } from "../env";
-import { claude, model, skipWithoutKey } from "./client";
+import { claude, escapeTags, model, skipWithoutKey } from "./client";
 
 export type Verdict = { ok: true } | { ok: false; reason: "abuse" | "ad" | "pii" | "offtopic" };
 
@@ -35,7 +35,7 @@ export async function moderateLetter(env: Env, body: string): Promise<Verdict> {
     system: SYSTEM,
     tools: [TOOL],
     tool_choice: { type: "tool", name: TOOL.name },
-    messages: [{ role: "user", content: `<letter>${body}</letter>` }],
+    messages: [{ role: "user", content: `<letter>${escapeTags(body)}</letter>` }],
   });
   const block = res.content.find((b) => b.type === "tool_use");
   if (!block || block.type !== "tool_use") {
