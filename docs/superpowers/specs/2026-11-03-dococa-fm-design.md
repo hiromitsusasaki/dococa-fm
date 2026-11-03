@@ -35,7 +35,7 @@ Dococa FM は、世界のどこかの誰かが置いた「その曲・本・映�
 - 英語 UI と英語 DJ。構造だけ用意し、日本語で出す。
 - Apple Music 連携、Bandcamp / Letterboxd / Goodreads の API 連携。CSV の取り込み（Netflix / Goodreads 等）は v1 から外す（本人決定 2026-11-03、URL 貼り付けで代替）。
 - ブラウザ拡張。v1 は URL 貼り付けとブックマークレットまで。拡張は次の版。
-- ネイティブアプリ。
+- ネイティブアプリ（v2 候補。§2.1）。v1 は Web。PWA にして Media Session API でロック画面の再生操作とバックグラウンド再生を取る。
 - 曲のフル再生・ミックス。30 秒の公式プレビューと埋め込みのみ。
 
 **アンチゴール（できても失敗）**
@@ -49,6 +49,7 @@ Dococa FM は、世界のどこかの誰かが置いた「その曲・本・映�
 ### 2.1 v2 候補（本人の提案 2026-11-03。要深掘り。v1 には入れない）
 - **自分の「好き」を集めた番組を固定 URL で公開し、プロフィール等に貼れる**（本人の許可制）。出会いやコミュニケーションはこのサービスではやらないが、「私の好きなもの」の提示は、番組という器なら押しつけにならない。
 - **トップページを公開番組の一覧やタイムラインにする**案もある。v1 のトップは「番組を聴く」「一通置く」だけにし、データ構造だけ公開に備える（episode に公開フラグを後から足せる形。リスナーのラジオネームを URL に使える形）。
+- **ネイティブ化（本人提起 2026-11-03、Claude の提案を本人了承）**: この Web を Capacitor で包み、DJ の声を OS 標準の高品質音声（iOS/macOS の AVSpeechSynthesizer 拡張音声、Android の Google TTS）や端末内モデル（Kokoro-82M の Core ML 版。日本語あり、INT8 で約 80MB、iOS 18 以上）に差し替えられるようにする。iOS の Personal Voice（自分の声）もここで選べる。バックグラウンド再生・ロック画面・CarPlay は「仕事中の BGM」に効く。v1 で入れない理由: 審査員が URL で 30 秒で聴けることがデモ 25 点に直結し、残り日数で Swift/Kotlin を積むと核が薄くなる。台本の出口は増えても「原文のまま・時事なし」の検証は Worker 側で済んでいるので、器を替えても設計は変わらない。
 
 ## 3. 制約
 
@@ -104,7 +105,7 @@ Dococa FM は、世界のどこかの誰かが置いた「その曲・本・映�
 
 ### 4.8 出口
 - アプリの画面（ブラウザ標準の音声合成で DJ が話す。声は端末の声から選ぶ）
-- クラウド TTS の口（デモ用。質の高い日本語音声）
+- クラウド TTS の口（デモ用。Google Cloud Text-to-Speech の Gemini-TTS。自然文のプロンプトで「40 代の落ち着いた深夜ラジオの DJ、ゆっくり、ささやくように」と指示できる。日本語 GA。本人了承 2026-11-03）
 - MCP の口（remote MCP、Streamable HTTP）。Claude の custom connector、ChatGPT の Developer mode、Gemini の Connected Apps、Claude Code や個人のアシスタントから、同じ台本を取り出せる。他社アシスタントの中では「原文を変えない」保証ができないことを README に明記する。
 
 ### 4.9 技術スタック
@@ -112,6 +113,7 @@ Dococa FM は、世界のどこかの誰かが置いた「その曲・本・映�
 - フロント: Hono JSX でサーバー描画、プレイヤーだけ hono/jsx/dom のクライアント部品。Vite + @cloudflare/vite-plugin。1 つの Worker（Claude の判断、notes/29。次点は Astro 7）。
 - データ: Cloudflare D1。お便りは JSON で持ち出せる。
 - Hono は安定版 4.13 系。HonoX は使わない（alpha）。
+- 音声: ブラウザ標準の Web Speech API を既定にし、デモ回と各リスナーの最初の回だけ Gemini-TTS（Google Cloud Text-to-Speech、鍵は `GOOGLE_TTS_API_KEY`）。PWA（manifest + Media Session API）でスマホのロック画面から再生・一時停止・次へを操作できるようにする。ネイティブ化は v2（§2.1）。
 - 名前: Dococa FM。ドメイン候補 `dococa.fm`（空き確認は DNS のみ。正式確認は本人）。
 
 ### 4.10 運用上の決め（Claude の判断。builder check Q6〜Q8 への回答）
@@ -150,7 +152,7 @@ Dococa FM は、世界のどこかの誰かが置いた「その曲・本・映�
 
 - 画面の設計（personal-design skill のパレットとボイスを使う。個人プロジェクト）
 - D1 のスキーマ詳細、ルーティング、i18n の辞書構造
-- クラウド TTS の提供元（日本語が自然で、キーを環境変数で渡せるもの）
+- ~~クラウド TTS の提供元~~ → Gemini-TTS に決定（§4.8、§4.9。2026-11-03）
 - 認証の方式（Spotify ログインと、リンクだけで聴けるゲスト。パスワードは持たない）
 - MCP の認証（OAuth が間に合わなければ、設定画面で発行するトークンを Authorization ヘッダで）
 - プレビューの取得元（iTunes Search API を既定、Spotify preview を補助、無ければ YouTube 埋め込み）
