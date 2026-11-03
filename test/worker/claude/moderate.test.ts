@@ -1,6 +1,6 @@
 import { env } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { stubAnthropic, toolUse } from "../../helpers/anthropic";
+import { expectInstructedTool, stubAnthropic, toolUse } from "../../helpers/anthropic";
 import type { Env } from "../../../src/worker/env";
 
 import { moderateLetter } from "../../../src/worker/claude/moderate";
@@ -18,13 +18,12 @@ afterEach(() => {
 });
 
 describe("moderateLetter", () => {
-  it("returns the rejection reason from the forced judge_letter tool", async () => {
+  it("returns the rejection reason from the judge_letter tool", async () => {
     create.mockResolvedValue(judged({ ok: false, reason: "ad" }));
     expect(await moderateLetter(keyed, "買って買って")).toEqual({ ok: false, reason: "ad" });
     const req = create.mock.calls[0]![0];
     expect(req.model).toBe("claude-sonnet-5-5");
-    expect(req.tool_choice).toEqual({ type: "tool", name: "judge_letter" });
-    expect(req.tools[0].name).toBe("judge_letter");
+    expectInstructedTool(req, "judge_letter");
     expect(req.max_tokens).toBe(200);
     expect(JSON.stringify(req.messages)).toContain("買って買って");
   });
@@ -47,6 +46,13 @@ describe("moderateLetter", () => {
     vi.spyOn(console, "warn").mockImplementation(() => {});
     create.mockResolvedValue({ content: [{ type: "text", text: "hmm" }] });
     expect(await moderateLetter(keyed, "x")).toEqual({ ok: true });
+  });
+
+  it("lets the letter through with a warning when the verdict is not a boolean", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    create.mockResolvedValue(judged({ ok: "no", reason: "ad" }));
+    expect(await moderateLetter(keyed, "x")).toEqual({ ok: true });
+    expect(warn).toHaveBeenCalledTimes(1);
   });
 
   it("skips Claude in dev when the key is empty", async () => {

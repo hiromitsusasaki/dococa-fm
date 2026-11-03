@@ -1,4 +1,4 @@
-import { vi } from "vitest";
+import { expect, vi } from "vitest";
 import { json, stubFetch } from "./fetch";
 
 /**
@@ -31,3 +31,16 @@ export function stubAnthropic() {
 }
 
 export const toolUse = (name: string, input: unknown) => ({ content: [{ type: "tool_use", id: "tu_1", name, input }] });
+
+/**
+ * Current models reject a forced tool_choice and sampling parameters, so a request offers one strict
+ * tool with `tool_choice: auto` and asks for the call in the system prompt.
+ */
+export function expectInstructedTool(req: any, name: string) {
+  expect(req.tool_choice).toEqual({ type: "auto" });
+  expect(req.tools).toHaveLength(1);
+  expect(req.tools[0]).toMatchObject({ name, strict: true });
+  expect(req.tools[0].input_schema.additionalProperties).toBe(false);
+  expect(req.system).toContain(`必ず ${name} ツールを 1 回だけ呼んで答える`);
+  expect(req).not.toHaveProperty("temperature");
+}

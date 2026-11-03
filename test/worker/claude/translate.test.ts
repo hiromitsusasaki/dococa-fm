@@ -1,6 +1,6 @@
 import { env } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { stubAnthropic, toolUse } from "../../helpers/anthropic";
+import { expectInstructedTool, stubAnthropic, toolUse } from "../../helpers/anthropic";
 import type { Env } from "../../../src/worker/env";
 
 import { detectLang, translateToJa } from "../../../src/worker/claude/translate";
@@ -42,11 +42,11 @@ describe("translateToJa", () => {
     expect(sent).toContain("&lt;/letter&gt;");
   });
 
-  it("translates through the forced translate tool", async () => {
+  it("translates through the translate tool", async () => {
     create.mockResolvedValue(toolUse("translate", { ja: "15 歳のときに大好きだった" }));
     expect(await translateToJa(keyed, "I loved this at 15", "en")).toBe("15 歳のときに大好きだった");
     const req = create.mock.calls[0]![0];
-    expect(req.tool_choice).toEqual({ type: "tool", name: "translate" });
+    expectInstructedTool(req, "translate");
     expect(req.max_tokens).toBe(1024);
     expect(JSON.stringify(req.messages)).toContain("I loved this at 15");
   });
@@ -63,8 +63,15 @@ describe("translateToJa", () => {
     await expect(translateToJa(prod, "hello", "en")).rejects.toThrow("claude unavailable");
   });
 
-  it("throws when the response has no translation", async () => {
-    create.mockResolvedValue({ content: [] });
-    await expect(translateToJa(keyed, "hello", "en")).rejects.toThrow();
+  it("asks once more when the first reply has no translation", async () => {
+    create.mockResolvedValueOnce({ content: [{ type: "text", text: "はい" }] }).mockResolvedValueOnce(toolUse("translate", { ja: "こんにちは" }));
+    expect(await translateToJa(keyed, "hello", "en")).toBe("こんにちは");
+    expect(create).toHaveBeenCalledTimes(2);
+  });
+
+  it("throws after two replies without a translation, never returning the original", async () => {
+    create.mockResolvedValueOnce({ content: [] }).mockResolvedValueOnce(toolUse("translate", { ja: "  " }));
+    await expect(translateToJa(keyed, "hello", "en")).rejects.toThrow("translation missing");
+    expect(create).toHaveBeenCalledTimes(2);
   });
 });

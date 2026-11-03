@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { elicitQuestions } from "../../../src/worker/claude/elicit";
 import type { Env } from "../../../src/worker/env";
 import type { Item, Listener } from "../../../src/worker/types";
-import { stubAnthropic, toolUse } from "../../helpers/anthropic";
+import { expectInstructedTool, stubAnthropic, toolUse } from "../../helpers/anthropic";
 
 const keyed = { ...env, ANTHROPIC_API_KEY: "sk-test" } as Env;
 const keyless = { ...env, ANTHROPIC_API_KEY: "" } as Env;
@@ -25,11 +25,11 @@ afterEach(() => {
 });
 
 describe("elicitQuestions", () => {
-  it("returns the questions from the forced ask tool", async () => {
+  it("returns the questions from the ask tool", async () => {
     create.mockResolvedValue(asked(["この曲を初めて聴いたのはどこでしたか？", "誰かと一緒でしたか？"]));
     expect(await elicitQuestions(keyed, item, listener)).toEqual(["この曲を初めて聴いたのはどこでしたか？", "誰かと一緒でしたか？"]);
     const req = create.mock.calls[0]![0];
-    expect(req.tool_choice).toEqual({ type: "tool", name: "ask" });
+    expectInstructedTool(req, "ask");
     expect(req.max_tokens).toBe(300);
     const sent = JSON.stringify(req.messages);
     expect(sent).toContain("Blue in Green");
