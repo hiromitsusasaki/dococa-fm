@@ -20,9 +20,14 @@ Built with Claude: Japan 2026 への応募作です。
 ```bash
 pnpm install
 cp .dev.vars.example .dev.vars   # 鍵を入れる（.dev.vars は gitignore 済み）
+pnpm wrangler d1 migrations apply dococa --local   # 初回だけ。pnpm dev の前に
 pnpm dev          # http://127.0.0.1:5173
 pnpm test         # vitest + @cloudflare/vitest-plugin
 pnpm typecheck
 ```
 
 必要な鍵は `.dev.vars.example` に一覧があります。鍵は `.dev.vars` と Cloudflare secrets にだけ置き、リポジトリには入れません。
+
+### Spotify 連携について
+
+Spotify 連携は開発モードのため、許可リストに入っているアカウントだけ使えます（本人と知人）。それ以外の方は、URL の貼り付けか「好きなもの 3 つ」から始められます。

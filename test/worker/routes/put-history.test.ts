@@ -72,6 +72,7 @@ describe("GET /put with a history", () => {
   it("shows the imported notice without a number", async () => {
     const html = await (await get("/put?imported=1", await newSession())).text();
     expect(html).toContain(t("put.imported"));
+    expect(html).not.toMatch(/\d+\s*(件|曲)/);
   });
 });
 
@@ -81,6 +82,12 @@ describe("GET /settings spotify section", () => {
     expect(html).toContain(t("settings.spotifyNotConnected"));
     expect(html).toContain('href="/auth/spotify"');
     expect(html).toContain(t("settings.spotifyDevMode"));
+  });
+
+  it("shows the failed notice after a failed import", async () => {
+    const html = await (await get("/settings?spotify=failed", await newSession())).text();
+    expect(html).toContain(t("settings.spotifyFailed"));
+    expect(await (await get("/settings", await newSession())).text()).not.toContain(t("settings.spotifyFailed"));
   });
 
   it("shows connected once a token is stored", async () => {

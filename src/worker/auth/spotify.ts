@@ -37,7 +37,7 @@ export function authorizeUrl(env: Env, challenge: string, state: string): string
   return `${AUTHORIZE_URL}?${qs}`;
 }
 
-type TokenResponse = { access_token?: string; refresh_token?: string };
+type TokenResponse = { access_token?: string; refresh_token?: string; error?: string };
 
 async function postToken(params: Record<string, string>): Promise<TokenResponse | null> {
   try {
@@ -46,7 +46,10 @@ async function postToken(params: Record<string, string>): Promise<TokenResponse 
       headers: { "content-type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams(params).toString(),
     });
-    return res.ok ? ((await res.json()) as TokenResponse) : null;
+    if (res.ok) return (await res.json()) as TokenResponse;
+    // A refused grant says why; invalid_grant means the stored token is dead.
+    const body = (await res.json().catch(() => ({}))) as TokenResponse;
+    return { error: body.error ?? "refused" };
   } catch {
     return null;
   }
@@ -143,12 +146,14 @@ export async function importSpotifyHistory(env: Env, db: D1Database, listener: L
   try {
     refresh = await decryptSecret(listener.spotifyRefreshToken, env.SESSION_SECRET);
   } catch {
-    console.warn("[dococa] stored spotify token cannot be decrypted; skipping import");
+    console.warn("[dococa] stored spotify token cannot be decrypted; clearing it");
+    await updateListener(db, listener.id, { spotifyRefreshToken: null });
     return 0;
   }
   const token = await postToken({ grant_type: "refresh_token", refresh_token: refresh, client_id: env.SPOTIFY_CLIENT_ID });
   if (!token?.access_token) {
     console.warn("[dococa] spotify token refresh failed; skipping import");
+    if (token?.error === "invalid_grant") await updateListener(db, listener.id, { spotifyRefreshToken: null });
     return 0;
   }
   if (token.refresh_token && token.refresh_token !== refresh) {

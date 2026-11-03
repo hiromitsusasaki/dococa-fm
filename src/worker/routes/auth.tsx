@@ -57,6 +57,7 @@ auth.get("/auth/spotify/callback", async (c) => {
   const saved = await updateListener(c.env.DB, listener.id, {
     spotifyRefreshToken: await encryptSecret(tokens.refreshToken, c.env.SESSION_SECRET),
   });
-  if (saved) await importSpotifyHistory(c.env, c.env.DB, saved);
-  return c.redirect("/put?imported=1", 303);
+  const count = saved ? await importSpotifyHistory(c.env, c.env.DB, saved) : 0;
+  // The count only decides where to go; it is never shown.
+  return c.redirect(count > 0 ? "/put?imported=1" : "/settings?spotify=failed", 303);
 });

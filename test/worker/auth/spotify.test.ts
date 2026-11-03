@@ -38,7 +38,7 @@ function stubWorld(o: Opts = {}) {
       "https://accounts.spotify.com/api/token",
       async (_u, init) => {
         tokenBodies.push(new URLSearchParams(String(init?.body)));
-        if (o.tokenStatus && o.tokenStatus !== 200) return json({ error: "invalid_grant" }, o.tokenStatus);
+        if (o.tokenStatus && o.tokenStatus !== 200) return json({ error: o.tokenStatus === 400 ? "invalid_grant" : "server_error" }, o.tokenStatus);
         return json({ access_token: "at-1", refresh_token: o.newRefresh ?? "rt-from-spotify" });
       },
     ],
@@ -152,6 +152,28 @@ describe("importSpotifyHistory", () => {
     expect(warn).toHaveBeenCalled();
   });
 
+  it("clears the stored token on invalid_grant", async () => {
+    stubWorld({ tokenStatus: 400 });
+    const listener = await connectedListener();
+    expect(await importSpotifyHistory(env, env.DB, listener)).toBe(0);
+    expect((await getListener(env.DB, listener.id))!.spotifyRefreshToken).toBeNull();
+  });
+
+  it("keeps the stored token when the refresh fails for another reason", async () => {
+    stubWorld({ tokenStatus: 503 });
+    const listener = await connectedListener();
+    expect(await importSpotifyHistory(env, env.DB, listener)).toBe(0);
+    expect((await getListener(env.DB, listener.id))!.spotifyRefreshToken).not.toBeNull();
+  });
+
+  it("clears a stored token that cannot be decrypted", async () => {
+    stubWorld();
+    const l = await createListener(env.DB);
+    const listener = (await updateListener(env.DB, l.id, { spotifyRefreshToken: "garbage.garbage" }))!;
+    expect(await importSpotifyHistory(env, env.DB, listener)).toBe(0);
+    expect((await getListener(env.DB, listener.id))!.spotifyRefreshToken).toBeNull();
+  });
+
   it("returns 0 for a listener with no stored token", async () => {
     stubWorld();
     expect(await importSpotifyHistory(env, env.DB, await createListener(env.DB))).toBe(0);
@@ -240,6 +262,14 @@ describe("spotify routes", () => {
     expect(row!.tok).not.toContain("rt-from-spotify");
     expect(await decryptSecret(row!.tok, SECRET)).toBe("rt-from-spotify");
     expect(await listHistory(env.DB, row!.id, 50)).toHaveLength(4);
+  });
+
+  it("sends the person to settings when the import yields nothing", async () => {
+    stubWorld({ top: [], recent: [], saved: [] });
+    const { session, pkce, state } = await begin();
+    const res = await callback(`code=ok&state=${state}`, `${session}; ${pkce}`);
+    expect(res.status).toBe(303);
+    expect(res.headers.get("location")).toBe("/settings?spotify=failed");
   });
 
   it("does not store a token when the exchange fails", async () => {
