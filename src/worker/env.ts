@@ -1,6 +1,7 @@
 export type Env = {
   DB: D1Database;
   BUCKET: R2Bucket;
+  ASSETS: Fetcher;
   ANTHROPIC_API_KEY: string;
   SPOTIFY_CLIENT_ID: string;
   GOOGLE_TTS_API_KEY: string;
