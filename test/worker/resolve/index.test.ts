@@ -1,0 +1,264 @@
+import { env } from "cloudflare:workers";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { Env } from "../../../src/worker/env";
+import { resolveOrCreate, resolveUrl, searchByText, type ItemDraft } from "../../../src/worker/resolve";
+import { resetDb } from "../../helpers/db";
+import { json, meta, stubFetch } from "../../helpers/fetch";
+
+const testEnv = { ...env, TMDB_API_KEY: "KEY" } as Env;
+const noTmdbEnv = { ...env, TMDB_API_KEY: "" } as Env;
+
+const itunesTrack = (id: number, name: string, artist = "Miles Davis") => ({
+  trackId: id,
+  trackName: name,
+  artistName: artist,
+  previewUrl: `https://audio.example/${id}.m4a`,
+  artworkUrl100: `https://img.example/${id}/100x100bb.jpg`,
+  trackViewUrl: `https://music.apple.com/jp/album/x/1?i=${id}`,
+  releaseDate: "1959-08-17T07:00:00Z",
+});
+const volume = (id: string, title: string) => ({ id, volumeInfo: { title, authors: ["夏目漱石"], publishedDate: "1914" } });
+
+afterEach(() => vi.unstubAllGlobals());
+
+describe("resolveUrl", () => {
+  it("spotify: oembed then itunes search gives a music draft with preview and the spotify link", async () => {
+    const url = "https://open.spotify.com/track/4uLU6hMCjMI75M1A2tKUQC";
+    const { calls } = stubFetch([
+      ["https://open.spotify.com/oembed", () => json({ title: "Blue in Green", thumbnail_url: "https://i.scdn.co/t.jpg" })],
+      ["https://itunes.apple.com/search", () => json({ results: [itunesTrack(10, "Blue in Green")] })],
+    ]);
+    const draft = await resolveUrl(url, testEnv);
+    expect(draft).toMatchObject({
+      kind: "music",
+      title: "Blue in Green",
+      creator: "Miles Davis",
+      year: 1959,
+      imageUrl: "https://img.example/10/600x600bb.jpg",
+      previewUrl: "https://audio.example/10.m4a",
+      outLinks: { apple: "https://music.apple.com/jp/album/x/1?i=10", spotify: url },
+      externalIds: { itunes: "10", spotify: "4uLU6hMCjMI75M1A2tKUQC" },
+    });
+    expect(calls()).toEqual([
+      `https://open.spotify.com/oembed?url=${encodeURIComponent(url)}`,
+      "https://itunes.apple.com/search?term=Blue+in+Green&media=music&entity=song&limit=5&country=JP",
+    ]);
+  });
+
+  it("spotify: still returns a music draft from oembed alone when itunes finds nothing", async () => {
+    const url = "https://open.spotify.com/track/abc";
+    stubFetch([
+      ["https://open.spotify.com/oembed", () => json({ title: "Obscure", thumbnail_url: "https://i.scdn.co/t.jpg" })],
+      ["https://itunes.apple.com/search", () => json({ results: [] })],
+    ]);
+    expect(await resolveUrl(url, testEnv)).toEqual({
+      kind: "music",
+      title: "Obscure",
+      creator: "",
+      year: null,
+      imageUrl: "https://i.scdn.co/t.jpg",
+      previewUrl: null,
+      outLinks: { spotify: url },
+      externalIds: { spotify: "abc" },
+    });
+  });
+
+  it("youtube: searches itunes with title and author, keeps the youtube link", async () => {
+    const url = "https://www.youtube.com/watch?v=dQw4w9WgXcQ";
+    const { calls } = stubFetch([
+      ["https://www.youtube.com/oembed", () => json({ title: "Song", author_name: "Artist", thumbnail_url: "https://i.ytimg.com/x.jpg" })],
+      ["https://itunes.apple.com/search", () => json({ results: [itunesTrack(20, "Song", "Artist")] })],
+    ]);
+    const draft = await resolveUrl(url, testEnv);
+    expect(draft).toMatchObject({ outLinks: { youtube: url }, externalIds: { itunes: "20", youtube: "dQw4w9WgXcQ" } });
+    expect(calls()[1]).toContain("term=Song+Artist");
+  });
+
+  it("youtube: falls back to oembed data when itunes finds nothing", async () => {
+    stubFetch([
+      ["https://www.youtube.com/oembed", () => json({ title: "Song", author_name: "Artist", thumbnail_url: "https://i.ytimg.com/x.jpg" })],
+      ["https://itunes.apple.com/search", () => json({ results: [] })],
+    ]);
+    expect(await resolveUrl("https://youtu.be/abcdefghijk", testEnv)).toMatchObject({
+      kind: "music",
+      creator: "Artist",
+      previewUrl: null,
+      imageUrl: "https://i.ytimg.com/x.jpg",
+      externalIds: { youtube: "abcdefghijk" },
+    });
+  });
+
+  it("apple music: looks up the ?i= id and records the pasted url as the apple link", async () => {
+    const url = "https://music.apple.com/jp/album/blue-in-green/1669547800?i=1669547856";
+    const { calls } = stubFetch([["https://itunes.apple.com/lookup", () => json({ results: [itunesTrack(1669547856, "Blue in Green")] })]]);
+    const draft = await resolveUrl(url, testEnv);
+    expect(calls()).toEqual(["https://itunes.apple.com/lookup?id=1669547856&country=JP"]);
+    expect(draft).toMatchObject({
+      outLinks: { apple: url },
+      externalIds: { itunes: "1669547856", "apple-music": "1669547856" },
+    });
+  });
+
+  it("amazon with an ISBN-10 resolves as a book through google books", async () => {
+    const url = "https://www.amazon.co.jp/dp/4101010013";
+    const { calls } = stubFetch([["https://www.googleapis.com/books/v1/volumes", () => json({ items: [volume("v1", "こころ")] })]]);
+    const draft = await resolveUrl(url, testEnv);
+    expect(calls()).toEqual(["https://www.googleapis.com/books/v1/volumes?q=isbn%3A4101010013&maxResults=5"]);
+    expect(draft).toMatchObject({
+      kind: "book",
+      title: "こころ",
+      outLinks: { amazon: url },
+      externalIds: { "google-books": "v1", isbn: "4101010013", amazon: "4101010013" },
+    });
+  });
+
+  it("amazon with an ISBN-10 falls back to ogp when google books has nothing", async () => {
+    const url = "https://www.amazon.co.jp/dp/4101010013";
+    stubFetch([
+      ["https://www.googleapis.com/", () => json({ totalItems: 0 })],
+      [url, () => meta({ "og:title": "こころ (新潮文庫)", "og:image": "https://m.media-amazon.com/x.jpg" })],
+    ]);
+    expect(await resolveUrl(url, testEnv)).toMatchObject({
+      kind: "book",
+      title: "こころ (新潮文庫)",
+      imageUrl: "https://m.media-amazon.com/x.jpg",
+      externalIds: { isbn: "4101010013", amazon: "4101010013" },
+    });
+  });
+
+  it("amazon with an ASIN reads ogp then takes the first kind that matches (itunes, books, tmdb)", async () => {
+    const url = "https://www.amazon.co.jp/dp/B08N5WRWNW";
+    const { calls } = stubFetch([
+      [url, () => meta({ "og:title": "Some Album" })],
+      ["https://itunes.apple.com/search", () => json({ results: [] })],
+      ["https://www.googleapis.com/", () => json({ items: [volume("v9", "Some Album")] })],
+      ["https://api.themoviedb.org/", () => json({ results: [{ id: 1, title: "never reached" }] })],
+    ]);
+    const draft = await resolveUrl(url, testEnv);
+    expect(draft).toMatchObject({ kind: "book", outLinks: { amazon: url }, externalIds: { "google-books": "v9", amazon: "B08N5WRWNW" } });
+    expect(calls().some((u) => u.startsWith("https://api.themoviedb.org/"))).toBe(false);
+  });
+
+  it.each([
+    ["filmarks", "https://filmarks.com/movies/70358", "映画『Beneath（原題）』の感想・レビュー[14件] | Filmarks", "Beneath（原題）", null, "70358"],
+    ["letterboxd", "https://letterboxd.com/film/parasite-2019/", "Parasite (2019)", "Parasite", 2019, "parasite-2019"],
+    ["netflix", "https://www.netflix.com/title/81091393", "Watch Demon Slayer | Netflix", "Demon Slayer", null, "81091393"],
+  ])("%s: builds a film draft from ogp", async (provider, url, ogTitle, title, year, id) => {
+    stubFetch([[url, () => meta({ "og:title": ogTitle, "og:image": "https://img.example/p.jpg" })]]);
+    expect(await resolveUrl(url, testEnv)).toEqual({
+      kind: "film",
+      title,
+      creator: "",
+      year,
+      imageUrl: "https://img.example/p.jpg",
+      previewUrl: null,
+      outLinks: { [provider]: url },
+      externalIds: { [provider]: id },
+    });
+  });
+
+  it("unknown url: ogp title is searched across itunes, books, tmdb and the first hit wins", async () => {
+    const url = "https://blog.example.com/post";
+    const { calls } = stubFetch([
+      [url, () => meta({ "og:title": "Parasite" })],
+      ["https://itunes.apple.com/search", () => json({ results: [] })],
+      ["https://www.googleapis.com/", () => json({})],
+      ["https://api.themoviedb.org/", () => json({ results: [{ id: 496243, title: "パラサイト", release_date: "2019-05-30" }] })],
+    ]);
+    const draft = await resolveUrl(url, testEnv);
+    expect(draft).toMatchObject({ kind: "film", externalIds: { tmdb: "496243" } });
+    expect(draft?.outLinks).toEqual({ tmdb: "https://www.themoviedb.org/movie/496243" });
+    expect(calls()[0]).toBe(url);
+  });
+
+  it("resolveUrl_unsupported_returns_null: no ogp, or nothing matches the ogp title", async () => {
+    stubFetch([["https://example.com/", () => new Response("<html></html>")]]);
+    expect(await resolveUrl("https://example.com/none", testEnv)).toBeNull();
+
+    stubFetch([
+      ["https://example.com/", () => meta({ "og:title": "Unfindable" })],
+      ["https://itunes.apple.com/", () => json({ results: [] })],
+      ["https://www.googleapis.com/", () => json({})],
+    ]);
+    expect(await resolveUrl("https://example.com/x", noTmdbEnv)).toBeNull();
+  });
+
+  it("returns null for non-urls, http errors and network failures instead of throwing", async () => {
+    stubFetch([]);
+    expect(await resolveUrl("not a url", testEnv)).toBeNull();
+    expect(await resolveUrl("https://open.spotify.com/track/abc", testEnv)).toBeNull();
+    vi.stubGlobal("fetch", vi.fn(async () => { throw new TypeError("network down"); }));
+    expect(await resolveUrl("https://open.spotify.com/track/abc", testEnv)).toBeNull();
+    expect(await resolveUrl("https://example.com/", testEnv)).toBeNull();
+  });
+});
+
+describe("searchByText", () => {
+  const routes: Array<[string, () => Response]> = [
+    ["https://itunes.apple.com/search", () => json({ results: [1, 2, 3].map((i) => itunesTrack(i, `Song ${i}`)) })],
+    ["https://www.googleapis.com/", () => json({ items: [volume("a", "Book A"), volume("b", "Book B"), volume("c", "Book C")] })],
+    ["https://api.themoviedb.org/", () => json({ results: [{ id: 7, title: "Film 7" }] })],
+  ];
+
+  it("routes by kind", async () => {
+    const { calls } = stubFetch(routes);
+    expect((await searchByText("q", "music", testEnv)).map((d) => d.title)).toEqual(["Song 1", "Song 2", "Song 3"]);
+    expect((await searchByText("q", "book", testEnv)).map((d) => d.title)).toEqual(["Book A", "Book B", "Book C"]);
+    expect((await searchByText("q", "film", testEnv)).map((d) => d.title)).toEqual(["Film 7"]);
+    expect(calls().map((u) => new URL(u).host)).toEqual(["itunes.apple.com", "www.googleapis.com", "api.themoviedb.org"]);
+  });
+
+  it("any: itunes, then books, then tmdb, concatenated and cut to 5", async () => {
+    stubFetch(routes);
+    expect((await searchByText("q", "any", testEnv)).map((d) => d.title)).toEqual(["Song 1", "Song 2", "Song 3", "Book A", "Book B"]);
+  });
+
+  it("film search and any skip tmdb without a key, and a failing provider does not sink the others", async () => {
+    const { calls } = stubFetch(routes);
+    expect(await searchByText("q", "film", noTmdbEnv)).toEqual([]);
+    expect(calls()).toEqual([]);
+    stubFetch([
+      ["https://itunes.apple.com/search", () => { throw new TypeError("down"); }],
+      ...routes.slice(1),
+    ]);
+    const any = await searchByText("q", "any", testEnv);
+    expect(any.map((d) => d.title)).toEqual(["Book A", "Book B", "Book C", "Film 7"]);
+  });
+});
+
+describe("resolveOrCreate", () => {
+  beforeEach(() => resetDb(env.DB));
+
+  const draft = (over: Partial<ItemDraft> = {}): ItemDraft => ({
+    kind: "music",
+    title: "Blue in Green",
+    creator: "Miles Davis",
+    year: 1959,
+    imageUrl: null,
+    previewUrl: null,
+    outLinks: {},
+    externalIds: { itunes: "10" },
+    ...over,
+  });
+  const count = async () => (await env.DB.prepare("SELECT COUNT(*) AS n FROM items").first<{ n: number }>())!.n;
+
+  it("returns the existing item when any external id matches, creating only once", async () => {
+    const first = await resolveOrCreate(env.DB, draft());
+    const second = await resolveOrCreate(env.DB, draft());
+    expect(second.id).toBe(first.id);
+    expect(await count()).toBe(1);
+  });
+
+  it("matches on a later external id too", async () => {
+    const first = await resolveOrCreate(env.DB, draft({ externalIds: { itunes: "10", spotify: "s1" } }));
+    const again = await resolveOrCreate(env.DB, draft({ externalIds: { itunes: "99", spotify: "s1" } }));
+    expect(again.id).toBe(first.id);
+    expect(await count()).toBe(1);
+  });
+
+  it("creates a new item when nothing matches", async () => {
+    await resolveOrCreate(env.DB, draft());
+    await resolveOrCreate(env.DB, draft({ externalIds: { itunes: "11" } }));
+    expect(await count()).toBe(2);
+  });
+});

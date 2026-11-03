@@ -2,10 +2,10 @@
 
 > 新しいセッションはまずここを読む。更新はタスクの区切りごと（最新を上に）。
 
-## 2026-11-03 Task 2 完了。次は Task 3
+## 2026-11-03 Task 3 完了。次は Task 4
 
 - 設計書・計画は本人承認済み。実行方式は **Subagent-driven**（`superpowers:subagent-driven-development`）。
-- 次の一手: **Task 3（作品の解決）**。`docs/superpowers/plans/2026-11-03-dococa-fm.md` の Task 3 を開き、Step 1 から順に。
+- 次の一手: **Task 4（リスナーのセッションと設定）**。`docs/superpowers/plans/2026-11-03-dococa-fm.md` の Task 4 を開き、Step 1 から順に。
 - リポは private。main-mac と ops-mac の両方に clone 済み（`~/src/github.com/hiromitsusasaki/dococa-fm`）。
 
 ## タスクの進み
@@ -14,7 +14,7 @@
 |---|---|---|
 | 1 | Scaffold（Worker、Vite、D1、vitest、i18n） | 完了 |
 | 2 | データ層（型、マイグレーション、リポジトリ） | 完了 |
-| 3 | 作品の解決（URL 貼り付け、検索、プレビュー） | 未着手 |
+| 3 | 作品の解決（URL 貼り付け、検索、プレビュー） | 完了（TMDB の実 API 確認は鍵待ち） |
 | 4 | リスナーのセッションと設定 | 未着手 |
 | 5 | お便り（投稿、判定、翻訳、作品ページ、リアクション） | 未着手 |
 | 6 | Spotify 連携と履歴、問い係 | 未着手 |
