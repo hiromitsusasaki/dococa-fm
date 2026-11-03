@@ -79,7 +79,7 @@ export async function selectProgram(
   const nearQuota = Math.round((remaining * 2) / 3);
   const neighborQuota = remaining - nearQuota;
 
-  const echo = size > 0 ? await echoItem(db, listener, rng) : null;
+  const echo = nearQuota > 0 ? await echoItem(db, listener, rng) : null;
   const taken = new Set<string>(echo ? [echo] : []);
   const pool = async (sql: string) => shuffle((await ids(db, sql, listener.id)).filter((id) => !taken.has(id)), rng);
 
@@ -91,9 +91,11 @@ export async function selectProgram(
   };
 
   const chosen: Record<Slot, string[]> = { near: echo ? [echo] : [], neighbor: [], far: [] };
-  const quota: Record<Slot, number> = { near: nearQuota, neighbor: neighborQuota, far: farQuota };
+  // The echo item uses one unit of the near quota; it never adds to the program size.
+  const nearRoom = nearQuota - (echo ? 1 : 0);
+  const quota: Record<Slot, number> = { near: nearRoom, neighbor: neighborQuota, far: farQuota };
   for (const slot of ["near", "neighbor", "far"] as const) {
-    chosen[slot].push(...pools[slot].splice(0, Math.max(0, quota[slot] - chosen[slot].length)));
+    chosen[slot].push(...pools[slot].splice(0, Math.max(0, quota[slot])));
   }
 
   const count = () => chosen.near.length + chosen.neighbor.length + chosen.far.length;

@@ -168,7 +168,20 @@ describe("selectProgram", () => {
         expect(bySlot(p, "near")).toBe(3);
         expect(new Set(p.map((s) => s.itemId)).size).toBe(6);
       }
-      expect(leaders.has(x.id)).toBe(true);
+      expect(leaders).toEqual(new Set([x.id, f.items[0]]));
+    });
+
+    it("does not overflow size or break dial=1 when an echo exists", async () => {
+      const f = await buildFixture();
+      const { x, mine } = await addOwnLetterWithReaction(f, new Date(Date.now() - 60_000).toISOString());
+      await insertLetter(env.DB, letterDraft(x.id, { kind: "watashimo", listenerId: f.b.id, parentLetterId: mine.id }));
+      const high = await selectProgram(env.DB, { ...f.a, dial: 1 }, { size: 6, seed: "s" });
+      expect(high).toHaveLength(6);
+      expect(bySlot(high, "far")).toBe(6);
+      const mid = await selectProgram(env.DB, { ...f.a, dial: 0.3 }, { size: 6, seed: "s" });
+      expect(mid).toHaveLength(6);
+      expect(mid[0]?.slot).toBe("near");
+      expect(bySlot(mid, "near")).toBe(3);
     });
 
     it("ignores a reaction older than the last episode", async () => {
