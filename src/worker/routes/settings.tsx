@@ -4,13 +4,17 @@ import { z } from "zod";
 import { Layout } from "../../views/layout";
 import type { Variables } from "../auth/session";
 import { newMcpToken, updateListener } from "../db/listeners";
+import { looksLikeContact } from "../program/pii-patterns";
 import type { Env } from "../env";
 import { t } from "../i18n/t";
 import type { Listener } from "../types";
 
+/** The DJ says radio names and places aloud, so they may not be an address, a phone number or a url. */
+const notContact = (s: string) => !looksLikeContact(s);
+
 const schema = z.object({
-  radioName: z.string().trim().max(20),
-  place: z.string().trim().max(30),
+  radioName: z.string().trim().max(20).refine(notContact),
+  place: z.string().trim().max(30).refine(notContact),
   voice: z.string().max(200),
   dial: z.coerce.number().min(0).max(1),
 });

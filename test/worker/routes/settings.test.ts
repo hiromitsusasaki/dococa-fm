@@ -105,6 +105,26 @@ describe("settings", () => {
     expect(res.status).toBe(422);
   });
 
+  it.each([
+    ["radioName", "a@b.co"],
+    ["radioName", "090-1234-5678"],
+    ["radioName", "example.com"],
+    ["place", "https://x.example"],
+  ])("rejects a %s that is contact details (%s) with 422", async (field, value) => {
+    const cookie = cookieOf(await SELF.fetch(`${BASE}/settings`));
+    const res = await postForm("/settings", cookie, { radioName: "ヒロ", place: "", voice: "", dial: "0.5", [field]: value });
+    expect(res.status).toBe(422);
+    expect(await res.text()).toContain("入力を確認してください");
+    const row = await env.DB.prepare("SELECT radio_name, place FROM listeners").first<{ radio_name: string; place: string }>();
+    expect(row).toEqual({ radio_name: "", place: "" });
+  });
+
+  it("accepts an ordinary radio name and place", async () => {
+    const cookie = cookieOf(await SELF.fetch(`${BASE}/settings`));
+    const res = await postForm("/settings", cookie, { radioName: "3人家族", place: "大船渡", voice: "", dial: "0.5" });
+    expect(res.status).toBe(303);
+  });
+
   it("escapes user text in the form", async () => {
     const cookie = cookieOf(await SELF.fetch(`${BASE}/settings`));
     await postForm("/settings", cookie, { radioName: '<b>"x"</b>', place: "", voice: "", dial: "0.5" });

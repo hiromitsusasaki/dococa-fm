@@ -42,6 +42,11 @@ describe("elicitQuestions", () => {
     expect(await elicitQuestions(keyed, item, listener)).toEqual(["誰かと一緒でしたか？"]);
   });
 
+  it("keeps a question that names the work's own year, drops one with another year", async () => {
+    create.mockResolvedValue(asked(["1959年に聴いたのはどこでしたか？", "1999年にも聴きましたか？"]));
+    expect(await elicitQuestions(keyed, item, listener)).toEqual(["1959年に聴いたのはどこでしたか？"]);
+  });
+
   it("returns [] when every question is topical", async () => {
     create.mockResolvedValue(asked(["今年いちばん聴きましたか？"]));
     expect(await elicitQuestions(keyed, item, listener)).toEqual([]);

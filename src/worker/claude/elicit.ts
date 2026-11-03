@@ -1,5 +1,5 @@
 import type { Env } from "../env";
-import { containsTopical } from "../program/topical-words";
+import { containsTopical, maskDataYears } from "../program/topical-words";
 import type { Item, Listener } from "../types";
 import { escapeTags, hasClaude } from "./client";
 import { callTool, type ToolSpec } from "./tool-call";
@@ -44,7 +44,7 @@ export async function elicitQuestions(env: Env, item: Item, _listener: Listener)
     return questions
       .filter((q): q is string => typeof q === "string")
       .map((q) => q.trim())
-      .filter((q) => q !== "" && Array.from(q).length <= MAX_LENGTH && !containsTopical(q))
+      .filter((q) => q !== "" && Array.from(q).length <= MAX_LENGTH && !containsTopical(maskDataYears(q.normalize("NFKC"), item.year === null ? [] : [item.year])))
       .slice(0, MAX_QUESTIONS);
   } catch (e) {
     console.warn("[dococa] questions unavailable", e instanceof Error ? e.message : "unknown error");

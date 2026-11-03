@@ -106,10 +106,12 @@ describe("verifyEpisode", () => {
     expect(r.details[0]).not.toContain("今夜はこの曲から。");
   });
 
-  it("skips the word and count checks for fixed template lines, but not pii", () => {
+  it("gives fixed template lines only the account and quote checks", () => {
     expect(verifyEpisode(episode(fixedDj("3人家族さん（那覇）から『私も』が届いています")), letters, me)).toMatchObject({ topical: true, pii: true });
     expect(verifyEpisode(episode(dj("3人家族さん（那覇）から『私も』が届いています")), letters, me).topical).toBe(false);
-    expect(verifyEpisode(episode(fixedDj("ネットで見つけた声です。a@b.coさん、YouTubeのコメントから。")), letters, me).pii).toBe(false);
+    expect(verifyEpisode(episode(fixedDj("ネットで見つけた声です。a@b.coさん、note.comのコメントから。")), letters, me).pii).toBe(true);
+    expect(verifyEpisode(episode(fixedDj("listener-0001さんから『私も』が届いています")), letters, me).pii).toBe(false);
+    expect(verifyEpisode(episode(fixedDj(`みなとさん（${plain.bodyJa}）から『私も』が届いています`)), letters, me).pii).toBe(false);
   });
 
   describe("years from the data", () => {
@@ -209,6 +211,12 @@ describe("verifyEpisode", () => {
     it("catches a letter copied whole even when it is mostly names", () => {
       const r = verifyEpisode(episode(dj("Blue in Green by Miles Davis saved me.")), byId([names]), me, items);
       expect(r.pii).toBe(false);
+    });
+
+    it("masks names case-insensitively", () => {
+      const r = verifyEpisode(episode(dj("MILES DAVIS の blue in green です。")), byId([names]), me, items);
+      expect(r.details).toEqual([]);
+      expect(verifyEpisode(episode(dj("BLUE IN GREEN BY MILES DAVIS SAVED ME.")), byId([names]), me, items).pii).toBe(false);
     });
 
     it("catches a quote around a short title", () => {

@@ -146,10 +146,26 @@ describe("buildEpisode", () => {
     expect(texts).toContain("ネットで見つけた声です。@jazzcatさん、YouTubeのコメントから。");
   });
 
+  it("verifies a found voice from a non-YouTube site and says the host", async () => {
+    const f = await fixture();
+    await insertLetter(env.DB, letterDraft(f.i1, { kind: "found", listenerId: null, sourceAuthor: "ゆき", sourceUrl: "https://note.com/yuki/n/abc", body: "遠い歌", bodyJa: "遠い歌" }));
+    const ep = await buildEpisode(keyless, env.DB, f.a, { size: 2, seed: "s" });
+    expect(ep.verified).toBe(true);
+    expect(ep.segments.flatMap((s) => djTexts(s.lines))).toContain("ネットで見つけた声です。ゆきさん、note.comのコメントから。");
+  });
+
+  it("verifies readings only when a reaction's radio name looks like an email address", async () => {
+    const f = await fixture();
+    await insertLetter(env.DB, letterDraft(f.i0, { kind: "watashimo", listenerId: null, radioName: "a@b.co", place: "", parentLetterId: f.mine.id, body: "私も", bodyJa: "私も" }));
+    const ep = await buildEpisode(keyless, env.DB, f.a, { size: 2, seed: "s" });
+    expect(ep.verified).toBe(true);
+    expect(ep.segments.flatMap((s) => djTexts(s.lines))).toContain("a@b.coさんから『私も』が届いています");
+  });
+
   it("throws EpisodeUnverifiedError when even the readings-only episode fails", async () => {
     const f = await fixture();
-    // A reply from someone whose radio name is an email address: its fixed reaction line cannot pass pii.
-    await insertLetter(env.DB, letterDraft(f.i0, { kind: "watashimo", listenerId: null, radioName: "x@example.com", place: "", parentLetterId: f.mine.id, body: "私も", bodyJa: "私も" }));
+    // A reaction whose radio name is the listener's own id: the fixed line would read the account aloud.
+    await insertLetter(env.DB, letterDraft(f.i0, { kind: "watashimo", listenerId: null, radioName: f.a.id, place: "", parentLetterId: f.mine.id, body: "私も", bodyJa: "私も" }));
     const err = await buildEpisode(keyless, env.DB, f.a, { size: 2, seed: "s" }).catch((e: unknown) => e);
     expect(err).toBeInstanceOf(EpisodeUnverifiedError);
     expect((err as EpisodeUnverifiedError).report.pii).toBe(false);

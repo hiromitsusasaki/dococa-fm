@@ -18,3 +18,13 @@ export const TOPICAL = new RegExp(
 export function containsTopical(text: string): boolean {
   return TOPICAL.test(text);
 }
+
+/**
+ * Masks the digits of years that come from the data (the work's, a letter's) so they pass `TOPICAL`;
+ * only the digits, so 「2016年末」 still reads as 年末, and 「12016年」 is left alone.
+ */
+export function maskDataYears(text: string, years: Iterable<number>): string {
+  let out = text;
+  for (const y of years) out = out.replace(new RegExp(`(?<![0-9０-９])${y}(?=年)`, "gu"), "〇");
+  return out;
+}

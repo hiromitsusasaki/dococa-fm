@@ -1,5 +1,6 @@
 import type { Item, Letter, Listener, Segment, VerifyReport } from "../types";
-import { TOPICAL } from "./topical-words";
+import { EMAIL, normalizeText as norm, PHONE, URL_RE } from "./pii-patterns";
+import { maskDataYears, TOPICAL } from "./topical-words";
 
 /**
  * Counting people, letters or ranks. Digits count with 人/名/通/件/位. Kanji numerals count only when the
@@ -8,17 +9,12 @@ import { TOPICAL } from "./topical-words";
  */
 const MEASURE =
   /[0-9]+\s*(?:人|名|通|件|位)|[一二三四五六七八九十百千万]+(?:人|名|通|件)(?=の方|から|も|が|に|届|ほど|目)|何(?:人|名|通|件)も|回再生|第[0-9一二三四五六七八九十]+位|ランキング|一致率|再生回数/u;
-const EMAIL = /[\w.+-]+@[\w-]+\.[\w.-]+/u;
-const PHONE = /\d{2,4}-\d{2,4}-\d{3,4}|\d{10,}|\+\d{1,3}[ -]?\d{1,4}[ -]?\d{2,4}[ -]?\d{3,4}/u;
-const URL_RE = /https?:\/\/|www\.|[a-z0-9-]+\.(?:co\.jp|com|net|org|jp|io|fm|tv)\b/iu;
 /** Ten code points shared with a letter is a quote, not a coincidence. */
 const QUOTE_WINDOW = 10;
 /** Stands in for a work's title or creator on both sides of the quote check. */
 const NAME = "\u{F0000}";
 
 const nonEmpty = (s: string | null) => s !== null && s.trim() !== "";
-/** NFKC, invisible format characters (zero-width and the like) removed, whitespace collapsed. */
-const norm = (s: string) => s.normalize("NFKC").replace(/\p{Cf}/gu, "").replace(/\s+/gu, " ");
 const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 function windows(text: string): string[] {
@@ -29,31 +25,26 @@ function windows(text: string): string[] {
 }
 
 /**
- * Replaces every title and creator with one sentinel code point, in letters and dj lines alike: the DJ
- * may name the work, but a name cannot pad a window, and a copied sentence still matches around it.
+ * Lower-cases, then replaces every title and creator with one sentinel code point, in letters and dj
+ * lines alike: the DJ may name the work in any case, but a name cannot pad a window, and a copied
+ * sentence still matches around it. Used for the quote check only.
  */
 function maskNames(items: Map<string, Item>): (text: string) => string {
-  const names = [...new Set([...items.values()].flatMap((i) => [norm(i.title).trim(), norm(i.creator).trim()]))]
+  const names = [...new Set([...items.values()].flatMap((i) => [norm(i.title).trim().toLowerCase(), norm(i.creator).trim().toLowerCase()]))]
     .filter((n) => n !== "")
     .sort((a, b) => b.length - a.length);
-  if (names.length === 0) return (text) => text;
+  if (names.length === 0) return (text) => text.toLowerCase();
   const re = new RegExp(names.map(escapeRe).join("|"), "gu");
-  return (text) => text.replace(re, NAME);
-}
-
-/** Masks a data year's digits only, so 「2016年末」 still reads as 年末 and 「12016年」 is untouched. */
-function maskDataYears(text: string, years: Set<number>): string {
-  let out = text;
-  for (const y of years) out = out.replace(new RegExp(`(?<![0-9])${y}(?=年)`, "gu"), "〇");
-  return out;
+  return (text) => text.toLowerCase().replace(re, NAME);
 }
 
 /**
  * Deterministic checks on a composed episode; nothing here asks a model. The mechanical guarantee is that
  * every letter is read verbatim from the database and that no dj line shares 10 consecutive code points
- * with any letter; a paraphrase by the DJ is not detectable here and is left to the prompt and the eval.
- * Every dj check runs on normalised text (NFKC, no format characters, collapsed spaces). Lines marked
- * `fixed` come from templates and data, so the word and count checks skip them, but not pii or quotes.
+ * with any letter, after work titles and creators collapse to one sentinel each; a paraphrase by the DJ is
+ * not detectable here and is left to the prompt and the eval. Every dj check runs on normalised text (NFKC,
+ * no format characters, collapsed spaces). Lines marked `fixed` are our templates filled with names, places
+ * and sources that are shown on screen anyway, so they get only the account and quote checks.
  * A detail reads `{check}: segment {i} line {j}: {term}` and never carries the dj line itself.
  */
 export function verifyEpisode(
@@ -119,15 +110,15 @@ export function verifyEpisode(
           details.push(`measure: ${at}: ${count[0]}`);
         }
       }
-      if (EMAIL.test(text)) {
+      if (!line.fixed && EMAIL.test(text)) {
         pii = false;
         details.push(`pii: ${at}: email address`);
       }
-      if (PHONE.test(text)) {
+      if (!line.fixed && PHONE.test(text)) {
         pii = false;
         details.push(`pii: ${at}: phone number`);
       }
-      if (URL_RE.test(text)) {
+      if (!line.fixed && URL_RE.test(text)) {
         pii = false;
         details.push(`pii: ${at}: url`);
       }
