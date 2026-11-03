@@ -98,3 +98,28 @@ export async function countRecentDuplicate(
 export async function setLetterStatus(db: D1Database, id: string, status: Letter["status"]): Promise<void> {
   await db.prepare("UPDATE letters SET status = ? WHERE id = ?").bind(status, id).run();
 }
+
+export async function insertReport(
+  db: D1Database,
+  r: { letterId: string; listenerId: string | null; reason: string },
+): Promise<void> {
+  await db
+    .prepare("INSERT INTO reports (letter_id, listener_id, reason, created_at) VALUES (?, ?, ?, ?)")
+    .bind(r.letterId, r.listenerId, r.reason, new Date().toISOString())
+    .run();
+}
+
+export async function insertTakedown(db: D1Database, r: { url: string; reason: string }): Promise<void> {
+  await db
+    .prepare("INSERT INTO takedowns (url, reason, created_at) VALUES (?, ?, ?)")
+    .bind(r.url, r.reason, new Date().toISOString())
+    .run();
+}
+
+export async function hasWatashimo(db: D1Database, listenerId: string, parentLetterId: string): Promise<boolean> {
+  const row = await db
+    .prepare("SELECT 1 AS x FROM letters WHERE listener_id = ? AND parent_letter_id = ? AND kind = 'watashimo' LIMIT 1")
+    .bind(listenerId, parentLetterId)
+    .first();
+  return row !== null;
+}
