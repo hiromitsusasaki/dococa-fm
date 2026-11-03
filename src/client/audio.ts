@@ -46,12 +46,18 @@ export function createClipPlayer(): ClipPlayer {
 const BED_URL = "/bed.mp3";
 const BED_VOLUME = 0.15;
 
-export function createBed(): { start(): void; stop(): void } {
+export function createBed(): { unlock(): void; start(): void; stop(): void } {
   let bed: HTMLAudioElement | null = null;
+  const element = () => (bed ??= Object.assign(new Audio(BED_URL), { loop: true, volume: BED_VOLUME }));
   return {
+    /** Inside the tap: lets the element play later without a gesture (iOS Safari). */
+    unlock() {
+      const a = element();
+      a.play().catch(() => {});
+      a.pause();
+    },
     start() {
-      bed ??= Object.assign(new Audio(BED_URL), { loop: true, volume: BED_VOLUME });
-      bed.play().catch(() => {});
+      element().play().catch(() => {});
     },
     stop() {
       bed?.pause();

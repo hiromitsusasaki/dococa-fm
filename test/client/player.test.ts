@@ -10,6 +10,7 @@ const strings: Record<string, string> = {
   "player.send": "送る",
   "player.sent": "届けました",
   "player.foundSource": "ネットで見つけた声 — {author}（{site}）",
+  "player.foundSourceNoSite": "ネットで見つけた声 — {author}",
   "player.sendFailed": "送れませんでした",
   "player.again": "もう一度体験する",
   "player.put": "一通置く",
@@ -204,6 +205,16 @@ describe("player", () => {
     expect(audios.find((a) => a.src === "/bed.mp3")!.play).toHaveBeenCalled();
   });
 
+  it("unlocks the bed inside the tap even when the first line is a preview", () => {
+    const previewFirst: PlayerEpisode = { ...one, segments: [{ ...one.segments[0]!, lines: [{ type: "preview", url: "https://p/a.mp3", seconds: 30 }] }] };
+    mountPlayer(root, previewFirst, opts());
+    btn("toggle").click();
+    const bed = audios.find((a) => a.src === "/bed.mp3")!;
+    expect(bed.play).toHaveBeenCalledTimes(1);
+    expect(bed.pause).toHaveBeenCalled();
+    expect(bed.paused).toBe(true);
+  });
+
   it("reuses one clip element for every preview and tts clip", async () => {
     mountPlayer(root, one, opts({ ttsUrl: "/tts" }));
     await tap("toggle");
@@ -247,6 +258,19 @@ describe("player", () => {
     expect(a.getAttribute("href")).toBe("https://www.example.com/c/1");
     expect(a.textContent).toBe("ネットで見つけた声 — taro（example.com）");
     expect(a.getAttribute("rel")).toContain("noopener");
+  });
+
+  it("omits the site parentheses when the source url has no host", async () => {
+    autoEnd = false;
+    const found: PlayerEpisode = {
+      ...one,
+      segments: [{ ...one.segments[0]!, lines: [{ ...letter("F1", "x"), kind: "found", sourceUrl: "https://", sourceAuthor: "taro" }] }],
+    };
+    mountPlayer(root, found, opts());
+    await tap("toggle");
+    await vi.waitFor(() => expect(spoken).toEqual(["x"]));
+    expect(root.querySelector(".player-letter.found")!.textContent).toContain("ネットで見つけた声 — taro");
+    expect(root.querySelector(".player-letter.found")!.textContent).not.toContain("（");
   });
 
   it("plays a preview with Audio and stops the bed for it; the bed plays only under dj and letter lines", async () => {

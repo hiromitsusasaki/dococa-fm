@@ -72,6 +72,7 @@ export const ja = {
   "player.send": "送る",
   "player.sent": "届けました",
   "player.foundSource": "ネットで見つけた声 — {author}（{site}）",
+  "player.foundSourceNoSite": "ネットで見つけた声 — {author}",
   "player.sendFailed": "送れませんでした",
   "player.again": "もう一度体験する",
   "player.put": "一通置く",

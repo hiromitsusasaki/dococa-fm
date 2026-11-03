@@ -133,6 +133,7 @@ export function mountPlayer(root: HTMLElement, episode: PlayerEpisode, opts: Pla
     if (unlocked) return;
     unlocked = true;
     clips.unlock();
+    bed.unlock();
     if (opts.ttsUrl === null && typeof speechSynthesis !== "undefined") speechSynthesis.speak(new SpeechSynthesisUtterance(""));
   }
 
@@ -247,6 +248,11 @@ const siteOf = (url: string): string => {
   }
 };
 
+function foundLabel(l: LetterLine, url: string, str: View["str"]): string {
+  const site = siteOf(url);
+  return fmt(str(site ? "player.foundSource" : "player.foundSourceNoSite"), { author: l.sourceAuthor ?? "", site });
+}
+
 function whoOf(l: LetterLine, str: View["str"]): string {
   if (l.kind === "found") return l.sourceAuthor ?? "";
   const who = l.radioName ? fmt(str("letter.who"), { name: l.radioName }) : str("listener.anonymous");
@@ -284,7 +290,7 @@ function Screen({ s, view }: { s: State; view: View }) {
             <footer class="letter-who">
               {letter.kind === "found" && isHttpUrl(letter.sourceUrl) ? (
                 <a href={letter.sourceUrl} rel="noopener noreferrer nofollow" target="_blank">
-                  {fmt(str("player.foundSource"), { author: letter.sourceAuthor ?? "", site: siteOf(letter.sourceUrl) })}
+                  {foundLabel(letter, letter.sourceUrl, str)}
                 </a>
               ) : (
                 whoOf(letter, str)
