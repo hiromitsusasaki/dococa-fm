@@ -92,6 +92,7 @@ export const ja = {
   "start.title": "はじめの一歩",
   "start.lead": "好きな作品を 3 つ、URL でも題名でも教えてください。横の一言は、書けば番組で読まれます。",
   "start.favorite": "好きなもの {n}",
+  "start.favoritePlaceholder": "曲名・書名・映画の題名、または URL",
   "start.note": "一言（任意）",
   "start.submit": "最初の回を流す",
   "start.none": "どの作品も見つかりませんでした。",

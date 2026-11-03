@@ -2,11 +2,12 @@ import { SELF } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { listHistory } from "../../../src/worker/db/history";
-import { listLettersByListener } from "../../../src/worker/db/letters";
+import { insertLetter, listLettersByListener } from "../../../src/worker/db/letters";
 import { t } from "../../../src/worker/i18n/t";
 import { stubAnthropic } from "../../helpers/anthropic";
 import { resetDb } from "../../helpers/db";
 import { json, stubFetch } from "../../helpers/fetch";
+import { letterDraft } from "../db/helpers";
 import { BASE, get, newSession, postForm } from "./helpers";
 
 const idOf = (cookie: string) => cookie.split("=")[1]!.split(".")[0]!;
@@ -57,7 +58,7 @@ describe("POST /start", () => {
     const cookie = await newSession();
     const res = await postForm("/start", cookie, { fav1: "曲A", fav2: "曲B", fav3: "曲C" });
     expect(res.status).toBe(303);
-    expect(res.headers.get("location")).toBe("/episodes/new");
+    expect(res.headers.get("location")).toMatch(/^\/episodes\/[0-9a-f-]{36}$/);
     const rows = await listHistory(env.DB, idOf(cookie), 10);
     expect(rows).toHaveLength(3);
     expect(rows.every((r) => r.source === "manual")).toBe(true);
@@ -80,6 +81,7 @@ describe("POST /start", () => {
     const html = await res.text();
     expect(html).toContain(t("start.none"));
     expect(html).toContain(t("start.hint"));
+    expect(html).toContain(`placeholder="${t("start.favoritePlaceholder")}"`);
     expect(html).toContain('value="ない1"');
     expect(html).toMatch(/name="fav3"/);
     expect(await listHistory(env.DB, idOf(cookie), 10)).toHaveLength(0);
@@ -101,6 +103,37 @@ describe("POST /start", () => {
     expect(res.status).toBe(303);
     expect((await listHistory(env.DB, idOf(cookie), 10)).map((r) => r.item.title)).toEqual(["Url Song"]);
     expect(stub.calls().some((u) => u.startsWith("https://itunes.apple.com/search") && u.includes("example.invalid"))).toBe(false);
+  });
+
+  it("registers one history row when two fields name the same work", async () => {
+    stubSearch({ 曲A: 1 });
+    const cookie = await newSession();
+    const res = await postForm("/start", cookie, { fav1: "曲A", fav2: "曲A", fav3: "" });
+    expect(res.status).toBe(303);
+    expect(await listHistory(env.DB, idOf(cookie), 10)).toHaveLength(1);
+  });
+
+  it("takes a url without a scheme as a url, and never searches a blocked one", async () => {
+    const stub = stubFetch([
+      ["https://itunes.apple.com/lookup", () => json({ results: [track(9, "Url Song")] })],
+      ["https://itunes.apple.com/search", () => json({ results: [track(5, "Searched")] })],
+    ]);
+    const cookie = await newSession();
+    const res = await postForm("/start", cookie, { fav1: "music.apple.com/jp/album/x/1?i=9", fav2: "http://localhost/x", fav3: "" });
+    expect(res.status).toBe(303);
+    expect((await listHistory(env.DB, idOf(cookie), 10)).map((r) => r.item.title)).toEqual(["Url Song"]);
+    expect(stub.calls().some((u) => u.startsWith("https://itunes.apple.com/search"))).toBe(false);
+  });
+
+  it("keeps an item only registered here off the home page until a public letter is on it", async () => {
+    stubSearch({ 曲A: 1 });
+    const cookie = await newSession();
+    await postForm("/start", cookie, { fav1: "曲A" });
+    // A listener who has started is no longer new, so the page is the plain home.
+    expect(await (await get("/", cookie)).text()).not.toContain("最近の作品");
+    const [row] = await listHistory(env.DB, idOf(cookie), 1);
+    await insertLetter(env.DB, letterDraft(row!.itemId));
+    expect(await (await get("/", cookie)).text()).toContain("最近の作品");
   });
 
   it("puts a one-liner through the letter pipeline, verbatim, and skips a rejected one", async () => {
@@ -134,13 +167,10 @@ describe("POST /start", () => {
 });
 
 describe("GET /episodes/new", () => {
-  it("does what POST /episodes does", async () => {
+  it("does not exist: a GET never creates an episode", async () => {
     const cookie = await newSession();
-    const viaGet = await SELF.fetch(`${BASE}/episodes/new`, { headers: { cookie }, redirect: "manual" });
-    expect(viaGet.status).toBe(303);
-    expect(viaGet.headers.get("location")).toMatch(/^\/episodes\/[0-9a-f-]{36}$/);
-    const viaPost = await postForm("/episodes", cookie, {});
-    expect(viaPost.status).toBe(303);
+    const res = await SELF.fetch(`${BASE}/episodes/new`, { headers: { cookie }, redirect: "manual" });
+    expect(res.status).toBe(404);
   });
 });
 

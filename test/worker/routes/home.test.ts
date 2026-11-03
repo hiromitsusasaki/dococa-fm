@@ -3,7 +3,8 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { upsertHistory } from "../../../src/worker/db/history";
 import { insertItem } from "../../../src/worker/db/items";
 import { resetDb } from "../../helpers/db";
-import { itemDraft } from "../db/helpers";
+import { insertLetter } from "../../../src/worker/db/letters";
+import { itemDraft, letterDraft } from "../db/helpers";
 import { get, newSession } from "./helpers";
 
 beforeEach(() => resetDb(env.DB));
@@ -16,7 +17,8 @@ describe("GET /", () => {
     await upsertHistory(env.DB, [{ listenerId: cookie.split("=")[1]!.split(".")[0]!, itemId: seen.id, source: "manual", occurredAt: null }]);
     await new Promise((r) => setTimeout(r, 2));
     for (let i = 0; i < 7; i++) {
-      await insertItem(env.DB, itemDraft({ title: `作品${i}`, externalIds: { itunes: String(i) } }));
+      const it = await insertItem(env.DB, itemDraft({ title: `作品${i}`, externalIds: { itunes: String(i) } }));
+      await insertLetter(env.DB, letterDraft(it.id));
       await new Promise((r) => setTimeout(r, 2));
     }
     const res = await get("/", cookie);

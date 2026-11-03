@@ -6,7 +6,7 @@ import type { Env } from "../env";
 import { t } from "../i18n/t";
 import { createLetter } from "../letters/create";
 import { type ItemDraft, resolveOrCreate, resolveUrl, searchByText } from "../resolve";
-import { isFetchableUrl } from "../resolve/url";
+import { startEpisode } from "./episodes";
 
 const SLOTS = [1, 2, 3] as const;
 const MAX_FIELD = 300;
@@ -29,7 +29,7 @@ function StartPage({ values, error }: { values?: Partial<Values>; error?: boolea
           {SLOTS.map((n) => (
             <fieldset>
               <legend>{t("start.favorite", { n: String(n) })}</legend>
-              <input type="text" name={`fav${n}`} maxlength={MAX_FIELD} value={values?.[`fav${n}`] ?? ""} required={n === 1} aria-label={t("start.favorite", { n: String(n) })} />
+              <input type="text" name={`fav${n}`} maxlength={MAX_FIELD} value={values?.[`fav${n}`] ?? ""} placeholder={t("start.favoritePlaceholder")} required={n === 1} aria-label={t("start.favorite", { n: String(n) })} />
               <input type="text" name={`note${n}`} maxlength={200} value={values?.[`note${n}`] ?? ""} placeholder={t("start.note")} aria-label={t("start.note")} />
             </fieldset>
           ))}
@@ -40,10 +40,16 @@ function StartPage({ values, error }: { values?: Partial<Values>; error?: boolea
   );
 }
 
-/** A url goes through the url resolver only; anything else is searched by title and the first hit wins. */
+/** The url a field means, or null for a title: an explicit scheme, or `host.tld/path` (a bare "Mr.Children" stays a title). */
+function urlOf(q: string): string | null {
+  if (/^https?:\/\/\S+$/i.test(q)) return q;
+  return /^[^\s/]+\.[^\s/]+\/\S*$/.test(q) ? `https://${q}` : null;
+}
+
+/** A url goes through the url resolver only (a blocked one is unresolved, never searched); a title is searched and the first hit wins. */
 async function resolveFavorite(q: string, env: Env): Promise<ItemDraft | null> {
-  const fromUrl = await resolveUrl(q, env);
-  if (fromUrl || isFetchableUrl(q)) return fromUrl;
+  const url = urlOf(q);
+  if (url) return resolveUrl(url, env);
   return (await searchByText(q, "any", env))[0] ?? null;
 }
 
@@ -73,5 +79,5 @@ start.post("/start", async (c) => {
     const result = await createLetter(c.env, c.env.DB, listener, { itemId: item.id, body });
     if (!result.ok) console.warn("[dococa] start one-liner skipped", result.key, result.reason ?? "");
   }
-  return c.redirect("/episodes/new", 303);
+  return startEpisode(c);
 });
