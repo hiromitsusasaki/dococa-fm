@@ -82,6 +82,36 @@ describe("buildEpisode", () => {
     const ep = await buildEpisode(keyed, env.DB, f.a, { size: 2, seed: "s" });
     expect(ep.verified).toBe(true);
     expect(djTexts(ep.segments[0]!.lines)).toContain("落ち着いた一曲です。");
+    const first = String(create.mock.calls[0]![0].messages[0].content);
+    const second = String(create.mock.calls[1]![0].messages[0].content);
+    expect(first).not.toContain("前回の台本");
+    expect(second).toContain("前回の台本で次の語が規則に触れました。言い換えてください");
+    expect(second).toContain("topical:");
+    expect(second).toContain("「今年」");
+  });
+
+  it("lets the DJ say the work's own year", async () => {
+    const f = await fixture();
+    await env.DB.prepare("UPDATE items SET year = 2016").run();
+    create.mockImplementation(async (req) => script(segCount(req), "2016年の作品です。"));
+    const ep = await buildEpisode(keyed, env.DB, f.a, { size: 2, seed: "s" });
+    expect(create).toHaveBeenCalledTimes(1);
+    expect(ep.verified).toBe(true);
+    expect(djTexts(ep.segments[0]!.lines)).toContain("2016年の作品です。");
+  });
+
+  it("logs the HTTP status when the script call fails, and reads letters only", async () => {
+    const f = await fixture();
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    create.mockImplementation(async () => {
+      throw new Error("unused");
+    });
+    vi.unstubAllGlobals();
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ type: "error", error: { type: "authentication_error", message: "bad key" } }), { status: 401, headers: { "content-type": "application/json" } })));
+    const ep = await buildEpisode(keyed, env.DB, f.a, { size: 2, seed: "s" });
+    expect(ep.verified).toBe(true);
+    expect(ep.segments[0]!.lines[0]).toEqual({ type: "dj", text: "お便りを読みます。" });
+    expect(warn.mock.calls.some((c) => c.includes("status 401"))).toBe(true);
   });
 
   it("composes readings only without calling Claude when there is no key", async () => {

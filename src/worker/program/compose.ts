@@ -5,7 +5,8 @@ import type { Selection } from "./select";
 
 export type SegmentPlan = Selection & { reactionIds: string[] };
 
-const MAX_REACTIONS = 3;
+/** Reactions read per segment; the rest wait for a later episode. */
+export const MAX_REACTIONS = 3;
 
 const dj = (text: string): ScriptLine => ({ type: "dj", text });
 

@@ -3,12 +3,11 @@ import { getLetter, listLettersForItem } from "../db/letters";
 import type { Env } from "../env";
 import { hasClaude } from "../claude/client";
 import type { Episode, Item, Letter, Listener } from "../types";
-import { composeEpisode, type SegmentPlan } from "./compose";
+import { composeEpisode, MAX_REACTIONS, type SegmentPlan } from "./compose";
 import { type DjLines, writeDjLines } from "./script";
 import { selectProgram } from "./select";
 import { verifyEpisode } from "./verify";
 
-const MAX_REACTIONS = 3;
 const DJ_ATTEMPTS = 2;
 
 /** Public 私も and 一言 that others left on this listener's letters about the item, newest first. */
@@ -26,7 +25,12 @@ async function askDj(env: Env, input: Parameters<typeof writeDjLines>[1]): Promi
   try {
     return await writeDjLines(env, input);
   } catch (e) {
-    console.warn("[dococa] dj script unavailable; reading letters only", e instanceof Error ? e.message : "unknown error");
+    const status = (e as { status?: unknown } | null)?.status;
+    console.warn(
+      "[dococa] dj script unavailable; reading letters only",
+      typeof status === "number" ? `status ${status}` : "no status",
+      e instanceof Error ? e.message : "unknown error",
+    );
     return null;
   }
 }
@@ -66,18 +70,20 @@ export async function buildEpisode(
   }
 
   const finish = (segments: Episode["segments"]): Episode => {
-    const report = verifyEpisode(segments, letters, listener);
+    const report = verifyEpisode(segments, letters, listener, items);
     const verified = report.verbatim && report.sources && report.topical && report.pii;
     return { id: crypto.randomUUID(), listenerId: listener.id, segments, verified, report, createdAt: new Date().toISOString() };
   };
 
   if (plan.length > 0 && hasClaude(env)) {
+    let retryNotes: string[] | undefined;
     for (let attempt = 0; attempt < DJ_ATTEMPTS; attempt++) {
-      const djLines = await askDj(env, input);
+      const djLines = await askDj(env, { ...input, retryNotes });
       if (!djLines) break;
       const episode = finish(composeEpisode(plan, djLines, letters, items));
       if (episode.verified) return episode;
       console.warn("[dococa] dj script failed verification", episode.report.details.join("; "));
+      retryNotes = episode.report.details;
     }
   } else if (plan.length > 0) {
     console.warn("[dococa] ANTHROPIC_API_KEY is empty; reading letters only");

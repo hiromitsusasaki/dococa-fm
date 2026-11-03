@@ -53,7 +53,7 @@ describe("writeDjLines", () => {
     await writeDjLines(keyed, input);
     const req = create.mock.calls[0]![0];
     expect(req.model).toBe("claude-sonnet-5-5");
-    expect(req.max_tokens).toBe(2048);
+    expect(req.max_tokens).toBe(4096);
     // Sonnet 5.5 rejects sampling parameters and forced tool_choice: auto + strict + an instruction.
     expect(req).not.toHaveProperty("temperature");
     expect(req.tools.map((t: { name: string }) => t.name)).toEqual(["write_script"]);
@@ -62,7 +62,9 @@ describe("writeDjLines", () => {
     const seg = req.tools[0].input_schema.properties.segments.items.properties;
     expect(seg.say_before.description).toContain("160");
     expect(seg.say_after.description).toContain("120");
-    for (const rule of ["時事", "引用も要約もしない", "何通", "癒し", "write_script"]) expect(req.system).toContain(rule);
+    for (const rule of ["時事", "引用も要約もしない", "何通", "癒し", "write_script", "今夜", "作品の年", "クリスマス", "トレンド", "「3人」"]) {
+      expect(req.system).toContain(rule);
+    }
   });
 
   it("puts the works, the letters and the reactions in the message and says a reader reads letters", async () => {
@@ -72,6 +74,20 @@ describe("writeDjLines", () => {
     for (const s of ["作品 0", "Miles Davis", "近く", "隣", "遠く", "夜中に一人で聴いて", "みなと", "函館", "祖父の台所", "@jazzcat", "あおい", "那覇", "読み上げ役"]) {
       expect(sent).toContain(s);
     }
+  });
+
+  it("tells a retry which rules the previous script broke", async () => {
+    create.mockResolvedValue(lines(6));
+    await writeDjLines(keyed, { ...input, retryNotes: ["topical: segment 1 line 1 「今年」 in 「今年の一曲」"] });
+    const content = create.mock.calls[0]![0].messages[0].content as string;
+    expect(content).toContain("前回の台本で次の語が規則に触れました。言い換えてください");
+    expect(content).toContain("topical: segment 1 line 1 「今年」");
+  });
+
+  it("says nothing about a previous script on the first request", async () => {
+    create.mockResolvedValue(lines(6));
+    await writeDjLines(keyed, input);
+    expect(create.mock.calls[0]![0].messages[0].content).not.toContain("前回の台本");
   });
 
   it("escapes tags inside letters so a body cannot close its tag", async () => {
