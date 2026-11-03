@@ -169,7 +169,7 @@ export function mountPlayer(root: HTMLElement, episode: PlayerEpisode, opts: Pla
   async function postLetter(fields: Record<string, string>, key: string) {
     try {
       const res = await fetch("/letters", { method: "POST", headers: FORM, body: new URLSearchParams(fields).toString(), redirect: "manual" });
-      // A successful post answers with a redirect; 409 means this person already said 私も.
+      // A successful post answers with a redirect; 409 means this person already said watashimo.
       const ok = res.ok || res.type === "opaqueredirect" || res.status === 409 || (res.status >= 300 && res.status < 400);
       if (ok) setState({ sent: { ...state.sent, [key]: true }, replyOpen: false, message: null });
       else setState({ message: str("player.sendFailed") });
@@ -239,6 +239,14 @@ type View = {
   line: (seg: number, line: number) => ScriptLine | undefined;
 };
 
+const siteOf = (url: string): string => {
+  try {
+    return new URL(url).hostname.replace(/^www\./, "");
+  } catch {
+    return "";
+  }
+};
+
 function whoOf(l: LetterLine, str: View["str"]): string {
   if (l.kind === "found") return l.sourceAuthor ?? "";
   const who = l.radioName ? fmt(str("letter.who"), { name: l.radioName }) : str("listener.anonymous");
@@ -271,9 +279,17 @@ function Screen({ s, view }: { s: State; view: View }) {
         {line?.type === "dj" && <p class="player-dj">{line.text}</p>}
         {line?.type === "preview" && <p class="player-dj" aria-hidden="true">♪</p>}
         {letter && (
-          <blockquote class="player-letter">
+          <blockquote class={letter.kind === "found" ? "player-letter found" : "player-letter"}>
             <p>{letter.text}</p>
-            <footer class="letter-who">{whoOf(letter, str)}</footer>
+            <footer class="letter-who">
+              {letter.kind === "found" && isHttpUrl(letter.sourceUrl) ? (
+                <a href={letter.sourceUrl} rel="noopener noreferrer nofollow" target="_blank">
+                  {fmt(str("player.foundSource"), { author: letter.sourceAuthor ?? "", site: siteOf(letter.sourceUrl) })}
+                </a>
+              ) : (
+                whoOf(letter, str)
+              )}
+            </footer>
           </blockquote>
         )}
       </div>

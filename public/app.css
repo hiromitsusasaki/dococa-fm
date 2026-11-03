@@ -407,3 +407,8 @@ button.quiet {
 .player-dial input {
   accent-color: var(--accent-spark);
 }
+
+.player-letter.found {
+  border-left-color: var(--accent-active);
+  background: rgba(0, 229, 255, 0.04);
+}

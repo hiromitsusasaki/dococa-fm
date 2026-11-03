@@ -9,6 +9,7 @@ const strings: Record<string, string> = {
   "player.reply": "一言",
   "player.send": "送る",
   "player.sent": "届けました",
+  "player.foundSource": "ネットで見つけた声 — {author}（{site}）",
   "player.sendFailed": "送れませんでした",
   "player.again": "もう一度体験する",
   "player.put": "一通置く",
@@ -231,6 +232,21 @@ describe("player", () => {
     await vi.waitFor(() => expect(spoken).toEqual(["d1", "l1"]));
     expect(root.textContent).toContain("l1");
     expect(root.textContent).toContain("しずくさん（松本）");
+  });
+
+  it("shows a found voice with its source as a link and marks the card", async () => {
+    autoEnd = false;
+    const found: PlayerEpisode = {
+      ...one,
+      segments: [{ ...one.segments[0]!, lines: [{ ...letter("F1", "ネットの声"), kind: "found", sourceUrl: "https://www.example.com/c/1", sourceAuthor: "taro" }] }],
+    };
+    mountPlayer(root, found, opts());
+    await tap("toggle");
+    await vi.waitFor(() => expect(spoken).toEqual(["ネットの声"]));
+    const a = root.querySelector<HTMLAnchorElement>(".player-letter.found a")!;
+    expect(a.getAttribute("href")).toBe("https://www.example.com/c/1");
+    expect(a.textContent).toBe("ネットで見つけた声 — taro（example.com）");
+    expect(a.getAttribute("rel")).toContain("noopener");
   });
 
   it("plays a preview with Audio and stops the bed for it; the bed plays only under dj and letter lines", async () => {

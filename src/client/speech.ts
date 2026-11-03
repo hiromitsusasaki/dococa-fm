@@ -58,7 +58,10 @@ export function speak(text: string, voice: SpeechSynthesisVoice | undefined, sig
     utterance.onend = finish;
     utterance.onerror = finish;
     speaking = utterance;
-    timer = setTimeout(finish, text.length * WATCHDOG_MS_PER_CHAR + WATCHDOG_MARGIN_MS);
+    timer = setTimeout(() => {
+      s.cancel();
+      finish();
+    }, text.length * WATCHDOG_MS_PER_CHAR + WATCHDOG_MARGIN_MS);
     s.speak(utterance);
   });
 }
