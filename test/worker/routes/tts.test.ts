@@ -165,6 +165,29 @@ describe("GET /tts", () => {
     expect(await env.DB.prepare("SELECT COUNT(*) AS n FROM tts_claims").first<{ n: number }>()).toEqual({ n: 0 });
   });
 
+  it("finds the clip in R2 after winning the claim when the first read missed it", async () => {
+    const { cookie, ep } = await setup();
+    const key = `tts/${ep.id}/3.mp3`;
+    // A claims, B misses R2, A puts and releases, B claims: the first read misses although the clip lands right after it.
+    let reads = 0;
+    const bucket = new Proxy(env.BUCKET, {
+      get(target, prop) {
+        if (prop !== "get") return Reflect.get(target, prop).bind(target);
+        return async (k: string) => {
+          if (reads++ > 0) return target.get(k);
+          await target.put(k, new Uint8Array([1, 2, 3]));
+          return null;
+        };
+      },
+    });
+    const { fn } = stubFetch([[GOOGLE, () => json({ audioContent: audio })]]);
+    const res = await call(`/tts?episode=${ep.id}&line=3`, cookie, { ...keyed, BUCKET: bucket });
+    expect(res.status).toBe(200);
+    expect([...new Uint8Array(await res.arrayBuffer())]).toEqual([1, 2, 3]);
+    expect(fn).not.toHaveBeenCalled();
+    expect(await env.DB.prepare("SELECT COUNT(*) AS n FROM tts_claims WHERE key = ?").bind(key).first<{ n: number }>()).toEqual({ n: 0 });
+  });
+
   it("answers 503 with Retry-After when another request holds the claim and no clip appears", async () => {
     const { cookie, ep } = await setup();
     await env.DB.prepare("INSERT INTO tts_claims (key, created_at) VALUES (?, ?)").bind(`tts/${ep.id}/3.mp3`, Date.now()).run();

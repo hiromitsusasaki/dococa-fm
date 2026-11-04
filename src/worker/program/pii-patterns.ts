@@ -6,11 +6,12 @@ export const URL_RE = /https?:\/\/|www\.|[a-z0-9-]+\.(?:co\.jp|com|net|org|jp|io
 export const POSTAL = /〒\s*\d{3}-?\d{4}|(?<![\d-])\d{3}-\d{4}(?![\d-])/u;
 const NUM = "[0-9一二三四五六七八九十〇]+";
 /**
- * A street address down to the lot: 番地, 番 with 号, 丁目 with 番, or a ward/town followed by 2-8-1 style numbers.
+ * A street address down to the lot: 番地, 番 with 号, 丁目 with 番, a 2-8-1 style triple, or a city/ward/town name followed by a number pair.
+ * A bare pair (「2-1」) or a year range (「1990-95 年」) is not an address.
  * 「2丁目のカフェ」 or 「十八番」 alone is not an address.
  */
 export const ADDRESS = new RegExp(
-  `${NUM}\\s*番地|${NUM}\\s*番\\s*${NUM}\\s*号|${NUM}\\s*丁目\\s*${NUM}\\s*番|(?:都|道|府|県|市|区|町|村)[^\\s\\d、。]{0,8}\\d+-\\d+(?:-\\d+)?(?!\\d)`,
+  `${NUM}\\s*番地|${NUM}\\s*番\\s*${NUM}\\s*号|${NUM}\\s*丁目\\s*${NUM}\\s*番|(?<![\\d-])\\d{1,3}-\\d{1,3}-\\d{1,4}(?![\\d-])|(?:市|区|町|村)[^\\s\\d、。]{0,8}\\d{1,4}-\\d{1,4}(?![\\d-]|\\s*年)`,
   "u",
 );
 

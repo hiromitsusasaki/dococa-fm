@@ -137,6 +137,8 @@ describe("verifyEpisode", () => {
     ["西新宿二丁目八番一号から。", "street address"],
     ["新宿区西新宿2-8-1のあたり。", "street address"],
     ["本町3番地の店で。", "street address"],
+    ["西新宿2-8-1", "street address"],
+    ["西新宿2丁目8番1号", "street address"],
     ["〒163-8001 から届きました。", "postal code"],
     ["〒1638001 から届きました。", "postal code"],
     ["163-8001 まで。", "postal code"],
@@ -146,7 +148,7 @@ describe("verifyEpisode", () => {
     expect(r.details.some((d) => d.endsWith(what))).toBe(true);
   });
 
-  it.each(["2丁目のカフェで聴いた歌です。", "十八番の一曲です。", "一番好きな歌です。", "3番線のホームで。"])("a place without a lot number passes: %s", (text) => {
+  it.each(["2丁目のカフェで聴いた歌です。", "十八番の一曲です。", "一番好きな歌です。", "3番線のホームで。", "武道館で 2-1", "下町で 1990-95 年", "武道館で2-1"])("a place without a lot number passes: %s", (text) => {
     expect(verifyEpisode(episode(dj(text)), letters, me).pii).toBe(true);
   });
 

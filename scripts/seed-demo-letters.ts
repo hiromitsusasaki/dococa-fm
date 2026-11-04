@@ -118,7 +118,6 @@ async function loadOrMakePersonas(client: Anthropic): Promise<Persona[]> {
 }
 
 let cookie: string | null = null;
-/** One anonymous session for all the page checks, so they do not each add a listener row. */
 /** One anonymous listener for every post-check read. Asked for twice at most; an origin that never sets one is an error, not "". */
 async function sessionCookie(): Promise<string> {
   for (let attempt = 0; cookie === null && attempt < 2; attempt++) {

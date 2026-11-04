@@ -46,6 +46,9 @@ tts.get("/tts", ttsIpRateLimit, ttsListenerRateLimit, async (c) => {
     return c.json({ error: "tts busy" }, 503, { "retry-after": "2" });
   }
   try {
+    // The winner of an earlier claim may have stored the clip and released between our R2 miss and this claim.
+    const stored = await c.env.BUCKET.get(key);
+    if (stored) return new Response(stored.body, { headers: HEADERS });
     const audio = await synthesize(c.env, target.text, c.env.GEMINI_TTS_VOICE === "female" ? "female" : "male");
     await c.env.BUCKET.put(key, audio, { httpMetadata: { contentType: "audio/mpeg" } });
     return new Response(audio, { headers: HEADERS });
