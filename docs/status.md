@@ -6,12 +6,12 @@
 
 - 設計書・計画は本人承認済み。実行方式は **Subagent-driven**（`superpowers:subagent-driven-development`）。
 - 全体レビュー（Claude と Codex）の指摘を 9 コミットで閉じた。主なもの: 定型文が引用検査に当たって 503 になる件、プレイヤーに原文を出す、時事語・作品数・住所・郵便番号の検査、未検証の回と非公開にしたお便りを全出口で出さない、作品の題名と作者の判定、審査員の 3 作品を「近く」に入れる、D1 のクエリ数（`POST /start` 57 → 25、`POST /episodes` 45 → 13）、空の回を作らない、`PUBLIC_ORIGIN` の既定値を空に、開発時の判定の素通しは `DEV_SKIP_CLAUDE=1` だけ、TTS の single-flight と上限、本文の上限、MCP の照会前の IP 制限。詳細は `.superpowers/sdd/2026-11-03-dococa-fm/final-fix-report.md`（gitignore 済み）。
-- **本人に確かめてほしいこと: Cloudflare のプランは Workers Free か Paid か。** Free は 1 回の実行あたり D1 のクエリが 50 まで（Paid は 1000）。主な経路はテストで 50 未満を確かめた（`test/worker/query-budget.test.ts`）が、Spotify の取り込みを含む実機の値はデプロイ後に `wrangler tail` で見る。
+- Cloudflare のプランは **Workers Paid**（本人確認 2026-11-04）。D1 のクエリ上限は 1 回の実行あたり 1000。主な経路はテストで 50 未満（`test/worker/query-budget.test.ts`）なので余裕がある。
 - 次の一手: 本人が push（main-mac / ops-mac）→ 鍵を入れる → デプロイ → 下のチェックリストを済ませて public 化・提出。
 - Task 16 でできたこと: CI（SHA 固定、secret なし）、Dependabot、SECURITY.md、同一オリジン検査、`secureHeaders()`、レート制限（IP とリスナー、1 分 20 回。カウンタは isolate ごと）、番組作成の全体上限（`EPISODE_GLOBAL_DAILY_LIMIT` 既定 300、`CLOUD_TTS_GLOBAL_DAILY_LIMIT` 既定 50、上限値 `0` は停止）、`SESSION_SECRET` 空のときの 500、未検証の番組は 404。
 - **public 化前チェックリスト（本人）**
-  - [ ] ローカルの commit を push する（最終修正の 9 コミットは未 push）。
-  - [ ] Cloudflare のプラン（Free / Paid）を確かめる。
+  - [x] ローカルの commit を push する（2026-11-04 ops-mac から push。初回 CI 緑）。
+  - [x] Cloudflare のプラン: Paid。
   - [ ] もう一方の端末の `.dev.vars` に `PUBLIC_ORIGIN=http://127.0.0.1:5173` と `DEV_SKIP_CLAUDE=1` を足し、`pnpm db:migrate:local` を流す（無いと `pnpm dev` が 500 になる。main-mac は 2026-11-04 に済み）。
   - [ ] `CLAUDE.md`、`docs/status.md`（端末名と private の作業場所のパス）、設計書 §3（知人の呼び名）を公開してよいか見る。
   - [ ] Settings → Code security で Secret scanning と Push protection を有効にする。
