@@ -42,6 +42,20 @@ describe("POST /letters", () => {
     expect(create).toHaveBeenCalledTimes(1); // moderation only; ja is not translated
   });
 
+  it("judges the work's title and creator in the same moderation call", async () => {
+    const item = await insertItem(env.DB, itemDraft({ title: "宣伝<タイトル>", creator: "誰かのチャンネル" }));
+    const res = await postForm("/letters", await newSession(), { itemId: item.id, body: "いい曲" });
+    expect(res.status).toBe(303);
+    expect(create).toHaveBeenCalledTimes(1);
+    const req = create.mock.calls[0]![0];
+    const user = String(req.messages[0].content);
+    expect(user).toContain("<work>");
+    expect(user).toContain("題名: 宣伝&lt;タイトル&gt;");
+    expect(user).toContain("作者: 誰かのチャンネル");
+    expect(user).toContain("<letter>いい曲</letter>");
+    expect(req.system).toContain("題名や作者名が中傷・宣伝・個人情報なら");
+  });
+
   it("keeps the original and stores the translation for english", async () => {
     const item = await seedItem();
     create.mockResolvedValueOnce(verdict({ ok: true })).mockResolvedValueOnce(translation("15 歳のときに大好きだった"));

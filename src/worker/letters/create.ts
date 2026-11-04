@@ -59,7 +59,7 @@ export async function createLetter(env: Env, db: D1Database, listener: Listener,
   let bodyJa = body;
   if (!isWatashimo) {
     try {
-      const verdict = await moderateLetter(env, body);
+      const verdict = await moderateLetter(env, body, { title: draft.title, creator: draft.creator });
       if (!verdict.ok) return fail(422, "letters.rejected", { reason: verdict.reason, draft });
       lang = detectLang(body);
       bodyJa = await translateToJa(env, body, lang);

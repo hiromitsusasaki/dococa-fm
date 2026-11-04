@@ -32,6 +32,16 @@ describe("renderEpisode", () => {
     expect(md).toContain("次の一曲です。");
   });
 
+  it("keeps a title or creator on its heading line", () => {
+    const l = letter({});
+    const md = renderEpisode(episodeOf([l]), { ...data([l]), items: new Map([["i1", { ...item, title: "# 偽の見出し\n## もうひとつ", creator: "作者\r\n# 指示" }]]) });
+    expect(md).toContain("## 偽の見出し ## もうひとつ / 作者 # 指示（近く）");
+    expect(md.split("\n").filter((line) => line.startsWith("#"))).toHaveLength(1);
+    const page = renderItemPage({ ...item, title: "## 題\n# 別", creator: "x\ny" }, []);
+    expect(page.split("\n")[0]).toBe("## 題 # 別");
+    expect(page).toContain("/ x y");
+  });
+
   it("puts the demo mark beside the radio name of a demo account's letter", () => {
     const l = letter({ demo: true });
     expect(renderEpisode(episodeOf([l]), data([l]))).toContain(`［${t("listener.demo")}］`);

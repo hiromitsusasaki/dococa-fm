@@ -11,6 +11,9 @@ export type EpisodeData = {
   letters: ReadonlyMap<string, Letter>;
 };
 
+/** One line of heading text: a title cannot break out of its heading or open a new one. */
+const headingText = (s: string): string => s.replace(/[\r\n]+/g, " ").replace(/^[\s#]+/, "");
+
 /** A blockquote that keeps every character and line break of `text`. */
 const quote = (text: string): string => text.split("\n").map((l) => `> ${l}`).join("\n");
 
@@ -41,7 +44,7 @@ export function renderEpisode(episode: Episode, data: EpisodeData): string {
   for (const seg of episode.segments) {
     const item = data.items.get(seg.itemId);
     if (!item) continue;
-    parts.push(`## ${item.title} / ${item.creator}（${t(`slot.${seg.slot}`)}）\n<!-- itemId: ${item.id} -->`);
+    parts.push(`## ${headingText(item.title)} / ${headingText(item.creator)}（${t(`slot.${seg.slot}`)}）\n<!-- itemId: ${item.id} -->`);
     parts.push(...seg.lines.map((l) => renderLine(l, data)).filter((s) => s !== ""));
   }
   return parts.join("\n\n");
@@ -50,7 +53,7 @@ export function renderEpisode(episode: Episode, data: EpisodeData): string {
 const outLabel = (key: string): string | null => (`out.${key}` in ja ? t(`out.${key}` as keyof typeof ja) : null);
 
 export function renderItemCard(item: Item): string {
-  const head = `## ${item.title}\n${t(`kind.${item.kind}`)} / ${item.creator}${item.year !== null ? `（${item.year}）` : ""}\n<!-- itemId: ${item.id} -->`;
+  const head = `## ${headingText(item.title)}\n${t(`kind.${item.kind}`)} / ${headingText(item.creator)}${item.year !== null ? `（${item.year}）` : ""}\n<!-- itemId: ${item.id} -->`;
   const links = Object.entries(item.outLinks).flatMap(([key, href]) => {
     const label = outLabel(key);
     return label && isHttpUrl(href) ? [`- [${label}](${href})`] : [];
