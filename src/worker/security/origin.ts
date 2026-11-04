@@ -31,3 +31,18 @@ export const sameOriginOnly: MiddlewareHandler<{ Bindings: Env }> = async (c, ne
   if (site !== undefined && site !== "same-origin" && site !== "none") return c.text("Forbidden", 403);
   return next();
 };
+
+let warnedMissingOrigin = false;
+
+/**
+ * PUBLIC_ORIGIN decides the same-origin check, the Secure cookie, the Spotify redirect and the MCP url. Empty
+ * (the committed default, so a deploy without it fails loudly) answers plainly and logs once. /healthz stays up.
+ */
+export const requirePublicOrigin: MiddlewareHandler<{ Bindings: Env }> = async (c, next) => {
+  if (c.env.PUBLIC_ORIGIN || c.req.path === "/healthz") return next();
+  if (!warnedMissingOrigin) {
+    warnedMissingOrigin = true;
+    console.error("[dococa] PUBLIC_ORIGIN is empty; set it in wrangler.jsonc (or .dev.vars for local dev)");
+  }
+  return c.text("Server is not configured", 500);
+};

@@ -16,5 +16,8 @@ export type Env = {
   CLAUDE_MODEL?: string;
   GEMINI_TTS_MODEL?: string;
   GEMINI_TTS_VOICE?: string;
+  /** Where the app is served, e.g. https://dococa.example. Empty refuses every request (see `requirePublicOrigin`). */
   PUBLIC_ORIGIN: string;
+  /** "1" lets letters through unjudged and untranslated when ANTHROPIC_API_KEY is empty. Local dev only. */
+  DEV_SKIP_CLAUDE?: string;
 };

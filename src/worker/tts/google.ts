@@ -43,7 +43,7 @@ async function synthesizeChunk(env: Env, text: string, voice: "male" | "female")
     headers: { "content-type": "application/json" },
     body: JSON.stringify({
       input: { text, prompt: DJ_STYLE_PROMPT },
-      voice: { languageCode: "ja-JP", name: VOICE_NAME[voice], modelName: env.GEMINI_TTS_MODEL ?? DEFAULT_MODEL },
+      voice: { languageCode: "ja-JP", name: VOICE_NAME[voice], modelName: env.GEMINI_TTS_MODEL || DEFAULT_MODEL },
       audioConfig: { audioEncoding: "MP3" },
     }),
     signal: AbortSignal.timeout(TIMEOUT_MS),

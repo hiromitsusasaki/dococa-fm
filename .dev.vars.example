@@ -12,8 +12,19 @@ YOUTUBE_API_KEY=
 ADMIN_TOKEN=
 # セッション cookie の署名用ランダム文字列
 SESSION_SECRET=
+# この app を配信する origin。開発は http://127.0.0.1:5173。空だと全リクエストが 500 になる
+# （本番は wrangler.jsonc の vars に書く）
+PUBLIC_ORIGIN=http://127.0.0.1:5173
+# 開発専用: 1 にすると、ANTHROPIC_API_KEY が空のときにお便りの判定と翻訳を素通しにする。本番では設定しない
+DEV_SKIP_CLAUDE=1
 # 任意: 1 リスナー 1 日の番組生成の上限
 EPISODE_DAILY_LIMIT=10
+# 任意: 全リスナー合計の 1 日の番組生成の上限（既定 300。0 で停止）
+EPISODE_GLOBAL_DAILY_LIMIT=300
+# 任意: クラウド TTS を使う回の 1 日の上限（既定 50。0 で停止）
+CLOUD_TTS_GLOBAL_DAILY_LIMIT=50
+# 任意: 1 分あたりの書き込みの上限（IP・リスナーごと。既定 20）
+RATE_LIMIT_PER_MINUTE=20
 # 任意: 台本生成に使う Claude のモデル
 CLAUDE_MODEL=claude-sonnet-5-5
 # 任意: クラウド TTS のモデル（既定 gemini-2.5-flash-tts）

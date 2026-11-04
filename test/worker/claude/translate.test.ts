@@ -51,15 +51,15 @@ describe("translateToJa", () => {
     expect(JSON.stringify(req.messages)).toContain("I loved this at 15");
   });
 
-  it("skips translation in dev when the key is empty", async () => {
+  it("skips translation when DEV_SKIP_CLAUDE is 1 and the key is empty", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-    const dev = { ...env, ANTHROPIC_API_KEY: "", PUBLIC_ORIGIN: "http://localhost:5173" } as Env;
+    const dev = { ...env, ANTHROPIC_API_KEY: "", DEV_SKIP_CLAUDE: "1" } as Env;
     expect(await translateToJa(dev, "hello", "en")).toBe("hello");
     expect(warn).toHaveBeenCalledTimes(1);
   });
 
-  it("throws in production when the key is empty", async () => {
-    const prod = { ...env, ANTHROPIC_API_KEY: "", PUBLIC_ORIGIN: "https://dococa.fm" } as Env;
+  it("throws without a key when DEV_SKIP_CLAUDE is not 1, even on a dev origin", async () => {
+    const prod = { ...env, ANTHROPIC_API_KEY: "", PUBLIC_ORIGIN: "http://127.0.0.1:5173", DEV_SKIP_CLAUDE: "" } as Env;
     await expect(translateToJa(prod, "hello", "en")).rejects.toThrow("claude unavailable");
   });
 

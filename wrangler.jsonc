@@ -9,5 +9,7 @@
   ],
   "r2_buckets": [{ "binding": "BUCKET", "bucket_name": "dococa-audio" }],
   "assets": { "binding": "ASSETS", "not_found_handling": "none", "run_worker_first": true },
-  "vars": { "PUBLIC_ORIGIN": "http://127.0.0.1:5173" }
+  // Set to the deployed origin (e.g. https://dococa.example.workers.dev) before `pnpm run deploy`. Empty refuses
+  // every request with 500. Local dev sets it in .dev.vars.
+  "vars": { "PUBLIC_ORIGIN": "" }
 }

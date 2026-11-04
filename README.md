@@ -104,10 +104,13 @@ pnpm wrangler d1 create dococa            # 出力の database_id を wrangler.j
 pnpm wrangler r2 bucket create dococa-audio
 pnpm wrangler secret put ANTHROPIC_API_KEY   # .dev.vars.example の鍵を 1 つずつ（ADMIN_TOKEN、SESSION_SECRET、SPOTIFY_CLIENT_ID、GOOGLE_TTS_API_KEY、TMDB_API_KEY、YOUTUBE_API_KEY）
 pnpm db:migrate
+# wrangler.jsonc の vars.PUBLIC_ORIGIN にデプロイ先の origin（例 https://dococa-fm.<account>.workers.dev）を書いてから
 pnpm run deploy   # pnpm deploy は pnpm 組み込みの別コマンドなので、run を付ける
 ```
 
-`wrangler.jsonc` の `PUBLIC_ORIGIN` は開発用の `http://127.0.0.1:5173` です。本番ではデプロイ先の URL に差し替えます（`vars` を書き換えるか、`pnpm build && pnpm wrangler deploy --var PUBLIC_ORIGIN:https://<デプロイ先>`）。Spotify の redirect URI も同じ origin に合わせます。
+`wrangler.jsonc` の `PUBLIC_ORIGIN` は、リポジトリでは空です。空のままデプロイすると、`/healthz` 以外のすべてのリクエストが 500（`Server is not configured`）になります。デプロイ前に `vars` へ本番の origin を書いてください。`--var` で渡す方法は、次の `pnpm run deploy` で空に戻るので使いません。開発では `.dev.vars` の `PUBLIC_ORIGIN=http://127.0.0.1:5173` を使います。Spotify の redirect URI も同じ origin に合わせます。
+
+`DEV_SKIP_CLAUDE=1` は開発専用です。`ANTHROPIC_API_KEY` が空のときに、お便りの判定と翻訳を素通しにします。本番の `vars` や secrets には入れません（入れなければ、鍵が空のときお便りの投稿は 503 で止まります）。
 
 ### Spotify 連携について
 

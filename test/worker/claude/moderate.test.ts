@@ -71,16 +71,21 @@ describe("moderateLetter", () => {
     await expect(moderateLetter(keyed, "x")).rejects.toThrow("moderation missing");
   });
 
-  it("skips Claude in dev when the key is empty", async () => {
+  it("skips Claude only when DEV_SKIP_CLAUDE is 1 and the key is empty", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-    const dev = { ...env, ANTHROPIC_API_KEY: "", PUBLIC_ORIGIN: "http://127.0.0.1:5173" } as Env;
+    const dev = { ...env, ANTHROPIC_API_KEY: "", DEV_SKIP_CLAUDE: "1" } as Env;
     expect(await moderateLetter(dev, "x")).toEqual({ ok: true });
     expect(create).not.toHaveBeenCalled();
     expect(warn).toHaveBeenCalledTimes(1);
   });
 
-  it("throws in production when the key is empty", async () => {
-    const prod = { ...env, ANTHROPIC_API_KEY: "", PUBLIC_ORIGIN: "https://dococa.fm" } as Env;
-    await expect(moderateLetter(prod, "x")).rejects.toThrow("claude unavailable");
+  it("throws without a key unless DEV_SKIP_CLAUDE is 1, whatever the origin", async () => {
+    for (const over of [
+      { PUBLIC_ORIGIN: "https://dococa.fm", DEV_SKIP_CLAUDE: "1x" },
+      { PUBLIC_ORIGIN: "http://127.0.0.1:5173", DEV_SKIP_CLAUDE: "" },
+      { PUBLIC_ORIGIN: "http://localhost:5173", DEV_SKIP_CLAUDE: undefined },
+    ]) {
+      await expect(moderateLetter({ ...env, ANTHROPIC_API_KEY: "", ...over } as Env, "x")).rejects.toThrow("claude unavailable");
+    }
   });
 });

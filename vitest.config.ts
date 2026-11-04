@@ -12,7 +12,26 @@ export default defineConfig(async () => {
             cloudflareTest({
               wrangler: { configPath: "./wrangler.jsonc" },
               miniflare: {
-                bindings: { TEST_MIGRATIONS: migrations, SESSION_SECRET: "test-session-secret", ANTHROPIC_API_KEY: "" },
+                // Every Env key is fixed here so a developer's .dev.vars cannot steer tests onto another path (or a real API).
+                bindings: {
+                  TEST_MIGRATIONS: migrations,
+                  PUBLIC_ORIGIN: "http://127.0.0.1:5173",
+                  DEV_SKIP_CLAUDE: "1",
+                  SESSION_SECRET: "test-session-secret",
+                  ANTHROPIC_API_KEY: "",
+                  SPOTIFY_CLIENT_ID: "",
+                  GOOGLE_TTS_API_KEY: "",
+                  TMDB_API_KEY: "",
+                  YOUTUBE_API_KEY: "",
+                  ADMIN_TOKEN: "",
+                  EPISODE_DAILY_LIMIT: "",
+                  EPISODE_GLOBAL_DAILY_LIMIT: "",
+                  CLOUD_TTS_GLOBAL_DAILY_LIMIT: "",
+                  RATE_LIMIT_PER_MINUTE: "",
+                  CLAUDE_MODEL: "",
+                  GEMINI_TTS_MODEL: "",
+                  GEMINI_TTS_VOICE: "",
+                },
                 assets: { directory: path.join(import.meta.dirname, "public"), binding: "ASSETS" },
               },
             }),

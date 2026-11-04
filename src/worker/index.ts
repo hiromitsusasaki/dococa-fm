@@ -14,7 +14,7 @@ import { put } from "./routes/put";
 import { settings } from "./routes/settings";
 import { start } from "./routes/start";
 import { tts } from "./routes/tts";
-import { sameOriginOnly } from "./security/origin";
+import { requirePublicOrigin, sameOriginOnly } from "./security/origin";
 import { ipRateLimit, listenerRateLimit } from "./security/rate-limit";
 
 const app = new Hono<{ Bindings: Env; Variables: Variables }>();
@@ -22,6 +22,7 @@ const app = new Hono<{ Bindings: Env; Variables: Variables }>();
 // No CSP: the player reads inline JSON script blocks and the client bundle. The other default headers stay on.
 app.use("*", secureHeaders({ referrerPolicy: "strict-origin-when-cross-origin" }));
 // Cheap refusals come before the session middleware so they never mint a listener row.
+app.use("*", requirePublicOrigin);
 app.use("*", sameOriginOnly);
 app.use("*", ipRateLimit);
 app.use("*", requireSessionSecret);

@@ -197,6 +197,23 @@ describe("SESSION_SECRET guard", () => {
   });
 });
 
+describe("PUBLIC_ORIGIN guard", () => {
+  it("answers a plain 500 everywhere but /healthz and logs once when the origin is empty", async () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const bad = { ...e, PUBLIC_ORIGIN: "" };
+    for (const [path, init] of [["/", {}], ["/settings", {}], ["/letters", { method: "POST" }], ["/admin/items", { method: "POST" }]] as const) {
+      const res = await app.request(path, init, bad);
+      expect(res.status, path).toBe(500);
+      expect(await res.text()).toBe("Server is not configured");
+    }
+    expect(errorSpy.mock.calls.filter((c) => String(c[0]).includes("PUBLIC_ORIGIN"))).toHaveLength(1);
+    expect((await app.request("/healthz", {}, bad)).status).toBe(200);
+    // Refused before the session middleware: no listener row was minted.
+    expect((await env.DB.prepare("SELECT COUNT(*) AS n FROM listeners").first<{ n: number }>())!.n).toBe(0);
+    errorSpy.mockRestore();
+  });
+});
+
 describe("session exemptions", () => {
   it("do not create listener rows for static assets and /api", async () => {
     for (const path of ["/app.css", "/icon.svg", "/manifest.webmanifest", "/bed.mp3", "/healthz", "/api/search"]) {
