@@ -1,7 +1,7 @@
 import { env } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import app from "../../../src/worker/index";
-import { getEpisode, listEpisodes } from "../../../src/worker/db/episodes";
+import { getEpisode, insertEpisode, listEpisodes } from "../../../src/worker/db/episodes";
 import { upsertHistory } from "../../../src/worker/db/history";
 import { insertItem } from "../../../src/worker/db/items";
 import { insertLetter } from "../../../src/worker/db/letters";
@@ -66,11 +66,11 @@ describe("POST /episodes", () => {
     expect(await listEpisodes(env.DB, idOf(cookie), 10)).toHaveLength(1);
   });
 
-  it("falls back to 10 when the limit is not a positive number", async () => {
+  it("falls back to 10 when the limit is not a number, and a limit of 0 pauses episodes", async () => {
     const cookie = await newSession();
     await seed(cookie);
     expect((await post("/episodes", cookie, { ...env, EPISODE_DAILY_LIMIT: "abc" })).status).toBe(303);
-    expect((await post("/episodes", cookie, { ...env, EPISODE_DAILY_LIMIT: "0" })).status).toBe(303);
+    expect((await post("/episodes", cookie, { ...env, EPISODE_DAILY_LIMIT: "0" })).status).toBe(429);
   });
 
   it("answers 503 and stores nothing when the episode cannot be verified", async () => {
@@ -84,6 +84,66 @@ describe("POST /episodes", () => {
     expect(await listEpisodes(env.DB, me, 10)).toHaveLength(0);
     expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining("EpisodeUnverifiedError"));
     expect(JSON.stringify(errorSpy.mock.calls)).not.toContain(me);
+  });
+});
+
+describe("global daily caps", () => {
+  const keyed = { ...env, GOOGLE_TTS_API_KEY: "k-test" };
+
+  /** Episodes made today by other listeners, as if a cookie-reset loop had made them. */
+  async function othersMade(n: number, cloudTts = false) {
+    for (let i = 0; i < n; i++) {
+      const other = await createListener(env.DB);
+      await insertEpisode(env.DB, { listenerId: other.id, segments: [], verified: true, report: {} as Episode["report"], cloudTts });
+    }
+  }
+
+  it("answers 429 for everyone once the global episode cap is reached", async () => {
+    const cookie = await newSession();
+    await seed(cookie);
+    await othersMade(2);
+    const capped = { ...env, EPISODE_GLOBAL_DAILY_LIMIT: "2" };
+    const res = await post("/episodes", cookie, capped);
+    expect(res.status).toBe(429);
+    expect(await res.text()).toContain("今日の番組はここまで。また明日");
+    expect(await listEpisodes(env.DB, idOf(cookie), 10)).toHaveLength(0);
+    expect((await post("/episodes", cookie, { ...env, EPISODE_GLOBAL_DAILY_LIMIT: "3" })).status).toBe(303);
+  });
+
+  it("treats a global limit of 0 as paused, and an invalid one as the default", async () => {
+    const cookie = await newSession();
+    await seed(cookie);
+    expect((await post("/episodes", cookie, { ...env, EPISODE_GLOBAL_DAILY_LIMIT: "0" })).status).toBe(429);
+    expect((await post("/episodes", cookie, { ...env, EPISODE_GLOBAL_DAILY_LIMIT: "many" })).status).toBe(303);
+  });
+
+  it("keeps making episodes past the cloud voice cap, without the voice and without using up the first-episode allowance", async () => {
+    const cookie = await newSession();
+    await seed(cookie);
+    await othersMade(1, true);
+    const id = locationId(await post("/episodes", cookie, { ...keyed, CLOUD_TTS_GLOBAL_DAILY_LIMIT: "1" }));
+    expect((await getEpisode(env.DB, id))!.cloudTts).toBe(false);
+    expect((await getListener(env.DB, idOf(cookie)))!.cloudTtsUsed).toBe(false);
+    const later = locationId(await post("/episodes", cookie, { ...keyed, CLOUD_TTS_GLOBAL_DAILY_LIMIT: "2" }));
+    expect((await getEpisode(env.DB, later))!.cloudTts).toBe(true);
+  });
+
+  it("treats a cloud voice cap of 0 as paused", async () => {
+    const cookie = await newSession();
+    await seed(cookie);
+    const id = locationId(await post("/episodes", cookie, { ...keyed, CLOUD_TTS_GLOBAL_DAILY_LIMIT: "0" }));
+    expect((await getEpisode(env.DB, id))!.cloudTts).toBe(false);
+  });
+});
+
+describe("unverified episodes", () => {
+  it("are not rendered or served as JSON", async () => {
+    const cookie = await newSession();
+    const row = await insertEpisode(env.DB, { listenerId: idOf(cookie), segments: [], verified: false, report: {} as Episode["report"] });
+    expect((await get(`/episodes/${row.id}`, cookie)).status).toBe(404);
+    expect((await get(`/episodes/${row.id}.json`, cookie)).status).toBe(404);
+    const ok = await insertEpisode(env.DB, { listenerId: idOf(cookie), segments: [], verified: true, report: {} as Episode["report"] });
+    expect((await get(`/episodes/${ok.id}`, cookie)).status).toBe(200);
   });
 });
 

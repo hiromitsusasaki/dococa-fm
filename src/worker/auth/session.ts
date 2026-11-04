@@ -35,7 +35,7 @@ export async function verifySession(cookie: string | undefined, secret: string):
   return diff === 0 ? id : null;
 }
 
-const EXEMPT_PREFIXES = ["/admin", "/mcp", "/assets", "/src"];
+const EXEMPT_PREFIXES = ["/admin", "/mcp", "/api", "/assets", "/src"];
 const EXEMPT_PATHS = new Set(["/healthz", "/app.css", "/favicon.ico", "/manifest.webmanifest", "/icon.svg", "/bed.mp3"]);
 
 /** Token-authenticated routes and static assets must not mint a listener per request. */
@@ -61,4 +61,16 @@ export const sessionMiddleware: MiddlewareHandler<{ Bindings: Env; Variables: Va
   }
   c.set("listener", listener);
   return next();
+};
+
+let warnedMissingSecret = false;
+
+/** An empty SESSION_SECRET would make every cookie request throw inside importKey; answer plainly instead, and log once. */
+export const requireSessionSecret: MiddlewareHandler<{ Bindings: Env }> = async (c, next) => {
+  if (isSessionExempt(c.req.path) || c.env.SESSION_SECRET) return next();
+  if (!warnedMissingSecret) {
+    warnedMissingSecret = true;
+    console.error("[dococa] SESSION_SECRET is empty; refusing requests that need a session");
+  }
+  return c.text("Server is not configured", 500);
 };

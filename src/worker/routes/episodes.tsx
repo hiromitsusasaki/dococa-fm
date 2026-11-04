@@ -88,7 +88,8 @@ episodes.get("/episodes/:id", async (c) => {
   const param = c.req.param("id");
   const asJson = param.endsWith(".json");
   const episode = await ownEpisode(c, asJson ? param.slice(0, -".json".length) : param);
-  if (!episode) return c.notFound();
+  // Only the builder stores verified rows; refusing the rest here is a second lock, not the first.
+  if (!episode || !episode.verified) return c.notFound();
   if (asJson) return c.json(episode);
 
   const listener = c.get("listener");

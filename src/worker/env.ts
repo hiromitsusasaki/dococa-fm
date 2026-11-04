@@ -10,6 +10,9 @@ export type Env = {
   ADMIN_TOKEN: string;
   SESSION_SECRET: string;
   EPISODE_DAILY_LIMIT?: string;
+  EPISODE_GLOBAL_DAILY_LIMIT?: string;
+  CLOUD_TTS_GLOBAL_DAILY_LIMIT?: string;
+  RATE_LIMIT_PER_MINUTE?: string;
   CLAUDE_MODEL?: string;
   GEMINI_TTS_MODEL?: string;
   GEMINI_TTS_VOICE?: string;

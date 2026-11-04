@@ -63,3 +63,15 @@ export async function countEpisodesToday(db: D1Database, listenerId: string, now
     .first<{ n: number }>();
   return row?.n ?? 0;
 }
+
+/** Episodes made by anyone since the JST day began. */
+export async function countAllEpisodesToday(db: D1Database, now: Date = new Date()): Promise<number> {
+  const row = await db.prepare("SELECT COUNT(*) AS n FROM episodes WHERE created_at >= ?").bind(jstDayStartIso(now)).first<{ n: number }>();
+  return row?.n ?? 0;
+}
+
+/** Episodes with the cloud voice since the JST day began. */
+export async function countCloudTtsToday(db: D1Database, now: Date = new Date()): Promise<number> {
+  const row = await db.prepare("SELECT COUNT(*) AS n FROM episodes WHERE cloud_tts = 1 AND created_at >= ?").bind(jstDayStartIso(now)).first<{ n: number }>();
+  return row?.n ?? 0;
+}

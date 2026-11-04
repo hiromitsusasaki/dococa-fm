@@ -113,6 +113,20 @@ pnpm run deploy   # pnpm deploy は pnpm 組み込みの別コマンドなので
 
 Spotify 連携は開発モードのため、許可リストに入っているアカウントだけ使えます（本人と知人）。それ以外の方は、URL の貼り付けか「好きなもの 3 つ」から始められます。
 
+### 守りと制限
+
+書き込みの `POST` は同一オリジンのみ、`/admin/*` は `ADMIN_TOKEN` 必須、レート制限は IP とリスナーごとに 1 分 20 回です。詳しくは [SECURITY.md](SECURITY.md) にあります。レート制限のカウンタは Worker の isolate ごとのメモリにあるため、isolate をまたぐ厳密な上限ではありません。番組の作成は D1 を数える 1 日の上限（`EPISODE_DAILY_LIMIT`、`EPISODE_GLOBAL_DAILY_LIMIT`、`CLOUD_TTS_GLOBAL_DAILY_LIMIT`。`0` は停止）が最後の歯止めです。
+
+### public 化前チェックリスト（本人）
+
+- [ ] リポの Settings → Code security で **Secret scanning** と **Push protection** を有効にする。
+- [ ] Settings → Actions → General で、fork からの pull request の workflow は承認が要る設定にする（"Require approval for all outside collaborators"）。
+- [ ] Settings → Branches（または Rulesets）で、`main` への直接 push を自分だけに限定する。
+- [ ] 手元で `gitleaks detect --source .` を実行し、検出が 0 であることを確かめる（履歴全体が対象）。
+- [ ] `.gitignore` に `.dev.vars`、`*.pem`、`.wrangler/`、`.found/` があることを確かめる（済み）。
+- [ ] CI（`.github/workflows/ci.yml`）が main で緑になっていることを確かめる。
+- [ ] 上が済んでから、Settings → General → Danger Zone で private を public に切り替え、提出する。
+
 ## MCP で聴く
 
 設定画面に表示される `/mcp/<token>` の URL が、番組を取り出す口です。トークンは URL の一部で、他の認証は要りません。URL を知っている人は、あなたの名前でお便りを置けます。漏れたら設定画面で作り直してください。

@@ -23,6 +23,9 @@ importers:
       hono:
         specifier: ^4.13.16
         version: 4.13.16
+      hono-rate-limiter:
+        specifier: ^0.5.4
+        version: 0.5.4(hono@4.13.16)
       zod:
         specifier: ^4.6.7
         version: 4.6.7

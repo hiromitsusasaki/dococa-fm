@@ -2,10 +2,18 @@
 
 > 新しいセッションはまずここを読む。更新はタスクの区切りごと（最新を上に）。
 
-## 2026-11-04 Task 15 完了。次は Task 16
+## 2026-11-04 Task 16 完了。次は全体レビュー
 
 - 設計書・計画は本人承認済み。実行方式は **Subagent-driven**（`superpowers:subagent-driven-development`）。
-- 次の一手: **Task 16（公開前の整備）**。`docs/superpowers/plans/2026-11-03-dococa-fm.md` の Task 16 を開く。
+- 次の一手: 最後の全体レビュー（Claude と Codex）→ 本人が下のチェックリストを済ませて public 化・提出。
+- Task 16 でできたこと: CI（SHA 固定、secret なし）、Dependabot、SECURITY.md、同一オリジン検査、`secureHeaders()`、レート制限（IP とリスナー、1 分 20 回。カウンタは isolate ごと）、番組作成の全体上限（`EPISODE_GLOBAL_DAILY_LIMIT` 既定 300、`CLOUD_TTS_GLOBAL_DAILY_LIMIT` 既定 50、上限値 `0` は停止）、`SESSION_SECRET` 空のときの 500、未検証の番組は 404。
+- **public 化前チェックリスト（本人）**
+  - [ ] Settings → Code security で Secret scanning と Push protection を有効にする。
+  - [ ] Settings → Actions → General で、fork からの PR の workflow は承認が要る設定にする。
+  - [ ] Settings → Branches（または Rulesets）で、`main` への直接 push を自分だけに限定する。
+  - [ ] 手元で `gitleaks detect --source .` を実行して検出 0 を確かめる（実装側で 2026-11-04 に実行済み: 50 commits、検出 0。public 化の直前にもう一度）。
+  - [ ] CI が main で緑になっていることを確かめる（GitHub Actions は push するまで走らない）。
+  - [ ] 上が済んでから private → public に切り替えて提出する。
 - Task 15 の保留（鍵と `wrangler login` 待ち）: 20 回の eval 実走と `docs/eval/<日付>.md`、デプロイ、本番 URL での MCP connector 確認。eval スクリプトは `pnpm eval`（管理 API の模擬サーバーで動作確認済み）、README の eval 欄は「鍵投入後に 20 回回して記入」のまま。走らせ方は `docs/eval/README.md`。
 - デプロイの手順（本人。`wrangler login` 後）:
   ```bash
@@ -45,7 +53,7 @@
 | 13b | デモ用シード（AI ペルソナのお便りと「デモ用」の印） | 完了（実 API での 3 ペルソナ投入は ANTHROPIC_API_KEY 待ち） |
 | 14 | はじめの一歩（好きなもの 3 つ、ブックマークレット、ホーム） | 完了 |
 | 15 | eval、デプロイ、README | 完了（20 回の eval 実走・デプロイ・MCP connector 確認は鍵と wrangler login 待ち） |
-| 16 | 公開前の整備（CI、secret scanning、レート制限）→ public 化 | 未着手 |
+| 16 | 公開前の整備（CI、secret scanning、レート制限）→ public 化 | 完了（gitleaks と GitHub 側の設定は本人） |
 
 ## 決定の記録（設計書に反映済み）
 
