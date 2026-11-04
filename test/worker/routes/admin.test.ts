@@ -223,6 +223,27 @@ describe("POST /admin/episodes", () => {
   });
 });
 
+describe("GET /admin/episodes/:id", () => {
+  it("returns the stored episode with its report for the operator", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const listener = await createListener(env.DB);
+    const item = await insertItem(env.DB, itemDraft());
+    await insertLetter(env.DB, letterDraft(item.id));
+    const made = (await (await call("POST", "/admin/episodes", { listenerId: listener.id })).json()) as { id: string };
+    const res = await call("GET", `/admin/episodes/${made.id}`);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { id: string; listenerId: string; segments: unknown[]; report: { verbatim: boolean } };
+    expect(body).toMatchObject({ id: made.id, listenerId: listener.id });
+    expect(Array.isArray(body.segments)).toBe(true);
+    expect(typeof body.report.verbatim).toBe("boolean");
+  });
+
+  it("answers 404 for an unknown episode and 401 without the token", async () => {
+    expect((await call("GET", "/admin/episodes/nope")).status).toBe(404);
+    expect((await call("GET", "/admin/episodes/nope", undefined, {})).status).toBe(401);
+  });
+});
+
 describe("POST /admin/letters/:id/reject", () => {
   it("flips the status and the letter leaves the item page", async () => {
     const item = await insertItem(env.DB, itemDraft());

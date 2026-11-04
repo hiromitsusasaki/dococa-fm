@@ -158,6 +158,12 @@ admin.post("/admin/episodes", async (c) => {
   return c.json({ id: made.id, cloudTts: episode?.cloudTts === true });
 });
 
+/** The stored episode, report included, so the eval script can read what a listener's session would. */
+admin.get("/admin/episodes/:id", async (c) => {
+  const episode = await getEpisode(c.env.DB, c.req.param("id"));
+  return episode ? c.json(episode) : c.json({ error: "episode not found" }, 404);
+});
+
 admin.post("/admin/letters/:id/reject", async (c) => {
   const id = c.req.param("id");
   if (!(await getLetter(c.env.DB, id))) return c.json({ error: "letter not found" }, 404);
