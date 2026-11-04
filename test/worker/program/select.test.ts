@@ -91,14 +91,46 @@ describe("selectProgram", () => {
     expect(bySlot(high, "far")).toBe(6);
   });
 
-  it("fills from far when the near pool is empty and keeps length 6", async () => {
+  it("fills a short near pool from the listener's own works first, then from far, and keeps length 6", async () => {
     const f = await buildFixture();
     const d = await createListener(env.DB);
     await upsertHistory(env.DB, [{ listenerId: d.id, itemId: f.items[3] as string, source: "manual", occurredAt: null }]);
     const p = await selectProgram(env.DB, { ...d, dial: 0.3 }, { seed: "s" });
     expect(p).toHaveLength(6);
-    expect(bySlot(p, "far")).toBe(6);
+    expect(p.filter((s) => s.slot === "near")).toEqual([{ itemId: f.items[3], slot: "near", letterIds: [] }]);
+    expect(bySlot(p, "far")).toBe(5);
     expect(new Set(p.map((s) => s.itemId)).size).toBe(6);
+  });
+
+  it("a new listener's three works land in near seats among many seed letters, and the dial moves the far share", async () => {
+    const seedWriter = await createListener(env.DB);
+    for (let n = 0; n < 12; n++) {
+      const it = await insertItem(env.DB, itemDraft({ title: `seeded-${n}`, externalIds: { itunes: `s${n}` } }));
+      await insertLetter(env.DB, letterDraft(it.id, { listenerId: seedWriter.id, body: `seed ${n}` }));
+    }
+    const judge = await createListener(env.DB);
+    const mine: string[] = [];
+    for (let n = 0; n < 3; n++) {
+      const it = await insertItem(env.DB, itemDraft({ title: `mine-${n}`, externalIds: { itunes: `m${n}` } }));
+      mine.push(it.id);
+      await upsertHistory(env.DB, [{ listenerId: judge.id, itemId: it.id, source: "manual", occurredAt: null }]);
+    }
+    // One of them carries the judge's own one-liner from /start: it still counts as nobody else's.
+    await insertLetter(env.DB, letterDraft(mine[0]!, { listenerId: judge.id, body: "my note" }));
+
+    const low = await selectProgram(env.DB, { ...judge, dial: 0.3 }, { seed: "s" });
+    expect(low).toHaveLength(6);
+    expect(low.filter((s) => s.slot === "near").map((s) => s.itemId).sort()).toEqual([...mine].sort());
+    expect(bySlot(low, "far")).toBe(3);
+    expect(low.every((s) => !s.letterIds.some((id) => id === undefined))).toBe(true);
+
+    const zero = await selectProgram(env.DB, { ...judge, dial: 0 }, { seed: "s" });
+    expect(bySlot(zero, "far")).toBe(3);
+    expect(zero.filter((s) => s.slot === "near").length).toBe(3);
+
+    const high = await selectProgram(env.DB, { ...judge, dial: 1 }, { seed: "s" });
+    expect(bySlot(high, "far")).toBe(6);
+    expect(high.some((s) => mine.includes(s.itemId))).toBe(false);
   });
 
   it("uses history-only items as the last resort and never pads with duplicates", async () => {

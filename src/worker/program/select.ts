@@ -94,9 +94,16 @@ export async function selectProgram(
   // The echo item uses one unit of the near quota; it never adds to the program size.
   const nearRoom = nearQuota - (echo ? 1 : 0);
   const quota: Record<Slot, number> = { near: nearRoom, neighbor: neighborQuota, far: farQuota };
+  let short = 0;
   for (const slot of ["near", "neighbor", "far"] as const) {
-    chosen[slot].push(...pools[slot].splice(0, Math.max(0, quota[slot])));
+    const took = pools[slot].splice(0, Math.max(0, quota[slot]));
+    chosen[slot].push(...took);
+    if (slot !== "far") short += Math.max(0, quota[slot]) - took.length;
   }
+  // Near and neighbor seats nobody else's letters can fill go to the listener's own works, introduced from
+  // the work alone, before far takes them: a new listener hears the three works they just named, and the
+  // dial still decides the far share.
+  chosen.near.push(...pools.fallback.splice(0, short));
 
   const count = () => chosen.near.length + chosen.neighbor.length + chosen.far.length;
   for (const slot of ["far", "near", "neighbor"] as const) {
