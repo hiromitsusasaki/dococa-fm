@@ -9,7 +9,14 @@ export type PlayerItem = { title: string; creator: string; imageUrl: string | nu
 /** The slice of an episode the page embeds: no listener id, no verification report. */
 /** Letters not written in Japanese: the line reads the translation, the screen shows this original under it. */
 export type PlayerOriginals = Record<string, { body: string; lang: string }>;
-export type PlayerEpisode = { id: string; segments: Segment[]; items: Record<string, PlayerItem>; originals?: PlayerOriginals };
+export type PlayerEpisode = {
+  id: string;
+  segments: Segment[];
+  items: Record<string, PlayerItem>;
+  originals?: PlayerOriginals;
+  /** The stored line each shown line is, for `/tts`: the page may leave out letters rejected after the episode was made. */
+  ttsLines?: number[];
+};
 export type PlayerOptions = {
   voiceURI: string;
   nextUrl: string;
@@ -55,8 +62,11 @@ export function mountPlayer(root: HTMLElement, episode: PlayerEpisode, opts: Pla
   let ttsOk = opts.ttsUrl !== null;
 
   const lineOf = (seg: number, line: number): ScriptLine | undefined => segments[seg]?.lines[line];
-  /** Index of a line across the whole episode, which is what the TTS endpoint takes. */
-  const globalIndex = (seg: number, line: number) => segments.slice(0, seg).reduce((n, s) => n + s.lines.length, 0) + line;
+  /** Index of a line across the whole stored episode, which is what the TTS endpoint takes. */
+  const globalIndex = (seg: number, line: number) => {
+    const shown = segments.slice(0, seg).reduce((n, s) => n + s.lines.length, 0) + line;
+    return episode.ttsLines?.[shown] ?? shown;
+  };
   const itemOf = (seg: number): PlayerItem | undefined => {
     const id = segments[seg]?.itemId;
     return id === undefined ? undefined : episode.items[id];

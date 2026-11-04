@@ -4,7 +4,7 @@ import app from "../../../src/worker/index";
 import { getEpisode, insertEpisode, listEpisodes } from "../../../src/worker/db/episodes";
 import { upsertHistory } from "../../../src/worker/db/history";
 import { insertItem } from "../../../src/worker/db/items";
-import { insertLetter } from "../../../src/worker/db/letters";
+import { insertLetter, setLetterStatus } from "../../../src/worker/db/letters";
 import { makeEpisode } from "../../../src/worker/program/create";
 import { createListener, getListener } from "../../../src/worker/db/listeners";
 import type { Episode } from "../../../src/worker/types";
@@ -262,7 +262,7 @@ describe("GET /episodes/:id", () => {
     expect(parsed.id).toBe(ep.id);
     expect(parsed.segments).toEqual(ep.segments);
     // The page carries only what the player shows: no listener id, no verification report.
-    expect(Object.keys(parsed).sort()).toEqual(["id", "items", "originals", "segments"]);
+    expect(Object.keys(parsed).sort()).toEqual(["id", "items", "originals", "segments", "ttsLines"]);
     expect(html).not.toContain(me);
     expect(Object.keys(parsed.items).sort()).toEqual(ep.segments.map((s) => s.itemId).sort());
   });
@@ -300,6 +300,39 @@ describe("GET /episodes/:id", () => {
     const { cookie, id } = await make();
     const json = (await (await get(`/episodes/${id}.json`, cookie)).json()) as { originals: Record<string, unknown> };
     expect(json.originals).toEqual({});
+  });
+
+  it("leaves a letter rejected since out of the page, the embedded json and the json", async () => {
+    const { cookie, id } = await make();
+    const ep = (await getEpisode(env.DB, id))!;
+    const target = ep.segments.find((s) => s.lines.some((l) => l.type === "letter"))!;
+    const line = target.lines.find((l) => l.type === "letter") as { letterId: string; text: string };
+    await setLetterStatus(env.DB, line.letterId, "rejected");
+    const html = await (await get(`/episodes/${id}`, cookie)).text();
+    const embedded = JSON.parse(html.match(/id="episode-json">([\s\S]*?)<\/script>/)![1]!);
+    const ids = (segs: Episode["segments"]) => segs.flatMap((s) => s.lines.flatMap((l) => (l.type === "letter" ? [l.letterId] : [])));
+    expect(ids(embedded.segments)).not.toContain(line.letterId);
+    expect(html).not.toContain(line.text);
+    // Each shown line keeps its stored index for /tts.
+    expect(embedded.ttsLines).toHaveLength(embedded.segments.reduce((n: number, s: Episode["segments"][number]) => n + s.lines.length, 0));
+    const json = (await (await get(`/episodes/${id}.json`, cookie)).json()) as Episode;
+    expect(ids(json.segments)).not.toContain(line.letterId);
+  });
+
+  it("drops a found voice's source line together with the rejected found voice", async () => {
+    const { cookie, id, far1 } = await make();
+    const found = await insertLetter(env.DB, letterDraft(far1.id, { kind: "found", listenerId: null, radioName: "", place: "", sourceAuthor: "@jazzcat", sourceUrl: "https://youtu.be/x", body: "so good", bodyJa: "とてもいい" }));
+    const ep = (await getEpisode(env.DB, id))!;
+    ep.segments[0]!.lines.push(
+      { type: "dj", text: "ネットで見つけた声です。@jazzcatさん、YouTubeのコメントから。", fixed: true },
+      { type: "letter", letterId: found.id, text: "とてもいい", radioName: "", place: "", kind: "found", sourceUrl: "https://youtu.be/x", sourceAuthor: "@jazzcat" },
+    );
+    await env.DB.prepare("UPDATE episodes SET segments = ? WHERE id = ?").bind(JSON.stringify(ep.segments), id).run();
+    expect(await (await get(`/episodes/${id}.json`, cookie)).text()).toContain("@jazzcat");
+    await setLetterStatus(env.DB, found.id, "rejected");
+    const after = await (await get(`/episodes/${id}.json`, cookie)).text();
+    expect(after).not.toContain("@jazzcat");
+    expect(after).not.toContain("とてもいい");
   });
 
   it("serves the episode as json", async () => {

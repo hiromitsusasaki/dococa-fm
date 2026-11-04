@@ -227,6 +227,16 @@ describe("player", () => {
     expect(audioCtor).toBe(2);
   });
 
+  it("asks /tts for the stored line when the page left lines out", async () => {
+    mountPlayer(root, { ...three, ttsLines: [0, 1, 4, 7, 8] }, opts({ ttsUrl: "/tts" }));
+    await tap("toggle");
+    for (const src of ["/tts?episode=ep3&line=0", "/tts?episode=ep3&line=1", "/tts?episode=ep3&line=4"]) {
+      await vi.waitFor(() => expect(audios.some((a) => a.src === src)).toBe(true));
+      audios.find((a) => a.src === src)!.fire("ended");
+    }
+    await vi.waitFor(() => expect(audios.some((a) => a.src === "/tts?episode=ep3&line=7")).toBe(true));
+  });
+
   it("falls back to the first ja voice when the saved voice is gone", async () => {
     mountPlayer(root, one, opts({ voiceURI: "missing" }));
     await tap("toggle");

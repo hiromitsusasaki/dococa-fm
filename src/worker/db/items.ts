@@ -45,6 +45,24 @@ export async function getItem(db: D1Database, id: string): Promise<Item | null> 
   return row ? rowToItem(row) : null;
 }
 
+/** D1 binds at most 100 parameters per statement. */
+const IN_CHUNK = 90;
+
+/** Items by id in one statement per 90 ids; missing ids are simply absent. */
+export async function getItemsByIds(db: D1Database, ids: Iterable<string>): Promise<Map<string, Item>> {
+  const unique = [...new Set(ids)];
+  const out = new Map<string, Item>();
+  for (let i = 0; i < unique.length; i += IN_CHUNK) {
+    const chunk = unique.slice(i, i + IN_CHUNK);
+    const { results } = await db
+      .prepare(`SELECT * FROM items WHERE id IN (${chunk.map(() => "?").join(", ")})`)
+      .bind(...chunk)
+      .all<Row>();
+    for (const r of results) out.set(r.id as string, rowToItem(r));
+  }
+  return out;
+}
+
 export async function findItemByExternalId(db: D1Database, key: string, value: string): Promise<Item | null> {
   if (!/^[a-z-]+$/.test(key)) throw new Error(`invalid external id key: ${key}`);
   const row = await db

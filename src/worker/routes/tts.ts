@@ -1,7 +1,8 @@
 import { Hono } from "hono";
 import type { Variables } from "../auth/session";
-import { getEpisode } from "../db/episodes";
+import { getVerifiedEpisode } from "../db/episodes";
 import type { Env } from "../env";
+import { loadPublicEpisode } from "../program/stored";
 import { synthesize } from "../tts/google";
 
 export const tts = new Hono<{ Bindings: Env; Variables: Variables }>();
@@ -14,11 +15,13 @@ tts.get("/tts", async (c) => {
   if (!episodeId || !rawLine || !/^\d+$/.test(rawLine)) return c.json({ error: "bad request" }, 400);
   const line = Number(rawLine);
 
-  const episode = await getEpisode(c.env.DB, episodeId);
+  const episode = await getVerifiedEpisode(c.env.DB, episodeId);
   if (!episode || episode.listenerId !== c.get("listener").id || !episode.cloudTts) return c.notFound();
 
   const target = episode.segments.flatMap((s) => s.lines)[line];
   if (!target || (target.type !== "dj" && target.type !== "letter")) return c.json({ error: "bad request" }, 400);
+  // A letter rejected since the episode was made, or the line that introduced it, is no longer voiced.
+  if (!(await loadPublicEpisode(c.env.DB, episode)).storedIndex.includes(line)) return c.notFound();
 
   const key = `tts/${episode.id}/${line}.mp3`;
   const cached = await c.env.BUCKET.get(key);

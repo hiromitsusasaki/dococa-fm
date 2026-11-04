@@ -2,9 +2,12 @@ import { env } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import app from "../../../src/worker/index";
 import { insertEpisode } from "../../../src/worker/db/episodes";
+import { insertItem } from "../../../src/worker/db/items";
+import { insertLetter, setLetterStatus } from "../../../src/worker/db/letters";
 import type { Episode } from "../../../src/worker/types";
 import { resetDb } from "../../helpers/db";
 import { json, stubFetch } from "../../helpers/fetch";
+import { itemDraft, letterDraft } from "../db/helpers";
 import { newSession } from "./helpers";
 
 const idOf = (cookie: string) => cookie.split("=")[1]!.split(".")[0]!;
@@ -13,12 +16,14 @@ const GOOGLE = "https://texttospeech.googleapis.com/v1/text:synthesize";
 const keyed = { ...env, GOOGLE_TTS_API_KEY: "k-test" };
 
 /** Global lines: 0 dj, 1 preview, 2 letter, 3 dj (second segment). */
-async function episodeFor(listenerId: string, cloudTts: boolean): Promise<Episode> {
-  const letter = { type: "letter" as const, letterId: "l", text: "お便りです", radioName: "しずく", place: "松本", kind: "letter" as const, sourceUrl: null, sourceAuthor: null };
+async function episodeFor(listenerId: string, cloudTts: boolean, verified = true): Promise<Episode> {
+  const item = await insertItem(env.DB, itemDraft());
+  const stored = await insertLetter(env.DB, letterDraft(item.id, { body: "お便りです", bodyJa: "お便りです", radioName: "しずく", place: "松本" }));
+  const letter = { type: "letter" as const, letterId: stored.id, text: "お便りです", radioName: "しずく", place: "松本", kind: "letter" as const, sourceUrl: null, sourceAuthor: null };
   return insertEpisode(env.DB, {
     listenerId,
     cloudTts,
-    verified: true,
+    verified,
     report,
     segments: [
       { itemId: "a", slot: "near", lines: [{ type: "dj", text: "こんばんは" }, { type: "preview", url: "https://p/a.mp3", seconds: 30 }, letter] },
@@ -34,10 +39,10 @@ beforeEach(() => resetDb(env.DB));
 afterEach(() => vi.unstubAllGlobals());
 
 describe("GET /tts", () => {
-  async function setup(cloudTts = true) {
+  async function setup(cloudTts = true, verified = true) {
     const cookie = await newSession();
     const me = idOf(cookie);
-    const ep = await episodeFor(me, cloudTts);
+    const ep = await episodeFor(me, cloudTts, verified);
     return { cookie, me, ep };
   }
 
@@ -80,6 +85,24 @@ describe("GET /tts", () => {
     expect((await call(`/tts?episode=${ep.id}&line=0`, cookie)).status).toBe(404);
     expect((await call("/tts?episode=nope&line=0", cookie)).status).toBe(404);
     expect(fn).not.toHaveBeenCalled();
+  });
+
+  it("answers 404 for an unverified episode", async () => {
+    const { cookie, ep } = await setup(true, false);
+    const { fn } = stubFetch([[GOOGLE, () => json({ audioContent: audio })]]);
+    expect((await call(`/tts?episode=${ep.id}&line=0`, cookie)).status).toBe(404);
+    expect(fn).not.toHaveBeenCalled();
+  });
+
+  it("answers 404 for a letter rejected since, and for the segment that only read it", async () => {
+    const { cookie, ep } = await setup();
+    const letterId = (ep.segments[0]!.lines[2] as { letterId: string }).letterId;
+    await setLetterStatus(env.DB, letterId, "rejected");
+    const { fn } = stubFetch([[GOOGLE, () => json({ audioContent: audio })]]);
+    expect((await call(`/tts?episode=${ep.id}&line=2`, cookie)).status).toBe(404);
+    expect((await call(`/tts?episode=${ep.id}&line=0`, cookie)).status).toBe(404);
+    expect((await call(`/tts?episode=${ep.id}&line=3`, cookie)).status).toBe(200);
+    expect(fn).toHaveBeenCalledTimes(1);
   });
 
   it("answers 400 for a preview line, an out-of-range line and bad parameters", async () => {

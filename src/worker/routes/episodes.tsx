@@ -3,14 +3,14 @@ import { raw } from "hono/html";
 import { isHttpUrl, ItemCard, whoOf } from "../../views/components";
 import { Layout } from "../../views/layout";
 import type { Variables } from "../auth/session";
-import { getEpisode, listEpisodes } from "../db/episodes";
-import { getItem } from "../db/items";
+import { getVerifiedEpisode, listVerifiedEpisodes } from "../db/episodes";
+import { getItem, getItemsByIds } from "../db/items";
 import type { Env } from "../env";
 import { ja } from "../i18n/ja";
 import { t } from "../i18n/t";
 import { makeEpisode } from "../program/create";
-import { lettersOf, originalsOf } from "../program/stored";
-import type { Episode, Item, Listener, ScriptLine } from "../types";
+import { loadPublicEpisode } from "../program/stored";
+import type { Episode, Listener, ScriptLine } from "../types";
 
 export const episodes = new Hono<{ Bindings: Env; Variables: Variables }>();
 
@@ -50,7 +50,7 @@ export const startEpisode = async (c: Context<{ Bindings: Env; Variables: Variab
 episodes.post("/episodes", startEpisode);
 
 episodes.get("/episodes", async (c) => {
-  const list = await listEpisodes(c.env.DB, c.get("listener").id, 50);
+  const list = await listVerifiedEpisodes(c.env.DB, c.get("listener").id, 50);
   const rows = await Promise.all(
     list.map(async (e) => {
       const first = e.segments[0] ? await getItem(c.env.DB, e.segments[0].itemId) : null;
@@ -79,9 +79,9 @@ episodes.get("/episodes", async (c) => {
   );
 });
 
-/** Only the listener's own episodes exist as far as this route is concerned. */
+/** Only the listener's own verified episodes exist as far as this route is concerned. */
 async function ownEpisode(c: { env: Env; get: (k: "listener") => Listener }, id: string): Promise<Episode | null> {
-  const e = await getEpisode(c.env.DB, id);
+  const e = await getVerifiedEpisode(c.env.DB, id);
   return e && e.listenerId === c.get("listener").id ? e : null;
 }
 
@@ -89,29 +89,26 @@ episodes.get("/episodes/:id", async (c) => {
   const param = c.req.param("id");
   const asJson = param.endsWith(".json");
   const episode = await ownEpisode(c, asJson ? param.slice(0, -".json".length) : param);
-  // Only the builder stores verified rows; refusing the rest here is a second lock, not the first.
-  if (!episode || !episode.verified) return c.notFound();
-  const originals = originalsOf(await lettersOf(c.env.DB, episode));
-  if (asJson) return c.json({ ...episode, originals });
+  // Only the builder stores verified rows; reading verified rows only is a second lock, not the first.
+  if (!episode) return c.notFound();
+  // Letters rejected or taken down since the episode was made are left out of every exit.
+  const { segments, originals, storedIndex } = await loadPublicEpisode(c.env.DB, episode);
+  if (asJson) return c.json({ ...episode, segments, originals });
 
   const listener = c.get("listener");
+  const stored = await getItemsByIds(c.env.DB, segments.map((s) => s.itemId));
   const items: Record<string, { title: string; creator: string; imageUrl: string | null; outLinks: Record<string, string> }> = {};
-  const rows = (
-    await Promise.all(
-      episode.segments.map(async (s) => {
-        const item: Item | null = await getItem(c.env.DB, s.itemId);
-        if (item) {
-          items[item.id] = {
-            title: item.title,
-            creator: item.creator,
-            imageUrl: isHttpUrl(item.imageUrl) ? item.imageUrl : null,
-            outLinks: Object.fromEntries(Object.entries(item.outLinks).filter(([, href]) => isHttpUrl(href))),
-          };
-        }
-        return item ? [{ item, slot: s.slot, readers: s.lines.filter((l): l is Extract<ScriptLine, { type: "letter" }> => l.type === "letter") }] : [];
-      }),
-    )
-  ).flat();
+  const rows = segments.flatMap((s) => {
+    const item = stored.get(s.itemId);
+    if (!item) return [];
+    items[item.id] = {
+      title: item.title,
+      creator: item.creator,
+      imageUrl: isHttpUrl(item.imageUrl) ? item.imageUrl : null,
+      outLinks: Object.fromEntries(Object.entries(item.outLinks).filter(([, href]) => isHttpUrl(href))),
+    };
+    return [{ item, slot: s.slot, readers: s.lines.filter((l): l is Extract<ScriptLine, { type: "letter" }> => l.type === "letter") }];
+  });
   return c.html(
     <Layout title={t("episode.title")} script>
       <main class="episode-page">
@@ -133,7 +130,7 @@ episodes.get("/episodes/:id", async (c) => {
           <a href="/episodes">{t("episode.archive")}</a>
         </p>
         <script type="application/json" id="episode-json">
-          {raw(jsonForScript({ id: episode.id, segments: episode.segments, items, originals }))}
+          {raw(jsonForScript({ id: episode.id, segments, items, originals, ttsLines: storedIndex }))}
         </script>
         <script type="application/json" id="player-i18n">
           {raw(jsonForScript(playerStrings()))}

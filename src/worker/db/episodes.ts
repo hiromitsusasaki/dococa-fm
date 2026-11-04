@@ -56,6 +56,20 @@ export async function listEpisodes(db: D1Database, listenerId: string, limit: nu
   return results.map(rowToEpisode);
 }
 
+/** The only reads that leave the worker: an unverified row is never shown, served, voiced or handed to MCP. */
+export async function getVerifiedEpisode(db: D1Database, id: string): Promise<Episode | null> {
+  const row = await db.prepare("SELECT * FROM episodes WHERE id = ? AND verified = 1").bind(id).first<Row>();
+  return row ? rowToEpisode(row) : null;
+}
+
+export async function listVerifiedEpisodes(db: D1Database, listenerId: string, limit: number): Promise<Episode[]> {
+  const { results } = await db
+    .prepare("SELECT * FROM episodes WHERE listener_id = ? AND verified = 1 ORDER BY created_at DESC, id DESC LIMIT ?")
+    .bind(listenerId, limit)
+    .all<Row>();
+  return results.map(rowToEpisode);
+}
+
 export async function countEpisodesToday(db: D1Database, listenerId: string, now: Date = new Date()): Promise<number> {
   const row = await db
     .prepare("SELECT COUNT(*) AS n FROM episodes WHERE listener_id = ? AND created_at >= ?")

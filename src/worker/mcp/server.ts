@@ -1,14 +1,15 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { getEpisode, listEpisodes } from "../db/episodes";
-import { getItem } from "../db/items";
+import { getVerifiedEpisode, listVerifiedEpisodes } from "../db/episodes";
+import { getItem, getItemsByIds } from "../db/items";
 import { getLetter, listLettersForItem } from "../db/letters";
 import type { Env } from "../env";
 import type { ja } from "../i18n/ja";
 import { t } from "../i18n/t";
 import { type LetterFailure, type LetterInput, createLetter } from "../letters/create";
 import { makeEpisode } from "../program/create";
-import type { Episode, Item, Letter, Listener } from "../types";
+import { loadPublicEpisode } from "../program/stored";
+import type { Episode, Listener } from "../types";
 import { renderEpisode, renderItemPage } from "./markdown";
 
 type ToolResult = { content: [{ type: "text"; text: string }]; isError?: true };
@@ -19,30 +20,22 @@ const fail = (text: string): ToolResult => ({ content: [{ type: "text", text }],
 const failureText = (f: LetterFailure): string =>
   f.reason ? `${t(f.key)} ${t(`letters.reason.${f.reason}` as keyof typeof ja)}` : t(f.key);
 
+/** Letters rejected since the episode was made are left out, as on the episode page. */
 async function renderStoredEpisode(db: D1Database, episode: Episode): Promise<string> {
-  const items = new Map<string, Item>();
-  const letters = new Map<string, Letter>();
-  for (const seg of episode.segments) {
-    const item = await getItem(db, seg.itemId);
-    if (item) items.set(item.id, item);
-    for (const line of seg.lines) {
-      if (line.type !== "letter") continue;
-      const letter = await getLetter(db, line.letterId);
-      if (letter) letters.set(letter.id, letter);
-    }
-  }
-  return renderEpisode(episode, { items, letters });
+  const { segments, letters } = await loadPublicEpisode(db, episode);
+  const items = await getItemsByIds(db, segments.map((s) => s.itemId));
+  return renderEpisode({ ...episode, segments }, { items, letters });
 }
 
-/** The episode to hand over: a fresh one when asked and allowed, otherwise the latest, otherwise a first one. */
+/** The verified episode to hand over: a fresh one when asked and allowed, otherwise the latest, otherwise a first one. */
 async function pickEpisode(env: Env, db: D1Database, listener: Listener, wantNew: boolean): Promise<Episode | null> {
-  const latest = async () => (await listEpisodes(db, listener.id, 1))[0] ?? null;
+  const latest = async () => (await listVerifiedEpisodes(db, listener.id, 1))[0] ?? null;
   if (!wantNew) {
     const existing = await latest();
     if (existing) return existing;
   }
   const made = await makeEpisode(env, listener);
-  if (made.ok) return getEpisode(db, made.id);
+  if (made.ok) return getVerifiedEpisode(db, made.id);
   return latest();
 }
 

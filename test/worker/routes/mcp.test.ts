@@ -1,7 +1,8 @@
 import { SELF, env } from "cloudflare:test";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { insertItem } from "../../../src/worker/db/items";
-import { insertLetter, listLettersForItem, listReactionsForLetter } from "../../../src/worker/db/letters";
+import { insertEpisode } from "../../../src/worker/db/episodes";
+import { insertLetter, listLettersForItem, listReactionsForLetter, setLetterStatus } from "../../../src/worker/db/letters";
 import { createListener } from "../../../src/worker/db/listeners";
 import { upsertHistory } from "../../../src/worker/db/history";
 import { t } from "../../../src/worker/i18n/t";
@@ -97,6 +98,32 @@ describe("/mcp/:token", () => {
     } finally {
       limited.EPISODE_DAILY_LIMIT = undefined;
     }
+  });
+
+  it("get_episode never hands over an unverified episode, even the latest", async () => {
+    const { me, far } = await seed();
+    const first = textOf(await call(me.mcpToken, "get_episode", { new: true }));
+    await insertEpisode(env.DB, {
+      listenerId: me.id,
+      verified: false,
+      report: { verbatim: true, sources: true, topical: false, pii: true, details: [] },
+      segments: [{ itemId: far.id, slot: "far", lines: [{ type: "dj", text: "未検証の回です" }] }],
+      createdAt: new Date(Date.now() + 60_000).toISOString(),
+    });
+    const again = textOf(await call(me.mcpToken, "get_episode", {}));
+    expect(again).not.toContain("未検証の回です");
+    expect(again).toBe(first);
+  });
+
+  it("get_episode leaves out a letter rejected after the episode was made", async () => {
+    const { me, far } = await seed();
+    const before = textOf(await call(me.mcpToken, "get_episode", { new: true }));
+    expect(before).toContain("遠い国の歌への手紙");
+    const [l] = await listLettersForItem(env.DB, far.id);
+    await setLetterStatus(env.DB, l!.id, "rejected");
+    const after = textOf(await call(me.mcpToken, "get_episode", {}));
+    expect(after).not.toContain("遠い国の歌への手紙");
+    expect(after.startsWith(t("mcp.instruction"))).toBe(true);
   });
 
   it("get_item shows the card and the letters with ids", async () => {
