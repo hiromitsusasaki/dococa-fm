@@ -5,6 +5,7 @@ import app from "../../src/worker/index";
 import { createListener, updateListener } from "../../src/worker/db/listeners";
 import { t } from "../../src/worker/i18n/t";
 import { WindowStore } from "../../src/worker/security/rate-limit";
+import { countingD1 } from "../helpers/d1-count";
 import { resetDb } from "../helpers/db";
 import { newSession } from "./routes/helpers";
 
@@ -115,6 +116,18 @@ describe("rate limit", () => {
     for (let i = 0; i < 25; i++) expect((await app.request("/healthz", { headers: { "cf-connecting-ip": "203.0.113.4" } }, e)).status).toBe(200);
   });
 
+  it("turns a guessing IP away before the token lookup once its 20 unknown-token answers are used", async () => {
+    const counted = countingD1(env.DB);
+    const ce = { ...e, DB: counted.db };
+    const hit = () => app.request("/mcp/guess2", { method: "POST", headers: { "cf-connecting-ip": "203.0.113.40" } }, ce);
+    for (let i = 0; i < 20; i++) expect((await hit()).status).toBe(401);
+    expect(counted.count()).toBe(20);
+    expect((await hit()).status).toBe(429);
+    expect((await hit()).status).toBe(429);
+    // Refused without a D1 read.
+    expect(counted.count()).toBe(20);
+  });
+
   it("limits a valid /mcp token by the token (60), not by the shared IP", async () => {
     const a = await createListener(env.DB);
     const b = await createListener(env.DB);
@@ -194,6 +207,37 @@ describe("SESSION_SECRET guard", () => {
     // Exempt paths do not need the secret.
     expect((await app.request("/healthz", {}, bad)).status).toBe(200);
     errorSpy.mockRestore();
+  });
+});
+
+describe("body limits", () => {
+  const big = (bytes: number) => `body=${"a".repeat(bytes)}`;
+
+  it("answers 413 for a public POST over 64 KB before reading it, without minting a listener", async () => {
+    const res = await app.request("/letters", { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" }, body: big(70 * 1024) }, e);
+    expect(res.status).toBe(413);
+    expect(await res.text()).toBe("Payload too large");
+    expect((await env.DB.prepare("SELECT COUNT(*) AS n FROM listeners").first<{ n: number }>())!.n).toBe(0);
+  });
+
+  it("counts a streamed body without Content-Length too", async () => {
+    const chunk = new TextEncoder().encode("a".repeat(16 * 1024));
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        for (let i = 0; i < 5; i++) controller.enqueue(chunk);
+        controller.close();
+      },
+    });
+    const res = await app.request("/start", { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" }, body: stream, duplex: "half" } as RequestInit, e);
+    expect(res.status).toBe(413);
+  });
+
+  it("lets a small public POST and a 70 KB admin batch through to their routes, and stops admin at 1 MB", async () => {
+    expect((await app.request("/letters", { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" }, body: big(1024) }, e)).status).not.toBe(413);
+    const admin = (bytes: number) =>
+      app.request("/admin/found", { method: "POST", headers: { "content-type": "application/json", authorization: "Bearer wrong" }, body: JSON.stringify({ pad: "a".repeat(bytes) }) }, e);
+    expect((await admin(70 * 1024)).status).toBe(401);
+    expect((await admin(1100 * 1024)).status).toBe(413);
   });
 });
 

@@ -61,6 +61,12 @@ export class WindowStore implements Store<AppEnv> {
     }
   }
 
+  /** Hits in the key's current window, without counting one. */
+  peek(key: string): number {
+    const entry = this.hits.get(key);
+    return entry && entry.resetTime.getTime() > Date.now() ? entry.totalHits : 0;
+  }
+
   decrement(key: string): void {
     const entry = this.hits.get(key);
     if (entry && entry.totalHits > 0) entry.totalHits -= 1;
@@ -108,16 +114,49 @@ export const listenerRateLimit = limiter((c) => {
   return listener ? `listener:${listener.id}` : null;
 });
 
+/** `GET /tts` is a paid call on a miss: its own buckets, per listener 60 and per IP 120 a minute (scaled with RATE_LIMIT_PER_MINUTE). */
+export const TTS_LISTENER_LIMIT_PER_WINDOW = 60;
+export const TTS_IP_LIMIT_PER_WINDOW = 120;
+
+function ttsLimiter(perWindow: number, keyOf: (c: Context<AppEnv>) => string | null): MiddlewareHandler<AppEnv> {
+  return rateLimiter<AppEnv>({
+    windowMs: WINDOW_MS,
+    limit: (c) => limitOf(c) * (perWindow / LIMIT_PER_WINDOW),
+    standardHeaders: "draft-6",
+    store: new WindowStore(),
+    keyGenerator: (c) => keyOf(c) ?? "",
+    skip: (c) => keyOf(c) === null,
+    handler: (c) => c.json({ error: "rate_limited" }, 429),
+  });
+}
+
+export const ttsIpRateLimit = ttsLimiter(TTS_IP_LIMIT_PER_WINDOW, (c) => {
+  const ip = c.req.header("cf-connecting-ip");
+  return ip ? `ip:${ip}` : null;
+});
+export const ttsListenerRateLimit = ttsLimiter(TTS_LISTENER_LIMIT_PER_WINDOW, (c) => {
+  const listener = c.get("listener");
+  return listener ? `listener:${listener.id}` : null;
+});
+
 const mcpTokenStore = new WindowStore();
 const mcpIpStore = new WindowStore();
 
 /**
- * `/mcp/<token>`: a valid token counts against that token (60 a minute); an unknown token counts against the caller's IP
- * (20 a minute), which is what bounds guessing. Returns true when the request must be refused with 429.
+ * `/mcp/<token>`, before the token is looked up: an IP that has already had its 20 unknown-token answers this minute
+ * is refused without a D1 read. Nothing is counted here.
  */
-export function mcpRateLimited(env: Env, ip: string | undefined, token: string, valid: boolean): boolean {
-  const base = limitOf({ env });
-  if (valid) return mcpTokenStore.increment(`token:${token}`).totalHits > base * (MCP_TOKEN_LIMIT_PER_WINDOW / LIMIT_PER_WINDOW);
+export function mcpIpBlocked(env: Env, ip: string | undefined): boolean {
+  return ip !== undefined && mcpIpStore.peek(`ip:${ip}`) >= limitOf({ env });
+}
+
+/** An unknown token counts against the caller's IP (20 a minute), which is what bounds guessing. True when over. */
+export function mcpUnauthorizedOver(env: Env, ip: string | undefined): boolean {
   if (!ip) return false;
-  return mcpIpStore.increment(`ip:${ip}`).totalHits > base;
+  return mcpIpStore.increment(`ip:${ip}`).totalHits > limitOf({ env });
+}
+
+/** A valid token counts against that token (60 a minute), not the IP: hosted connectors share egress IPs. True when over. */
+export function mcpTokenOver(env: Env, token: string): boolean {
+  return mcpTokenStore.increment(`token:${token}`).totalHits > limitOf({ env }) * (MCP_TOKEN_LIMIT_PER_WINDOW / LIMIT_PER_WINDOW);
 }

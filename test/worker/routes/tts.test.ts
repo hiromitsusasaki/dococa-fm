@@ -145,6 +145,76 @@ describe("GET /tts", () => {
     expect(JSON.stringify(errorSpy.mock.calls)).not.toContain("k-test");
   });
 
+  it("makes one Google call for two concurrent requests of the same uncached line", async () => {
+    const { cookie, ep } = await setup();
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    const { fn } = stubFetch([[GOOGLE, async () => {
+      await gate;
+      return json({ audioContent: audio });
+    }]]);
+    const both = Promise.all([call(`/tts?episode=${ep.id}&line=3`, cookie), call(`/tts?episode=${ep.id}&line=3`, cookie)]);
+    await vi.waitFor(() => expect(fn).toHaveBeenCalledTimes(1));
+    release();
+    const [a, b] = await both;
+    expect([a.status, b.status]).toEqual([200, 200]);
+    expect([...new Uint8Array(await a.arrayBuffer())]).toEqual([1, 2, 3]);
+    expect([...new Uint8Array(await b.arrayBuffer())]).toEqual([1, 2, 3]);
+    expect(fn).toHaveBeenCalledTimes(1);
+    // The claim is released once the clip is stored.
+    expect(await env.DB.prepare("SELECT COUNT(*) AS n FROM tts_claims").first<{ n: number }>()).toEqual({ n: 0 });
+  });
+
+  it("answers 503 with Retry-After when another request holds the claim and no clip appears", async () => {
+    const { cookie, ep } = await setup();
+    await env.DB.prepare("INSERT INTO tts_claims (key, created_at) VALUES (?, ?)").bind(`tts/${ep.id}/3.mp3`, Date.now()).run();
+    const { fn } = stubFetch([[GOOGLE, () => json({ audioContent: audio })]]);
+    const res = await call(`/tts?episode=${ep.id}&line=3`, cookie);
+    expect(res.status).toBe(503);
+    expect(res.headers.get("retry-after")).toBe("2");
+    expect(fn).not.toHaveBeenCalled();
+  }, 15_000);
+
+  it("treats a claim older than a minute as free", async () => {
+    const { cookie, ep } = await setup();
+    await env.DB.prepare("INSERT INTO tts_claims (key, created_at) VALUES (?, ?)").bind(`tts/${ep.id}/3.mp3`, Date.now() - 61_000).run();
+    const { fn } = stubFetch([[GOOGLE, () => json({ audioContent: audio })]]);
+    expect((await call(`/tts?episode=${ep.id}&line=3`, cookie)).status).toBe(200);
+    expect(fn).toHaveBeenCalledTimes(1);
+  });
+
+  it("releases the claim when Google fails, so the next request may try again", async () => {
+    const { cookie, ep } = await setup();
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    stubFetch([[GOOGLE, () => json({}, 500)]]);
+    expect((await call(`/tts?episode=${ep.id}&line=3`, cookie)).status).toBe(502);
+    vi.unstubAllGlobals();
+    const { fn } = stubFetch([[GOOGLE, () => json({ audioContent: audio })]]);
+    expect((await call(`/tts?episode=${ep.id}&line=3`, cookie)).status).toBe(200);
+    expect(fn).toHaveBeenCalledTimes(1);
+  });
+
+  it("limits each listener, then each IP, with a JSON 429", async () => {
+    const { cookie, ep } = await setup();
+    stubFetch([[GOOGLE, () => json({ audioContent: audio })]]);
+    // RATE_LIMIT_PER_MINUTE=1 scales the buckets down: 3 a minute per listener, 6 per IP.
+    const slow = { ...keyed, RATE_LIMIT_PER_MINUTE: "1" };
+    const statuses: number[] = [];
+    for (let i = 0; i < 4; i++) statuses.push((await call(`/tts?episode=${ep.id}&line=0`, cookie, slow)).status);
+    expect(statuses).toEqual([200, 200, 200, 429]);
+    const limited = await call(`/tts?episode=${ep.id}&line=0`, cookie, slow);
+    expect(await limited.json()).toEqual({ error: "rate_limited" });
+
+    const ip = { "cf-connecting-ip": "203.0.113.9" };
+    const byIp: number[] = [];
+    for (let i = 0; i < 7; i++) {
+      const fresh = await newSession();
+      byIp.push((await app.request(`/tts?episode=${ep.id}&line=0`, { headers: { cookie: fresh, ...ip } }, slow)).status);
+    }
+    expect(byIp.slice(0, 6).every((s) => s === 404)).toBe(true);
+    expect(byIp[6]).toBe(429);
+  });
+
   it("picks the male voice by default and female when configured", async () => {
     const { cookie, ep } = await setup();
     const { fn } = stubFetch([[GOOGLE, () => json({ audioContent: audio })]]);
