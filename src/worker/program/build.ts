@@ -1,5 +1,5 @@
-import { getItem } from "../db/items";
-import { getLetter, listLettersForItem } from "../db/letters";
+import { getItemsByIds } from "../db/items";
+import { getLettersByIds, listReactionsToListener } from "../db/letters";
 import type { Env } from "../env";
 import { hasClaude } from "../claude/client";
 import type { Episode, Item, Letter, Listener, VerifyReport } from "../types";
@@ -22,16 +22,6 @@ export class EpisodeUnverifiedError extends Error {
 
 const hasSource = (l: Letter) => l.kind !== "found" || (Boolean(l.sourceUrl?.trim()) && Boolean(l.sourceAuthor?.trim()));
 
-/** Public 私も and 一言 that others left on this listener's letters about the item, newest first. */
-async function reactionsTo(db: D1Database, listener: Listener, itemId: string): Promise<Letter[]> {
-  const onItem = await listLettersForItem(db, itemId);
-  const mine = new Set(onItem.filter((l) => l.listenerId === listener.id).map((l) => l.id));
-  return onItem
-    .filter((l) => (l.kind === "watashimo" || l.kind === "reply") && l.parentLetterId !== null && mine.has(l.parentLetterId))
-    .filter((l) => l.listenerId !== listener.id)
-    .sort((a, b) => (a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : 0))
-    .slice(0, MAX_REACTIONS);
-}
 
 async function askDj(env: Env, input: Parameters<typeof writeDjLines>[1]): Promise<DjLines[] | null> {
   try {
@@ -60,6 +50,13 @@ export async function buildEpisode(
   opts: { size?: number; seed?: string } = {},
 ): Promise<Episode> {
   const selection = await selectProgram(db, listener, opts);
+  // Three reads for the whole plan, whatever its size: D1 counts queries per invocation.
+  const itemIds = selection.map((s) => s.itemId);
+  const [stored, candidates, allReactions] = await Promise.all([
+    getItemsByIds(db, itemIds),
+    getLettersByIds(db, selection.flatMap((s) => s.letterIds)),
+    listReactionsToListener(db, listener.id, itemIds),
+  ]);
   const items = new Map<string, Item>();
   const letters = new Map<string, Letter>();
   const plan: SegmentPlan[] = [];
@@ -67,19 +64,20 @@ export async function buildEpisode(
   let sourceless = 0;
 
   for (const s of selection) {
-    const item = await getItem(db, s.itemId);
+    const item = stored.get(s.itemId);
     if (!item) continue;
     items.set(item.id, item);
     const read: Letter[] = [];
     for (const id of s.letterIds) {
-      const l = await getLetter(db, id);
+      const l = candidates.get(id);
       if (l && l.status === "public" && !hasSource(l)) sourceless++;
       else if (l && l.status === "public") {
         letters.set(l.id, l);
         read.push(l);
       }
     }
-    const reactions = await reactionsTo(db, listener, item.id);
+    // Public 私も and 一言 that others left on this listener's letters about the item, newest first.
+    const reactions = allReactions.filter((r) => r.itemId === item.id).slice(0, MAX_REACTIONS);
     for (const r of reactions) letters.set(r.id, r);
     plan.push({ ...s, letterIds: read.map((l) => l.id), reactionIds: reactions.map((r) => r.id) });
     input.segments.push({ item, slot: s.slot, letters: read, reactions });

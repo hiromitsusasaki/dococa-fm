@@ -5,7 +5,7 @@ import { upsertHistory } from "../db/history";
 import type { Env } from "../env";
 import { t } from "../i18n/t";
 import { createLetter } from "../letters/create";
-import { type ItemDraft, resolveOrCreate, resolveUrl, searchByText } from "../resolve";
+import { type ItemDraft, resolveOrCreateMany, resolveUrl, searchByText } from "../resolve";
 import { startEpisode } from "./episodes";
 
 const SLOTS = [1, 2, 3] as const;
@@ -67,16 +67,17 @@ start.post("/start", async (c) => {
   const found = resolved.filter((r): r is { n: 1 | 2 | 3; draft: ItemDraft } => r.draft !== null);
   if (found.length === 0) return c.html(<StartPage values={values} error />, 422);
 
-  // Sequential: two drafts can be the same work, and the letter checks (duplicates, limits) read what the last one wrote.
-  const items = [];
-  for (const { n, draft } of found) items.push({ n, item: await resolveOrCreate(c.env.DB, draft) });
+  // One lookup and one insert for all three; two drafts that are the same work resolve to one item.
+  const stored = await resolveOrCreateMany(c.env.DB, found.map((f) => f.draft));
+  const items = found.map(({ n }, i) => ({ n, item: stored[i]! }));
   await upsertHistory(c.env.DB, items.map(({ item }) => ({ listenerId: listener.id, itemId: item.id, source: "manual", occurredAt: null })));
 
+  // Sequential: the letter checks (duplicates, limits) read what the last one wrote.
   // A one-liner that fails its judgement is skipped; it never stops the first episode.
   for (const { n, item } of items) {
     const body = values[`note${n}`];
     if (!body) continue;
-    const result = await createLetter(c.env, c.env.DB, listener, { itemId: item.id, body });
+    const result = await createLetter(c.env, c.env.DB, listener, { itemId: item.id, body }, { item });
     if (!result.ok) console.warn("[dococa] start one-liner skipped", result.key, result.reason ?? "");
   }
   return startEpisode(c);

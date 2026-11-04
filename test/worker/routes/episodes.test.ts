@@ -391,4 +391,38 @@ describe("GET /episodes", () => {
     const stranger = await newSession();
     expect(await (await get("/episodes", stranger)).text()).not.toContain(id);
   });
+
+  it("titles each row with its first work in one query, and leaves unverified rows out", async () => {
+    const cookie = await newSession();
+    const { near } = await seed(cookie);
+    const listenerId = idOf(cookie);
+    const seg = (itemId: string) => [{ itemId, slot: "near" as const, lines: [] }];
+    const shown = await insertEpisode(env.DB, { listenerId, segments: seg(near.id), verified: true, report: {} as Episode["report"] });
+    const hidden = await insertEpisode(env.DB, { listenerId, segments: seg(near.id), verified: false, report: {} as Episode["report"] });
+    const html = await (await get("/episodes", cookie)).text();
+    expect(html).toMatch(new RegExp(`href="/episodes/${shown.id}">\\s*<time>[^<]+</time> 手元の曲`));
+    expect(html).not.toContain(hidden.id);
+  });
+});
+
+describe("empty plan", () => {
+  it("stores nothing, keeps the daily limit and points to /start when there is nothing to play", async () => {
+    const cookie = await newSession();
+    const res = await post("/episodes", cookie, { ...env, EPISODE_DAILY_LIMIT: "1" });
+    expect(res.status).toBe(200);
+    const html = await res.text();
+    expect(html).toContain("まだお便りがありません");
+    expect(html).toContain('href="/start"');
+    expect(await listEpisodes(env.DB, idOf(cookie), 10)).toHaveLength(0);
+    await seed(cookie);
+    expect((await post("/episodes", cookie, { ...env, EPISODE_DAILY_LIMIT: "1" })).status).toBe(303);
+  });
+
+  it("answers 409 from /next when there is nothing to play", async () => {
+    const cookie = await newSession();
+    const ep = await insertEpisode(env.DB, { listenerId: idOf(cookie), segments: [], verified: true, report: {} as Episode["report"] });
+    const res = await post(`/episodes/${ep.id}/next`, cookie);
+    expect(res.status).toBe(409);
+    expect(await res.json()).toEqual({ error: "empty" });
+  });
 });

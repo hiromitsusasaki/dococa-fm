@@ -14,10 +14,11 @@ export function limitFrom(raw: string | undefined, fallback: number): number {
   return Number.isFinite(n) && n >= 0 ? n : fallback;
 }
 
-export type Made = { ok: true; id: string } | { ok: false; reason: "limit" | "unavailable" };
+export type Made = { ok: true; id: string } | { ok: false; reason: "limit" | "unavailable" | "empty" };
 
 /**
  * Limit check, build, store. Failures are logged by error name only: report details can quote lines.
+ * An episode with no segment (nothing written anywhere yet) is not stored and answers `empty`.
  * The cloud voice goes to the listener's first episode, or to any episode made with `cloudTts: true`
  * (the owner's demo), which does not use up the listener's first. Without a TTS key nothing is
  * claimed and no episode gets the voice: the player would have nothing to play.
@@ -28,6 +29,8 @@ export async function makeEpisode(env: Env, listener: Listener, opts: { cloudTts
   if ((await countAllEpisodesToday(env.DB)) >= limitFrom(env.EPISODE_GLOBAL_DAILY_LIMIT, DEFAULT_GLOBAL_DAILY_LIMIT)) return { ok: false, reason: "limit" };
   try {
     const built = await buildEpisode(env, env.DB, listener);
+    // Nothing to play yet: no row, so the daily limits are not used up.
+    if (built.segments.length === 0) return { ok: false, reason: "empty" };
     const hasKey = Boolean(env.GOOGLE_TTS_API_KEY);
     if (!hasKey && opts.cloudTts === true) console.warn("[dococa] cloud tts requested but GOOGLE_TTS_API_KEY is empty; using the browser voice");
     const demo = hasKey && opts.cloudTts === true;

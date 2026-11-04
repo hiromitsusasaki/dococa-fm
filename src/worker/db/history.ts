@@ -3,15 +3,27 @@ import { rowToItem } from "./items";
 
 type Row = Record<string, unknown>;
 
+/** Four columns a row, and D1 binds at most 100 parameters per statement. */
+const ROWS_PER_UPSERT = 25;
+
+/** One multi-row statement per 25 rows, sent as one batch. */
 export async function upsertHistory(db: D1Database, rows: HistoryRow[]): Promise<void> {
   if (rows.length === 0) return;
-  const stmt = db.prepare(
-    `INSERT INTO history (listener_id, item_id, source, occurred_at) VALUES (?, ?, ?, ?)
-     ON CONFLICT (listener_id, item_id) DO UPDATE SET
-       source = excluded.source,
-       occurred_at = COALESCE(excluded.occurred_at, history.occurred_at)`,
-  );
-  await db.batch(rows.map((r) => stmt.bind(r.listenerId, r.itemId, r.source, r.occurredAt)));
+  const stmts: D1PreparedStatement[] = [];
+  for (let i = 0; i < rows.length; i += ROWS_PER_UPSERT) {
+    const chunk = rows.slice(i, i + ROWS_PER_UPSERT);
+    stmts.push(
+      db
+        .prepare(
+          `INSERT INTO history (listener_id, item_id, source, occurred_at) VALUES ${chunk.map(() => "(?, ?, ?, ?)").join(", ")}
+           ON CONFLICT (listener_id, item_id) DO UPDATE SET
+             source = excluded.source,
+             occurred_at = COALESCE(excluded.occurred_at, history.occurred_at)`,
+        )
+        .bind(...chunk.flatMap((r) => [r.listenerId, r.itemId, r.source, r.occurredAt])),
+    );
+  }
+  await db.batch(stmts);
 }
 
 export async function isInHistory(db: D1Database, listenerId: string, itemId: string): Promise<boolean> {

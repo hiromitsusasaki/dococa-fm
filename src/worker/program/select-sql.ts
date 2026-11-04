@@ -51,14 +51,15 @@ export const FALLBACK_SQL = `WITH ${OWN}
   WHERE NOT EXISTS (SELECT 1 FROM letters l WHERE l.item_id = o.item_id AND ${OTHERS_TEXT} AND ${NOT_ME})
   ORDER BY o.item_id`;
 
-/** Own items whose letter got a reaction from someone else after the cutoff (?2). */
+/** Own items whose letter got a reaction from someone else since the listener's last episode; none before the first. */
 export const ECHO_SQL = `SELECT DISTINCT r.item_id FROM letters r
   JOIN letters p ON p.id = r.parent_letter_id
   WHERE p.listener_id = ?1 AND p.status = 'public' AND r.status = 'public' AND r.kind IN ('watashimo', 'reply')
-    AND (r.listener_id IS NULL OR r.listener_id != ?1) AND r.created_at > ?2
+    AND (r.listener_id IS NULL OR r.listener_id != ?1)
+    AND r.created_at > (SELECT MAX(created_at) FROM episodes WHERE listener_id = ?1)
   ORDER BY r.item_id`;
 
-/** Letters the DJ may read for an item: other people's text, never reactions. */
-export const LETTER_IDS_SQL = `SELECT l.id FROM letters l
-  WHERE l.item_id = ?2 AND ${OTHERS_TEXT} AND ${NOT_ME}
-  ORDER BY l.id`;
+/** Letters the DJ may read for the chosen items (?2…): other people's text, never reactions. */
+export const letterIdsSql = (items: number): string => `SELECT l.id, l.item_id FROM letters l
+  WHERE l.item_id IN (${Array.from({ length: items }, (_, i) => `?${i + 2}`).join(", ")}) AND ${OTHERS_TEXT} AND ${NOT_ME}
+  ORDER BY l.item_id, l.id`;

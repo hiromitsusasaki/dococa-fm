@@ -153,7 +153,7 @@ admin.post("/admin/episodes", async (c) => {
   const listener = await getListener(c.env.DB, parsed.data.listenerId);
   if (!listener) return c.json({ error: "listener not found" }, 404);
   const made = await makeEpisode(c.env, listener, { cloudTts: true });
-  if (!made.ok) return c.json({ error: made.reason }, made.reason === "limit" ? 429 : 503);
+  if (!made.ok) return c.json({ error: made.reason }, made.reason === "limit" ? 429 : made.reason === "empty" ? 409 : 503);
   const episode = await getEpisode(c.env.DB, made.id);
   return c.json({ id: made.id, cloudTts: episode?.cloudTts === true });
 });

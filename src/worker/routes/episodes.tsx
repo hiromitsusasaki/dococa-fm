@@ -3,8 +3,8 @@ import { raw } from "hono/html";
 import { isHttpUrl, ItemCard, whoOf } from "../../views/components";
 import { Layout } from "../../views/layout";
 import type { Variables } from "../auth/session";
-import { getVerifiedEpisode, listVerifiedEpisodes } from "../db/episodes";
-import { getItem, getItemsByIds } from "../db/items";
+import { getVerifiedEpisode, listArchive } from "../db/episodes";
+import { getItemsByIds } from "../db/items";
 import type { Env } from "../env";
 import { ja } from "../i18n/ja";
 import { t } from "../i18n/t";
@@ -16,11 +16,16 @@ export const episodes = new Hono<{ Bindings: Env; Variables: Variables }>();
 
 const JST_OFFSET_MS = 9 * 60 * 60 * 1000;
 
-function MessagePage({ message }: { message: string }) {
+function MessagePage({ message, start }: { message: string; start?: boolean }) {
   return (
     <Layout title={t("episode.title")}>
       <main class="episode-page">
         <p role="alert">{message}</p>
+        {start && (
+          <p>
+            <a class="button" href="/start">{t("home.start")}</a>
+          </p>
+        )}
         <p>
           <a href="/">{t("episode.home")}</a>
         </p>
@@ -44,19 +49,18 @@ const readerOf = (l: Extract<ScriptLine, { type: "letter" }>): string =>
 export const startEpisode = async (c: Context<{ Bindings: Env; Variables: Variables }>) => {
   const made = await makeEpisode(c.env, c.get("listener"));
   if (made.ok) return c.redirect(`/episodes/${made.id}`, 303);
+  if (made.reason === "empty") return c.html(<MessagePage message={t("episode.empty")} start />, 200);
   return c.html(<MessagePage message={t(made.reason === "limit" ? "episode.limit" : "episode.unavailable")} />, made.reason === "limit" ? 429 : 503);
 };
 
 episodes.post("/episodes", startEpisode);
 
 episodes.get("/episodes", async (c) => {
-  const list = await listVerifiedEpisodes(c.env.DB, c.get("listener").id, 50);
-  const rows = await Promise.all(
-    list.map(async (e) => {
-      const first = e.segments[0] ? await getItem(c.env.DB, e.segments[0].itemId) : null;
-      return { id: e.id, date: new Date(Date.parse(e.createdAt) + JST_OFFSET_MS).toISOString().slice(0, 10), title: first?.title ?? t("episode.untitled") };
-    }),
-  );
+  const rows = (await listArchive(c.env.DB, c.get("listener").id, 50)).map((e) => ({
+    id: e.id,
+    date: new Date(Date.parse(e.createdAt) + JST_OFFSET_MS).toISOString().slice(0, 10),
+    title: e.title ?? t("episode.untitled"),
+  }));
   return c.html(
     <Layout title={t("episode.archive")}>
       <main class="archive">
@@ -144,5 +148,5 @@ episodes.post("/episodes/:id/next", async (c) => {
   if (!(await ownEpisode(c, c.req.param("id")))) return c.notFound();
   const made = await makeEpisode(c.env, c.get("listener"));
   if (made.ok) return c.json({ id: made.id });
-  return c.json({ error: made.reason }, made.reason === "limit" ? 429 : 503);
+  return c.json({ error: made.reason }, made.reason === "limit" ? 429 : made.reason === "empty" ? 409 : 503);
 });

@@ -62,6 +62,7 @@ export const ja = {
   "episode.title": "番組",
   "episode.limit": "今日の番組はここまで。また明日",
   "episode.unavailable": "番組を作れませんでした。少し待ってもう一度",
+  "episode.empty": "まだお便りがありません",
   "episode.archive": "これまでの番組",
   "episode.archiveEmpty": "まだ番組がありません",
   "episode.untitled": "(作品なし)",

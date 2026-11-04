@@ -6,7 +6,7 @@ import type { Env } from "../env";
 import type { ja } from "../i18n/ja";
 import { t } from "../i18n/t";
 import { type ItemDraft, resolveOrCreate, resolveUrl } from "../resolve";
-import type { Letter, LetterKind, Listener } from "../types";
+import type { Item, Letter, LetterKind, Listener } from "../types";
 
 export const MAX_BODY = 200;
 const DUPLICATE_WINDOW_MINUTES = 10;
@@ -33,7 +33,14 @@ export type LetterFailure = {
 export type LetterResult = { ok: true; letter: Letter; itemId: string } | LetterFailure;
 
 /** The shared letter pipeline: checks, moderation, translation, insert. The caller maps failures to its own surface. */
-export async function createLetter(env: Env, db: D1Database, listener: Listener, input: LetterInput): Promise<LetterResult> {
+export async function createLetter(
+  env: Env,
+  db: D1Database,
+  listener: Listener,
+  input: LetterInput,
+  /** The stored item `input.itemId` names, when the caller already has it (saves a query). */
+  known: { item?: Item } = {},
+): Promise<LetterResult> {
   const kind = input.kind ?? "letter";
   const isWatashimo = kind === "watashimo";
   const body = isWatashimo ? t("reaction.watashimo") : input.body.trim();
@@ -42,7 +49,7 @@ export async function createLetter(env: Env, db: D1Database, listener: Listener,
   if (body === "") return fail(422, "letters.empty");
   if (Array.from(body).length > MAX_BODY) return fail(422, "letters.tooLong");
 
-  const stored = input.itemId ? await getItem(db, input.itemId) : null;
+  const stored = input.itemId ? (known.item?.id === input.itemId ? known.item : await getItem(db, input.itemId)) : null;
   const draft = stored ?? (input.url ? await resolveUrl(input.url, env) : null);
   if (!draft) return fail(422, "put.notFound");
 

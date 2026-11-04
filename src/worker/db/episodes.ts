@@ -70,6 +70,20 @@ export async function listVerifiedEpisodes(db: D1Database, listenerId: string, l
   return results.map(rowToEpisode);
 }
 
+/** The archive rows in one query: each verified episode with the title of its first work. */
+export async function listArchive(db: D1Database, listenerId: string, limit: number): Promise<Array<{ id: string; createdAt: string; title: string | null }>> {
+  const { results } = await db
+    .prepare(
+      `SELECT e.id, e.created_at, i.title FROM episodes e
+       LEFT JOIN items i ON i.id = json_extract(e.segments, '$[0].itemId')
+       WHERE e.listener_id = ? AND e.verified = 1
+       ORDER BY e.created_at DESC, e.id DESC LIMIT ?`,
+    )
+    .bind(listenerId, limit)
+    .all<{ id: string; created_at: string; title: string | null }>();
+  return results.map((r) => ({ id: r.id, createdAt: r.created_at, title: r.title ?? null }));
+}
+
 export async function countEpisodesToday(db: D1Database, listenerId: string, now: Date = new Date()): Promise<number> {
   const row = await db
     .prepare("SELECT COUNT(*) AS n FROM episodes WHERE listener_id = ? AND created_at >= ?")

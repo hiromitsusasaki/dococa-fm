@@ -1,4 +1,4 @@
-import { findItemByExternalId, insertItem } from "../db/items";
+import { findItemsByExternalIds, insertItems, newItem } from "../db/items";
 import type { Env } from "../env";
 import type { Item, ItemKind } from "../types";
 import { searchBooks } from "./books";
@@ -164,13 +164,37 @@ export async function resolveUrl(url: string, env: Env): Promise<ItemDraft | nul
  * before it. So a different Spotify id is never merged into another track through a shared iTunes guess.
  */
 export async function resolveOrCreate(db: D1Database, draft: ItemDraft): Promise<Item> {
-  const tried: Array<[string, string]> = [];
-  for (const [key, value] of Object.entries(draft.externalIds)) {
-    const existing = await findItemByExternalId(db, key, value);
-    if (existing && tried.every(([k, v]) => existing.externalIds[k] === undefined || existing.externalIds[k] === v)) {
-      return existing;
+  const [item] = await resolveOrCreateMany(db, [draft]);
+  return item as Item;
+}
+
+/**
+ * `resolveOrCreate` for many drafts with one lookup and one batched insert, in order: a later draft that is
+ * the same work as an earlier new one resolves to it, not to a second row.
+ */
+export async function resolveOrCreateMany(db: D1Database, drafts: ItemDraft[]): Promise<Item[]> {
+  const pairs = [...new Map(drafts.flatMap((d) => Object.entries(d.externalIds)).map(([k, v]) => [`${k}\u0000${v}`, [k, v] as [string, string]])).values()];
+  const known = pairs.length > 0 ? await findItemsByExternalIds(db, pairs) : [];
+  const created: Item[] = [];
+  const out: Item[] = [];
+  for (const draft of drafts) {
+    const tried: Array<[string, string]> = [];
+    let match: Item | undefined;
+    for (const [key, value] of Object.entries(draft.externalIds)) {
+      const existing = known.find((i) => i.externalIds[key] === value);
+      if (existing && tried.every(([k, v]) => existing.externalIds[k] === undefined || existing.externalIds[k] === v)) {
+        match = existing;
+        break;
+      }
+      tried.push([key, value]);
     }
-    tried.push([key, value]);
+    if (!match) {
+      match = newItem(draft);
+      created.push(match);
+      known.push(match);
+    }
+    out.push(match);
   }
-  return insertItem(db, draft);
+  await insertItems(db, created);
+  return out;
 }

@@ -105,6 +105,26 @@ export async function listLettersByListener(db: D1Database, listenerId: string):
   return results.map(rowToLetter);
 }
 
+/** Public 私も and 一言 that others left on the listener's public letters about any of the items, newest first. */
+export async function listReactionsToListener(db: D1Database, listenerId: string, itemIds: string[]): Promise<Letter[]> {
+  const out: Letter[] = [];
+  for (let i = 0; i < itemIds.length; i += IN_CHUNK) {
+    const chunk = itemIds.slice(i, i + IN_CHUNK);
+    const { results } = await db
+      .prepare(
+        `${SELECT} JOIN letters p ON p.id = letters.parent_letter_id
+         WHERE p.listener_id = ? AND p.status = 'public' AND letters.status = 'public'
+           AND letters.kind IN ('watashimo', 'reply') AND (letters.listener_id IS NULL OR letters.listener_id != ?)
+           AND letters.item_id IN (${chunk.map(() => "?").join(", ")})
+         ORDER BY letters.created_at DESC, letters.id DESC`,
+      )
+      .bind(listenerId, listenerId, ...chunk)
+      .all<Row>();
+    out.push(...results.map(rowToLetter));
+  }
+  return out;
+}
+
 export async function listReactionsForLetter(db: D1Database, letterId: string): Promise<Letter[]> {
   const { results } = await db
     .prepare(`${SELECT} WHERE letters.parent_letter_id = ? AND letters.status = 'public' ORDER BY letters.created_at ASC, letters.id ASC`)

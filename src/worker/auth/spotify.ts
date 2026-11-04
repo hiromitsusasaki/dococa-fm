@@ -1,7 +1,7 @@
 import { upsertHistory } from "../db/history";
 import { updateListener } from "../db/listeners";
 import type { Env } from "../env";
-import { type ItemDraft, resolveOrCreate, sameArtist, searchByText } from "../resolve";
+import { type ItemDraft, resolveOrCreateMany, sameArtist, searchByText } from "../resolve";
 import type { HistoryRow, Listener } from "../types";
 import { decryptSecret, encryptSecret, toBase64Url } from "./crypto";
 
@@ -169,11 +169,9 @@ export async function importSpotifyHistory(env: Env, db: D1Database, listener: L
   const entries = uniqueTracks(lists);
 
   const drafts = await Promise.all(entries.map((e) => draftFor(env, e.track)));
-  const rows: HistoryRow[] = [];
-  for (const [i, draft] of drafts.entries()) {
-    const item = await resolveOrCreate(db, draft);
-    rows.push({ listenerId: listener.id, itemId: item.id, source: "spotify", occurredAt: entries[i]!.at });
-  }
+  // At most 40 tracks, one lookup and one batched insert: the callback stays well inside D1's per-invocation limit.
+  const items = await resolveOrCreateMany(db, drafts);
+  const rows: HistoryRow[] = items.map((item, i) => ({ listenerId: listener.id, itemId: item.id, source: "spotify", occurredAt: entries[i]!.at }));
   // Two Spotify tracks can resolve to one stored item; the batch upsert must not see the same key twice.
   const byItem = new Map(rows.map((r) => [r.itemId, r]));
   await upsertHistory(db, [...byItem.values()]);

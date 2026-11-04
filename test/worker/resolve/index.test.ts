@@ -1,7 +1,8 @@
 import { env } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Env } from "../../../src/worker/env";
-import { resolveOrCreate, resolveUrl, searchByText, type ItemDraft } from "../../../src/worker/resolve";
+import { resolveOrCreate, resolveOrCreateMany, resolveUrl, searchByText, type ItemDraft } from "../../../src/worker/resolve";
+import { countingD1 } from "../../helpers/d1-count";
 import { resetDb } from "../../helpers/db";
 import { html, json, meta, stubFetch } from "../../helpers/fetch";
 
@@ -382,5 +383,21 @@ describe("resolveOrCreate", () => {
     await resolveOrCreate(env.DB, draft());
     await resolveOrCreate(env.DB, draft({ externalIds: { itunes: "11" } }));
     expect(await count()).toBe(2);
+  });
+
+  it("resolves many drafts in order with one lookup and one batched insert, merging repeats", async () => {
+    const old = await resolveOrCreate(env.DB, draft({ externalIds: { itunes: "10" } }));
+    const drafts = Array.from({ length: 40 }, (_, n) => draft({ title: `t${n}`, externalIds: { spotify: `s${n}`, itunes: `${100 + n}` } }));
+    drafts.push(draft({ externalIds: { itunes: "10" } }), draft({ title: "again", externalIds: { spotify: "s3", itunes: "103" } }));
+    const counted = countingD1(env.DB);
+    const items = await resolveOrCreateMany(counted.db, drafts);
+    expect(items).toHaveLength(42);
+    expect(items[40]!.id).toBe(old.id);
+    expect(items[41]!.id).toBe(items[3]!.id);
+    expect(await count()).toBe(41);
+    // 82 id pairs: two lookups; 40 new rows: five multi-row inserts.
+    expect(counted.count()).toBeLessThanOrEqual(7);
+    const again = await resolveOrCreateMany(env.DB, drafts.slice(0, 2));
+    expect(again.map((i) => i.id)).toEqual([items[0]!.id, items[1]!.id]);
   });
 });

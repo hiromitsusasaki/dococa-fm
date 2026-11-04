@@ -1,6 +1,5 @@
-import { listEpisodes } from "../db/episodes";
 import type { Listener } from "../types";
-import { ECHO_SQL, FALLBACK_SQL, FAR_SQL, LETTER_IDS_SQL, NEAR_SQL, NEIGHBOR_SQL } from "./select-sql";
+import { ECHO_SQL, FALLBACK_SQL, FAR_SQL, letterIdsSql, NEAR_SQL, NEIGHBOR_SQL } from "./select-sql";
 
 export type Slot = "near" | "neighbor" | "far";
 export type Selection = { itemId: string; slot: Slot; letterIds: string[] };
@@ -43,18 +42,17 @@ async function ids(db: D1Database, sql: string, ...binds: unknown[]): Promise<st
 }
 
 async function echoItem(db: D1Database, listener: Listener, rng: () => number): Promise<string | null> {
-  const [last] = await listEpisodes(db, listener.id, 1);
-  if (!last) return null;
-  const candidates = await ids(db, ECHO_SQL, listener.id, last.createdAt);
+  const candidates = await ids(db, ECHO_SQL, listener.id);
   return candidates.length === 0 ? null : (shuffle(candidates, rng)[0] ?? null);
 }
 
-async function pickLetterIds(db: D1Database, listenerId: string, itemId: string, rng: () => number): Promise<string[]> {
-  const { results } = await db.prepare(LETTER_IDS_SQL).bind(listenerId, itemId).all<{ id: string }>();
-  return shuffle(
-    results.map((r) => r.id),
-    rng,
-  ).slice(0, MAX_LETTERS_PER_SEGMENT);
+/** Readable letter ids of every chosen item, in one query; each item's list is ordered by id, as the shuffle expects. */
+async function letterIdsByItem(db: D1Database, listenerId: string, itemIds: string[]): Promise<Map<string, string[]>> {
+  const out = new Map<string, string[]>();
+  if (itemIds.length === 0) return out;
+  const { results } = await db.prepare(letterIdsSql(itemIds.length)).bind(listenerId, ...itemIds).all<{ id: string; item_id: string }>();
+  for (const r of results) out.set(r.item_id, [...(out.get(r.item_id) ?? []), r.id]);
+  return out;
 }
 
 /** Take items round-robin across the lists so no kind is front-loaded. */
@@ -112,14 +110,12 @@ export async function selectProgram(
   }
   if (count() < size) chosen.near.push(...pools.fallback.splice(0, size - count()));
 
-  const build = async (slot: Slot, itemId: string): Promise<Selection> => ({
-    itemId,
-    slot,
-    letterIds: await pickLetterIds(db, listener.id, itemId, rng),
-  });
+  const readable = await letterIdsByItem(db, listener.id, [...chosen.near, ...chosen.neighbor, ...chosen.far]);
   const segments: Record<Slot, Selection[]> = { near: [], neighbor: [], far: [] };
   for (const slot of ["near", "neighbor", "far"] as const) {
-    for (const itemId of chosen[slot]) segments[slot].push(await build(slot, itemId));
+    for (const itemId of chosen[slot]) {
+      segments[slot].push({ itemId, slot, letterIds: shuffle(readable.get(itemId) ?? [], rng).slice(0, MAX_LETTERS_PER_SEGMENT) });
+    }
   }
 
   const first = echo ? segments.near.splice(0, 1) : [];
