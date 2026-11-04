@@ -115,7 +115,7 @@ Spotify 連携は開発モードのため、許可リストに入っているア
 
 ### 守りと制限
 
-書き込みの `POST` は同一オリジンのみ、`/admin/*` は `ADMIN_TOKEN` 必須、レート制限は IP とリスナーごとに 1 分 20 回です。詳しくは [SECURITY.md](SECURITY.md) にあります。レート制限のカウンタは Worker の isolate ごとのメモリにあるため、isolate をまたぐ厳密な上限ではありません。番組の作成は D1 を数える 1 日の上限（`EPISODE_DAILY_LIMIT`、`EPISODE_GLOBAL_DAILY_LIMIT`、`CLOUD_TTS_GLOBAL_DAILY_LIMIT`。`0` は停止）が最後の歯止めです。
+書き込みの `POST` は同一オリジンのみ、`/admin/*` は `ADMIN_TOKEN` 必須、レート制限は IP とリスナーごとに 1 分 20 回です。詳しくは [SECURITY.md](SECURITY.md) にあります。レート制限のカウンタは Worker の isolate ごとのメモリにあるため、isolate をまたぐ厳密な上限ではありません。番組の作成は D1 を数える 1 日の上限（`EPISODE_DAILY_LIMIT`、`EPISODE_GLOBAL_DAILY_LIMIT`、`CLOUD_TTS_GLOBAL_DAILY_LIMIT`。`0` は停止）が最後の歯止めです。ただし判定は原子的ではなく同時実行で数回超えることがあり、cookie を捨てる 1 人に全体の上限を使い切られうることも、[SECURITY.md](SECURITY.md) の既知の制限に書いています。
 
 ### public 化前チェックリスト（本人）
 
