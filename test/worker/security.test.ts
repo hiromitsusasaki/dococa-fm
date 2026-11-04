@@ -116,28 +116,52 @@ describe("rate limit", () => {
     for (let i = 0; i < 25; i++) expect((await app.request("/healthz", { headers: { "cf-connecting-ip": "203.0.113.4" } }, e)).status).toBe(200);
   });
 
-  it("turns a guessing IP away before the token lookup once its 20 unknown-token answers are used", async () => {
+  it("refuses a malformed token without a D1 read once its IP has had 20 unknown-token answers", async () => {
     const counted = countingD1(env.DB);
     const ce = { ...e, DB: counted.db };
-    const hit = () => app.request("/mcp/guess2", { method: "POST", headers: { "cf-connecting-ip": "203.0.113.40" } }, ce);
+    const hit = () => app.request("/mcp/not-a-token", { method: "POST", headers: { "cf-connecting-ip": "203.0.113.40" } }, ce);
     for (let i = 0; i < 20; i++) expect((await hit()).status).toBe(401);
-    expect(counted.count()).toBe(20);
     expect((await hit()).status).toBe(429);
     expect((await hit()).status).toBe(429);
-    // Refused without a D1 read.
+    // A token that cannot exist is never looked up.
+    expect(counted.count()).toBe(0);
+  });
+
+  it("looks a well-formed unknown token up, answers 401 and spends the IP bucket", async () => {
+    const counted = countingD1(env.DB);
+    const ce = { ...e, DB: counted.db };
+    const guess = (n: number) => app.request(`/mcp/${n.toString(16).padStart(48, "0")}`, { method: "POST", headers: { "cf-connecting-ip": "203.0.113.41" } }, ce);
+    for (let i = 0; i < 20; i++) expect((await guess(i)).status).toBe(401);
     expect(counted.count()).toBe(20);
+    expect((await guess(20)).status).toBe(429);
+    // The bucket it spent now also stops malformed tokens from that IP before any lookup.
+    expect((await app.request("/mcp/x", { method: "POST", headers: { "cf-connecting-ip": "203.0.113.41" } }, ce)).status).toBe(429);
+    expect(counted.count()).toBe(21);
+  });
+
+  it("lets a valid token through from an IP whose unknown-token bucket is full", async () => {
+    const a = await createListener(env.DB);
+    const ip = { "cf-connecting-ip": "203.0.113.42" };
+    for (let i = 0; i < 21; i++) await app.request("/mcp/guess", { method: "POST", headers: ip }, e);
+    expect((await app.request("/mcp/guess", { method: "POST", headers: ip }, e)).status).toBe(429);
+    const res = await app.request(
+      `/mcp/${a.mcpToken}`,
+      { method: "POST", headers: { ...ip, "content-type": "application/json", accept: "application/json, text/event-stream" }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list", params: {} }) },
+      e,
+    );
+    expect(res.status).toBe(200);
   });
 
   it("limits a valid /mcp token by the token (60), not by the shared IP", async () => {
     const a = await createListener(env.DB);
     const b = await createListener(env.DB);
-    await updateListener(env.DB, a.id, { mcpToken: "tok-a-valid" });
-    await updateListener(env.DB, b.id, { mcpToken: "tok-b-valid" });
+    await updateListener(env.DB, a.id, { mcpToken: "a".repeat(48) });
+    await updateListener(env.DB, b.id, { mcpToken: "b".repeat(48) });
     const hit = (token: string) => app.request(`/mcp/${token}`, { method: "POST", headers: { "cf-connecting-ip": "203.0.113.6", "content-type": "application/json", accept: "application/json, text/event-stream" }, body: "{}" }, e);
-    for (let i = 0; i < 60; i++) expect((await hit("tok-a-valid")).status, String(i)).not.toBe(429);
-    expect((await hit("tok-a-valid")).status).toBe(429);
+    for (let i = 0; i < 60; i++) expect((await hit("a".repeat(48))).status, String(i)).not.toBe(429);
+    expect((await hit("a".repeat(48))).status).toBe(429);
     // Another token behind the same IP is unaffected, and so is a guess from that IP.
-    expect((await hit("tok-b-valid")).status).not.toBe(429);
+    expect((await hit("b".repeat(48))).status).not.toBe(429);
     expect((await hit("nope")).status).toBe(401);
   });
 

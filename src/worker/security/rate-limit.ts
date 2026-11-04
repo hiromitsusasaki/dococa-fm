@@ -143,8 +143,8 @@ const mcpTokenStore = new WindowStore();
 const mcpIpStore = new WindowStore();
 
 /**
- * `/mcp/<token>`, before the token is looked up: an IP that has already had its 20 unknown-token answers this minute
- * is refused without a D1 read. Nothing is counted here.
+ * `/mcp/<token>` with a malformed token, before any lookup: an IP that has already had its 20 unknown-token answers
+ * this minute is refused. Nothing is counted here. Well-formed tokens never pass through this check.
  */
 export function mcpIpBlocked(env: Env, ip: string | undefined): boolean {
   return ip !== undefined && mcpIpStore.peek(`ip:${ip}`) >= limitOf({ env });

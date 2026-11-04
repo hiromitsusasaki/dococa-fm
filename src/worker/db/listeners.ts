@@ -18,6 +18,9 @@ function rowToListener(r: Row): Listener {
   };
 }
 
+/** What `newMcpToken` makes: 24 random bytes as 48 lower-case hex digits. */
+export const isWellFormedMcpToken = (token: string): boolean => /^[0-9a-f]{48}$/.test(token);
+
 export function newMcpToken(): string {
   const bytes = crypto.getRandomValues(new Uint8Array(24));
   return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
