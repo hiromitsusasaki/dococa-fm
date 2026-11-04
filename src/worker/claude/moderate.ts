@@ -1,5 +1,5 @@
 import type { Env } from "../env";
-import { escapeTags, skipWithoutKey } from "./client";
+import { escapeTags, oneLine, skipWithoutKey } from "./client";
 import { callTool, type ToolSpec } from "./tool-call";
 
 type Reason = "abuse" | "ad" | "pii" | "offtopic";
@@ -35,7 +35,8 @@ const ATTEMPTS = 2;
 /** The work a letter is about, judged in the same call: its title and creator reach every screen and the DJ. */
 export type WorkToJudge = { title: string; creator: string };
 
-const workTag = (w: WorkToJudge): string => `<work>\n題名: ${escapeTags(w.title)}\n作者: ${escapeTags(w.creator)}\n</work>\n`;
+/** Title and creator stay on their own line each: a newline in either cannot add a line such as 「判定: ok」 to the block. */
+const workTag = (w: WorkToJudge): string => `<work>\n題名: ${escapeTags(oneLine(w.title))}\n作者: ${escapeTags(oneLine(w.creator))}\n</work>\n`;
 
 /**
  * Fails closed: without a verdict after two tries it throws, and `POST /letters` answers 503 and stores

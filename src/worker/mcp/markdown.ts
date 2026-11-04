@@ -1,4 +1,5 @@
 import { isHttpUrl, whoOf } from "../../views/components";
+import { oneLine } from "../claude/client";
 import { ja } from "../i18n/ja";
 import { t } from "../i18n/t";
 import type { Episode, Item, Letter, ScriptLine } from "../types";
@@ -12,7 +13,7 @@ export type EpisodeData = {
 };
 
 /** One line of heading text: a title cannot break out of its heading or open a new one. */
-const headingText = (s: string): string => s.replace(/[\r\n]+/g, " ").replace(/^[\s#]+/, "");
+const headingText = (s: string): string => oneLine(s).replace(/^[\s#]+/, "");
 
 /** A blockquote that keeps every character and line break of `text`. */
 const quote = (text: string): string => text.split("\n").map((l) => `> ${l}`).join("\n");
