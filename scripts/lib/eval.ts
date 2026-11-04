@@ -32,10 +32,10 @@ export function parseEvalArgs(argv: string[], env: Record<string, string | undef
 
 const fold = (s: string) => s.normalize("NFKC").toLowerCase();
 
-/** 「…」 and 『…』 spans, then runs of capitalised latin words in what is left (the DJ writes Japanese, so a capital marks a name). */
 /** Capitalised words that are not a title or a person: never flagged as unsourced. */
 const GENERIC = new Set(["dj", "fm", "ai", "youtube", "spotify", "dococa", "dococa fm", "tmdb", "mcp", "pwa"]);
 
+/** 「…」 and 『…』 spans, then runs of capitalised latin words in what is left (the DJ writes Japanese, so a capital marks a name). */
 function namesIn(text: string): string[] {
   const names: string[] = [];
   const rest = text.normalize("NFKC").replace(/[「『]([^」』]+)[」』]/gu, (_, n: string) => {

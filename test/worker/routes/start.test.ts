@@ -136,7 +136,7 @@ describe("POST /start", () => {
     expect(await (await get("/", cookie)).text()).toContain("最近の作品");
   });
 
-  it("puts a one-liner through the letter pipeline, verbatim, and skips a rejected one", async () => {
+  it("puts a one-liner through the letter pipeline, stored with only its outer spaces trimmed, and skips a rejected one", async () => {
     const create = stubAnthropic();
     // stubAnthropic replaces fetch, so route the search hosts to a second stub and keep Anthropic on the first.
     const anthropicFetch = globalThis.fetch;

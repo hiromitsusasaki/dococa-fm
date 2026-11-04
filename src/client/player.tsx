@@ -104,6 +104,31 @@ export function mountPlayer(root: HTMLElement, episode: PlayerEpisode, opts: Pla
     return prefetch;
   }
 
+  const ttsSrc = (seg: number, line: number) => `${opts.ttsUrl}?episode=${encodeURIComponent(episode.id)}&line=${globalIndex(seg, line)}`;
+  const warmed = new Set<string>();
+
+  /** The next line after (seg, line) that is spoken (dj or letter), skipping previews. */
+  function nextSpoken(seg: number, line: number): [number, number] | null {
+    for (let i = seg, j = line + 1; i < segments.length; i++, j = 0) {
+      const lines = segments[i]!.lines;
+      for (; j < lines.length; j++) if (lines[j]!.type !== "preview") return [i, j];
+    }
+    return null;
+  }
+
+  /**
+   * While a cloud clip plays, asks for the next spoken line so the server synthesizes and stores it now;
+   * the clip element then gets it from R2 (or the HTTP cache) instead of waiting seconds for synthesis.
+   */
+  function warmNext(seg: number, line: number) {
+    const next = nextSpoken(seg, line);
+    if (!next) return;
+    const src = ttsSrc(next[0], next[1]);
+    if (warmed.has(src)) return;
+    warmed.add(src);
+    void fetch(src).catch(() => {});
+  }
+
   async function playLine(line: ScriptLine, seg: number, index: number, signal: AbortSignal) {
     if (line.type === "preview") {
       bed.stop();
@@ -112,7 +137,8 @@ export function mountPlayer(root: HTMLElement, episode: PlayerEpisode, opts: Pla
     }
     bed.start();
     if (ttsOk) {
-      const played = await clips.play(`${opts.ttsUrl}?episode=${encodeURIComponent(episode.id)}&line=${globalIndex(seg, index)}`, signal);
+      warmNext(seg, index);
+      const played = await clips.play(ttsSrc(seg, index), signal);
       if (played || signal.aborted) return;
       ttsOk = false;
     }
@@ -348,7 +374,7 @@ function Screen({ s, view }: { s: State; view: View }) {
                 view.reply((e.currentTarget as HTMLFormElement).querySelector("input")!.value);
               }}
             >
-              <input type="text" name="body" maxlength={140} aria-label={str("player.reply")} />
+              <input type="text" name="body" maxlength={200} aria-label={str("player.reply")} />
               <button type="submit">{str("player.send")}</button>
             </form>
           )}

@@ -252,7 +252,10 @@ describe("GET /put", () => {
   it("says not found for an unresolvable url", async () => {
     const res = await get(`/put?url=${encodeURIComponent("https://example.org/x")}`, await newSession());
     expect(res.status).toBe(200);
-    expect(await res.text()).toContain(t("put.notFound"));
+    const html = await res.text();
+    expect(html).toContain(t("put.notFound"));
+    // Searching by title happens on /start; the home page has no search.
+    expect(html).toContain(`<a href="/start">${t("put.search")}</a>`);
   });
 });
 

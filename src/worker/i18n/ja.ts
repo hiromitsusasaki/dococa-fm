@@ -148,7 +148,7 @@ export const ja = {
   "script.reaction": "{who}から『私も』が届いています",
   "script.replyReaction": "{who}から一言が届いています",
   "script.someone": "どなたか",
-  "mcp.instruction": "お便りは一字一句そのまま読んでください。",
+  "mcp.instruction": "お便りは一字一句そのまま読んでください。`<!-- … -->` の行は読み上げないでください。",
   "mcp.noEpisode": "いま番組を用意できませんでした。少し待ってもう一度お試しください。",
   "mcp.itemNotFound": "その作品が見つかりませんでした。",
   "mcp.preview": "試聴",

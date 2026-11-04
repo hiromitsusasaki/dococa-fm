@@ -244,10 +244,10 @@ export function parseItemUrls(text: string): string[] {
     .filter((l) => /^https?:\/\//i.test(l) && !/^https?:\/\/(?:localhost|127\.|10\.|192\.168\.|\[)/i.test(l));
 }
 
-/** 2 to 5 distinct items for the persona at `index`: a rotating window, so the same list gives the same assignment and every item is reached. */
 /** The first of each item id, so one work is never assigned twice to the same persona. */
 export const uniqueById = (items: SeedItem[]): SeedItem[] => items.filter((it, i) => items.findIndex((o) => o.id === it.id) === i);
 
+/** 2 to 5 distinct items for the persona at `index`: a rotating window, so the same list gives the same assignment and every item is reached. */
 export function pickItems(urls: string[], index: number): string[] {
   const count = Math.min(urls.length, MIN_ITEMS + (index % (MAX_ITEMS - MIN_ITEMS + 1)));
   const start = (index * 3) % Math.max(urls.length, 1);

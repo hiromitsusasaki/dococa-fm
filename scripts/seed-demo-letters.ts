@@ -119,11 +119,13 @@ async function loadOrMakePersonas(client: Anthropic): Promise<Persona[]> {
 
 let cookie: string | null = null;
 /** One anonymous session for all the page checks, so they do not each add a listener row. */
+/** One anonymous listener for every post-check read. Asked for twice at most; an origin that never sets one is an error, not "". */
 async function sessionCookie(): Promise<string> {
-  if (cookie === null) {
+  for (let attempt = 0; cookie === null && attempt < 2; attempt++) {
     const res = await fetch(`${args.origin}/settings`);
-    cookie = /dfm_sid=[^;]+/.exec(res.headers.get("set-cookie") ?? "")?.[0] ?? "";
+    cookie = /dfm_sid=[^;]+/.exec(res.headers.get("set-cookie") ?? "")?.[0] ?? null;
   }
+  if (cookie === null) throw new CliError(`${args.origin}/settings set no dfm_sid cookie; is PUBLIC_ORIGIN and SESSION_SECRET set there?`);
   return cookie;
 }
 

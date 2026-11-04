@@ -32,7 +32,7 @@ export function PutPage({ listener, card, itemId, url, body, error, history = []
         {card && <ItemCard item={card} heading="h2" />}
         {!card && url && (
           <p class="muted">
-            <a href="/">{t("put.search")}</a>
+            <a href="/start">{t("put.search")}</a>
           </p>
         )}
         <form method="get" action="/put" class="put-url">

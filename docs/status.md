@@ -2,12 +2,18 @@
 
 > 新しいセッションはまずここを読む。更新はタスクの区切りごと（最新を上に）。
 
-## 2026-11-04 Task 16 完了。次は全体レビュー
+## 2026-11-04 最終修正 完了。次は本人作業（push・鍵・デプロイ・public 化）
 
 - 設計書・計画は本人承認済み。実行方式は **Subagent-driven**（`superpowers:subagent-driven-development`）。
-- 次の一手: 最後の全体レビュー（Claude と Codex）→ 本人が下のチェックリストを済ませて public 化・提出。
+- 全体レビュー（Claude と Codex）の指摘を 9 コミットで閉じた。主なもの: 定型文が引用検査に当たって 503 になる件、プレイヤーに原文を出す、時事語・作品数・住所・郵便番号の検査、未検証の回と非公開にしたお便りを全出口で出さない、作品の題名と作者の判定、審査員の 3 作品を「近く」に入れる、D1 のクエリ数（`POST /start` 57 → 25、`POST /episodes` 45 → 13）、空の回を作らない、`PUBLIC_ORIGIN` の既定値を空に、開発時の判定の素通しは `DEV_SKIP_CLAUDE=1` だけ、TTS の single-flight と上限、本文の上限、MCP の照会前の IP 制限。詳細は `.superpowers/sdd/2026-11-03-dococa-fm/final-fix-report.md`（gitignore 済み）。
+- **本人に確かめてほしいこと: Cloudflare のプランは Workers Free か Paid か。** Free は 1 回の実行あたり D1 のクエリが 50 まで（Paid は 1000）。主な経路はテストで 50 未満を確かめた（`test/worker/query-budget.test.ts`）が、Spotify の取り込みを含む実機の値はデプロイ後に `wrangler tail` で見る。
+- 次の一手: 本人が push（main-mac / ops-mac）→ 鍵を入れる → デプロイ → 下のチェックリストを済ませて public 化・提出。
 - Task 16 でできたこと: CI（SHA 固定、secret なし）、Dependabot、SECURITY.md、同一オリジン検査、`secureHeaders()`、レート制限（IP とリスナー、1 分 20 回。カウンタは isolate ごと）、番組作成の全体上限（`EPISODE_GLOBAL_DAILY_LIMIT` 既定 300、`CLOUD_TTS_GLOBAL_DAILY_LIMIT` 既定 50、上限値 `0` は停止）、`SESSION_SECRET` 空のときの 500、未検証の番組は 404。
 - **public 化前チェックリスト（本人）**
+  - [ ] ローカルの commit を push する（最終修正の 9 コミットは未 push）。
+  - [ ] Cloudflare のプラン（Free / Paid）を確かめる。
+  - [ ] もう一方の端末の `.dev.vars` に `PUBLIC_ORIGIN=http://127.0.0.1:5173` と `DEV_SKIP_CLAUDE=1` を足し、`pnpm db:migrate:local` を流す（無いと `pnpm dev` が 500 になる。main-mac は 2026-11-04 に済み）。
+  - [ ] `CLAUDE.md`、`docs/status.md`（端末名と private の作業場所のパス）、設計書 §3（知人の呼び名）を公開してよいか見る。
   - [ ] Settings → Code security で Secret scanning と Push protection を有効にする。
   - [ ] Settings → Actions → General で、fork からの PR の workflow は承認が要る設定にする。
   - [ ] Settings → Branches（または Rulesets）で、`main` への直接 push を自分だけに限定する。
@@ -20,9 +26,10 @@
   pnpm wrangler d1 create dococa                 # 出た database_id を wrangler.jsonc の d1_databases に書く
   pnpm wrangler r2 bucket create dococa-audio
   for k in ANTHROPIC_API_KEY SPOTIFY_CLIENT_ID GOOGLE_TTS_API_KEY TMDB_API_KEY YOUTUBE_API_KEY ADMIN_TOKEN SESSION_SECRET; do pnpm wrangler secret put $k; done
-  # 任意: EPISODE_DAILY_LIMIT、CLAUDE_MODEL、GEMINI_TTS_MODEL、GEMINI_TTS_VOICE
-  # wrangler.jsonc の vars.PUBLIC_ORIGIN を本番 URL にする（または pnpm build && pnpm wrangler deploy --var PUBLIC_ORIGIN:https://<URL>）
-  pnpm db:migrate
+  # 任意: EPISODE_DAILY_LIMIT、EPISODE_GLOBAL_DAILY_LIMIT、CLOUD_TTS_GLOBAL_DAILY_LIMIT、RATE_LIMIT_PER_MINUTE、CLAUDE_MODEL、GEMINI_TTS_MODEL、GEMINI_TTS_VOICE
+  # DEV_SKIP_CLAUDE は本番に入れない（開発専用）
+  # wrangler.jsonc の vars.PUBLIC_ORIGIN を本番 URL にする（必須。空のままだと /healthz 以外が 500。--var は次の deploy で空に戻るので使わない）
+  pnpm db:migrate                                # 0004_tts_claims.sql まで当たる
   pnpm run deploy
   ```
   そのあと本番 URL で `/start` → 番組を聴く → `/settings` の `/mcp/<token>` を Claude のカスタムコネクタに登録して `get_episode` を呼ぶ。eval は `EPISODE_DAILY_LIMIT` を 25 などに上げて `pnpm eval --origin https://<URL> --token "$ADMIN_TOKEN" --listener <id> --runs 20 --out docs/eval/<日付>.md`。
@@ -57,7 +64,7 @@
 
 ## 決定の記録（設計書に反映済み）
 
-- 2026-11-03 **デモ用データは AI 生成の多国籍ダミーペルソナのお便りで作る**（本人）。ペルソナは国籍・土地・年代・好みが一貫した人物像を持たせ、日本語圏以外は英語で原文を投稿した体（`lang="en"`）にし、番組では聴く側の言語（v1 は日本語）に翻訳したものを DJ が読む（画面は原文併記）。本人の実お便りと「見つけた声」を置き換えるものではなく、デモの密度を出す追加。計画に Task 13 付近で「デモ用シード生成」（`scripts/seed-demo-letters.ts` → 管理 API）を追加する。設計書のアンチゴール「架空のお便り」との整理（README・画面で「デモ用」と明示）は本人に確認中。
+- 2026-11-03 **デモ用データは AI 生成の多国籍ダミーペルソナのお便りで作る**（本人）。ペルソナは国籍・土地・年代・好みが一貫した人物像を持たせ、日本語圏以外は英語で原文を投稿した体（`lang="en"`）にし、番組では聴く側の言語（v1 は日本語）に翻訳したものを DJ が読む（画面は原文併記）。本人の実お便りと「見つけた声」を置き換えるものではなく、デモの密度を出す追加。計画に Task 13 付近で「デモ用シード生成」（`scripts/seed-demo-letters.ts` → 管理 API）を追加する。設計書のアンチゴール「架空のお便り」との整理は、設計書の「追記 2026-11-03: デモ用ペルソナ」に書いた（「デモ用」の印付きのお便りだけ例外。README も「印で見分けられます」に合わせた）。
 - 2026-11-03 Task 1 のレビューで、`run_worker_first: true` のまま `ASSETS` binding が無いと静的アセットが配信されないことが判明。計画の Task 1 の決めを `binding: "ASSETS"` + Worker 末尾のフォールスルーに修正（Claude の判断）。dev の `PUBLIC_ORIGIN` は Spotify の制約で `http://127.0.0.1:5173`。
 - 2026-11-03 クラウド TTS は Google Cloud Text-to-Speech の **Gemini-TTS**（スタイルをプロンプトで指定。既定モデル `gemini-2.5-flash-tts`、声は Charon / Kore）。API キーで通らなければサービスアカウント JWT に切り替える（Task 11 Step 5 で確認）。
 - 2026-11-03 v1 は Web + PWA（Media Session API）。**ネイティブ化は v2**（Capacitor、OS 音声、端末内モデル Kokoro Core ML、Personal Voice）。設計書 §2.1。

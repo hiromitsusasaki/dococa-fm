@@ -237,6 +237,34 @@ describe("player", () => {
     await vi.waitFor(() => expect(audios.some((a) => a.src === "/tts?episode=ep3&line=7")).toBe(true));
   });
 
+  it("asks for the next spoken line's clip while the current one plays, skipping previews, once each", async () => {
+    mountPlayer(root, one, opts({ ttsUrl: "/tts" }));
+    await tap("toggle");
+    await vi.waitFor(() => expect(audios.some((a) => a.src === "/tts?episode=ep1&line=0")).toBe(true));
+    expect(fetchMock).toHaveBeenCalledWith("/tts?episode=ep1&line=1");
+    audios.find((a) => a.src === "/tts?episode=ep1&line=0")!.fire("ended");
+    await vi.waitFor(() => expect(audios.some((a) => a.src === "/tts?episode=ep1&line=1")).toBe(true));
+    // Line 2 is a preview: the next spoken line is 3.
+    expect(fetchMock).toHaveBeenCalledWith("/tts?episode=ep1&line=3");
+    expect(fetchMock.mock.calls.filter((c) => c[0] === "/tts?episode=ep1&line=1")).toHaveLength(1);
+  });
+
+  it("does not ask for clips when the episode has no cloud voice", async () => {
+    mountPlayer(root, one, opts());
+    await tap("toggle");
+    await vi.waitFor(() => expect(spoken.length).toBeGreaterThan(0));
+    expect(fetchMock.mock.calls.some((c) => String(c[0]).startsWith("/tts"))).toBe(false);
+  });
+
+  it("lets a reply be as long as the server allows", async () => {
+    autoEnd = false;
+    mountPlayer(root, { ...one, segments: [{ ...one.segments[0]!, lines: [letter("L1", "l1")] }] }, opts());
+    await tap("toggle");
+    await vi.waitFor(() => expect(spoken).toEqual(["l1"]));
+    await tap("reply");
+    expect(root.querySelector("form.reply input")!.getAttribute("maxlength")).toBe("200");
+  });
+
   it("falls back to the first ja voice when the saved voice is gone", async () => {
     mountPlayer(root, one, opts({ voiceURI: "missing" }));
     await tap("toggle");
