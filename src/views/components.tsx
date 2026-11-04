@@ -66,13 +66,13 @@ export function ReportForm({ letterId }: { letterId: string }) {
   );
 }
 
-/** The translation first, with the untouched original beside it when the letter was not written in Japanese. */
+/** The translation first, with the untouched original open beside it when the letter was not written in Japanese. */
 export function LetterText({ letter }: { letter: Pick<Letter, "body" | "bodyJa" | "lang"> }) {
   return (
     <>
       <p class="letter-body">{letter.bodyJa}</p>
       {letter.lang !== "ja" && (
-        <details class="letter-original">
+        <details class="letter-original" open>
           <summary>{t("item.originalBody")}</summary>
           <p>{letter.body}</p>
         </details>

@@ -368,6 +368,16 @@ button.quiet {
   white-space: pre-wrap;
 }
 
+.player-letter .player-original {
+  color: var(--fg2);
+  font-size: var(--fs-14);
+}
+
+.player-original-label {
+  font-weight: 600;
+  margin-right: var(--sp-2);
+}
+
 .player-message {
   margin: 0;
   color: var(--accent-spark);

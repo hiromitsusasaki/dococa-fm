@@ -1,4 +1,6 @@
+import { t } from "../i18n/t";
 import type { Item, Letter, Listener, Segment, VerifyReport } from "../types";
+import { FIXED_TEMPLATES } from "./compose";
 import { EMAIL, normalizeText as norm, PHONE, URL_RE } from "./pii-patterns";
 import { maskDataYears, TOPICAL } from "./topical-words";
 
@@ -16,6 +18,24 @@ const NAME = "\u{F0000}";
 
 const nonEmpty = (s: string | null) => s !== null && s.trim() !== "";
 const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/**
+ * One anchored pattern per fixed template, its wording normalised like a dj line and each `{param}` a lazy
+ * capture. A fixed line is quote-checked on its captures only, joined by the name sentinel, so a letter that
+ * happens to contain 「ネットで見つけた声です」 cannot fail the template that says it.
+ */
+const FIXED_PATTERNS = FIXED_TEMPLATES.map(
+  (key) => new RegExp(`^${t(key).split(/\{\w+\}/u).map((part) => escapeRe(norm(part))).join("(.*?)")}$`, "u"),
+);
+
+/** What was filled into a fixed line; the whole line when it matches no template. */
+function filledValues(text: string): string {
+  for (const re of FIXED_PATTERNS) {
+    const m = text.match(re);
+    if (m) return m.slice(1).join(NAME);
+  }
+  return text;
+}
 
 function windows(text: string): string[] {
   const cps = Array.from(text);
@@ -44,7 +64,8 @@ function maskNames(items: Map<string, Item>): (text: string) => string {
  * with any letter, after work titles and creators collapse to one sentinel each; a paraphrase by the DJ is
  * not detectable here and is left to the prompt and the eval. Every dj check runs on normalised text (NFKC,
  * no format characters, collapsed spaces). Lines marked `fixed` are our templates filled with names, places
- * and sources that are shown on screen anyway, so they get only the account and quote checks.
+ * and sources that are shown on screen anyway, so they get only the account and quote checks, and the quote
+ * check sees only the filled-in values, never the template wording.
  * A detail reads `{check}: segment {i} line {j}: {term}` and never carries the dj line itself.
  */
 export function verifyEpisode(
@@ -126,7 +147,7 @@ export function verifyEpisode(
         pii = false;
         details.push(`pii: ${at}: listener account`);
       }
-      if (windows(mask(text)).some((w) => quotes.has(w))) {
+      if (windows(mask(line.fixed ? filledValues(text) : text)).some((w) => quotes.has(w))) {
         pii = false;
         details.push(`pii: ${at}: quotes a letter`);
       }

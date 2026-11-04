@@ -7,7 +7,9 @@ import { loadVoices, pickVoice, speak } from "./speech";
 
 export type PlayerItem = { title: string; creator: string; imageUrl: string | null; outLinks: Record<string, string> };
 /** The slice of an episode the page embeds: no listener id, no verification report. */
-export type PlayerEpisode = { id: string; segments: Segment[]; items: Record<string, PlayerItem> };
+/** Letters not written in Japanese: the line reads the translation, the screen shows this original under it. */
+export type PlayerOriginals = Record<string, { body: string; lang: string }>;
+export type PlayerEpisode = { id: string; segments: Segment[]; items: Record<string, PlayerItem>; originals?: PlayerOriginals };
 export type PlayerOptions = {
   voiceURI: string;
   nextUrl: string;
@@ -209,6 +211,7 @@ export function mountPlayer(root: HTMLElement, episode: PlayerEpisode, opts: Pla
     item: (seg) => itemOf(seg),
     itemId: (seg) => segments[seg]?.itemId,
     line: (seg, line) => lineOf(seg, line),
+    original: (letterId) => episode.originals?.[letterId],
   };
 
   if (typeof navigator !== "undefined" && navigator.mediaSession) {
@@ -241,6 +244,7 @@ type View = {
   item: (seg: number) => PlayerItem | undefined;
   itemId: (seg: number) => string | undefined;
   line: (seg: number, line: number) => ScriptLine | undefined;
+  original: (letterId: string) => PlayerOriginals[string] | undefined;
 };
 
 const siteOf = (url: string): string => {
@@ -269,6 +273,7 @@ function Screen({ s, view }: { s: State; view: View }) {
   const itemId = view.itemId(s.seg);
   const line = view.line(s.seg, s.line);
   const letter = line?.type === "letter" ? line : null;
+  const original = letter ? view.original(letter.letterId) : undefined;
   const links = Object.entries(item?.outLinks ?? {}).flatMap(([key, href]) => {
     const label = outLabel(str, key);
     return label && isHttpUrl(href) ? [{ label, href }] : [];
@@ -291,6 +296,11 @@ function Screen({ s, view }: { s: State; view: View }) {
         {letter && (
           <blockquote class={letter.kind === "found" ? "player-letter found" : "player-letter"}>
             <p>{letter.text}</p>
+            {original && original.body !== letter.text && (
+              <p class="player-original" lang={original.lang}>
+                <span class="player-original-label">{str("player.original")}</span> {original.body}
+              </p>
+            )}
             <footer class="letter-who">
               {letter.kind === "found" && isHttpUrl(letter.sourceUrl) ? (
                 <a href={letter.sourceUrl} rel="noopener noreferrer nofollow" target="_blank">

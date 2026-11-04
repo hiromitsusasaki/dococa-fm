@@ -12,6 +12,9 @@ const dj = (text: string): ScriptLine => ({ type: "dj", text });
 /** A line from a template and data, never from the model. */
 const fixed = (text: string): ScriptLine => ({ type: "dj", text, fixed: true });
 
+/** Every template a `fixed` line is made from; the quote check reads only what was filled into them. */
+export const FIXED_TEMPLATES = ["script.readingOnly", "script.foundVoice", "script.reaction", "script.replyReaction"] as const;
+
 /** Where a found voice was found, said aloud: YouTube by name, otherwise the host without www. */
 export function siteName(sourceUrl: string | null): string {
   let host = "";

@@ -262,7 +262,7 @@ describe("GET /episodes/:id", () => {
     expect(parsed.id).toBe(ep.id);
     expect(parsed.segments).toEqual(ep.segments);
     // The page carries only what the player shows: no listener id, no verification report.
-    expect(Object.keys(parsed).sort()).toEqual(["id", "items", "segments"]);
+    expect(Object.keys(parsed).sort()).toEqual(["id", "items", "originals", "segments"]);
     expect(html).not.toContain(me);
     expect(Object.keys(parsed.items).sort()).toEqual(ep.segments.map((s) => s.itemId).sort());
   });
@@ -280,6 +280,26 @@ describe("GET /episodes/:id", () => {
     expect(strings["out.spotify"]).toBe("Spotify で聴く");
     expect(strings["letter.who"]).toBe("{name}さん");
     expect(strings["listener.anonymous"]).toBe("名無しのリスナー");
+  });
+
+  it("carries the original of a letter not written in Japanese, in the page and in the json", async () => {
+    const { cookie, id } = await make();
+    const ep = (await getEpisode(env.DB, id))!;
+    const read = ep.segments.flatMap((s) => s.lines).find((l) => l.type === "letter")!;
+    const letterId = (read as { letterId: string }).letterId;
+    await env.DB.prepare("UPDATE letters SET lang = 'en', body = 'A letter from far away.' WHERE id = ?").bind(letterId).run();
+    const html = await (await get(`/episodes/${id}`, cookie)).text();
+    const embedded = JSON.parse(html.match(/id="episode-json">([\s\S]*?)<\/script>/)![1]!);
+    expect(embedded.originals).toEqual({ [letterId]: { body: "A letter from far away.", lang: "en" } });
+    expect(JSON.parse(html.match(/id="player-i18n">([\s\S]*?)<\/script>/)![1]!)["player.original"]).toBe("原文");
+    const json = (await (await get(`/episodes/${id}.json`, cookie)).json()) as { originals: Record<string, unknown> };
+    expect(json.originals).toEqual({ [letterId]: { body: "A letter from far away.", lang: "en" } });
+  });
+
+  it("carries no originals when every letter is Japanese", async () => {
+    const { cookie, id } = await make();
+    const json = (await (await get(`/episodes/${id}.json`, cookie)).json()) as { originals: Record<string, unknown> };
+    expect(json.originals).toEqual({});
   });
 
   it("serves the episode as json", async () => {

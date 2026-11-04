@@ -9,6 +9,7 @@ import type { Env } from "../env";
 import { ja } from "../i18n/ja";
 import { t } from "../i18n/t";
 import { makeEpisode } from "../program/create";
+import { lettersOf, originalsOf } from "../program/stored";
 import type { Episode, Item, Listener, ScriptLine } from "../types";
 
 export const episodes = new Hono<{ Bindings: Env; Variables: Variables }>();
@@ -90,7 +91,8 @@ episodes.get("/episodes/:id", async (c) => {
   const episode = await ownEpisode(c, asJson ? param.slice(0, -".json".length) : param);
   // Only the builder stores verified rows; refusing the rest here is a second lock, not the first.
   if (!episode || !episode.verified) return c.notFound();
-  if (asJson) return c.json(episode);
+  const originals = originalsOf(await lettersOf(c.env.DB, episode));
+  if (asJson) return c.json({ ...episode, originals });
 
   const listener = c.get("listener");
   const items: Record<string, { title: string; creator: string; imageUrl: string | null; outLinks: Record<string, string> }> = {};
@@ -131,7 +133,7 @@ episodes.get("/episodes/:id", async (c) => {
           <a href="/episodes">{t("episode.archive")}</a>
         </p>
         <script type="application/json" id="episode-json">
-          {raw(jsonForScript({ id: episode.id, segments: episode.segments, items }))}
+          {raw(jsonForScript({ id: episode.id, segments: episode.segments, items, originals }))}
         </script>
         <script type="application/json" id="player-i18n">
           {raw(jsonForScript(playerStrings()))}

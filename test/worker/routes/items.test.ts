@@ -43,6 +43,7 @@ describe("GET /items/:id", () => {
     const html = await (await get(`/items/${item.id}`, await newSession())).text();
     expect(html).toContain("15 歳のときに大好きだった");
     expect(html).toContain("I loved this at 15");
+    expect(html).toMatch(/<details class="letter-original" open(="")?>/);
   });
 
   it("shows found letters under their own heading with the source link and takedown link", async () => {

@@ -154,6 +154,27 @@ describe("buildEpisode", () => {
     expect(ep.segments.flatMap((s) => djTexts(s.lines))).toContain("ネットで見つけた声です。ゆきさん、note.comのコメントから。");
   });
 
+  it("does not count template wording as a quote when a letter happens to contain it", async () => {
+    const f = await fixture();
+    await insertLetter(env.DB, letterDraft(f.i1, { listenerId: null, radioName: "ゆう", place: "", body: "ネットで見つけた声ですよね、これ。", bodyJa: "ネットで見つけた声ですよね、これ。" }));
+    await insertLetter(env.DB, letterDraft(f.i1, { kind: "found", listenerId: null, sourceAuthor: "@jazzcat", sourceUrl: "https://youtu.be/x", body: "so good", bodyJa: "とてもいい" }));
+    await insertLetter(env.DB, letterDraft(f.i0, { listenerId: null, radioName: "ゆう", place: "", body: "あおいさん(那覇)から『私も』が届いていますね", bodyJa: "あおいさん(那覇)から『私も』が届いていますね" }));
+    const ep = await buildEpisode(keyless, env.DB, f.a, { size: 2, seed: "s" });
+    expect(ep.verified).toBe(true);
+    expect(ep.report.pii).toBe(true);
+    const texts = ep.segments.flatMap((s) => djTexts(s.lines));
+    expect(texts).toContain("ネットで見つけた声です。@jazzcatさん、YouTubeのコメントから。");
+    expect(texts).toContain("あおいさん（那覇）から『私も』が届いています");
+  });
+
+  it("still fails a fixed line whose filled-in name quotes a letter", async () => {
+    const f = await fixture();
+    await insertLetter(env.DB, letterDraft(f.i0, { kind: "watashimo", listenerId: null, radioName: "雨の日に聴きました。", place: "", parentLetterId: f.mine.id, body: "私も", bodyJa: "私も" }));
+    const err = await buildEpisode(keyless, env.DB, f.a, { size: 2, seed: "s" }).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(EpisodeUnverifiedError);
+    expect((err as EpisodeUnverifiedError).report.details.some((d) => d.includes("quotes a letter"))).toBe(true);
+  });
+
   it("verifies readings only when a reaction's radio name looks like an email address", async () => {
     const f = await fixture();
     await insertLetter(env.DB, letterDraft(f.i0, { kind: "watashimo", listenerId: null, radioName: "a@b.co", place: "", parentLetterId: f.mine.id, body: "私も", bodyJa: "私も" }));

@@ -245,6 +245,32 @@ describe("player", () => {
     expect(root.textContent).toContain("しずくさん（松本）");
   });
 
+  it("shows the original under a translated letter, and reads only the translation", async () => {
+    autoEnd = false;
+    const translated: PlayerEpisode = {
+      ...one,
+      originals: { L1: { body: "Cried a little, alone at midnight.", lang: "en" } },
+      segments: [{ ...one.segments[0]!, lines: [letter("L1", "夜中にひとりで少し泣いた。")] }],
+    };
+    mountPlayer(root, translated, opts({ strings: { ...strings, "player.original": "原文" } }));
+    await tap("toggle");
+    await vi.waitFor(() => expect(spoken).toEqual(["夜中にひとりで少し泣いた。"]));
+    const quote = root.querySelector(".player-letter")!;
+    expect(quote.textContent).toContain("夜中にひとりで少し泣いた。");
+    const original = quote.querySelector(".player-original")!;
+    expect(original.textContent).toContain("原文");
+    expect(original.textContent).toContain("Cried a little, alone at midnight.");
+    expect(original.getAttribute("lang")).toBe("en");
+  });
+
+  it("shows no original line for a letter written in Japanese", async () => {
+    autoEnd = false;
+    mountPlayer(root, { ...one, segments: [{ ...one.segments[0]!, lines: [letter("L1", "l1")] }] }, opts());
+    await tap("toggle");
+    await vi.waitFor(() => expect(spoken).toEqual(["l1"]));
+    expect(root.querySelector(".player-original")).toBeNull();
+  });
+
   it("shows a found voice with its source as a link and marks the card", async () => {
     autoEnd = false;
     const found: PlayerEpisode = {

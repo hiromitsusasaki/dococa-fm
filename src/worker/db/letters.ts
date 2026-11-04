@@ -62,6 +62,24 @@ export async function getLetter(db: D1Database, id: string): Promise<Letter | nu
   return row ? rowToLetter(row) : null;
 }
 
+/** D1 binds at most 100 parameters per statement. */
+const IN_CHUNK = 90;
+
+/** Letters by id in one statement per 90 ids, whatever their status; missing ids are simply absent. */
+export async function getLettersByIds(db: D1Database, ids: Iterable<string>): Promise<Map<string, Letter>> {
+  const unique = [...new Set(ids)];
+  const out = new Map<string, Letter>();
+  for (let i = 0; i < unique.length; i += IN_CHUNK) {
+    const chunk = unique.slice(i, i + IN_CHUNK);
+    const { results } = await db
+      .prepare(`${SELECT} WHERE letters.id IN (${chunk.map(() => "?").join(", ")})`)
+      .bind(...chunk)
+      .all<Row>();
+    for (const r of results) out.set(r.id as string, rowToLetter(r));
+  }
+  return out;
+}
+
 export async function listLettersForItem(db: D1Database, itemId: string): Promise<Letter[]> {
   const { results } = await db
     .prepare(`${SELECT} WHERE letters.item_id = ? AND letters.status = 'public' ORDER BY letters.created_at ASC, letters.id ASC`)

@@ -83,6 +83,7 @@ export const ja = {
   "player.loading": "読み込み中",
   "player.failed": "番組を作れませんでした",
   "player.limit": "今日の番組はここまで",
+  "player.original": "原文",
   "slot.near": "近く",
   "slot.neighbor": "隣",
   "slot.far": "遠く",
