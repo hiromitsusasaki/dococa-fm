@@ -86,7 +86,7 @@ DJ が語る材料は 3 層に分かれ、混ぜません。
 ```bash
 pnpm install
 cp .dev.vars.example .dev.vars   # 鍵を入れる（.dev.vars は gitignore 済み）
-pnpm wrangler d1 migrations apply dococa --local   # 初回だけ。pnpm dev の前に
+pnpm db:migrate:local   # 初回だけ。pnpm dev の前に
 pnpm dev          # http://127.0.0.1:5173
 pnpm test         # vitest + @cloudflare/vitest-plugin
 pnpm typecheck
@@ -104,10 +104,10 @@ pnpm wrangler d1 create dococa            # 出力の database_id を wrangler.j
 pnpm wrangler r2 bucket create dococa-audio
 pnpm wrangler secret put ANTHROPIC_API_KEY   # .dev.vars.example の鍵を 1 つずつ（ADMIN_TOKEN、SESSION_SECRET、SPOTIFY_CLIENT_ID、GOOGLE_TTS_API_KEY、TMDB_API_KEY、YOUTUBE_API_KEY）
 pnpm db:migrate
-pnpm deploy
+pnpm run deploy   # pnpm deploy は pnpm 組み込みの別コマンドなので、run を付ける
 ```
 
-`wrangler.jsonc` の `PUBLIC_ORIGIN` は開発用の `http://127.0.0.1:5173` です。本番ではデプロイ先の URL に差し替えます（`vars` を書き換えるか、`pnpm wrangler deploy --var PUBLIC_ORIGIN:https://<デプロイ先>`）。Spotify の redirect URI も同じ origin に合わせます。
+`wrangler.jsonc` の `PUBLIC_ORIGIN` は開発用の `http://127.0.0.1:5173` です。本番ではデプロイ先の URL に差し替えます（`vars` を書き換えるか、`pnpm build && pnpm wrangler deploy --var PUBLIC_ORIGIN:https://<デプロイ先>`）。Spotify の redirect URI も同じ origin に合わせます。
 
 ### Spotify 連携について
 

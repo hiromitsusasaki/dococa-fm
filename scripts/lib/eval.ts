@@ -1,4 +1,5 @@
 /** Pure parts of `pnpm eval`: argument parsing and the aggregation of episodes read from the admin API. */
+import { ja } from "../../src/worker/i18n/ja.ts";
 import type { Episode, Item } from "../../src/worker/types.ts";
 
 export type EvalItem = Pick<Item, "title" | "creator">;
@@ -32,6 +33,9 @@ export function parseEvalArgs(argv: string[], env: Record<string, string | undef
 const fold = (s: string) => s.normalize("NFKC").toLowerCase();
 
 /** 「…」 and 『…』 spans, then runs of capitalised latin words in what is left (the DJ writes Japanese, so a capital marks a name). */
+/** Capitalised words that are not a title or a person: never flagged as unsourced. */
+const GENERIC = new Set(["dj", "fm", "ai", "youtube", "spotify", "dococa", "dococa fm", "tmdb", "mcp", "pwa"]);
+
 function namesIn(text: string): string[] {
   const names: string[] = [];
   const rest = text.normalize("NFKC").replace(/[「『]([^」』]+)[」』]/gu, (_, n: string) => {
@@ -39,7 +43,7 @@ function namesIn(text: string): string[] {
     return " ";
   });
   for (const m of rest.matchAll(/\b[A-Z][\p{L}\p{N}'’.-]*(?:\s+[A-Z][\p{L}\p{N}'’.-]*)*/gu)) names.push(m[0]);
-  return names.filter((n) => n !== "");
+  return names.filter((n) => Array.from(n).length >= 2 && !GENERIC.has(n.toLowerCase()));
 }
 
 export type SourcedStats = { sourced: number; checked: number; unsourced: string[] };
@@ -83,12 +87,17 @@ export type Aggregate = {
   failures: string[];
 };
 
+/** The builder's fixed-phrase episode says 「お便りを読みます。」 in every segment; a model reply that was merely empty does not. */
+function isFallback(e: EvalEpisode): boolean {
+  return e.segments.length > 0 && e.segments.every((s) => s.lines.some((l) => l.type === "dj" && l.fixed === true && l.text === ja["script.readingOnly"]));
+}
+
 export function aggregate(episodes: EvalEpisode[], items: Record<string, EvalItem>, unbuilt = 0): Aggregate {
   const a: Aggregate = { runs: episodes.length + unbuilt, pass: { verbatim: 0, sources: 0, topical: 0, pii: 0 }, far: 0, unbuilt, fallback: 0, sourced: { sourced: 0, checked: 0, unsourced: [] }, failures: [] };
   for (const e of episodes) {
     for (const k of ["verbatim", "sources", "topical", "pii"] as const) if (e.report[k]) a.pass[k]++;
     if (e.segments.some((s) => s.slot === "far")) a.far++;
-    if (!e.segments.some((s) => s.lines.some((l) => l.type === "dj" && !l.fixed))) a.fallback++;
+    if (isFallback(e)) a.fallback++;
     const s = sourcedStats(e, items);
     a.sourced.sourced += s.sourced;
     a.sourced.checked += s.checked;
@@ -114,7 +123,7 @@ export function renderMarkdown(a: Aggregate, date: string): string {
     row("時事・数字なし（topical）", a.pass.topical, a.runs),
     row("個人情報・お便りの引用なし（pii）", a.pass.pii, a.runs),
     row("far 枠が 1 つ以上ある回", a.far, a.runs),
-    row("モデルの DJ 行が 1 行も無い回（定型文だけの代替）", a.fallback, a.runs),
+    row("定型文だけの回（お便りを読みます。）", a.fallback, a.runs),
     row("名前を挙げた DJ 行のうち、作品かお便りに出所がある行", a.sourced.sourced, a.sourced.checked),
   ];
   if (a.failures.length > 0) lines.push("", "## 検証に落ちた箇所", "", ...a.failures.map((f) => `- ${f}`));

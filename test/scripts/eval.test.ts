@@ -58,6 +58,12 @@ describe("sourcedStats", () => {
     expect(sourcedStats(e, items).unsourced).toEqual([]);
   });
 
+  it("does not flag generic words or one-letter tokens", () => {
+    const e = episode();
+    e.segments[0]!.lines.push({ type: "dj", text: "DJ の YouTube 好きな A 面。" });
+    expect(sourcedStats(e, items).unsourced).toEqual([]);
+  });
+
   it("skips fixed template lines and lines without any name", () => {
     const e = episode();
     e.segments[0]!.lines.push({ type: "dj", text: "「Kind of Blue」", fixed: true }, { type: "dj", text: "ここで一息。" });
@@ -86,7 +92,7 @@ describe("aggregate", () => {
 
   it("counts unbuilt runs as misses on every item and detects the fixed-phrase fallback", () => {
     const fixedOnly = episode({ id: "e2" });
-    fixedOnly.segments = [{ itemId: "i1", slot: "far", lines: [{ type: "dj", text: "続いては。", fixed: true }] }];
+    fixedOnly.segments = [{ itemId: "i1", slot: "far", lines: [{ type: "dj", text: "お便りを読みます。", fixed: true }] }];
     const a = aggregate([episode(), fixedOnly], items, 2);
     expect(a.runs).toBe(4);
     expect(a.pass.verbatim).toBe(2);
@@ -94,6 +100,12 @@ describe("aggregate", () => {
     expect(a.fallback).toBe(1);
     expect(a.unbuilt).toBe(2);
     expect(renderMarkdown(a, "2026-11-05")).toContain("| 原文のまま（verbatim） | 2 / 4 | 50% |");
+  });
+
+  it("does not call an episode with an empty model reply a fallback", () => {
+    const emptyReply = episode({ id: "e3" });
+    emptyReply.segments = [{ itemId: "i1", slot: "far", lines: [{ type: "dj", text: "声の主は、どこかの誰か。", fixed: true }, letter()] }];
+    expect(aggregate([emptyReply], items).fallback).toBe(0);
   });
 
   it("handles zero runs without dividing by zero", () => {

@@ -16,11 +16,16 @@ class CliError extends Error {}
 let args: EvalArgs;
 
 async function admin(method: "GET" | "POST", path: string, body?: unknown): Promise<{ status: number; json: any }> {
-  const res = await fetch(`${args.origin}${path}`, {
-    method,
-    headers: { authorization: `Bearer ${args.token}`, "content-type": "application/json" },
-    body: body === undefined ? undefined : JSON.stringify(body),
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${args.origin}${path}`, {
+      method,
+      headers: { authorization: `Bearer ${args.token}`, "content-type": "application/json" },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+  } catch {
+    throw new CliError(`cannot reach ${args.origin} (is pnpm dev or the deployment up?)`);
+  }
   const text = await res.text();
   let json: unknown = null;
   try {
@@ -41,6 +46,8 @@ async function main(): Promise<void> {
   for (let i = 1; i <= args.runs; i++) {
     const made = await admin("POST", "/admin/episodes", { listenerId: args.listener });
     if (made.status === 429) throw new CliError(`daily episode limit reached after ${i - 1} runs; raise EPISODE_DAILY_LIMIT for the eval run`);
+    if (made.status === 401) throw new CliError("401 from the admin API: --token / ADMIN_TOKEN does not match the Worker's");
+    if (made.status === 404) throw new CliError(`404 from the admin API: listener ${args.listener} not found (the id is on /settings)`);
     if (made.status === 503) {
       unbuilt++;
       console.log(`run ${i}/${args.runs}: not built (503)`);

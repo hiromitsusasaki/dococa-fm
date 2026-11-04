@@ -13,9 +13,9 @@
   pnpm wrangler r2 bucket create dococa-audio
   for k in ANTHROPIC_API_KEY SPOTIFY_CLIENT_ID GOOGLE_TTS_API_KEY TMDB_API_KEY YOUTUBE_API_KEY ADMIN_TOKEN SESSION_SECRET; do pnpm wrangler secret put $k; done
   # 任意: EPISODE_DAILY_LIMIT、CLAUDE_MODEL、GEMINI_TTS_MODEL、GEMINI_TTS_VOICE
-  # wrangler.jsonc の vars.PUBLIC_ORIGIN を本番 URL にする（または pnpm wrangler deploy --var PUBLIC_ORIGIN:https://<URL>）
+  # wrangler.jsonc の vars.PUBLIC_ORIGIN を本番 URL にする（または pnpm build && pnpm wrangler deploy --var PUBLIC_ORIGIN:https://<URL>）
   pnpm db:migrate
-  pnpm deploy
+  pnpm run deploy
   ```
   そのあと本番 URL で `/start` → 番組を聴く → `/settings` の `/mcp/<token>` を Claude のカスタムコネクタに登録して `get_episode` を呼ぶ。eval は `EPISODE_DAILY_LIMIT` を 25 などに上げて `pnpm eval --origin https://<URL> --token "$ADMIN_TOKEN" --listener <id> --runs 20 --out docs/eval/<日付>.md`。
 - Demo seeding real run held: no key（`ANTHROPIC_API_KEY` が空。入れたら `pnpm seed --items <作品 URL の一覧> --personas 3 --dry-run` で確かめ、`--dry-run` を外して投入。`docs/demo/personas.json` はこのときできる）。デモ用リスナーは `listeners.demo = 1` で、画面・MCP・番組に「デモ用」の印が出る。
