@@ -2,9 +2,11 @@
 export const TOPICAL = new RegExp(
   [
     // the day, the week, the year it was said
-    "今日|今朝|今夜|昨日|明日|今週|先週|来週|今月|先月|来月|今年|去年|昨年|来年|最近|近頃|このところ",
+    "今日|今朝|今夜|昨夜|昨晩|昨日|明日|先日|今週|先週|来週|今月|先月|来月|今年|去年|昨年|来年|最近|近頃|このところ",
     // news and fashion
     "ニュース|速報|流行|トレンド|バズ|話題の|話題に",
+    // what is on sale or on air right now
+    "公開中|上映中|発売中|配信中|放送中|配信開始|発売開始|新作|最新作",
     // dates and eras
     "[0-9０-９]{4}年|(?:昭和|平成|令和)[0-9０-９元]+年|令和|平成[0-9]",
     // seasons and calendar events

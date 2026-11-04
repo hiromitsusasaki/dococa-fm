@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { composeEpisode, siteName } from "../../../src/worker/program/compose";
-import { byId, item, letter } from "./fixtures";
+import { t } from "../../../src/worker/i18n/t";
+import { composeEpisode, FIXED_TEMPLATES, siteName } from "../../../src/worker/program/compose";
+import { verifyEpisode } from "../../../src/worker/program/verify";
+import { byId, item, letter, listener } from "./fixtures";
 
 const plain = letter({ id: "a" });
 const found = letter({
@@ -93,5 +95,13 @@ describe("composeEpisode", () => {
 
   it("throws when the dj lines do not match the segments", () => {
     expect(() => composeEpisode([{ itemId: "i1", slot: "near", letterIds: [], reactionIds: [] }], [], letters, items)).toThrow();
+  });
+});
+
+describe("fixed templates", () => {
+  it.each(FIXED_TEMPLATES)("%s says nothing the dj checks would refuse, so a fixed line never needs them", (key) => {
+    const text = t(key, { who: "みなとさん（函館）", author: "@jazzcat", site: "YouTube" });
+    const r = verifyEpisode([{ itemId: "i1", slot: "near", lines: [{ type: "dj", text }] }], new Map(), listener());
+    expect(r).toMatchObject({ topical: true, pii: true });
   });
 });

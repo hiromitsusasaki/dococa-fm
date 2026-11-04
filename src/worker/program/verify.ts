@@ -1,16 +1,18 @@
 import { t } from "../i18n/t";
 import type { Item, Letter, Listener, Segment, VerifyReport } from "../types";
 import { FIXED_TEMPLATES } from "./compose";
-import { EMAIL, normalizeText as norm, PHONE, URL_RE } from "./pii-patterns";
+import { ADDRESS, EMAIL, normalizeText as norm, PHONE, POSTAL, URL_RE } from "./pii-patterns";
 import { maskDataYears, TOPICAL } from "./topical-words";
 
 /**
  * Counting people, letters or ranks. Digits count with 人/名/通/件/位. Kanji numerals count only when the
  * phrase goes on to say who sent or how many (の方/から/も/が/に/届/ほど/目), so 「二人で」「三人組」
  * 「百人一首」「二人の時間」「世界のどこかの一通を」 stay. 回 counts only as 回再生.
+ * Works count too (曲/作品/冊/本/枚/話), from two up: 「静かな一曲」「1本の映画」 name one work, they do not count.
+ * Checked after titles and creators are masked, so a title such as 「千本桜」 is not a count.
  */
 const MEASURE =
-  /[0-9]+\s*(?:人|名|通|件|位)|[一二三四五六七八九十百千万]+(?:人|名|通|件)(?=の方|から|も|が|に|届|ほど|目)|何(?:人|名|通|件)も|回再生|第[0-9一二三四五六七八九十]+位|ランキング|一致率|再生回数/u;
+  /[0-9]+\s*(?:人|名|通|件|位)|[一二三四五六七八九十百千万]+(?:人|名|通|件)(?=の方|から|も|が|に|届|ほど|目)|何(?:人|名|通|件|曲|作品|冊|本|枚)も|回再生|第[0-9一二三四五六七八九十]+位|ランキング|一致率|再生回数|(?<![0-9])(?!1\s*(?:曲|作品|冊|本|枚|話))[0-9]+\s*(?:曲|作品|冊|本|枚|話)|(?<![一二三四五六七八九十百千万])(?!一(?:曲|作品|冊|本|枚|話))[一二三四五六七八九十百千万]+(?:曲|作品|冊|本|枚|話)/u;
 /** Ten code points shared with a letter is a quote, not a coincidence. */
 const QUOTE_WINDOW = 10;
 /** Stands in for a work's title or creator on both sides of the quote check. */
@@ -120,12 +122,14 @@ export function verifyEpisode(
       if (line.type !== "dj") return;
       const text = norm(line.text);
       if (!line.fixed) {
-        const day = maskDataYears(text, years).match(TOPICAL);
+        // Titles and creators are data, not talk: 「今夜はブギー・バック」 or 「千本桜」 may be named.
+        const talk = mask(text);
+        const day = maskDataYears(talk, years).match(TOPICAL);
         if (day) {
           topical = false;
           details.push(`topical: ${at}: ${day[0]}`);
         }
-        const count = text.match(MEASURE);
+        const count = talk.match(MEASURE);
         if (count) {
           topical = false;
           details.push(`measure: ${at}: ${count[0]}`);
@@ -142,6 +146,14 @@ export function verifyEpisode(
       if (!line.fixed && URL_RE.test(text)) {
         pii = false;
         details.push(`pii: ${at}: url`);
+      }
+      if (!line.fixed && POSTAL.test(text)) {
+        pii = false;
+        details.push(`pii: ${at}: postal code`);
+      }
+      if (!line.fixed && ADDRESS.test(text)) {
+        pii = false;
+        details.push(`pii: ${at}: street address`);
       }
       if (secrets.some((s) => text.includes(s))) {
         pii = false;

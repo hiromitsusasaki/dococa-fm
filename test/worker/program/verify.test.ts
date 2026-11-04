@@ -101,6 +101,59 @@ describe("verifyEpisode", () => {
     },
   );
 
+  it.each([
+    "3曲続けてどうぞ。",
+    "３曲続けてどうぞ。",
+    "10曲目の歌です。",
+    "三作品を並べて。",
+    "2冊読みました。",
+    "二冊目の本です。",
+    "4本の映画から。",
+    "四本立てで。",
+    "5枚のアルバム。",
+    "十二話あるドラマ。",
+    "何曲も聴いた人が。",
+  ])("counting works fails: %s", (text) => {
+    const r = verifyEpisode(episode(dj(text)), letters, me);
+    expect(r.topical).toBe(false);
+    expect(r.details.some((d) => d.startsWith("measure:"))).toBe(true);
+  });
+
+  it.each(["静かな一曲です。", "一本の映画のような夜。", "一冊の本を閉じたあと。", "1曲だけ。", "第一話のような始まり。", "日本の歌です。"])(
+    "naming one work is not a count: %s",
+    (text) => {
+      expect(verifyEpisode(episode(dj(text)), letters, me).topical).toBe(true);
+    },
+  );
+
+  it("does not take a title or creator for a count or a date", () => {
+    const named = byId([item({ id: "i1", title: "千本桜", creator: "今夜の楽団", year: null })]);
+    expect(verifyEpisode(episode(dj("千本桜を、今夜の楽団で。")), letters, me, named).topical).toBe(true);
+    expect(verifyEpisode(episode(dj("千本桜を3曲。")), letters, me, named).topical).toBe(false);
+  });
+
+  it.each([
+    ["新宿区西新宿2丁目8番1号に住んでいるそうです。", "street address"],
+    ["西新宿二丁目八番一号から。", "street address"],
+    ["新宿区西新宿2-8-1のあたり。", "street address"],
+    ["本町3番地の店で。", "street address"],
+    ["〒163-8001 から届きました。", "postal code"],
+    ["〒1638001 から届きました。", "postal code"],
+    ["163-8001 まで。", "postal code"],
+  ])("a dj line with an address or postal code fails pii: %s", (text, what) => {
+    const r = verifyEpisode(episode(dj(text)), letters, me);
+    expect(r.pii).toBe(false);
+    expect(r.details.some((d) => d.endsWith(what))).toBe(true);
+  });
+
+  it.each(["2丁目のカフェで聴いた歌です。", "十八番の一曲です。", "一番好きな歌です。", "3番線のホームで。"])("a place without a lot number passes: %s", (text) => {
+    expect(verifyEpisode(episode(dj(text)), letters, me).pii).toBe(true);
+  });
+
+  it("leaves fixed lines out of the address and postal checks", () => {
+    expect(verifyEpisode(episode(fixedDj("みなとさん（本町3番地）から『私も』が届いています")), letters, me).pii).toBe(true);
+  });
+
   it.each(["二人で聴きたい曲です。", "三人組のバンドです。", "百人一首のような短さ。", "二人の時間に。", "世界のどこかの一通を。", "3回聴いた曲です。", "2回目のサビで。"])(
     "a phrase that does not count passes: %s",
     (text) => {
