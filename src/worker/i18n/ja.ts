@@ -66,6 +66,7 @@ export const ja = {
   "episode.archiveEmpty": "まだ番組がありません",
   "episode.untitled": "(作品なし)",
   "episode.home": "ホームへ",
+  "rate.limited": "短い間に送られた数が多すぎました。少し待ってもう一度お試しください",
   "player.play": "再生",
   "player.pause": "一時停止",
   "player.next": "次の作品",

@@ -20,7 +20,7 @@ import { ipRateLimit, listenerRateLimit } from "./security/rate-limit";
 const app = new Hono<{ Bindings: Env; Variables: Variables }>();
 
 // No CSP: the player reads inline JSON script blocks and the client bundle. The other default headers stay on.
-app.use("*", secureHeaders());
+app.use("*", secureHeaders({ referrerPolicy: "strict-origin-when-cross-origin" }));
 // Cheap refusals come before the session middleware so they never mint a listener row.
 app.use("*", sameOriginOnly);
 app.use("*", ipRateLimit);

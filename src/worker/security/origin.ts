@@ -21,11 +21,13 @@ export const sameOriginOnly: MiddlewareHandler<{ Bindings: Env }> = async (c, ne
   const path = c.req.path;
   if (!UNSAFE.has(c.req.method) || path === "/admin" || path.startsWith("/admin/") || path === "/mcp" || path.startsWith("/mcp/")) return next();
   const origin = c.req.header("origin");
+  const site = c.req.header("sec-fetch-site");
   if (origin !== undefined) {
+    // Some browsers send `Origin: null` on a same-origin form post under a strict referrer policy; Sec-Fetch-Site tells the truth there.
+    if (origin === "null" && site === "same-origin") return next();
     if (origin !== normalized(c.env.PUBLIC_ORIGIN)) return c.text("Forbidden", 403);
     return next();
   }
-  const site = c.req.header("sec-fetch-site");
   if (site !== undefined && site !== "same-origin" && site !== "none") return c.text("Forbidden", 403);
   return next();
 };

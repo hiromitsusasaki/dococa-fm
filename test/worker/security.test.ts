@@ -2,6 +2,9 @@ import { env } from "cloudflare:workers";
 import { SELF } from "cloudflare:test";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import app from "../../src/worker/index";
+import { createListener, updateListener } from "../../src/worker/db/listeners";
+import { t } from "../../src/worker/i18n/t";
+import { WindowStore } from "../../src/worker/security/rate-limit";
 import { resetDb } from "../helpers/db";
 import { newSession } from "./routes/helpers";
 
@@ -33,6 +36,11 @@ describe("origin check", () => {
   it("compares the whole origin, not a prefix", async () => {
     expect((await form({ origin: `${ORIGIN}.evil.example` })).status).toBe(403);
     expect((await form({ origin: "null" })).status).toBe(403);
+    expect((await form({ origin: "null", "sec-fetch-site": "cross-site" })).status).toBe(403);
+  });
+
+  it("lets a same-origin form post through when the browser sends Origin: null (strict referrer policy)", async () => {
+    expect((await form({ origin: "null", "sec-fetch-site": "same-origin" })).status).not.toBe(403);
   });
 
   it("lets the same origin through, and a client with neither Origin nor Sec-Fetch-Site", async () => {
@@ -66,6 +74,7 @@ describe("security headers", () => {
     const res = await app.request("/", {}, e);
     expect(res.headers.get("x-content-type-options")).toBe("nosniff");
     expect(res.headers.get("content-security-policy")).toBeNull();
+    expect(res.headers.get("referrer-policy")).toBe("strict-origin-when-cross-origin");
   });
 
   it("also sets them on static assets", async () => {
@@ -97,11 +106,37 @@ describe("rate limit", () => {
     expect(put.status).toBe(429);
   });
 
-  it("limits /mcp/* by IP including 401 answers, and leaves plain pages alone", async () => {
+  it("limits unknown /mcp tokens by IP (20), and answers 429 in JSON", async () => {
     const hit = () => app.request("/mcp/guess", { method: "POST", headers: { "cf-connecting-ip": "203.0.113.4" } }, e);
     for (let i = 0; i < 20; i++) expect((await hit()).status).toBe(401);
-    expect((await hit()).status).toBe(429);
+    const res = await hit();
+    expect(res.status).toBe(429);
+    expect(await res.json()).toEqual({ error: "rate_limited" });
     for (let i = 0; i < 25; i++) expect((await app.request("/healthz", { headers: { "cf-connecting-ip": "203.0.113.4" } }, e)).status).toBe(200);
+  });
+
+  it("limits a valid /mcp token by the token (60), not by the shared IP", async () => {
+    const a = await createListener(env.DB);
+    const b = await createListener(env.DB);
+    await updateListener(env.DB, a.id, { mcpToken: "tok-a-valid" });
+    await updateListener(env.DB, b.id, { mcpToken: "tok-b-valid" });
+    const hit = (token: string) => app.request(`/mcp/${token}`, { method: "POST", headers: { "cf-connecting-ip": "203.0.113.6", "content-type": "application/json", accept: "application/json, text/event-stream" }, body: "{}" }, e);
+    for (let i = 0; i < 60; i++) expect((await hit("tok-a-valid")).status, String(i)).not.toBe(429);
+    expect((await hit("tok-a-valid")).status).toBe(429);
+    // Another token behind the same IP is unaffected, and so is a guess from that IP.
+    expect((await hit("tok-b-valid")).status).not.toBe(429);
+    expect((await hit("nope")).status).toBe(401);
+  });
+
+  it("answers a form route's 429 with a small HTML page", async () => {
+    for (let i = 0; i < 20; i++) await post("203.0.113.7");
+    const res = await post("203.0.113.7");
+    expect(res.status).toBe(429);
+    expect(res.headers.get("content-type")).toContain("text/html");
+    expect(await res.text()).toContain(t("rate.limited"));
+    const next = await app.request("/episodes/x/next", { method: "POST", headers: { "cf-connecting-ip": "203.0.113.7" } }, e);
+    expect(next.status).toBe(429);
+    expect(await next.json()).toEqual({ error: "rate_limited" });
   });
 
   it("limits one listener across many IPs", async () => {
@@ -116,6 +151,33 @@ describe("rate limit", () => {
     const before = (await env.DB.prepare("SELECT COUNT(*) AS n FROM listeners").first<{ n: number }>())!.n;
     expect((await post("203.0.113.5")).status).toBe(429);
     expect((await env.DB.prepare("SELECT COUNT(*) AS n FROM listeners").first<{ n: number }>())!.n).toBe(before);
+  });
+});
+
+describe("WindowStore", () => {
+  it("stays under its key cap, dropping the oldest windows when nothing has expired", () => {
+    const store = new WindowStore(5);
+    for (let i = 0; i < 50; i++) store.increment(`k${i}`);
+    expect(store.size).toBe(5);
+    expect(store.increment("k49").totalHits).toBe(2);
+    expect(store.increment("k0").totalHits).toBe(1);
+  });
+
+  it("sweeps expired keys first", () => {
+    vi.useFakeTimers();
+    try {
+      const store = new WindowStore(3);
+      store.increment("a");
+      store.increment("b");
+      vi.advanceTimersByTime(61_000);
+      store.increment("c");
+      store.increment("d");
+      store.increment("e");
+      expect(store.size).toBe(3);
+      expect(store.increment("c").totalHits).toBe(2);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 

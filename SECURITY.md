@@ -19,7 +19,7 @@
 
 - `/admin/*` は `ADMIN_TOKEN`（Bearer）が必須です。`/mcp/<token>` は推測できない token だけが鍵です。
 - 書き込みの `POST` は同一オリジンのみです。`Origin` があれば `PUBLIC_ORIGIN` と一致が必要で、無いときは `Sec-Fetch-Site` が `same-origin` か `none` のときだけ通します（curl などブラウザ以外は通ります。Cookie を持たないため）。
-- レート制限: `POST /letters`、`/episodes`、`/episodes/:id/next`、`/start`、`/takedown`、お便りの通報、`GET /put?itemId=|url=`、`/api/*`、`/mcp/*` は、IP（`CF-Connecting-IP`）とリスナーのそれぞれで 1 分 20 回までです。超えると 429 を返します。
+- レート制限: `POST /letters`、`/episodes`、`/episodes/:id/next`、`/start`、`/takedown`、お便りの通報、`GET /put?itemId=|url=`、`/api/*` は、IP（`CF-Connecting-IP`）とリスナーのそれぞれで 1 分 20 回までです。`/mcp/*` は下の規則です。超えると 429 を返します。
 - 番組の作成は、リスナーごとの 1 日の上限（`EPISODE_DAILY_LIMIT`、既定 10）と、全体の 1 日の上限（`EPISODE_GLOBAL_DAILY_LIMIT`、既定 300）があります。クラウドの声（Gemini-TTS）には全体の 1 日の上限（`CLOUD_TTS_GLOBAL_DAILY_LIMIT`、既定 50）があり、超えるとブラウザの音声に切り替わります。どの上限も `0` は停止、日は日本時間で数えます。
 - `secureHeaders()` で標準のセキュリティヘッダを付けています。CSP は付けていません（プレイヤーが JSON の script ブロックとバンドルを使うため）。
 
