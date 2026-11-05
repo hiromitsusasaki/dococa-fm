@@ -2,6 +2,7 @@ import { SELF } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { beforeEach, describe, expect, it } from "vitest";
 import { resetDb } from "../../helpers/db";
+import { get, signedInSession } from "./helpers";
 
 beforeEach(() => resetDb(env.DB));
 
@@ -181,3 +182,80 @@ describe("settings", () => {
     expect(after).not.toBe(before);
   });
 });
+
+describe("public station settings", () => {
+  const rowOf = async (name: string) => env.DB.prepare("SELECT station_public AS pub, station_slug AS slug FROM listeners WHERE display_name = ?").bind(name).first<{ pub: number; slug: string | null }>();
+
+  it("shows the station section only to a signed-in listener", async () => {
+    const anon = await (await get("/settings", await newAnon())).text();
+    expect(anon).not.toContain('name="stationPublic"');
+    const html = await (await get("/settings", await signedInSession())).text();
+    expect(html).toContain('name="stationPublic"');
+    expect(html).toContain('name="stationSlug"');
+  });
+
+  it("saves a chosen slug (trimmed, lower-cased) and makes the station public", async () => {
+    const cookie = await signedInSession("Hiro");
+    const res = await postForm("/settings", cookie, { radioName: "", place: "", voice: "", dial: "0.5", stationPublic: "1", stationSlug: "  My-Radio " });
+    expect(res.status).toBe(303);
+    expect(await rowOf("Hiro")).toEqual({ pub: 1, slug: "my-radio" });
+    const html = await (await get("/settings", cookie)).text();
+    expect(html).toContain('href="http://127.0.0.1:5173/stations/s:my-radio"');
+  });
+
+  it("generates a slug from the display name when public is turned on without one", async () => {
+    const cookie = await signedInSession("Hiro Sasaki");
+    await postForm("/settings", cookie, { radioName: "", place: "", voice: "", dial: "0.5", stationPublic: "1" });
+    expect(await rowOf("Hiro Sasaki")).toEqual({ pub: 1, slug: "hiro-sasaki" });
+  });
+
+  it("falls back to radio-xxxx when the name has no usable letters", async () => {
+    const cookie = await signedInSession("ヒロ");
+    await postForm("/settings", cookie, { radioName: "", place: "", voice: "", dial: "0.5", stationPublic: "1" });
+    expect((await rowOf("ヒロ"))?.slug).toMatch(/^radio-[a-z0-9]{4}$/);
+  });
+
+  it("appends a random suffix when the generated slug is taken", async () => {
+    await postForm("/settings", await signedInSession("Hiro"), { radioName: "", place: "", voice: "", dial: "0.5", stationPublic: "1" });
+    const other = await signedInSession("Other");
+    await env.DB.prepare("UPDATE listeners SET display_name = 'Hiro' WHERE display_name = 'Other'").run();
+    await postForm("/settings", other, { radioName: "", place: "", voice: "", dial: "0.5", stationPublic: "1" });
+    const rows = await env.DB.prepare("SELECT station_slug AS slug FROM listeners WHERE station_slug IS NOT NULL ORDER BY station_slug").all<{ slug: string }>();
+    expect(rows.results).toHaveLength(2);
+    expect(rows.results.map((r) => r.slug).some((s) => /^hiro-[a-z0-9]{4}$/.test(s))).toBe(true);
+  });
+
+  it("keeps the slug when public is turned off, so the URL stays stable", async () => {
+    const cookie = await signedInSession("Hiro");
+    await postForm("/settings", cookie, { radioName: "", place: "", voice: "", dial: "0.5", stationPublic: "1", stationSlug: "my-radio" });
+    await postForm("/settings", cookie, { radioName: "", place: "", voice: "", dial: "0.5" });
+    expect(await rowOf("Hiro")).toEqual({ pub: 0, slug: "my-radio" });
+  });
+
+  it("422s with the taken message when another listener has the chosen slug", async () => {
+    await postForm("/settings", await signedInSession("Hiro"), { radioName: "", place: "", voice: "", dial: "0.5", stationPublic: "1", stationSlug: "my-radio" });
+    const res = await postForm("/settings", await signedInSession("Other"), { radioName: "", place: "", voice: "", dial: "0.5", stationPublic: "1", stationSlug: "my-radio" });
+    expect(res.status).toBe(422);
+    expect(await res.text()).toContain("その URL は使われています");
+    expect(await rowOf("Other")).toEqual({ pub: 0, slug: null });
+  });
+
+  it("422s for a slug that is too short or has bad characters", async () => {
+    const cookie = await signedInSession("Hiro");
+    for (const bad of ["ab", "has space", "UPPER_x"]) {
+      expect((await postForm("/settings", cookie, { radioName: "", place: "", voice: "", dial: "0.5", stationSlug: bad })).status).toBe(422);
+    }
+  });
+
+  it("ignores the station fields for an anonymous listener but still saves the rest", async () => {
+    const cookie = await newAnon();
+    const res = await postForm("/settings", cookie, { radioName: "Tama", place: "", voice: "", dial: "0.5", stationPublic: "1", stationSlug: "sneaky" });
+    expect(res.status).toBe(303);
+    const row = await env.DB.prepare("SELECT radio_name AS n, station_public AS pub, station_slug AS slug FROM listeners WHERE radio_name = 'Tama'").first();
+    expect(row).toEqual({ n: "Tama", pub: 0, slug: null });
+  });
+});
+
+async function newAnon(): Promise<string> {
+  return cookieOf(await SELF.fetch(`${BASE}/settings`));
+}

@@ -41,7 +41,7 @@
 | Task 6 | ホームを局に | 完了。局パネルの見た目（左寄せ、DOCOCA FM と ON AIR の間隔）は Task 11 で整える |
 | Task 7 | Google サインイン | 完了（OIDC を Worker 内で。`/auth/google`、`/auth/google/callback`、`POST /auth/signout`。実キーでの実機確認は本人作業の後） |
 | Task 8 | 保護とマイページ | 完了（`requireSignin` で `/start`・`/auth/spotify`・`POST /letters`（`kind=letter`）・`/me` を保護。`GET /put` は閲覧可で、匿名にはフォームの代わりにサインイン案内。ヘッダ `.site-header` と `/me`。`POST /put` は存在しないので対象外） |
-| Task 9 | 公開局 | 未着手 |
+| Task 9 | 公開局 | 完了（設定で `stationPublic`・`stationSlug`（空なら表示名から生成、衝突は 422 `settings.slugTaken`、生成のときは乱数を足して 1 回再試行）。`/stations/s:<slug>` に OGP。`POST /settings` をレート制限の対象に。匿名は公開の項目が出ず、送っても無視。見た目は Task 11 で整える） |
 | Task 10 | 取り込みの順位 | 未着手 |
 | Task 11 | 見た目の方針 | 未着手 |
 | Task 12 | レトロラジオのコントロール | 未着手 |

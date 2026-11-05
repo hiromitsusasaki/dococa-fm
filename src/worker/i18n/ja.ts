@@ -193,6 +193,7 @@ export const ja = {
   "settings.stationSlug": "ラジオの URL",
   "settings.stationSlugHelp": "英小文字・数字・ハイフン、3〜24 字",
   "settings.stationUrl": "公開 URL",
+  "settings.slugTaken": "その URL は使われています",
   "put.register": "好きなものに加える",
   "put.imported.top": "よく聴く順",
   "put.imported.recent": "最近聴いた順",

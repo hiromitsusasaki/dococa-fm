@@ -10,7 +10,7 @@ import { ja } from "../i18n/ja";
 import { type Lang, tFor } from "../i18n/t";
 import { makeEpisode } from "../program/create";
 import { playerView } from "../program/player-view";
-import { type StationKey, parseStationKey, stationColumn, stationLabel } from "../program/station";
+import { type StationKey, parseStationKey, stationColumn, stationLabel, stationUrl } from "../program/station";
 import { jsonForScript } from "./episodes";
 import { currentPath } from "../auth/require-signin";
 import type { Listener } from "../types";
@@ -18,12 +18,12 @@ import type { Listener } from "../types";
 export const stations = new Hono<{ Bindings: Env; Variables: Variables }>();
 
 /** The route's key as a station, with the owner's name for the label. Null when it is not a station a listener can tune to. */
-async function resolve(db: D1Database, raw: string): Promise<{ key: StationKey; ownerName: string } | null> {
+async function resolve({ DB: db, PUBLIC_ORIGIN }: Pick<Env, "DB" | "PUBLIC_ORIGIN">, raw: string): Promise<{ key: StationKey; ownerName: string; url?: string } | null> {
   const parsed = parseStationKey(raw);
   if (!parsed) return null;
   if (parsed.kind !== "public") return { key: parsed, ownerName: "" };
   const owner = await getListenerBySlug(db, parsed.slug);
-  return owner ? { key: { kind: "public", ownerId: owner.id }, ownerName: owner.radioName } : null;
+  return owner ? { key: { kind: "public", ownerId: owner.id }, ownerName: owner.displayName || owner.radioName, url: stationUrl({ PUBLIC_ORIGIN }, parsed.slug) } : null;
 }
 
 /** What the station player needs to know: the labels it shows, as `t()` values, since `t()` is server-only. */
@@ -45,6 +45,8 @@ export type StationPageProps = {
   grow: boolean;
   /** The page title when it differs from the station label (the home page is titled by the app). */
   title?: string;
+  /** Link-preview tags (a public station is meant to be shared). */
+  og?: { title: string; description: string; url: string };
   /** Extra content under the player (the home page's links). */
   children?: unknown;
   /** A hint line directly above the player. */
@@ -52,9 +54,9 @@ export type StationPageProps = {
 };
 
 /** The station screen: the player mounts into `#station` and takes everything it needs from its data attributes. */
-export function StationPage({ stationKey, label, lang, listener, path, voice, dial, grow, title, children, intro }: StationPageProps) {
+export function StationPage({ stationKey, label, lang, listener, path, voice, dial, grow, title, og, children, intro }: StationPageProps) {
   return (
-    <Layout title={title ?? label} script="station" lang={lang} listener={listener} path={path}>
+    <Layout title={title ?? label} script="station" lang={lang} listener={listener} path={path} og={og}>
       <main class="station-page">
         <h1 class="station-name">{label}</h1>
         {intro}
@@ -81,7 +83,7 @@ export function StationPage({ stationKey, label, lang, listener, path, voice, di
 stations.post("/stations/:key/next", async (c) => {
   const raw = c.req.param("key");
   const listener = c.get("listener");
-  const station = await resolve(c.env.DB, raw);
+  const station = await resolve(c.env, raw);
   if (!station) return c.json({ error: "station" }, 404);
   const made = await makeEpisode(c.env, listener, { station: station.key });
   if (!made.ok) return c.json({ error: made.reason }, made.reason === "limit" ? 429 : made.reason === "empty" ? 409 : 503);
@@ -98,13 +100,13 @@ stations.get("/stations/:key", async (c) => {
   const asJson = param.endsWith(".json");
   const raw = asJson ? param.slice(0, -".json".length) : param;
   const listener = c.get("listener");
-  const station = await resolve(c.env.DB, raw);
+  const station = await resolve(c.env, raw);
   if (!station) return asJson ? c.json({ error: "station" }, 404) : c.notFound();
   const label = stationLabel(station.key, station.ownerName, listener.lang);
 
   if (!asJson) {
     const grow = station.key.kind === "mine" && (await listHistory(c.env.DB, listener.id, 1)).length === 0;
-    return c.html(<StationPage stationKey={raw} label={label} lang={listener.lang} listener={listener} path={currentPath(c)} voice={listener.voice} dial={listener.dial} grow={grow} />);
+    return c.html(<StationPage stationKey={raw} label={label} lang={listener.lang} listener={listener} path={currentPath(c)} voice={listener.voice} dial={listener.dial} grow={grow} og={station.url ? { title: label, description: tFor(listener.lang)("app.tagline"), url: station.url } : undefined} />);
   }
 
   // Resume after a reload: the listener's latest verified episode made on this station.

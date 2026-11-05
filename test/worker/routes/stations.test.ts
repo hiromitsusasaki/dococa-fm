@@ -193,4 +193,32 @@ describe("GET /stations/:key (page)", () => {
     await upsertHistory(env.DB, [{ listenerId, itemId: it.id, source: "manual", occurredAt: null, rank: 1 }]);
     expect(await (await page("mine", cookie)).text()).toContain('data-grow="0"');
   });
+
+  it("a public station page carries og tags, titled with the owner's display name", async () => {
+    const owner = await createListener(env.DB, { radioName: "ヒロ" });
+    await updateListener(env.DB, owner.id, { stationSlug: "hiro", stationPublic: true, displayName: "Hiro" });
+    const html = await (await page("s:hiro", await newSession())).text();
+    expect(html).toContain('<meta property="og:title" content="Hiroさんのラジオ"');
+    expect(html).toContain('<meta property="og:description" content="世界のどこかにいる誰かの好きなものが聴こえてくるラジオ"');
+    expect(html).toContain('<meta property="og:url" content="http://127.0.0.1:5173/stations/s:hiro"');
+    expect(html).toContain("<title>Hiroさんのラジオ | Dococa FM</title>");
+  });
+
+  it("turning the station off makes the page a 404 again", async () => {
+    const owner = await createListener(env.DB);
+    await updateListener(env.DB, owner.id, { stationSlug: "hiro", stationPublic: true });
+    expect((await page("s:hiro", await newSession())).status).toBe(200);
+    await updateListener(env.DB, owner.id, { stationPublic: false });
+    expect((await page("s:hiro", await newSession())).status).toBe(404);
+  });
+
+  it("a public station with no favourites still renders, and its next answers 409 empty", async () => {
+    const owner = await createListener(env.DB);
+    await updateListener(env.DB, owner.id, { stationSlug: "hiro", stationPublic: true });
+    const cookie = await newSession();
+    expect((await page("s:hiro", cookie)).status).toBe(200);
+    const res = await postNext("s:hiro", cookie);
+    expect(res.status).toBe(409);
+    expect(await res.json()).toEqual({ error: "empty" });
+  });
 });

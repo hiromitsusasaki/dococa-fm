@@ -9,6 +9,7 @@ import { listLettersByListener, listReactionsToListener } from "../db/letters";
 import type { Env } from "../env";
 import { displayText } from "../letters/display";
 import { tFor } from "../i18n/t";
+import { stationUrl } from "../program/station";
 
 const FAVORITES_LIMIT = 20;
 const REACTIONS_LIMIT = 50;
@@ -26,7 +27,7 @@ me.get("/me", requireSignin, async (c) => {
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.id.localeCompare(a.id))
     .slice(0, REACTIONS_LIMIT);
   const items = await getItemsByIds(c.env.DB, reactions.map((r) => r.itemId));
-  const stationUrl = listener.stationPublic && listener.stationSlug ? `${c.env.PUBLIC_ORIGIN}/stations/s:${listener.stationSlug}` : null;
+  const publicUrl = listener.stationPublic && listener.stationSlug ? stationUrl(c.env, listener.stationSlug) : null;
   return c.html(
     <Layout title={t("me.title")} lang={lang} listener={listener} path={currentPath(c)}>
       <main class="me">
@@ -65,9 +66,9 @@ me.get("/me", requireSignin, async (c) => {
         </section>
         <section class="me-station">
           <h2>{t("me.station")}</h2>
-          {stationUrl ? (
+          {publicUrl ? (
             <p>
-              <a href={stationUrl}>{stationUrl}</a>
+              <a href={publicUrl}>{publicUrl}</a>
             </p>
           ) : (
             <p>

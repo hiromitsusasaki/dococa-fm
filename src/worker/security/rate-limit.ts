@@ -82,7 +82,7 @@ export function isRateLimited(method: string, path: string, query: URLSearchPara
   if (path === "/api" || path.startsWith("/api/")) return true;
   if (method === "GET") return path === "/auth/google" || (path === "/put" && (query.has("itemId") || query.has("url")));
   if (method !== "POST") return false;
-  return path === "/letters" || path === "/auth/signout" || path === "/episodes" || path === "/start" || path === "/takedown" || /^\/episodes\/[^/]+\/next$/.test(path) || /^\/stations\/[^/]+\/next$/.test(path) || /^\/letters\/[^/]+\/report$/.test(path);
+  return path === "/letters" || path === "/settings" || path === "/auth/signout" || path === "/episodes" || path === "/start" || path === "/takedown" || /^\/episodes\/[^/]+\/next$/.test(path) || /^\/stations\/[^/]+\/next$/.test(path) || /^\/letters\/[^/]+\/report$/.test(path);
 }
 
 const limitOf = (c: { env: Env }): number => {

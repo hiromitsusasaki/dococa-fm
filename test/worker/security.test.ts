@@ -107,6 +107,11 @@ describe("rate limit", () => {
     expect(put.status).toBe(429);
   });
 
+  it("counts POST /settings in the IP bucket, since it writes", async () => {
+    for (let i = 0; i < 20; i++) await post("203.0.113.9", "/settings");
+    expect((await post("203.0.113.9", "/settings")).status).toBe(429);
+  });
+
   it("limits unknown /mcp tokens by IP (20), and answers 429 in JSON", async () => {
     const hit = () => app.request("/mcp/guess", { method: "POST", headers: { "cf-connecting-ip": "203.0.113.4" } }, e);
     for (let i = 0; i < 20; i++) expect((await hit()).status).toBe(401);
