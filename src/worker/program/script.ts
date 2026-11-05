@@ -44,7 +44,7 @@ const TOOL = {
         items: {
           type: "object",
           properties: {
-            say_before: { type: "string", description: `作品を紹介し、送り主の名前と土地を添えて『〇〇さんからのお便りです』で手渡す。再生や視聴を促す言い方はしない。${SAY_BEFORE_MAX} 字以内` },
+            say_before: { type: "string", description: `作品を紹介する。お便りがあるときは、送り主の名前と土地を添えて『〇〇さんからのお便りです』で手渡す。無いときは作品の紹介だけ。再生や視聴を促す言い方はしない。${SAY_BEFORE_MAX} 字以内` },
             say_after: { type: "string", description: `短い感想と、次のお便りへのつなぎ（次に来るのもお便りであることを言う）。${SAY_AFTER_MAX} 字以内` },
           },
           required: ["say_before", "say_after"],
@@ -89,7 +89,7 @@ function userMessage(input: ScriptInput): string {
     return [
       `<segment n="${i + 1}" slot="${SLOT_LABEL[s.slot]}">`,
       `<work>${work.join("\n")}</work>`,
-      ...(s.letters.length === 0 && s.reactions.length === 0 ? [NO_LETTER_NOTE] : []),
+      ...(s.letters.length === 0 ? [NO_LETTER_NOTE] : []),
       ...s.letters.map(letterTag),
       ...s.reactions.map(reactionTag),
       "</segment>",

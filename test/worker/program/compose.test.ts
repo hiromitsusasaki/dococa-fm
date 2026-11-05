@@ -120,6 +120,15 @@ describe("composeEpisode", () => {
     expect(siteName(url)).toBe(site);
   });
 
+  it("composes and verifies a segment that has only a 私も reaction and no letter", () => {
+    const only = composeEpisode([{ itemId: "i1", slot: "near", letterIds: [], reactionIds: ["w1"] }], [{ sayBefore: "静かな一曲の話から。", sayAfter: "次の作品へ。" }], letters, items);
+    expect(only[0]!.lines.some((l) => l.type === "letter")).toBe(false);
+    expect(only[0]!.lines.some((l) => l.type === "dj" && l.fixed === true)).toBe(true);
+    expect(verifyEpisode(only, letters, listener(), items).details).toEqual([]);
+    const announcing = composeEpisode([{ itemId: "i1", slot: "near", letterIds: [], reactionIds: ["w1"] }], [{ sayBefore: "あおいさんからのお便りです。", sayAfter: "次へ。" }], letters, items);
+    expect(verifyEpisode(announcing, letters, listener(), items).details.some((d) => d.startsWith("announce:"))).toBe(true);
+  });
+
   it("throws when the dj lines do not match the segments", () => {
     expect(() => composeEpisode([{ itemId: "i1", slot: "near", letterIds: [], reactionIds: [] }], [], letters, items)).toThrow();
   });
