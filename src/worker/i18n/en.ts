@@ -201,4 +201,5 @@ export const en: Record<keyof typeof ja, string> = {
   "put.register": "Add to my favorites",
   "put.imported.top": "Most played",
   "put.imported.recent": "Recently played",
+  "put.favorites": "Things you love",
 };

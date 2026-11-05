@@ -179,13 +179,26 @@ describe("importSpotifyHistory", () => {
     expect(await importSpotifyHistory(env, env.DB, await createListener(env.DB))).toBe(0);
   });
 
-  it("caps the import at 40 unique tracks", async () => {
-    const many = Array.from({ length: 45 }, (_, i): Fake => ({ id: `m${i}`, name: `Many ${i}`, artist: "Artist" }));
-    const world = stubWorld({ top: many, recent: [], saved: [], itunes: [] });
+  it("ranks the top tracks 1..n across long and short term, and leaves played and saved unranked", async () => {
+    stubWorld({ top: [T1, T2], recent: [T3], saved: [T4] });
+    const listener = await connectedListener();
+    await importSpotifyHistory(env, env.DB, listener);
+    const rows = await listHistory(env.DB, listener.id, 50, "rank");
+    const rank = (id: string) => rows.find((r) => r.item.externalIds.spotify === id)!.rank;
+    expect([rank("s1"), rank("s2"), rank("s3"), rank("s4")]).toEqual([1, 2, null, null]);
+  });
+
+  it("takes 20 long-term, 10 short-term, 10 recent and fills the rest from saved, 40 at most", async () => {
+    const many = (p: string, n: number) => Array.from({ length: n }, (_, i): Fake => ({ id: `${p}${i}`, name: `${p} ${i}`, artist: "Artist" }));
+    const long = many("l", 30);
+    stubWorld({ top: long, recent: many("r", 15), saved: many("v", 30), itunes: [] });
     const listener = await connectedListener();
     expect(await importSpotifyHistory(env, env.DB, listener)).toBe(40);
-    expect(await listHistory(env.DB, listener.id, 100)).toHaveLength(40);
-    expect(world.calls().filter((u) => u.startsWith("https://itunes.apple.com")).length).toBeLessThanOrEqual(40);
+    const rows = await listHistory(env.DB, listener.id, 100, "rank");
+    expect(rows).toHaveLength(40);
+    // the stub serves the same top list for both ranges: long takes l0..l19, short continues with l20..l29
+    expect(rows.filter((r) => r.rank !== null).map((r) => r.rank)).toEqual(Array.from({ length: 30 }, (_, i) => i + 1));
+    expect(rows.filter((r) => r.rank === null)).toHaveLength(10);
   });
 });
 

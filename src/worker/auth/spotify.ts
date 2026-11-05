@@ -74,7 +74,7 @@ type SpotifyTrack = {
   album?: { release_date?: string; images?: { url?: string; width?: number }[] };
   external_urls?: { spotify?: string };
 };
-type Entry = { track: SpotifyTrack; at: string | null };
+type Entry = { track: SpotifyTrack; at: string | null; rank?: number };
 
 async function readTracks(path: string, token: string, pick: (item: any) => Entry | null): Promise<Entry[]> {
   try {
@@ -97,17 +97,33 @@ const isoOrNull = (s: unknown): string | null => {
   return Number.isNaN(d.getTime()) ? null : d.toISOString();
 };
 
-/** Unique tracks by Spotify id, top first, then recently played, then saved. A later entry may only add a time. */
+/** How many new tracks each source may add, in order: long-term top, short-term top, recently played, saved (what room is left). */
+const TAKE = [20, 10, 10, MAX_TRACKS] as const;
+
+/**
+ * Unique tracks by Spotify id. The two top lists share one rank sequence (1, 2, 3 ...); the others carry none.
+ * A later entry for a track already taken may only add a time. A source adds at most its share of new tracks.
+ */
 function uniqueTracks(lists: Entry[][]): Entry[] {
   const seen = new Map<string, Entry>();
-  for (const e of lists.flat()) {
-    const id = e.track.id;
-    if (!id || !e.track.name) continue;
-    const prior = seen.get(id);
-    if (!prior) seen.set(id, { ...e });
-    else if (prior.at === null) prior.at = e.at;
-  }
-  return [...seen.values()].slice(0, MAX_TRACKS);
+  let rank = 0;
+  lists.forEach((list, i) => {
+    const ranked = i < 2;
+    let taken = 0;
+    for (const e of list) {
+      const id = e.track.id;
+      if (!id || !e.track.name) continue;
+      const prior = seen.get(id);
+      if (prior) {
+        if (prior.at === null) prior.at = e.at;
+        continue;
+      }
+      if (taken >= TAKE[i]! || seen.size >= MAX_TRACKS) continue;
+      taken += 1;
+      seen.set(id, ranked ? { ...e, rank: ++rank } : { ...e });
+    }
+  });
+  return [...seen.values()];
 }
 
 function draftFromSpotify(t: SpotifyTrack): ItemDraft {
@@ -163,6 +179,7 @@ export async function importSpotifyHistory(env: Env, db: D1Database, listener: L
   const access = token.access_token;
   const lists = [
     await readTracks("/me/top/tracks?limit=50&time_range=long_term", access, (t) => ({ track: t, at: null })),
+    await readTracks("/me/top/tracks?limit=50&time_range=short_term", access, (t) => ({ track: t, at: null })),
     await readTracks("/me/player/recently-played?limit=50", access, (i) => ({ track: i?.track, at: isoOrNull(i?.played_at) })),
     await readTracks("/me/tracks?limit=50", access, (i) => ({ track: i?.track, at: isoOrNull(i?.added_at) })),
   ].map((l) => l.filter((e) => e.track));
@@ -171,7 +188,7 @@ export async function importSpotifyHistory(env: Env, db: D1Database, listener: L
   const drafts = await Promise.all(entries.map((e) => draftFor(env, e.track)));
   // At most 40 tracks, one lookup and one batched insert: the callback stays well inside D1's per-invocation limit.
   const items = await resolveOrCreateMany(db, drafts);
-  const rows: HistoryRow[] = items.map((item, i) => ({ listenerId: listener.id, itemId: item.id, source: "spotify", occurredAt: entries[i]!.at, rank: null }));
+  const rows: HistoryRow[] = items.map((item, i) => ({ listenerId: listener.id, itemId: item.id, source: "spotify", occurredAt: entries[i]!.at, rank: entries[i]!.rank ?? null }));
   // Two Spotify tracks can resolve to one stored item; the batch upsert must not see the same key twice.
   const byItem = new Map(rows.map((r) => [r.itemId, r]));
   await upsertHistory(db, [...byItem.values()]);

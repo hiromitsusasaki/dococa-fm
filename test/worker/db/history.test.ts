@@ -62,6 +62,15 @@ describe("history", () => {
     expect((await listHistory(env.DB, me.id, 10))[0]?.rank).toBe(1);
   });
 
+  it("a spotify import does not demote a manual or url favourite", async () => {
+    const me = await createListener(env.DB);
+    const a = await insertItem(env.DB, itemDraft());
+    await upsertHistory(env.DB, [{ listenerId: me.id, itemId: a.id, source: "manual", occurredAt: null, rank: null }]);
+    await upsertHistory(env.DB, [{ listenerId: me.id, itemId: a.id, source: "spotify", occurredAt: "2026-01-01T00:00:00.000Z", rank: 4 }]);
+    const [row] = await listFavorites(env.DB, me.id, 10);
+    expect(row).toMatchObject({ source: "manual", rank: 4, occurredAt: "2026-01-01T00:00:00.000Z" });
+  });
+
   it("listFavorites leaves out what a service played and orders by rank", async () => {
     const me = await createListener(env.DB);
     const [a, b, c] = await Promise.all(["A", "B", "C"].map((title) => insertItem(env.DB, itemDraft({ title, externalIds: {} }))));

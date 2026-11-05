@@ -198,4 +198,5 @@ export const ja = {
   "put.register": "好きなものに加える",
   "put.imported.top": "よく聴く順",
   "put.imported.recent": "最近聴いた順",
+  "put.favorites": "あなたの好きなもの",
 } as const;

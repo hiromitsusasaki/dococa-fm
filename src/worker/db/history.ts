@@ -17,7 +17,7 @@ export async function upsertHistory(db: D1Database, rows: HistoryRow[]): Promise
         .prepare(
           `INSERT INTO history (listener_id, item_id, source, occurred_at, rank) VALUES ${chunk.map(() => "(?, ?, ?, ?, ?)").join(", ")}
            ON CONFLICT (listener_id, item_id) DO UPDATE SET
-             source = excluded.source,
+             source = CASE WHEN history.source IN ('manual', 'url') THEN history.source ELSE excluded.source END,
              occurred_at = COALESCE(excluded.occurred_at, history.occurred_at),
              rank = COALESCE(excluded.rank, history.rank)`,
         )
@@ -76,4 +76,11 @@ export async function listFavorites(db: D1Database, listenerId: string, limit: n
     .bind(listenerId, limit)
     .all<Row>();
   return results.map(rowToHistory);
+}
+
+/** What a Spotify import brought in and the listener has not (yet) made a favourite: ranked ones first group, unranked the second. */
+export async function listImported(db: D1Database, listenerId: string, limit: number): Promise<{ top: (HistoryRow & { item: Item })[]; recent: (HistoryRow & { item: Item })[] }> {
+  const q = (where: string, order: string) => db.prepare(selectHistory(` AND h.source = 'spotify' AND ${where}`, order)).bind(listenerId, limit).all<Row>();
+  const [top, recent] = await Promise.all([q("h.rank IS NOT NULL", "h.rank ASC, h.item_id"), q("h.rank IS NULL", ORDER.recent)]);
+  return { top: top.results.map(rowToHistory), recent: recent.results.map(rowToHistory) };
 }

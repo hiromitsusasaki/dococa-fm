@@ -1,14 +1,14 @@
 import { env } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { encryptSecret } from "../../../src/worker/auth/crypto";
-import { upsertHistory } from "../../../src/worker/db/history";
+import { listFavorites, upsertHistory } from "../../../src/worker/db/history";
 import { insertItem } from "../../../src/worker/db/items";
 import { updateListener } from "../../../src/worker/db/listeners";
 import { t } from "../../../src/worker/i18n/t";
 import { stubAnthropic, toolUse } from "../../helpers/anthropic";
 import { resetDb } from "../../helpers/db";
 import { itemDraft } from "../db/helpers";
-import { get, signedInSession } from "./helpers";
+import { get, newSession, postForm, signedInSession } from "./helpers";
 
 let create: ReturnType<typeof stubAnthropic>;
 beforeEach(async () => {
@@ -73,6 +73,60 @@ describe("GET /put with a history", () => {
     const html = await (await get("/put?imported=1", await signedInSession())).text();
     expect(html).toContain(t("put.imported"));
     expect(html).not.toMatch(/\d+\s*(件|曲)/);
+  });
+});
+
+describe("imported candidates and /put/register", () => {
+  it("shows the ranked group before the recent group, favourites first, with no rank numbers", async () => {
+    const cookie = await signedInSession();
+    const id = await listenerId(cookie);
+    const [fav, a, b, r] = await Promise.all(["Fav", "Alpha", "Beta", "Recent"].map((title) => insertItem(env.DB, itemDraft({ title, externalIds: { k: title } }))));
+    await upsertHistory(env.DB, [
+      { listenerId: id, itemId: fav!.id, source: "manual", occurredAt: null, rank: null },
+      { listenerId: id, itemId: b!.id, source: "spotify", occurredAt: null, rank: 2 },
+      { listenerId: id, itemId: a!.id, source: "spotify", occurredAt: null, rank: 1 },
+      { listenerId: id, itemId: r!.id, source: "spotify", occurredAt: "2026-10-01T00:00:00.000Z", rank: null },
+    ]);
+    const html = await (await get("/put", cookie)).text();
+    const at = (s: string) => html.indexOf(s);
+    expect(at(t("put.favorites"))).toBeLessThan(at(t("put.imported.top")));
+    expect(at(t("put.imported.top"))).toBeLessThan(at("Alpha"));
+    expect(at("Alpha")).toBeLessThan(at("Beta"));
+    expect(at("Beta")).toBeLessThan(at(t("put.imported.recent")));
+    expect(at(t("put.imported.recent"))).toBeLessThan(at("Recent"));
+    expect(html).toContain(t("put.register"));
+    expect(html).not.toMatch(/\d+\s*位/);
+    expect(html.match(/action="\/put\/register"/g)).toHaveLength(3);
+  });
+
+  it("registers an imported item as a favourite and goes on to the letter screen", async () => {
+    const cookie = await signedInSession();
+    const id = await listenerId(cookie);
+    const item = await insertItem(env.DB, itemDraft());
+    await upsertHistory(env.DB, [{ listenerId: id, itemId: item.id, source: "spotify", occurredAt: null, rank: 3 }]);
+    expect(await listFavorites(env.DB, id, 10)).toHaveLength(0);
+    const res = await postForm("/put/register", cookie, { itemId: item.id });
+    expect(res.status).toBe(303);
+    expect(res.headers.get("location")).toBe(`/put?itemId=${item.id}`);
+    const favs = await listFavorites(env.DB, id, 10);
+    expect(favs.map((f) => [f.itemId, f.rank])).toEqual([[item.id, 3]]);
+  });
+
+  it("404s for an item that is not in this listener's history", async () => {
+    const cookie = await signedInSession();
+    const item = await insertItem(env.DB, itemDraft());
+    expect((await postForm("/put/register", cookie, { itemId: item.id })).status).toBe(404);
+  });
+
+  it("sends an anonymous visitor to sign in without writing anything", async () => {
+    const cookie = await newSession();
+    const id = await listenerId(cookie);
+    const item = await insertItem(env.DB, itemDraft());
+    await upsertHistory(env.DB, [{ listenerId: id, itemId: item.id, source: "spotify", occurredAt: null, rank: null }]);
+    const res = await postForm("/put/register", cookie, { itemId: item.id });
+    expect(res.status).toBe(303);
+    expect(res.headers.get("location")).toContain("/auth/google");
+    expect(await listFavorites(env.DB, id, 10)).toHaveLength(0);
   });
 });
 
