@@ -284,7 +284,7 @@ a {
   gap: 22px;
   align-items: center;
   max-width: 1120px;
-  margin: 0 auto;
+  margin: 0 auto 22px;
   padding: 26px;
   border: 1px solid var(--line-strong);
   border-radius: var(--r-hero);
@@ -299,6 +299,11 @@ a {
 
 .hero .kv {
   display: block;
+  min-width: 0;
+}
+
+.hero .kv img {
+  display: block;
   width: 100%;
   height: auto;
   aspect-ratio: 3 / 2;
@@ -311,6 +316,7 @@ a {
   margin: var(--sp-2) 0 0;
   font-size: clamp(14px, 1.5vw, 16px);
   text-wrap: balance;
+  word-break: auto-phrase;
 }
 
 @media (min-width: 761px) {

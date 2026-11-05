@@ -15,10 +15,21 @@ home.get("/", async (c) => {
   const lang = listener.lang;
   const t = tFor(lang);
   const [recent, active] = await Promise.all([listRecentItems(c.env.DB, 6), hasActivity(c.env.DB, listener.id)]);
+  const hero = (
+    <section class="hero">
+      <div class="copy">
+        <h1 class="wordmark">{t("app.name")}</h1>
+        <p class="tagline">{t("app.tagline")}</p>
+      </div>
+      <picture class="kv">
+        <source media="(max-width: 760px)" srcset="/kv-mobile.jpg" />
+        <img src="/kv.jpg" alt={t("home.kvAlt")} width="1280" height="853" loading="eager" fetchpriority="high" />
+      </picture>
+    </section>
+  );
   return c.html(
-    <StationPage stationKey="world" title={t("app.name")} label={stationLabel({ kind: "world" }, "", lang)} lang={lang} listener={listener} path="/" voice={listener.voice} dial={listener.dial} grow={false} hideName>
+    <StationPage stationKey="world" title={t("app.name")} label={stationLabel({ kind: "world" }, "", lang)} lang={lang} listener={listener} path="/" voice={listener.voice} dial={listener.dial} grow={false} hideName top={hero}>
       <section class="home">
-        <p>{t("app.tagline")}</p>
         <p>{active ? <a class="button" href="/stations/mine">{t("home.listen")}</a> : <a class="button" href="/start">{t("home.start")}</a>}</p>
         <p>
           <a class="button" href="/put">{t("home.put")}</a>

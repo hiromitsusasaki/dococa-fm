@@ -91,6 +91,7 @@ export const ja = {
   "slot.near": "近く",
   "slot.neighbor": "隣",
   "slot.far": "遠く",
+  "home.kvAlt": "机でレトロなラジオを聴く人と、世界の誰かの好きなもの",
   "home.listen": "あなたのラジオをつける",
   "home.put": "お便りを送る",
   "home.recent": "最近の作品",

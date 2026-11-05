@@ -5,7 +5,8 @@ import { insertItem } from "../../../src/worker/db/items";
 import { resetDb } from "../../helpers/db";
 import { insertLetter } from "../../../src/worker/db/letters";
 import { itemDraft, letterDraft } from "../db/helpers";
-import { get, newSession } from "./helpers";
+import { BASE, get, newSession } from "./helpers";
+import { SELF } from "cloudflare:test";
 
 beforeEach(() => resetDb(env.DB));
 
@@ -61,9 +62,32 @@ describe("GET /", () => {
     expect(html).toContain('data-grow="0"');
     expect(html).toContain('id="station-i18n"');
     const page = html.replace(/<script[\s\S]*?<\/script>/g, "");
-    expect(page).not.toContain("<h1");
+    expect(page.match(/<h1/g)).toHaveLength(1);
     expect(page).not.toContain("tune-in");
     expect(html).toMatch(/id="station-i18n"[^>]*>[^<]*"station\.on":"ラジオをつける"/);
     expect(html).toContain("<title>Dococa FM</title>");
+  });
+
+  it("opens with the hero: wordmark h1, tagline and the key visual with its alt", async () => {
+    const html = await (await get("/", await newSession())).text();
+    expect(html).toContain('class="hero"');
+    expect(html).toMatch(/<h1 class="wordmark">Dococa FM<\/h1>/);
+    expect(html).toContain('src="/kv.jpg"');
+    expect(html).toContain('<source media="(max-width: 760px)" srcset="/kv-mobile.jpg"');
+    expect(html).toContain('alt="机でレトロなラジオを聴く人と、世界の誰かの好きなもの"');
+    expect(html.indexOf('class="hero"')).toBeLessThan(html.indexOf('id="station"'));
+    // The tagline lives in the hero only.
+    expect(html.match(/世界のどこかにいる誰かの好きなものが聴こえてくるラジオ/g)).toHaveLength(1);
+  });
+
+  it("has an English alt for an English listener", async () => {
+    const res = await SELF.fetch(`${BASE}/`, { headers: { "accept-language": "en-US,en;q=0.9" } });
+    expect(await res.text()).toContain('alt="Someone listening to a vintage radio at a desk, and what people around the world love"');
+  });
+
+  it("other stations have no hero", async () => {
+    const html = await (await get("/stations/world", await newSession())).text();
+    expect(html).not.toContain('class="hero"');
+    expect(html).toContain('class="station-name"');
   });
 });

@@ -94,6 +94,7 @@ export const en: Record<keyof typeof ja, string> = {
   "slot.near": "Near",
   "slot.neighbor": "Next door",
   "slot.far": "Far away",
+  "home.kvAlt": "Someone listening to a vintage radio at a desk, and what people around the world love",
   "home.listen": "Turn your radio on",
   "home.put": "Send a letter",
   "home.recent": "Recent works",

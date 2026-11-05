@@ -45,7 +45,7 @@
 | Task 10 | 取り込みの順位 | 完了（取り込みは long_term 20＋short_term 10 に 1..n の `rank`、直近 10 と保存済みは `rank` なし、計 40。取り込みは `manual`/`url` の `source` を上書きしない。サインイン済みの `GET /put` は好きなもの→`put.imported.top`→`put.imported.recent` の順で順位の数字なし、各候補に `POST /put/register`（要サインイン、履歴に無ければ 404、`manual` にして 303 `/put?itemId=`）。お気に入りの並び（公開局・マイページ）は Spotify の順位を引き継ぐ。手で順位を付ける経路は無い（v1 の決定）。再取り込みは古い順位を消す） |
 | Task 11 | 見た目の方針 | 完了。トークン（ライト / ダーク）、Google Fonts、`.panel` `.hero` `.pill` `.site-header`、テーマ切替（`dfm.theme`）、1120px の 2 列レイアウト。スクリーンショットは `docs/screenshots/2026-11-05-theme-*.png`。`.hero` のマークアップとキービジュアルは Task 13、ノブとスイッチの作り込みは Task 12 |
 | Task 12 | レトロラジオのコントロール | 完了。`.knob` は 52px の円と coral の針（`--angle` を入力で更新、range は透明で上に重ねてキーボードも可）、ダイヤル面に ON AIR、目盛りの針は ON の間だけゆっくり動く（`prefers-reduced-motion` で止める） |
-| Task 13 | キービジュアル | 未着手 |
+| Task 13 | キービジュアル | 完了。`/` の先頭に `.hero`（`h1.wordmark` + タグライン + `<picture>`、760px 以下は `kv-mobile.jpg`）。他の局のページにはヒーローなし。スクリーンショットは `docs/screenshots/2026-11-05-hero-*.png` と `2026-11-05-radio-on.png` |
 | Task 14 | 文書と本番の設定 | 未着手 |
 
 ## 2026-11-04 最終修正 完了。次は本人作業（push・鍵・デプロイ・public 化）
