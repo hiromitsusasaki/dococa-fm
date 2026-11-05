@@ -323,6 +323,23 @@
 - [ ] **Step 4: 緑を確認。** 設定画面のスクリーンショットを撮る。
 - [ ] **Step 5: コミット** `feat: pick a place from country and region lists`
 
+### Task 16: DJ の語り口（かけない。紹介して、お便りを読む）
+
+**Files:**
+- Modify: `src/worker/program/script.ts`（`DJ_SYSTEM`、`write_script` の `say_before` / `say_after` の説明、`userMessage` の頭の指示）、`src/worker/program/verify.ts`（禁止語）、`src/worker/program/compose.ts`（固定文「お便りを読みます。」→「〇〇さんからのお便りです。」の形に。`script.readingOnly` の i18n も）、`src/worker/i18n/ja.ts` / `en.ts`（`station.upNext` → `このあとのお便り` / `Up next: letters`、`script.*`）、`docs/DESIGN.md` §6
+- Test: `test/worker/program/verify.test.ts`、`test/worker/program/script.test.ts`、`test/worker/program/compose.test.ts`
+
+**Interfaces:**
+- Produces: `verify.ts` に `PLAYBACK = /(かけ(ます|ましょう|る)|流し(ます|ましょう)|お聴きください|聴いてください|観てください|お楽しみください|どうぞ)/` を dj 行（固定文を除く）に適用し、`playback: ${at}: …` を details に積み `topical=false`（再生成の対象。`build.ts` の RETRYABLE に `playback` を足す）。
+- `say_before` の説明: 「作品を紹介し、送り主の名前と土地を添えて『〇〇さんからのお便りです』で手渡す。再生や視聴を促す言い方はしない」。`say_after`: 「短い感想と、次のお便りへのつなぎ（次に来るのもお便りであることを言う）」。`DJ_SYSTEM` の「次にかける理由」を「次のお便りへのつなぎ」に。
+- 固定文（compose）: `script.readingOnly` を「お便りを読みます。」のまま使うのは手渡しの固定文だけにし、送り主がいる行は `script.letterFrom`（ja `{who}からのお便りです。` / en `A letter from {who}.`）を使う。
+
+- [ ] **Step 1: 失敗するテスト。** `verify.test.ts`: dj 行「次はこの曲をかけます」「どうぞ」→ `playback:` で落ちる；固定文は対象外；「続いては、ポルトの Azulejo Sunday さんから、『ニュー・シネマ・パラダイス』へのお便り」は通る。`script.test.ts`: プロンプトに「かけ」が無く「お便りです」がある。`compose.test.ts`: 手渡しの固定文が `{who}からのお便りです。` になる。
+- [ ] **Step 2: 失敗を確認。**
+- [ ] **Step 3: 実装。** 既存の台本テストの fixture に「かけ」が含まれていれば直す。
+- [ ] **Step 4: 緑を確認。** `pnpm eval --runs 3` をローカルで回して `playback:` が 0 件であることを見る（鍵がある端末で）。
+- [ ] **Step 5: コミット** `feat: the dj introduces and reads letters, never plays`
+
 ### Task 14: 文書と本番の設定
 
 **Files:**
@@ -340,4 +357,4 @@
 - Spec 追記 F（言語設定）→ Task 2、2b。G（見た目の確定）→ Task 11、13。
 - Spec 追記 A（局・連続再生・途中の反応・はじめの一歩の降格）→ Task 3〜6、12。B（識別・匿名の範囲）→ Task 2、7、8。C（公開局）→ Task 2、3、4、9。D（取り込みの並び）→ Task 2、10。E（文言・見た目・キービジュアル）→ Task 1、11、12、13。
 - 名前の一貫性: `StationKey` / `parseStationKey`（Task 3）を Task 4・5・6 が使う。`playerView`（Task 4）を Task 5 が使う。`requireSignin`（Task 8）を Task 9・10 が使う。`listFavorites`（Task 2）を Task 3・8・10 が使う。
-- 間に合わないときの削る順: Task 15 → 12 → 10 → 9 → 8（マイページだけ落として保護は残す）。Task 1、2、2b、3〜7、11、13 は提出の核。Phase 3（音声の事前生成）は別計画。
+- 間に合わないときの削る順: Task 15 → 12 → 10 → 9 → 8（マイページだけ落として保護は残す）。Task 1、2、2b、3〜7、11、13、16 は提出の核。Phase 3（音声の事前生成、英語の DJ）は別計画。
