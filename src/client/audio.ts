@@ -8,13 +8,20 @@ export type ClipPlayer = {
   unlock(): void;
   /** Plays `url` until it ends, `seconds` pass, or `signal` aborts. Always resolves: false when the clip failed (error event, non-2xx, play refused), true otherwise. */
   play(url: string, signal: AbortSignal, seconds?: number): Promise<boolean>;
+  /** 0..1, applied to the shared element now and whenever it is created. */
+  setVolume(volume: number): void;
 };
 
 /** One reusable element for every preview and TTS clip: a fresh `new Audio` per clip would lose the tap's permission. */
 export function createClipPlayer(): ClipPlayer {
   let audio: HTMLAudioElement | null = null;
-  const element = () => (audio ??= new Audio());
+  let volume = 1;
+  const element = () => (audio ??= Object.assign(new Audio(), { volume }));
   return {
+    setVolume(v) {
+      volume = v;
+      if (audio) audio.volume = v;
+    },
     unlock() {
       const a = element();
       a.src = SILENT_WAV;
@@ -48,10 +55,16 @@ export function createClipPlayer(): ClipPlayer {
 const BED_URL = "/bed.mp3";
 const BED_VOLUME = 0.15;
 
-export function createBed(): { unlock(): void; start(): void; stop(): void } {
+export function createBed(): { unlock(): void; start(): void; stop(): void; setVolume(volume: number): void } {
   let bed: HTMLAudioElement | null = null;
-  const element = () => (bed ??= Object.assign(new Audio(BED_URL), { loop: true, volume: BED_VOLUME }));
+  let level = BED_VOLUME;
+  const element = () => (bed ??= Object.assign(new Audio(BED_URL), { loop: true, volume: level }));
   return {
+    /** The listener's volume (0..1) scales the bed's own quiet level. */
+    setVolume(v) {
+      level = BED_VOLUME * v;
+      if (bed) bed.volume = level;
+    },
     /** Inside the tap: lets the element play later without a gesture (iOS Safari). */
     unlock() {
       const a = element();

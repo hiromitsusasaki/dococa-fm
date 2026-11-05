@@ -1,22 +1,22 @@
 /** @jsxImportSource hono/jsx/dom */
 import { flushSync } from "hono/jsx/dom";
 import { createRoot } from "hono/jsx/dom/client";
-import type { ScriptLine, Segment } from "../worker/types";
-import { createBed, createClipPlayer } from "./audio";
-import { loadVoices, pickVoice, speak } from "./speech";
+import type { ScriptLine } from "../worker/types";
+import { LetterQuote } from "./letter-quote";
+import {
+  bindMediaSession,
+  createLinePlayer,
+  isHttpUrl,
+  type LetterLine,
+  outLabel,
+  type PlayerEpisode,
+  type PlayerItem,
+  type PlayerOriginals,
+  syncMediaSession,
+} from "./playback";
+import { onReleased, postLetter, saveDial } from "./reactions";
 
-export type PlayerItem = { title: string; creator: string; imageUrl: string | null; outLinks: Record<string, string> };
-/** The slice of an episode the page embeds: no listener id, no verification report. */
-/** What the screen shows for a letter: the text in the listener's language and, behind a toggle, the original when that is a translation. The DJ reads the script line as it is. */
-export type PlayerOriginals = Record<string, { main: string; original: string | null }>;
-export type PlayerEpisode = {
-  id: string;
-  segments: Segment[];
-  items: Record<string, PlayerItem>;
-  originals?: PlayerOriginals;
-  /** The stored line each shown line is, for `/tts`: the page may leave out letters rejected after the episode was made. */
-  ttsLines?: number[];
-};
+export type { PlayerEpisode, PlayerItem, PlayerOriginals };
 export type PlayerOptions = {
   voiceURI: string;
   nextUrl: string;
@@ -39,34 +39,18 @@ type State = {
   sent: Record<string, true>;
 };
 type Next = { ok: true; id: string } | { ok: false; reason: "limit" | "failed" };
-type LetterLine = Extract<ScriptLine, { type: "letter" }>;
-
-const FORM = { "content-type": "application/x-www-form-urlencoded" };
-const isHttpUrl = (s: string | null): s is string => s !== null && /^https?:\/\//i.test(s);
-const fmt = (tpl: string, params: Record<string, string>) => tpl.replace(/\{(\w+)\}/g, (m, k: string) => params[k] ?? m);
 
 export function mountPlayer(root: HTMLElement, episode: PlayerEpisode, opts: PlayerOptions) {
   const str = (key: string) => opts.strings?.[key] ?? key;
   const navigate = opts.navigate ?? ((url: string) => location.assign(url));
   const segments = episode.segments;
-  const bed = createBed();
-  const clips = createClipPlayer();
-  let unlocked = false;
+  const player = createLinePlayer({ voiceURI: opts.voiceURI, ttsUrl: opts.ttsUrl });
   const reactRoot = createRoot(root);
 
   let state: State = { status: "idle", seg: 0, line: 0, loading: false, message: null, replyOpen: false, sent: {} };
   let abort = new AbortController();
   let prefetch: Promise<Next> | null = null;
-  let voices: SpeechSynthesisVoice[] | null = null;
-  /** Cleared after the first failed cloud clip: the rest of the episode is read by the browser voice. */
-  let ttsOk = opts.ttsUrl !== null;
-
   const lineOf = (seg: number, line: number): ScriptLine | undefined => segments[seg]?.lines[line];
-  /** Index of a line across the whole stored episode, which is what the TTS endpoint takes. */
-  const globalIndex = (seg: number, line: number) => {
-    const shown = segments.slice(0, seg).reduce((n, s) => n + s.lines.length, 0) + line;
-    return episode.ttsLines?.[shown] ?? shown;
-  };
   const itemOf = (seg: number): PlayerItem | undefined => {
     const id = segments[seg]?.itemId;
     return id === undefined ? undefined : episode.items[id];
@@ -76,22 +60,10 @@ export function mountPlayer(root: HTMLElement, episode: PlayerEpisode, opts: Pla
     const segChanged = patch.seg !== undefined && patch.seg !== state.seg;
     state = { ...state, ...patch };
     flushSync(() => reactRoot.render(<Screen s={state} view={view} />));
-    if (segChanged || patch.status !== undefined) syncMediaSession();
+    if (segChanged || patch.status !== undefined) sync();
   }
 
-  function syncMediaSession() {
-    const ms = typeof navigator === "undefined" ? undefined : navigator.mediaSession;
-    if (!ms) return;
-    const item = itemOf(state.seg);
-    if (item && typeof MediaMetadata !== "undefined") {
-      ms.metadata = new MediaMetadata({
-        title: item.title,
-        artist: item.creator,
-        artwork: isHttpUrl(item.imageUrl) ? [{ src: item.imageUrl }] : [],
-      });
-    }
-    ms.playbackState = state.status === "playing" ? "playing" : "paused";
-  }
+  const sync = () => syncMediaSession(itemOf(state.seg), state.status === "playing");
 
   function ensureNext(): Promise<Next> {
     prefetch ??= fetch(opts.nextUrl, { method: "POST" })
@@ -104,51 +76,9 @@ export function mountPlayer(root: HTMLElement, episode: PlayerEpisode, opts: Pla
     return prefetch;
   }
 
-  const ttsSrc = (seg: number, line: number) => `${opts.ttsUrl}?episode=${encodeURIComponent(episode.id)}&line=${globalIndex(seg, line)}`;
-  const warmed = new Set<string>();
-
-  /** The next line after (seg, line) that is spoken (dj or letter), skipping previews. */
-  function nextSpoken(seg: number, line: number): [number, number] | null {
-    for (let i = seg, j = line + 1; i < segments.length; i++, j = 0) {
-      const lines = segments[i]!.lines;
-      for (; j < lines.length; j++) if (lines[j]!.type !== "preview") return [i, j];
-    }
-    return null;
-  }
-
-  /**
-   * While a cloud clip plays, asks for the next spoken line so the server synthesizes and stores it now;
-   * the clip element then gets it from R2 (or the HTTP cache) instead of waiting seconds for synthesis.
-   */
-  function warmNext(seg: number, line: number) {
-    const next = nextSpoken(seg, line);
-    if (!next) return;
-    const src = ttsSrc(next[0], next[1]);
-    if (warmed.has(src)) return;
-    warmed.add(src);
-    void fetch(src).catch(() => {});
-  }
-
-  async function playLine(line: ScriptLine, seg: number, index: number, signal: AbortSignal) {
-    if (line.type === "preview") {
-      bed.stop();
-      await clips.play(line.url, signal, line.seconds);
-      return;
-    }
-    bed.start();
-    if (ttsOk) {
-      warmNext(seg, index);
-      const played = await clips.play(ttsSrc(seg, index), signal);
-      if (played || signal.aborted) return;
-      ttsOk = false;
-    }
-    voices ??= await loadVoices();
-    if (!signal.aborted) await speak(line.text, pickVoice(voices, opts.voiceURI), signal);
-  }
-
   /** The last line is done: hand over to the next episode, which has been made in the background since the second-to-last segment. */
   async function finish(signal: AbortSignal) {
-    bed.stop();
+    player.stopBed();
     setState({ loading: true });
     const next = await ensureNext();
     if (signal.aborted) return;
@@ -163,24 +93,15 @@ export function mountPlayer(root: HTMLElement, episode: PlayerEpisode, opts: Pla
       for (let j = i === fromSeg ? fromLine : 0; j < lines.length; j++) {
         if (signal.aborted) return;
         if (i !== state.seg || j !== state.line) setState({ seg: i, line: j, replyOpen: false });
-        await playLine(lines[j]!, i, j, signal);
+        await player.play(episode, i, j, signal);
       }
     }
     if (!signal.aborted) await finish(signal);
   }
 
-  /** iOS Safari allows sound only for what a tap starts, and the first line comes after an await. So the tap itself starts the speech engine (also the fallback when a cloud clip fails), the shared clip element and the bed. */
-  function unlockAudio() {
-    if (unlocked) return;
-    unlocked = true;
-    clips.unlock();
-    bed.unlock();
-    if (typeof speechSynthesis !== "undefined") speechSynthesis.speak(new SpeechSynthesisUtterance(""));
-  }
-
   /** Cancels whatever is sounding and starts reading from (seg, line). Called from a tap, so audio may start. */
   function startAt(seg: number, line: number) {
-    unlockAudio();
+    player.unlock();
     abort.abort();
     abort = new AbortController();
     setState({ status: "playing", seg, line, loading: false, message: null, replyOpen: false });
@@ -190,7 +111,7 @@ export function mountPlayer(root: HTMLElement, episode: PlayerEpisode, opts: Pla
   function pause() {
     if (state.status !== "playing") return;
     abort.abort();
-    bed.stop();
+    player.stopBed();
     setState({ status: "paused" });
   }
 
@@ -208,16 +129,9 @@ export function mountPlayer(root: HTMLElement, episode: PlayerEpisode, opts: Pla
     void finish(abort.signal);
   }
 
-  async function postLetter(fields: Record<string, string>, key: string) {
-    try {
-      const res = await fetch("/letters", { method: "POST", headers: FORM, body: new URLSearchParams(fields).toString(), redirect: "manual" });
-      // A successful post answers with a redirect; 409 means this person already said watashimo.
-      const ok = res.ok || res.type === "opaqueredirect" || res.status === 409 || (res.status >= 300 && res.status < 400);
-      if (ok) setState({ sent: { ...state.sent, [key]: true }, replyOpen: false, message: null });
-      else setState({ message: str("player.sendFailed") });
-    } catch {
-      setState({ message: str("player.sendFailed") });
-    }
+  async function send(fields: Record<string, string>, key: string) {
+    if (await postLetter(fields)) setState({ sent: { ...state.sent, [key]: true }, replyOpen: false, message: null });
+    else setState({ message: str("player.sendFailed") });
   }
 
   const currentLetter = (): LetterLine | null => {
@@ -233,16 +147,14 @@ export function mountPlayer(root: HTMLElement, episode: PlayerEpisode, opts: Pla
     watashimo() {
       const l = currentLetter();
       const itemId = segments[state.seg]?.itemId;
-      if (l && itemId) void postLetter({ kind: "watashimo", itemId, parentLetterId: l.letterId }, `w:${l.letterId}`);
+      if (l && itemId) void send({ kind: "watashimo", itemId, parentLetterId: l.letterId }, `w:${l.letterId}`);
     },
     reply(body) {
       const l = currentLetter();
       const itemId = segments[state.seg]?.itemId;
-      if (l && itemId && body.trim() !== "") void postLetter({ kind: "reply", body, itemId, parentLetterId: l.letterId }, `r:${l.letterId}`);
+      if (l && itemId && body.trim() !== "") void send({ kind: "reply", body, itemId, parentLetterId: l.letterId }, `r:${l.letterId}`);
     },
-    saveDial(value) {
-      void fetch("/settings/dial", { method: "POST", headers: FORM, body: new URLSearchParams({ dial: value }).toString() }).catch(() => {});
-    },
+    saveDial,
     dial: opts.dial ?? 0.3,
     item: (seg) => itemOf(seg),
     itemId: (seg) => segments[seg]?.itemId,
@@ -250,19 +162,15 @@ export function mountPlayer(root: HTMLElement, episode: PlayerEpisode, opts: Pla
     original: (letterId) => episode.originals?.[letterId],
   };
 
-  if (typeof navigator !== "undefined" && navigator.mediaSession) {
-    navigator.mediaSession.setActionHandler("play", play);
-    navigator.mediaSession.setActionHandler("pause", pause);
-    navigator.mediaSession.setActionHandler("nexttrack", next);
-  }
+  bindMediaSession({ play, pause, next });
   setState({});
-  syncMediaSession();
+  sync();
 
   return {
     state: () => state,
     unmount() {
       abort.abort();
-      bed.stop();
+      player.stopBed();
       reactRoot.unmount();
     },
   };
@@ -282,26 +190,6 @@ type View = {
   line: (seg: number, line: number) => ScriptLine | undefined;
   original: (letterId: string) => PlayerOriginals[string] | undefined;
 };
-
-const siteOf = (url: string): string => {
-  try {
-    return new URL(url).hostname.replace(/^www\./, "");
-  } catch {
-    return "";
-  }
-};
-
-function foundLabel(l: LetterLine, url: string, str: View["str"]): string {
-  const site = siteOf(url);
-  return fmt(str(site ? "player.foundSource" : "player.foundSourceNoSite"), { author: l.sourceAuthor ?? "", site });
-}
-
-function whoOf(l: LetterLine, str: View["str"]): string {
-  if (l.kind === "found") return l.sourceAuthor ?? "";
-  const who = l.radioName ? fmt(str("letter.who"), { name: l.radioName }) : str("listener.anonymous");
-  const named = l.place ? fmt(str("letter.whoPlace"), { who, place: l.place }) : who;
-  return l.demo ? fmt(str("letter.whoDemo"), { who: named, demo: str("listener.demo") }) : named;
-}
 
 function Screen({ s, view }: { s: State; view: View }) {
   const { str } = view;
@@ -330,24 +218,7 @@ function Screen({ s, view }: { s: State; view: View }) {
         {line?.type === "dj" && <p class="player-dj">{line.text}</p>}
         {line?.type === "preview" && <p class="player-dj" aria-hidden="true">♪</p>}
         {letter && (
-          <blockquote class={letter.kind === "found" ? "player-letter found" : "player-letter"}>
-            <p>{original?.main ?? letter.text}</p>
-            {original?.original != null && original.original !== original.main && (
-              <details class="player-original">
-                <summary>{str("player.original")}</summary>
-                <p>{original.original}</p>
-              </details>
-            )}
-            <footer class="letter-who">
-              {letter.kind === "found" && isHttpUrl(letter.sourceUrl) ? (
-                <a href={letter.sourceUrl} rel="noopener noreferrer nofollow" target="_blank">
-                  {foundLabel(letter, letter.sourceUrl, str)}
-                </a>
-              ) : (
-                whoOf(letter, str)
-              )}
-            </footer>
-          </blockquote>
+          <LetterQuote letter={letter} original={original} str={str} toggleKey="player.original" />
         )}
       </div>
       {s.message && <p class="player-message" role="alert">{s.message}</p>}
@@ -405,17 +276,6 @@ function Screen({ s, view }: { s: State; view: View }) {
     </div>
   );
 }
-
-/** Hono maps onChange to the `input` event, which fires all through a drag; the dial is saved once, on release. */
-const onReleased = (save: (value: string) => void) => (el: HTMLInputElement | null) => {
-  if (el) el.onchange = () => save(el.value);
-};
-
-/** `out.*` labels are shipped by the server; a service without one is not linked. */
-const outLabel = (str: View["str"], key: string): string | null => {
-  const label = str(`out.${key}`);
-  return label === `out.${key}` ? null : label;
-};
 
 function boot() {
   const el = document.getElementById("player");
