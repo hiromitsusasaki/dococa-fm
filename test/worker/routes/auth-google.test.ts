@@ -122,7 +122,7 @@ describe("GET /auth/google/callback", () => {
     expect(res.headers.get("location")).toBe("/settings?signin=failed");
   });
 
-  it("binds a new sub to the current listener and fills the names", async () => {
+  it("binds a new sub to the current listener and keeps the google name private", async () => {
     const sid = await newSession();
     const id = sid.split("=")[1]!.split(".")[0]!;
     const s = await start(sid, "/settings");
@@ -136,10 +136,10 @@ describe("GET /auth/google/callback", () => {
     const listener = await getListener(env.DB, id);
     expect(listener?.googleSub).toBe("g-1");
     expect(listener?.displayName).toBe("Aiko");
-    expect(listener?.radioName).toBe("Aiko");
+    expect(listener?.radioName).toBe("");
   });
 
-  it("uses the email local part when there is no name, and keeps an existing radio name", async () => {
+  it("uses the email local part as the private display name when there is no name, and keeps an existing radio name", async () => {
     const sid = await newSession();
     const id = sid.split("=")[1]!.split(".")[0]!;
     await updateListener(env.DB, id, { radioName: "My Radio" });

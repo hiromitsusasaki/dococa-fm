@@ -90,9 +90,10 @@ authGoogle.get("/auth/google/callback", async (c) => {
   } else {
     // Never overwrite a listener that is already bound to another Google account.
     if (current.googleSub !== null) return c.redirect(FAILED, 303);
+    // The Google name stays private (header and /me only). The public radio name is only ever what the listener types.
     const displayName = profile.name || profile.email.split("@")[0] || undefined;
     try {
-      await updateListener(c.env.DB, current.id, { googleSub: profile.sub, displayName, radioName: current.radioName || displayName });
+      await updateListener(c.env.DB, current.id, { googleSub: profile.sub, displayName });
     } catch {
       // google_sub is UNIQUE: someone bound the same account between our lookup and this write.
       const winner = await getListenerByGoogleSub(c.env.DB, profile.sub);

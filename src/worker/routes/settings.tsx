@@ -59,6 +59,7 @@ function SettingsPage(props: { values: FormValues; listener: Listener; path: str
           <label>
             <span>{t("settings.radioName")}</span>
             <input type="text" name="radioName" maxlength={20} value={values.radioName} />
+            <small>{t("settings.radioNameHint")}</small>
           </label>
           <fieldset class="settings-place">
             <legend>{t("settings.place")}</legend>

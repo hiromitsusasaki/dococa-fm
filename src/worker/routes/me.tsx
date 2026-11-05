@@ -36,6 +36,11 @@ me.get("/me", requireSignin, async (c) => {
     <Layout title={t("me.title")} lang={lang} listener={listener} path={currentPath(c)}>
       <main class="me">
         <h1>{t("me.title")}</h1>
+        {!listener.radioName && (
+          <p class="muted">
+            {t("me.radioNameHint")} <a href="/settings">{t("settings.title")}</a>
+          </p>
+        )}
         <section class="me-favorites">
           <h2>{t("me.favorites")}</h2>
           <ul>
