@@ -57,7 +57,7 @@ describe("origin check", () => {
   });
 
   it("covers every write route outside /admin and /mcp, and does not mint a listener for a refused one", async () => {
-    for (const path of ["/start", "/episodes", "/settings", "/settings/mcp-token", "/takedown"]) {
+    for (const path of ["/start", "/episodes", "/settings", "/settings/mcp-token", "/settings/dial", "/takedown"]) {
       const res = await form({ origin: "https://evil.example" }, path);
       expect(res.status, path).toBe(403);
       expect(res.headers.get("set-cookie")).toBeNull();
@@ -333,5 +333,16 @@ describe("isRateLimited for /put/register", () => {
   it("limits the register post and not a get", () => {
     expect(isRateLimited("POST", "/put/register", new URLSearchParams())).toBe(true);
     expect(isRateLimited("GET", "/put/register", new URLSearchParams())).toBe(false);
+  });
+});
+
+describe("rate-limit allowlist covers every write route", () => {
+  it("counts every registered POST route outside /admin and /mcp", () => {
+    const posts = [...new Set(app.routes.filter((r) => r.method === "POST" || r.method === "ALL").map((r) => r.path))]
+      .filter((p) => !p.startsWith("/admin") && !p.startsWith("/mcp") && p !== "*" && !p.includes("*"))
+      .map((p) => p.replace(/:[A-Za-z]+/g, "x"));
+    expect(posts).toContain("/settings/dial");
+    expect(posts.length).toBeGreaterThan(8);
+    for (const path of posts) expect(isRateLimited("POST", path, new URLSearchParams()), path).toBe(true);
   });
 });
