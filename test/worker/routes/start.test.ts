@@ -58,7 +58,7 @@ describe("POST /start", () => {
     const cookie = await newSession();
     const res = await postForm("/start", cookie, { fav1: "曲A", fav2: "曲B", fav3: "曲C" });
     expect(res.status).toBe(303);
-    expect(res.headers.get("location")).toMatch(/^\/episodes\/[0-9a-f-]{36}$/);
+    expect(res.headers.get("location")).toBe("/stations/mine");
     const rows = await listHistory(env.DB, idOf(cookie), 10);
     expect(rows).toHaveLength(3);
     expect(rows.every((r) => r.source === "manual")).toBe(true);
@@ -175,10 +175,10 @@ describe("GET /episodes/new", () => {
 });
 
 describe("home and bookmarklet", () => {
-  it("sends the listen button of a brand-new listener to /start", async () => {
+  it("sends a brand-new listener from the home page to /start", async () => {
     const html = await (await get("/", await newSession())).text();
     expect(html).not.toMatch(/<form[^>]*action="\/episodes"/);
-    expect(html).toMatch(/href="\/start"[^>]*>あなたのラジオをつける/);
+    expect(html).toMatch(/href="\/start"[^>]*>好きなものを 3 つ送って、あなたのラジオを始める/);
   });
 
   it("explains the bookmarklet on /put and /settings", async () => {

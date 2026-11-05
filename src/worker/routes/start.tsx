@@ -6,7 +6,6 @@ import type { Env } from "../env";
 import { type Lang, tFor } from "../i18n/t";
 import { createLetter } from "../letters/create";
 import { type ItemDraft, resolveOrCreateMany, resolveUrl, searchByText } from "../resolve";
-import { startEpisode } from "./episodes";
 
 const SLOTS = [1, 2, 3] as const;
 const MAX_FIELD = 300;
@@ -81,5 +80,5 @@ start.post("/start", async (c) => {
     const result = await createLetter(c.env, c.env.DB, listener, { itemId: item.id, body }, { item });
     if (!result.ok) console.warn("[dococa] start one-liner skipped", result.key, result.reason ?? "");
   }
-  return startEpisode(c);
+  return c.redirect("/stations/mine", 303);
 });

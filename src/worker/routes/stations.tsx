@@ -38,12 +38,16 @@ export type StationPageProps = {
   dial: number;
   /** A `mine` station with no history yet: the player shows how to start instead of tuning. */
   grow: boolean;
+  /** The page title when it differs from the station label (the home page is titled by the app). */
+  title?: string;
+  /** Extra content under the player (the home page's links). */
+  children?: unknown;
 };
 
 /** The station screen: the player mounts into `#station` and takes everything it needs from its data attributes. */
-export function StationPage({ stationKey, label, lang, voice, dial, grow }: StationPageProps) {
+export function StationPage({ stationKey, label, lang, voice, dial, grow, title, children }: StationPageProps) {
   return (
-    <Layout title={label} script="station" lang={lang}>
+    <Layout title={title ?? label} script="station" lang={lang}>
       <main class="station-page">
         <h1 class="station-name">{label}</h1>
         <div
@@ -60,6 +64,7 @@ export function StationPage({ stationKey, label, lang, voice, dial, grow }: Stat
         <script type="application/json" id="station-i18n">
           {rawHtml(jsonForScript(stationStrings(lang)))}
         </script>
+        {children}
       </main>
     </Layout>
   );

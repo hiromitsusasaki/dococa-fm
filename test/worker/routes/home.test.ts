@@ -25,8 +25,10 @@ describe("GET /", () => {
     expect(res.status).toBe(200);
     const html = await res.text();
     expect(html).toContain("世界のどこかにいる誰かの好きなものが聴こえてくるラジオ");
-    expect(html).toMatch(/<form[^>]*method="post"[^>]*action="\/episodes"/);
+    expect(html).not.toMatch(/<form[^>]*action="\/episodes"/);
+    expect(html).toContain('href="/stations/mine"');
     expect(html).toContain("あなたのラジオをつける");
+    expect(html).toContain('href="/episodes"');
     expect(html).toMatch(/href="\/put"[^>]*>お便りを送る/);
     expect(html).toContain("最近の作品");
     expect(html).toContain("作品6");
@@ -38,12 +40,26 @@ describe("GET /", () => {
 
   it("hints at /start for a listener with no history and no letters, and not otherwise", async () => {
     const cookie = await newSession();
-    expect(await (await get("/", cookie)).text()).toContain('href="/start"');
+    const first = await (await get("/", cookie)).text();
+    expect(first).toContain('href="/start"');
+    expect(first).toContain("好きなものを 3 つ送って、あなたのラジオを始める");
+    expect(first).not.toContain('href="/stations/mine"');
     const item = await insertItem(env.DB, itemDraft());
     const id = cookie.split("=")[1]!.split(".")[0]!;
     await upsertHistory(env.DB, [{ listenerId: id, itemId: item.id, source: "manual", occurredAt: null, rank: null }]);
     const html = await (await get("/", cookie)).text();
     expect(html).not.toContain('href="/start"');
     expect(html).toContain("あなたのラジオをつける");
+  });
+
+  it("is the world station: tuning in needs no registration", async () => {
+    const cookie = await newSession();
+    const html = await (await get("/", cookie)).text();
+    expect(html).toContain('id="station"');
+    expect(html).toContain('data-station-key="world"');
+    expect(html).toContain('data-next-url="/stations/world/next"');
+    expect(html).toContain('data-grow="0"');
+    expect(html).toContain('id="station-i18n"');
+    expect(html).toContain("ラジオをつける");
   });
 });
