@@ -20,6 +20,7 @@
   - [ ] 声の聴き比べ（Task 11 Step 5）: 本番でブラウザから自分の最初の回を聴く（最初の回だけクラウド TTS）。Kore を試すなら `pnpm wrangler secret put GEMINI_TTS_VOICE` に `female` を入れて再生成。`DJ_STYLE_PROMPT`（`src/worker/tts/style.ts`）は耳で 1〜2 回調整。
   - [ ] Spotify Developer Dashboard の Redirect URI を `https://dococafm.app/auth/spotify/callback` に、Website を `https://dococafm.app` に変更（workers.dev 版は消してよい）。TMDB の Application URL も同じく。`/settings` からの Spotify 連携の実機確認は本人のフィードバック待ち。
   - [ ] Google Cloud で Books API を有効化し、キー（YouTube のキーに Books API を足して同じ値でもよい）を `.dev.vars` の `GOOGLE_BOOKS_API_KEY` と Cloudflare secret に入れる。入ったら本の作品を足してデモを追加投入（`--reuse`）。
+  - 決定（Task 7）: セッション cookie はリスナー id の決定的な HMAC なので、サインインで紐づけても回さない（既存の設計）。有効な `dfm_sid` 無しでコールバックに来ると孤児の匿名リスナー行ができる。別の Google アカウントに紐づいたリスナーへは上書きせず失敗にする。
   - [ ] Google サインイン（Task 7）: Google Cloud で OAuth クライアント（ウェブ アプリケーション）を作り、承認済みのリダイレクト URI に `https://dococafm.app/auth/google/callback`（開発は `http://127.0.0.1:5173/auth/google/callback`）を登録。`pnpm wrangler secret put GOOGLE_OAUTH_CLIENT_ID` と `GOOGLE_OAUTH_CLIENT_SECRET` で入れ、`.dev.vars` にも写す。同意画面を「本番」に公開（テスト中のままだと登録したテストユーザーしか入れない）。
   - [ ] `printf '30' | pnpm wrangler secret put EPISODE_DAILY_LIMIT`（eval 20 回のため。エージェントの権限では secret の書き込みが拒まれる）。
   - [x] デモ投入（上記）。

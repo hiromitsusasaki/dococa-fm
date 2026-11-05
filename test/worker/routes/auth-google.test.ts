@@ -2,6 +2,7 @@ import { env } from "cloudflare:workers";
 import { SELF } from "cloudflare:test";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { toBase64Url } from "../../../src/worker/auth/crypto";
+import * as listeners from "../../../src/worker/db/listeners";
 import { createListener, getListener, updateListener } from "../../../src/worker/db/listeners";
 import { t } from "../../../src/worker/i18n/t";
 import { json, stubFetch } from "../../helpers/fetch";
@@ -22,7 +23,8 @@ const manual = (path: string, cookie: string, init: RequestInit = {}) =>
 async function start(sid: string, next?: string) {
   const res = await manual(`/auth/google${next === undefined ? "" : `?next=${encodeURIComponent(next)}`}`, sid);
   const raw = (res.headers.get("set-cookie") ?? "").match(/dfm_oauth=([^;]+)/)?.[1] ?? "";
-  const [state, nonce, enc_next] = decodeURIComponent(raw).split(".");
+  const [state, nonce, ...rest] = decodeURIComponent(raw).split(".");
+  const enc_next = rest.join(".");
   return { res, cookie: `${sid}; dfm_oauth=${raw}`, state: state!, nonce: nonce!, next: enc_next ? decodeURIComponent(enc_next) : undefined };
 }
 
@@ -69,9 +71,18 @@ describe("GET /auth/google", () => {
     expect(await res.text()).toContain(t("signin.unavailable", undefined, "ja"));
   });
 
-  it.each([["//evil.example"], ["https://evil.example"], ["me"], ["/" + "a".repeat(250)]])("falls back to /me for next=%s", async (bad) => {
+  it.each([["//evil.example"], ["/%09/evil.com"], ["/\t/evil.com"], ["/\n/evil.com"], ["/%0a/evil.com"], ["/\\evil.com"], ["https://evil.example"], ["me"], ["/" + "a".repeat(250)]])("falls back to /me for next=%s", async (bad) => {
     const sid = await newSession();
     expect((await start(sid, bad)).next).toBe("/me");
+  });
+
+  it("keeps a next path that contains a dot through the callback", async () => {
+    const sid = await newSession();
+    const s = await start(sid, "/stations/a.b?x=1");
+    expect(s.next).toBe("/stations/a.b?x=1");
+    stubGoogle({}, s.nonce);
+    const res = await manual(`/auth/google/callback?code=abc&state=${s.state}`, s.cookie);
+    expect(res.headers.get("location")).toBe("/stations/a.b?x=1");
   });
 
   it("keeps a safe next path", async () => {
@@ -119,7 +130,7 @@ describe("GET /auth/google/callback", () => {
     const res = await manual(`/auth/google/callback?code=abc&state=${s.state}`, s.cookie);
     expect(res.status).toBe(303);
     expect(res.headers.get("location")).toBe("/settings");
-    expect(res.headers.get("set-cookie")).toMatch(/dfm_oauth=;.*Max-Age=0|dfm_oauth=;/);
+    expect(res.headers.get("set-cookie")).toMatch(/dfm_oauth=;.*Max-Age=0/);
     expect(sidOf(res)).toBeUndefined();
     expect(stub.calls()).toEqual(["https://oauth2.googleapis.com/token"]);
     const listener = await getListener(env.DB, id);
@@ -139,6 +150,37 @@ describe("GET /auth/google/callback", () => {
     const listener = await getListener(env.DB, id);
     expect(listener?.displayName).toBe("aiko");
     expect(listener?.radioName).toBe("My Radio");
+  });
+
+  it("never overwrites a listener already bound to another Google account", async () => {
+    const sid = await newSession();
+    const id = sid.split("=")[1]!.split(".")[0]!;
+    await updateListener(env.DB, id, { googleSub: "g-other", displayName: "Other" });
+    const s = await start(sid);
+    stubGoogle({}, s.nonce);
+    const res = await manual(`/auth/google/callback?code=abc&state=${s.state}`, s.cookie);
+    expect(res.headers.get("location")).toBe("/settings?signin=failed");
+    expect((await getListener(env.DB, id))?.googleSub).toBe("g-other");
+  });
+
+  it("switches to the winner when the sub gets bound between lookup and write", async () => {
+    const owner = await createListener(env.DB, { lang: "ja" });
+    const sid = await newSession();
+    const s = await start(sid);
+    stubGoogle({}, s.nonce);
+    const real = listeners.getListenerByGoogleSub;
+    let calls = 0;
+    const spy = vi.spyOn(listeners, "getListenerByGoogleSub").mockImplementation(async (db, sub) => {
+      if (calls++ === 0) {
+        await updateListener(db, owner.id, { googleSub: sub });
+        return null;
+      }
+      return real(db, sub);
+    });
+    const res = await manual(`/auth/google/callback?code=abc&state=${s.state}`, s.cookie);
+    spy.mockRestore();
+    expect(res.headers.get("location")).toBe("/me");
+    expect(sidOf(res)).toBe(owner.id);
   });
 
   it("switches the session to the listener that already owns the sub", async () => {

@@ -13,10 +13,20 @@ const OAUTH_MAX_AGE = 600;
 const DEFAULT_NEXT = "/me";
 const FAILED = "/settings?signin=failed";
 
-/** A same-site absolute path only; anything else would make the callback an open redirect. */
-function safeNext(raw: string | undefined): string {
-  if (!raw || raw.length > 200 || !raw.startsWith("/") || raw.includes("//") || raw.includes("\\")) return DEFAULT_NEXT;
-  return raw;
+/**
+ * A same-site absolute path only; anything else would make the callback an open redirect. Printable ASCII only,
+ * because browsers strip tabs and newlines from a Location value (`/%09/evil.com` would become `//evil.com`).
+ */
+function safeNext(raw: string | undefined, publicOrigin: string): string {
+  if (!raw || raw.length > 200 || !/^\/(?!\/)[\x21-\x7e]*$/.test(raw) || raw.includes("\\") || /%(?:[01][0-9a-f]|7f)/i.test(raw)) return DEFAULT_NEXT;
+  try {
+    const u = new URL(raw, publicOrigin);
+    if (u.origin !== new URL(publicOrigin).origin) return DEFAULT_NEXT;
+    const next = u.pathname + u.search;
+    return next.startsWith("//") ? DEFAULT_NEXT : next;
+  } catch {
+    return DEFAULT_NEXT;
+  }
 }
 
 const randomHex = () => Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, "0")).join("");
@@ -40,7 +50,7 @@ authGoogle.get("/auth/google", (c) => {
   }
   const state = randomHex();
   const nonce = randomHex();
-  const next = safeNext(c.req.query("next"));
+  const next = safeNext(c.req.query("next"), c.env.PUBLIC_ORIGIN);
   setCookie(c, OAUTH_COOKIE, `${state}.${nonce}.${encodeURIComponent(next)}`, {
     httpOnly: true,
     sameSite: "Lax",
@@ -52,7 +62,8 @@ authGoogle.get("/auth/google", (c) => {
 });
 
 authGoogle.get("/auth/google/callback", async (c) => {
-  const [state, nonce, encodedNext] = (getCookie(c, OAUTH_COOKIE) ?? "").split(".");
+  // `next` may itself contain dots, so everything after the second dot belongs to it.
+  const [state, nonce, ...rest] = (getCookie(c, OAUTH_COOKIE) ?? "").split(".");
   deleteCookie(c, OAUTH_COOKIE, { path: OAUTH_PATH });
   const code = c.req.query("code");
   if (!c.env.GOOGLE_OAUTH_CLIENT_ID || !state || !nonce || !code || c.req.query("state") !== state) return c.redirect(FAILED, 303);
@@ -63,23 +74,30 @@ authGoogle.get("/auth/google/callback", async (c) => {
 
   let next = DEFAULT_NEXT;
   try {
-    next = safeNext(decodeURIComponent(encodedNext ?? ""));
+    next = safeNext(decodeURIComponent(rest.join(".")), c.env.PUBLIC_ORIGIN);
   } catch {
     // A malformed escape falls back to the default.
   }
 
+  // The session cookie is a deterministic HMAC of the listener id, so it does not rotate when an account is bound
+  // or switched. A callback without a valid dfm_sid also leaves an orphan anonymous listener row behind.
   const current = c.get("listener");
   const existing = await getListenerByGoogleSub(c.env.DB, profile.sub);
-  if (existing && existing.id !== current.id) {
+  if (existing) {
     // The anonymous listener we leave behind stays as it was.
-    await setSessionCookie(c, existing.id);
+    if (existing.id !== current.id) await setSessionCookie(c, existing.id);
   } else {
-    const displayName = profile.name || profile.email.split("@")[0] || "";
-    await updateListener(c.env.DB, current.id, {
-      googleSub: profile.sub,
-      displayName: displayName || undefined,
-      radioName: current.radioName || displayName || undefined,
-    });
+    // Never overwrite a listener that is already bound to another Google account.
+    if (current.googleSub !== null) return c.redirect(FAILED, 303);
+    const displayName = profile.name || profile.email.split("@")[0] || undefined;
+    try {
+      await updateListener(c.env.DB, current.id, { googleSub: profile.sub, displayName, radioName: current.radioName || displayName });
+    } catch {
+      // google_sub is UNIQUE: someone bound the same account between our lookup and this write.
+      const winner = await getListenerByGoogleSub(c.env.DB, profile.sub);
+      if (!winner) return c.redirect(FAILED, 303);
+      await setSessionCookie(c, winner.id);
+    }
   }
   return c.redirect(next, 303);
 });
