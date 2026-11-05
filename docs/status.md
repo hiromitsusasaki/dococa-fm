@@ -4,7 +4,7 @@
 
 ## 2026-11-05 本番デプロイと Gemini-TTS 完了。次は Spotify の本番 redirect・声の聴き比べ・デモ投入・public 化
 
-- 本番 URL: **https://dococa-fm.promitsu.workers.dev**（Cloudflare account `promitsu.jp`、Worker `dococa-fm`、D1 `dococa`（APAC、`database_id` は wrangler.jsonc に記入済み）、R2 `dococa-audio`。migrations 0001〜0004 適用済み、secret 8 件投入済み（`GOOGLE_TTS_SA_JSON` を含む。`GOOGLE_TTS_API_KEY` は残っているが読まれない。消してよい））。認証は ops-mac の `.env` の `CLOUDFLARE_API_TOKEN`（gitignore 済み）。再デプロイは `pnpm run deploy`。
+- 本番 URL: **https://dococa-fm.promitsu.workers.dev**（Cloudflare account `promitsu.jp`、Worker `dococa-fm`、D1 `dococa`（APAC、`database_id` は wrangler.jsonc に記入済み）、R2 `dococa-audio`。migrations 0001〜0004 適用済み、secret 7 件投入済み（`GOOGLE_TTS_API_KEY` は `GOOGLE_TTS_SA_JSON` に置き換え、旧 secret は 2026-11-05 に削除））。認証は ops-mac の `.env` の `CLOUDFLARE_API_TOKEN`（gitignore 済み）。再デプロイは `pnpm run deploy`。
 - 本番で確かめたこと（2026-11-05、ops-mac から curl）: 全ページ 200、セキュリティヘッダ想定どおり。`POST /start` → 303 → 番組生成が実 API で通る（TMDB の映画、Spotify の曲、YouTube の動画、Claude の台本。12〜15 秒）。別リスナーのお便りは原文のまま `letter` 行で読まれる。D1 のクエリは問題なし（CPU 81 ms）。
 - Gemini-TTS は **API キーでは使えない**（IAM 権限 `aiplatform.endpoints.predict` が要る）。サービスアカウント `dococa-tts`（ロール Vertex AI User）の JSON を `GOOGLE_TTS_SA_JSON` に置き、Worker が RS256 の JWT を署名して OAuth2 トークンに交換する方式に変更（計画 Task 11 を修正、コミット 805b63f と 4be9d18、opus レビュー済み）。本番 `GET /tts` で 200、初回 8 秒、R2 キャッシュ後 0.7 秒。
 - 見つけた不具合と対処:
@@ -13,7 +13,7 @@
 - **本人作業（残り）**
   - [x] Gemini-TTS: Agent Platform API（旧 Vertex AI API）を有効化し、サービスアカウントで通した（2026-11-05）。API キー `dococa-tts` は不要になったので Google 側で削除してよい。
   - [ ] 声の聴き比べ（Task 11 Step 5）: 本番でブラウザから自分の最初の回を聴く（最初の回だけクラウド TTS）。Kore を試すなら `pnpm wrangler secret put GEMINI_TTS_VOICE` に `female` を入れて再生成。`DJ_STYLE_PROMPT`（`src/worker/tts/style.ts`）は耳で 1〜2 回調整。
-  - [ ] Spotify Developer Dashboard の Redirect URIs に `https://dococa-fm.promitsu.workers.dev/auth/spotify/callback` を追加し、Website に本番 URL を入れる。その後 `/settings` から Spotify 連携を実機で確かめる。
+  - [x] Spotify Developer Dashboard の本番 redirect URI と Website を登録（2026-11-05）。`/settings` からの Spotify 連携の実機確認は本人のフィードバック待ち。
   - [ ] デモ投入: `pnpm seed --items <作品 URL の一覧> --personas 3 --dry-run` → 内容を見て `--dry-run` を外す（本番は `--origin https://dococa-fm.promitsu.workers.dev --token "$ADMIN_TOKEN"`）。
   - [ ] eval 20 回: `pnpm eval --origin https://dococa-fm.promitsu.workers.dev --token "$ADMIN_TOKEN" --listener <id> --runs 20 --out docs/eval/<日付>.md`（`EPISODE_DAILY_LIMIT` を 25 以上に）。
   - [ ] `/settings` の `/mcp/<token>` を Claude のカスタムコネクタに登録して `get_episode` を確認。
