@@ -269,10 +269,10 @@
 **Interfaces:**
 - 正本は `docs/DESIGN.md` と本人確定の模型 `docs/design/station-mock.html`（2026-11-05）。トークン名と値はそこから写す（下は抜粋）:
   - ライト: `--paper #e9f1f8`、`--ink #141b31`、`--ink-2 #44506b`、`--line rgba(20,27,49,.16)`、`--line-strong #c9d2df`、`--haze rgba(20,27,49,.06)`、`--panel #ffffff`、`--aqua #1fb3a7`、`--sky #3f9fff`、`--coral #ff6f7a`、`--magenta #e0409a`、`--lemon #ffd24d`、`--hero #ffffff`。
-  - ダーク（`prefers-color-scheme: dark` と `html[data-theme="dark"]`）: `--paper #121a2e`、`--ink #eef4f8`、`--ink-2 #a9b7cc`、`--line rgba(238,244,248,.14)`、`--line-strong #4b5878`、`--haze rgba(238,244,248,.07)`、`--panel #1a2440`、`--aqua #4fd1c5`、`--sky #7cc4ff`、`--coral #ff8a95`、`--magenta #f06cb6`、`--lemon #ffe08a`、`--hero linear-gradient(160deg,#1c2a52 0%,#2a4a7a 40%,#a04a8a 74%,#ff7a8a 100%)`。
+  - ダーク（`prefers-color-scheme: dark` と `html[data-theme="dark"]`）: `--paper #121a2e`、`--ink #eef4f8`、`--ink-2 #a9b7cc`、`--line rgba(238,244,248,.14)`、`--line-strong #4b5878`、`--haze rgba(238,244,248,.07)`、`--panel #1a2440`、`--aqua #4fd1c5`、`--sky #7cc4ff`、`--coral #ff8a95`、`--magenta #f06cb6`、`--lemon #ffe08a`、`--hero #1a2440`（無地）。
   - 書体: ロゴ（`Dococa FM` の wordmark）だけ `"Righteous"`、日本語・英語の見出しと本文は `"Zen Kaku Gothic New"`（Google Fonts、`display=swap`）。
   - 差し色の使いどころ（暖色）: wordmark のグラデーション（coral → magenta → lemon）、パネル上端の 4px の帯（coral / lemon / magenta）、`ON AIR`・見出しラベル・コントロールのラベルは coral、目盛りは coral、針は lemon、お便りの左線は lemon、ボタンの枠は coral、主ボタン（私も）は magenta、作品種別ラベルは magenta。地（paper / panel）と文字（ink）は冷色のまま。
-  - 部品: `.panel`（丸角 22px、`--panel`、1px `--line`、影 `0 18px 40px rgba(20,40,70,.12)`、上端の帯は `::before`）、`.switch`（72×36 のトグル。ON で `--lemon` に点灯、`aria-pressed`）、`.knob`（52px の円、針つき。`input[type=range]` を置き換え）、`.scale`（目盛り + 針）、`.hero`（ライトは白パネル、ダークはグラデーション。枠線は不透明な `--line-strong`、`background-clip: padding-box`）。PC 幅（> 760px）はヒーローが 2 列（左に文、右にキービジュアル）、本体が 2 列（左にラジオと いま流れている、右に このあと流れるもの）。スマホ幅は 1 列、タグラインは折り返す。
+  - 部品: `.panel`（丸角 22px、`--panel`、1px `--line`、影 `0 18px 40px rgba(20,40,70,.12)`、上端の帯は `::before`）、`.switch`（72×36 のトグル。ON で `--lemon` に点灯、`aria-pressed`）、`.knob`（52px の円、針つき。`input[type=range]` を置き換え）、`.scale`（目盛り + 針）、`.hero`（ライトは白、ダークは紺の無地。枠線は不透明な `--line-strong`）。PC 幅（> 760px）はヒーローが 2 列（左に文、右にキービジュアル）、本体が 2 列（左にラジオと いま流れている、右に このあと流れるもの）。スマホ幅は 1 列、タグラインは折り返す。
   - テーマ切替: 既定は端末に合わせる。ヘッダに ライト / ダーク / 端末 の 3 択（`html[data-theme]`、`localStorage` に保存。読めなくても動く）。
 
 - [ ] **Step 1: 失敗するテスト。** `GET /` の HTML に `fonts.googleapis.com` の link（`Righteous` と `Zen+Kaku+Gothic+New`）と `class="site-header"`、テーマ切替の `data-theme-set` ボタンがある。

@@ -27,7 +27,7 @@ CSS 変数は `:root` にライト、`@media (prefers-color-scheme: dark)` と `
 | `--coral` | `#ff6f7a` | `#ff8a95` | 暖色の差し色（ラベル、目盛り、ボタンの枠、wordmark） |
 | `--magenta` | `#e0409a` | `#f06cb6` | 主ボタン（私も）、作品種別ラベル |
 | `--lemon` | `#ffd24d` | `#ffe08a` | 点灯（ON のスイッチ、針、お便りの左線） |
-| `--hero` | `#ffffff` | `linear-gradient(160deg,#1c2a52 0%,#2a4a7a 40%,#a04a8a 74%,#ff7a8a 100%)` | ヒーローの地 |
+| `--hero` | `#ffffff` | `#1a2440` | ヒーローの地（どちらもパネルと同じ無地。グラデーションは使わない。本人決定 2026-11-05） |
 | `--knob` | `radial-gradient(circle at 35% 30%,#fff,#e9eef5 60%,#c9d3e0)` | `radial-gradient(circle at 35% 30%,rgba(255,255,255,.38),rgba(255,255,255,.08) 55%,rgba(0,0,0,.3))` | ノブ |
 
 暖色の使いどころ（これ以外には広げない）:
@@ -54,7 +54,7 @@ CSS 変数は `:root` にライト、`@media (prefers-color-scheme: dark)` と `
 
 | 部品 | 形 | 状態 |
 |---|---|---|
-| `.hero` | 丸角 24px、枠線 1px `--line-strong`、影 `0 18px 40px rgba(20,40,70,.12)`、`background-clip: padding-box`。PC 幅は 2 列（左: wordmark とタグライン、右: キービジュアル `public/kv.jpg` を 3:2・丸角 16px・影つき）。スマホ幅は 1 列で絵は文の下に全幅 | ライトは白、ダークはグラデーション |
+| `.hero` | 丸角 24px、枠線 1px `--line-strong`、影 `0 18px 40px rgba(20,40,70,.12)`、`background-clip: padding-box`。PC 幅は 2 列（左: wordmark とタグライン、右: キービジュアル `public/kv.jpg` を 3:2・丸角 16px・影つき）。スマホ幅は 1 列で絵は文の下に全幅 | ライトは白、ダークは紺の無地（パネルと同じ） |
 | `.panel`（ラジオ、このあと、カード） | 丸角 22px、`--panel`、枠線 1px `--line`、影、上端に 4px の帯（`::before`） | |
 | `.face`（ラジオの面） | 左に `DOCOCA FM`、右に赤い点つきの `ON AIR`。破線の下罫 | 局名は出さない |
 | `.scale`（目盛り） | 12px の高さの縦線の繰り返し + 針 | 針の位置は飾り（再生位置ではない） |
