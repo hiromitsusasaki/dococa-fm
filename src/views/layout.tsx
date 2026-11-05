@@ -12,7 +12,7 @@ export function Layout({ title, children, script, lang = "ja" }: LayoutProps) {
       <head>
         <meta charset="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <title>{`${title} | ${t("app.name")}`}</title>
+        <title>{title === t("app.name") ? title : `${title} | ${t("app.name")}`}</title>
         <meta name="theme-color" content="#0f0f1e" />
         <link rel="manifest" href="/manifest.webmanifest" />
         <link rel="icon" href="/icon.svg" type="image/svg+xml" />

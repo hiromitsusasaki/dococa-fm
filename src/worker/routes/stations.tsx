@@ -42,14 +42,17 @@ export type StationPageProps = {
   title?: string;
   /** Extra content under the player (the home page's links). */
   children?: unknown;
+  /** A hint line directly above the player. */
+  intro?: unknown;
 };
 
 /** The station screen: the player mounts into `#station` and takes everything it needs from its data attributes. */
-export function StationPage({ stationKey, label, lang, voice, dial, grow, title, children }: StationPageProps) {
+export function StationPage({ stationKey, label, lang, voice, dial, grow, title, children, intro }: StationPageProps) {
   return (
     <Layout title={title ?? label} script="station" lang={lang}>
       <main class="station-page">
         <h1 class="station-name">{label}</h1>
+        {intro}
         <div
           id="station"
           data-station-key={stationKey}

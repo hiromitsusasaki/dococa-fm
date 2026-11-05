@@ -36,7 +36,7 @@
 | Task 3 | 局ごとの枠決め | 完了 |
 | Task 4 | 局の API | 完了（`/stations/:key.json` は局ごとの直近の検証済み回を返す。`episodes.station` を 0006 で追加） |
 | Task 5 | 局プレイヤー | 完了（`/stations/:key` のページと `station.js`。行の再生は `playback.ts` に共通化。ON で直近の回に復帰か新規作成、残り 2 セグメントで次の回を先読み） |
-| Task 6 | ホームを局に | 完了 |
+| Task 6 | ホームを局に | 完了。局パネルの見た目（左寄せ、DOCOCA FM と ON AIR の間隔）は Task 11 で整える |
 | Task 7 | Google サインイン | 未着手 |
 | Task 8 | 保護とマイページ | 未着手 |
 | Task 9 | 公開局 | 未着手 |

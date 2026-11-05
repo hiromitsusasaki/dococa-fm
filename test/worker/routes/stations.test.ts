@@ -165,7 +165,7 @@ describe("GET /stations/:key (page)", () => {
     expect(i18n["kind.music"]).toBeDefined();
     expect(i18n["out.spotify"]).toBeDefined();
     expect(i18n["home.start"]).toBeUndefined();
-    expect(html).toContain("<title>Dococa FM | ");
+    expect(html).toContain("<title>Dococa FM</title>");
   });
 
   it("404s an unknown key, an unknown slug and a station that is not public", async () => {

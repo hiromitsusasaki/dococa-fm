@@ -53,7 +53,7 @@ describe("GET /start", () => {
 });
 
 describe("POST /start", () => {
-  it("registers three titles as manual history and goes to the first episode", async () => {
+  it("registers three titles as manual history and goes to my station", async () => {
     stubSearch({ 曲A: 1, 曲B: 2, 曲C: 3 });
     const cookie = await newSession();
     const res = await postForm("/start", cookie, { fav1: "曲A", fav2: "曲B", fav3: "曲C" });
