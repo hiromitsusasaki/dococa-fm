@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { insertItem } from "../../../src/worker/db/items";
 import { insertEpisode } from "../../../src/worker/db/episodes";
 import { insertLetter, listLettersForItem, listReactionsForLetter, setLetterStatus } from "../../../src/worker/db/letters";
-import { createListener } from "../../../src/worker/db/listeners";
+import { createListener, updateListener } from "../../../src/worker/db/listeners";
 import { upsertHistory } from "../../../src/worker/db/history";
 import { t } from "../../../src/worker/i18n/t";
 import { resetDb } from "../../helpers/db";
@@ -143,6 +143,7 @@ describe("/mcp/:token", () => {
     create.mockImplementation(okReply);
     (env as { ANTHROPIC_API_KEY: string }).ANTHROPIC_API_KEY = "sk-test";
     const { me, far } = await seed();
+    await updateListener(env.DB, me.id, { googleSub: "g-me" });
     const r = await call(me.mcpToken, "post_letter", { itemId: far.id, body: "中学の頃、毎日聴いていた" });
     expect(r.body.result.isError).toBeFalsy();
     expect(textOf(r)).toContain("> 中学の頃、毎日聴いていた");
@@ -152,6 +153,20 @@ describe("/mcp/:token", () => {
     const dup = await call(me.mcpToken, "post_letter", { itemId: far.id, body: "中学の頃、毎日聴いていた" });
     expect(dup.body.result.isError).toBe(true);
     expect(textOf(dup)).toBe(t("letters.duplicate"));
+  });
+
+  it("post_letter fails for an anonymous listener, and react still works", async () => {
+    create = stubAnthropic();
+    create.mockImplementation(okReply);
+    (env as { ANTHROPIC_API_KEY: string }).ANTHROPIC_API_KEY = "sk-test";
+    const { me, far } = await seed();
+    const r = await call(me.mcpToken, "post_letter", { itemId: far.id, body: "中学の頃、毎日聴いていた" });
+    expect(r.body.result.isError).toBe(true);
+    expect(textOf(r)).toBe(t("signin.needed"));
+    expect((await listLettersForItem(env.DB, far.id)).filter((l) => l.listenerId === me.id)).toHaveLength(0);
+    const [parent] = await listLettersForItem(env.DB, far.id);
+    const reacted = await call(me.mcpToken, "react", { letterId: parent!.id, kind: "watashimo" });
+    expect(reacted.body.result.isError).toBeFalsy();
   });
 
   it("react places a watashimo once and a reply", async () => {

@@ -88,7 +88,8 @@ export function createMcpServer(env: Env, db: D1Database, listener: Listener): M
       description: "作品にお便りを一通置く（200 字まで）。作品は URL か itemId で指す。書いたとおりに届く。",
       inputSchema: { url: z.string().max(2000).optional(), itemId: z.string().max(100).optional(), body: z.string() },
     },
-    ({ url, itemId, body }) => place({ url, itemId, body, kind: "letter" }, t("mcp.posted")),
+    // The web gate for new letters is requireSignin; MCP has no session, so the same rule is checked here.
+    ({ url, itemId, body }) => (listener.googleSub === null ? fail(t("signin.needed")) : place({ url, itemId, body, kind: "letter" }, t("mcp.posted"))),
   );
 
   server.registerTool(

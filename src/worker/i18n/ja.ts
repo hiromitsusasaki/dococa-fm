@@ -18,6 +18,7 @@ export const ja = {
   "settings.invalid": "入力を確認してください",
   "settings.mcp": "MCP の口",
   "settings.mcpHelp": "Claude や ChatGPT にこの URL を登録すると、同じ番組をそこから取り出せます",
+  "settings.mcpAnonymous": "サインインしていないときは、聴くことと反応だけできます",
   "settings.mcpRegenerate": "URL を作り直す",
   "settings.listenerId": "リスナー ID",
   "kind.music": "音楽",

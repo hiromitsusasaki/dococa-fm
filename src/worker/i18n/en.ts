@@ -21,6 +21,7 @@ export const en: Record<keyof typeof ja, string> = {
   "settings.invalid": "Please check what you entered",
   "settings.mcp": "MCP endpoint",
   "settings.mcpHelp": "Add this URL to Claude or ChatGPT and you can pull the same show from there",
+  "settings.mcpAnonymous": "Without sign-in you can listen and react only",
   "settings.mcpRegenerate": "Make a new URL",
   "settings.listenerId": "Listener ID",
   "kind.music": "Music",

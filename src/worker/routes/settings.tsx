@@ -142,6 +142,7 @@ function SettingsPage(props: { values: FormValues; listener: Listener; path: str
         <section class="settings-mcp">
           <h2>{t("settings.mcp")}</h2>
           <p>{t("settings.mcpHelp")}</p>
+          {listener.googleSub === null && <p class="muted">{t("settings.mcpAnonymous")}</p>}
           <input type="text" readonly value={mcpUrl} aria-label={t("settings.mcp")} />
           <form method="post" action="/settings/mcp-token">
             <button type="submit">{t("settings.mcpRegenerate")}</button>
