@@ -20,7 +20,7 @@ export default defineConfig(async () => {
                   SESSION_SECRET: "test-session-secret",
                   ANTHROPIC_API_KEY: "",
                   SPOTIFY_CLIENT_ID: "",
-                  GOOGLE_TTS_API_KEY: "",
+                  GOOGLE_TTS_SA_JSON: "",
                   TMDB_API_KEY: "",
                   YOUTUBE_API_KEY: "",
                   ADMIN_TOKEN: "",

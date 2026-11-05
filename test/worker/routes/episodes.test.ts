@@ -88,7 +88,7 @@ describe("POST /episodes", () => {
 });
 
 describe("global daily caps", () => {
-  const keyed = { ...env, GOOGLE_TTS_API_KEY: "k-test" };
+  const keyed = { ...env, GOOGLE_TTS_SA_JSON: "sa-test" };
 
   /** Episodes made today by other listeners, as if a cookie-reset loop had made them. */
   async function othersMade(n: number, cloudTts = false) {
@@ -148,7 +148,7 @@ describe("unverified episodes", () => {
 });
 
 describe("cloud tts rule", () => {
-  const keyed = { ...env, GOOGLE_TTS_API_KEY: "k-test" };
+  const keyed = { ...env, GOOGLE_TTS_SA_JSON: "sa-test" };
   const flag = async (id: string) => (await env.DB.prepare("SELECT cloud_tts_used AS u FROM listeners WHERE id = ?").bind(id).first<{ u: number }>())!.u;
 
   it("gives the first episode of a listener the cloud voice, and only that one", async () => {
@@ -167,7 +167,7 @@ describe("cloud tts rule", () => {
   it("without a TTS key the first episode has no cloud voice and the allowance is kept", async () => {
     const cookie = await newSession();
     await seed(cookie);
-    const noKey = { ...env, GOOGLE_TTS_API_KEY: "" };
+    const noKey = { ...env, GOOGLE_TTS_SA_JSON: "" };
     const id = locationId(await post("/episodes", cookie, noKey));
     expect((await getEpisode(env.DB, id))!.cloudTts).toBe(false);
     expect(await (await get(`/episodes/${id}`, cookie)).text()).toContain('data-tts-url=""');
@@ -215,7 +215,7 @@ describe("cloud tts rule", () => {
     const cookie = await newSession();
     await seed(cookie);
     const listener = (await getListener(env.DB, idOf(cookie)))!;
-    const made = await makeEpisode({ ...env, GOOGLE_TTS_API_KEY: "" }, listener, { cloudTts: true });
+    const made = await makeEpisode({ ...env, GOOGLE_TTS_SA_JSON: "" }, listener, { cloudTts: true });
     expect((await getEpisode(env.DB, (made as { id: string }).id))!.cloudTts).toBe(false);
   });
 });

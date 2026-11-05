@@ -34,7 +34,7 @@ tts.get("/tts", ttsIpRateLimit, ttsListenerRateLimit, async (c) => {
   const cached = await c.env.BUCKET.get(key);
   if (cached) return new Response(cached.body, { headers: HEADERS });
 
-  if (!c.env.GOOGLE_TTS_API_KEY) return c.json({ error: "tts unavailable" }, 503);
+  if (!c.env.GOOGLE_TTS_SA_JSON) return c.json({ error: "tts unavailable" }, 503);
 
   // Single flight: only the claim holder calls Google; the others wait for its clip.
   if (!(await claimTts(c.env.DB, key))) {

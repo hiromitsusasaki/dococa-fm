@@ -7,13 +7,15 @@ import { insertLetter, setLetterStatus } from "../../../src/worker/db/letters";
 import type { Episode } from "../../../src/worker/types";
 import { resetDb } from "../../helpers/db";
 import { json, stubFetch } from "../../helpers/fetch";
+import { makeServiceAccount, primeToken } from "../../helpers/service-account";
 import { itemDraft, letterDraft } from "../db/helpers";
 import { newSession } from "./helpers";
 
 const idOf = (cookie: string) => cookie.split("=")[1]!.split(".")[0]!;
 const report = { verbatim: true, sources: true, topical: true, pii: true, details: [] };
 const GOOGLE = "https://texttospeech.googleapis.com/v1/text:synthesize";
-const keyed = { ...env, GOOGLE_TTS_API_KEY: "k-test" };
+const sa = await makeServiceAccount();
+const keyed = { ...env, GOOGLE_TTS_SA_JSON: sa.json };
 
 /** Global lines: 0 dj, 1 preview, 2 letter, 3 dj (second segment). */
 async function episodeFor(listenerId: string, cloudTts: boolean, verified = true): Promise<Episode> {
@@ -35,7 +37,10 @@ async function episodeFor(listenerId: string, cloudTts: boolean, verified = true
 const call = (path: string, cookie: string, e: object = keyed) => app.request(path, { headers: { cookie } }, e);
 const audio = btoa(String.fromCharCode(1, 2, 3));
 
-beforeEach(() => resetDb(env.DB));
+beforeEach(async () => {
+  await resetDb(env.DB);
+  await primeToken(sa.json);
+});
 afterEach(() => vi.unstubAllGlobals());
 
 describe("GET /tts", () => {
@@ -120,7 +125,7 @@ describe("GET /tts", () => {
   it("answers 503 when there is no key and nothing cached", async () => {
     const { cookie, ep } = await setup();
     const { fn } = stubFetch([[GOOGLE, () => json({ audioContent: audio })]]);
-    const res = await call(`/tts?episode=${ep.id}&line=0`, cookie, { ...env, GOOGLE_TTS_API_KEY: "" });
+    const res = await call(`/tts?episode=${ep.id}&line=0`, cookie, { ...env, GOOGLE_TTS_SA_JSON: "" });
     expect(res.status).toBe(503);
     expect(await res.json()).toEqual({ error: "tts unavailable" });
     expect(fn).not.toHaveBeenCalled();

@@ -2,8 +2,8 @@
 ANTHROPIC_API_KEY=
 # Spotify Developer Dashboard のアプリの Client ID（PKCE のため secret は不要）
 SPOTIFY_CLIENT_ID=
-# Google Cloud Text-to-Speech（Gemini-TTS）の API キー
-GOOGLE_TTS_API_KEY=
+# Google Cloud のサービスアカウント（ロール Vertex AI User）の JSON キーを 1 行にしたもの。Gemini-TTS は API キーでは使えない
+GOOGLE_TTS_SA_JSON=
 # TMDB の API キー（映画の検索）
 TMDB_API_KEY=
 # YouTube Data API v3 のキー（見つけた声の収集）

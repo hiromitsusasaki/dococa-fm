@@ -1,4 +1,5 @@
 import type { Env } from "../env";
+import { accessToken, parseServiceAccount } from "./google-auth";
 import { DJ_STYLE_PROMPT } from "./style";
 
 const ENDPOINT = "https://texttospeech.googleapis.com/v1/text:synthesize";
@@ -38,9 +39,11 @@ function fromBase64(b64: string): Uint8Array {
 }
 
 async function synthesizeChunk(env: Env, text: string, voice: "male" | "female"): Promise<Uint8Array> {
-  const res = await fetch(`${ENDPOINT}?${new URLSearchParams({ key: env.GOOGLE_TTS_API_KEY })}`, {
+  const sa = parseServiceAccount(env.GOOGLE_TTS_SA_JSON);
+  const token = await accessToken(sa);
+  const res = await fetch(ENDPOINT, {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: { "content-type": "application/json", authorization: `Bearer ${token}`, "x-goog-user-project": sa.project_id },
     body: JSON.stringify({
       input: { text, prompt: DJ_STYLE_PROMPT },
       voice: { languageCode: "ja-JP", name: VOICE_NAME[voice], modelName: env.GEMINI_TTS_MODEL || DEFAULT_MODEL },
@@ -48,7 +51,7 @@ async function synthesizeChunk(env: Env, text: string, voice: "male" | "female")
     }),
     signal: AbortSignal.timeout(TIMEOUT_MS),
   });
-  // The status only: the body and URL can carry the line or the key.
+  // The status only: the body can carry the line.
   if (!res.ok) throw new Error(`tts ${res.status}`);
   const { audioContent } = (await res.json()) as { audioContent?: string };
   if (!audioContent) throw new Error("tts empty");

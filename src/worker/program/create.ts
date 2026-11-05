@@ -31,8 +31,8 @@ export async function makeEpisode(env: Env, listener: Listener, opts: { cloudTts
     const built = await buildEpisode(env, env.DB, listener);
     // Nothing to play yet: no row, so the daily limits are not used up.
     if (built.segments.length === 0) return { ok: false, reason: "empty" };
-    const hasKey = Boolean(env.GOOGLE_TTS_API_KEY);
-    if (!hasKey && opts.cloudTts === true) console.warn("[dococa] cloud tts requested but GOOGLE_TTS_API_KEY is empty; using the browser voice");
+    const hasKey = Boolean(env.GOOGLE_TTS_SA_JSON);
+    if (!hasKey && opts.cloudTts === true) console.warn("[dococa] cloud tts requested but GOOGLE_TTS_SA_JSON is empty; using the browser voice");
     const demo = hasKey && opts.cloudTts === true;
     // Past the global cloud-voice cap the episode is still made, with the browser voice. The owner's demo episodes are not counted against it.
     const cloudAllowed = hasKey && !demo && (await countCloudTtsToday(env.DB)) < limitFrom(env.CLOUD_TTS_GLOBAL_DAILY_LIMIT, DEFAULT_CLOUD_TTS_GLOBAL_DAILY_LIMIT);

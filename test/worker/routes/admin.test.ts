@@ -213,7 +213,7 @@ describe("POST /admin/episodes", () => {
     const listener = await createListener(env.DB);
     const item = await insertItem(env.DB, itemDraft());
     await insertLetter(env.DB, letterDraft(item.id));
-    const res = await call("POST", "/admin/episodes", { listenerId: listener.id }, undefined, { ...e, GOOGLE_TTS_API_KEY: "k" });
+    const res = await call("POST", "/admin/episodes", { listenerId: listener.id }, undefined, { ...e, GOOGLE_TTS_SA_JSON: "k" });
     expect(await res.json()).toMatchObject({ cloudTts: true });
   });
 
