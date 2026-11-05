@@ -41,18 +41,19 @@
 **Interfaces:**
 - Produces: 新しいキー `station.*`（下記）。後の Task はこのキーを使う。
 
-- [ ] **Step 1: テストを直す。** `i18n.test.ts` の `app.tagline` の期待値を `世界のどこかにいる誰かの好きなものが聴こえてくるラジオ` に。`home.test.ts:27` も同じ文字列に。追加: `expect(t("station.on")).toBe("スイッチを入れる")`、`expect(t("station.off")).toBe("止める")`。
+- [ ] **Step 1: テストを直す。** `i18n.test.ts` の `app.tagline` の期待値を `世界のどこかにいる誰かの好きなものが聴こえてくるラジオ` に。`home.test.ts:27` も同じ文字列に。追加: `expect(t("station.on")).toBe("ラジオをつける")`、`expect(t("station.dial")).toBe("セレンディピティ")`。
 - [ ] **Step 2: 実行して失敗を確認。** `pnpm vitest run test/worker/i18n.test.ts test/worker/routes/home.test.ts`
-- [ ] **Step 3: `ja.ts` を更新。** `app.tagline` を置き換え。次のキーを追加（値は厳守）:
-  - `station.world`: `世界の局`、`station.mine`: `わたしの局`、`station.public`: `{name}の局`
-  - `station.on`: `スイッチを入れる`、`station.off`: `止める`、`station.volume`: `音量`、`station.nowPlaying`: `いま流れているもの`、`station.upNext`: `このあと`、`station.tuning`: `チューニング中`、`station.limit`: `今日の分はここまで。また明日、この局で`、`station.failed`: `電波が届きませんでした。少し待ってもう一度`、`station.empty`: `この局にはまだお便りがありません`
-  - `station.grow`: `自分の局を育てる`、`station.growHelp`: `好きなものを置くと、「近く」と「隣」の枠が効き始めます`
-  - `home.tuneIn`: `世界の局をつける`
-  - 既存の `home.listen` を `わたしの局をつける`、`home.start` を `好きなものを 3 つ置いて、わたしの局を始める` に変更。
+- [ ] **Step 3: `ja.ts` を更新。** `app.tagline` を置き換え。「局」「置く」は画面に出さない（内部名だけ）。次のキーを追加（値は厳守。本人確定の模型 `docs/design/station-mock.html` と同じ言葉）:
+  - `station.world`: `Dococa FM`（世界の局の表示名。画面では局名を出さず ON AIR だけ）、`station.mine`: `あなたのラジオ`、`station.public`: `{name}さんのラジオ`
+  - `station.on`: `ラジオをつける`、`station.off`: `止める`、`station.onOff`: `ラジオをつける / 止める`、`station.onAir`: `ON AIR`、`station.volume`: `音量`、`station.dial`: `セレンディピティ`、`station.nowPlaying`: `いま流れている`、`station.upNext`: `このあと流れるもの`、`station.tuning`: `チューニング中`、`station.limit`: `今日の分はここまで。また明日`、`station.failed`: `電波が届きませんでした。少し待ってもう一度`、`station.empty`: `まだお便りがありません`
+  - `station.grow`: `あなたのラジオ`、`station.growHelp`: `好きなものを 3 つ送ると、あなた向けのラジオが始まります`
+  - `home.tuneIn`: `ラジオをつける`
+  - 既存の `home.listen` を `あなたのラジオをつける`、`home.start` を `好きなものを 3 つ送って、あなたのラジオを始める`、`home.put` を `お便りを送る`、`put.title` を `お便りを送る`、`put.submit` を `送る`、`item.putLetter` を `自分もお便りを送る`、`player.put` を `お便りを送る`、`player.reply` を `一言を送る`、`player.again` を `この作品を聴く・観る`、`settings.dial` を `セレンディピティ`、`settings.dialHelp` を `右に回すほど、あなたと接点のないお便りが増えます`、`start.lead` の「置く」を「送る」に変更。
+  - `letter.showOriginal`: `原文を見る`、`letter.showTranslation`: `訳を見る`
   - `signin.google`: `Google でサインイン`、`signin.needed`: `好きなものを置くには、サインインが要ります。聴くのと「私も」「一言」はそのままどうぞ`、`signin.out`: `サインアウト`、`signin.as`: `{name} としてサインイン中`
   - `me.title`: `マイページ`、`me.favorites`: `わたしの好きなもの`、`me.reactions`: `届いた反応`、`me.station`: `わたしの公開局`、`me.nobody`: `まだ反応はありません`
   - `settings.station`: `公開局`、`settings.stationPublic`: `わたしの好きなものだけの局を公開する`、`settings.stationSlug`: `局の URL`、`settings.stationSlugHelp`: `英小文字・数字・ハイフン、3〜24 字`、`settings.stationUrl`: `公開 URL`
-  - `put.register`: `好きなものに置く`、`put.imported.top`: `よく聴く順`、`put.imported.recent`: `最近聴いた順`
+  - `put.register`: `好きなものに加える`、`put.imported.top`: `よく聴く順`、`put.imported.recent`: `最近聴いた順`
 - [ ] **Step 4: README、CLAUDE.md、manifest の一文を置き換え。**
 - [ ] **Step 5: `pnpm test` が緑。コミット** `feat: new tagline and station vocabulary`
 
@@ -65,8 +66,8 @@
 
 **Interfaces:**
 - Produces:
-  - `listeners` に `google_sub TEXT NULL UNIQUE`、`display_name TEXT NOT NULL DEFAULT ''`、`station_public INTEGER NOT NULL DEFAULT 0`、`station_slug TEXT NULL UNIQUE`。`history` に `rank INTEGER NULL`。
-  - `Listener` に `googleSub: string | null; displayName: string; stationPublic: boolean; stationSlug: string | null`。`HistoryRow` に `rank: number | null`。
+  - `listeners` に `google_sub TEXT NULL UNIQUE`、`display_name TEXT NOT NULL DEFAULT ''`、`station_public INTEGER NOT NULL DEFAULT 0`、`station_slug TEXT NULL UNIQUE`。`history` に `rank INTEGER NULL`。`letters` に `body_en TEXT NULL`。
+  - `Listener` に `googleSub: string | null; displayName: string; stationPublic: boolean; stationSlug: string | null`、`lang` の型を `"ja" | "en"` に。`HistoryRow` に `rank: number | null`。`Letter` に `bodyEn: string | null`（`db/letters.ts` の読み書きに追加）。
   - `updateListener` の書き込み可能列に `googleSub, displayName, stationPublic, stationSlug` を追加。
   - `getListenerByGoogleSub(db, sub): Promise<Listener | null>`、`getListenerBySlug(db, slug): Promise<Listener | null>`（`station_public = 1` のものだけ返す）。
   - `upsertHistory(db, rows: (HistoryRow)[])`: `rank` を書く。ON CONFLICT では `rank = COALESCE(excluded.rank, history.rank)`。
@@ -75,9 +76,34 @@
 
 - [ ] **Step 1: 失敗するテスト。** `listeners.test.ts`: `updateListener(db, id, { googleSub: "g1", displayName: "Hiro" })` → `getListenerByGoogleSub(db,"g1")` が同じ id。`stationSlug: "hiro"` と `stationPublic: true` で `getListenerBySlug(db,"hiro")` が取れ、`stationPublic: false` にすると null。同じ `googleSub` を別リスナーに書くと `D1_ERROR`（UNIQUE）。`history.test.ts`: `upsertHistory` に `rank: 2` → `listHistory(db,id,10,"rank")` が rank 順（null は最後）。`listFavorites` が spotify 行を除く。
 - [ ] **Step 2: 失敗を確認。** `pnpm vitest run test/worker/db`
-- [ ] **Step 3: マイグレーションと DB 層を実装。** `0005_station.sql` は `ALTER TABLE ... ADD COLUMN` を 5 本と `CREATE UNIQUE INDEX idx_listeners_google_sub ON listeners(google_sub)`、`CREATE UNIQUE INDEX idx_listeners_station_slug ON listeners(station_slug)`。`test/apply-migrations.ts` が全マイグレーションを当てることを確認（`TEST_MIGRATIONS`）。
+- [ ] **Step 3: マイグレーションと DB 層を実装。** `0005_station.sql` は `ALTER TABLE ... ADD COLUMN` を 6 本と `CREATE UNIQUE INDEX idx_listeners_google_sub ON listeners(google_sub)`、`CREATE UNIQUE INDEX idx_listeners_station_slug ON listeners(station_slug)`。`test/apply-migrations.ts` が全マイグレーションを当てることを確認（`TEST_MIGRATIONS`）。
 - [ ] **Step 4: 緑を確認。** `pnpm test`
 - [ ] **Step 5: コミット** `feat: schema for google identity, public station and import rank`
+
+### Task 2b: 言語設定（日本語 / 英語）とお便りの表示
+
+**Files:**
+- Create: `src/worker/i18n/en.ts`
+- Modify: `src/worker/i18n/t.ts`（`t(key, params?, lang?)`）、`src/worker/i18n/ja.ts`、`src/worker/auth/session.ts`（新規リスナーの `lang` を `Accept-Language` から）、`src/worker/routes/settings.tsx`（言語の選択）、`src/views/layout.tsx`（`<html lang>`）、`src/worker/claude/translate.ts`（翻訳先を指定）、`src/worker/letters/create.ts`（足りない訳を作る）、`src/worker/program/stored.ts`（`originalsOf` を表示言語対応に）、`src/worker/routes/items.tsx`、`src/worker/routes/episodes.tsx`、`src/client/player.tsx`、`src/worker/mcp/markdown.ts`
+- Test: `test/worker/i18n.test.ts`、`test/worker/routes/settings.test.ts`、`test/worker/routes/items.test.ts`、`test/worker/letters/create.test.ts`、`test/client/player.test.tsx`
+
+**Interfaces:**
+- Consumes: Task 2 の `letters.body_en` と `Letter.bodyEn`、`Listener.lang: "ja" | "en"`。
+- Produces:
+  - `type Lang = "ja" | "en"`（`src/worker/i18n/t.ts`）；`t(key, params?, lang: Lang = "ja")`；`en.ts` は `ja.ts` と同じキー集合（`i18n.test.ts` でキー集合の一致を検査）。
+  - `langFromAcceptLanguage(header: string | undefined): Lang`（`en` で始まる言語が最上位なら `en`、それ以外 `ja`）。`createListener` のとき `lang` に入れる。
+  - 設定画面に `lang` の select（`settings.lang`: `言語` / `Language`、選択肢 `日本語` / `English`）。保存は `updateListener`。
+  - `displayText(letter: Letter, lang: Lang): { main: string; original: string | null }`（`src/worker/letters/display.ts`）: `letter.lang === lang` なら `{ main: body, original: null }`；`lang === "ja"` なら `{ main: bodyJa ?? body, original: body }`；`lang === "en"` なら `{ main: bodyEn ?? body, original: body }`。`bodyJa` / `bodyEn` が無いときは原文を主に出す（翻訳が未済でも壊れない）。
+  - `translateLetter(env, body, from: Lang, to: Lang)`（`translate.ts` の既存関数に `to` を追加）。`createLetter` は `lang !== "ja"` なら `bodyJa`、`lang !== "en"` なら `bodyEn` を作る（Claude が無いときは `DEV_SKIP_CLAUDE` の既存規則どおり null）。
+  - 画面（作品ページ、届いた反応、プレイヤー）: 主文のあとに `<details><summary>{letter.showOriginal}</summary>原文</details>`。プレイヤーの `episode-json` の `originals` は「表示言語での主文と原文の対」に変える（`{ [letterId]: { main, original } }`）。番組の読み上げは `bodyJa`（DJ は日本語のまま）。
+  - `mcp/markdown.ts`: 固定文（指示・見出し）はリスナーの `lang` で `t()`。お便りの本文は `bodyJa` と原文の両方を出す（従来どおり）。
+  - `Layout` の `<html lang>` と全ページの `t()` 呼び出しにリスナーの `lang` を渡す（`c.get("listener").lang`）。免除パスのページは `ja`。
+
+- [ ] **Step 1: 失敗するテスト。** `i18n.test.ts`: `Object.keys(en)` が `Object.keys(ja)` と一致；`t("station.on", undefined, "en")` が `Turn the radio on`。`settings.test.ts`: `lang=en` を保存すると `GET /settings` の `<html lang="en">` と `Language` の表示。`letters/create.test.ts`: 日本語のお便りを置くと（翻訳スタブで）`bodyEn` が入る；英語なら `bodyJa`。`items.test.ts`: 英語原文のお便りが `lang=ja` のリスナーには訳が主文で `原文を見る` の details があり、`lang=en` のリスナーには原文が主文で details が無い。`player.test.tsx`: `originals[id].original` があるとき `player.original` のトグルが出る。`session.test.ts`（あれば）: `Accept-Language: en-US,en` で作られたリスナーの `lang` が `en`。
+- [ ] **Step 2: 失敗を確認。**
+- [ ] **Step 3: 実装。** `en.ts` の文言は Task 1 の日本語と対になる自然な英語（例: `app.tagline`: `A radio where you hear what someone, somewhere, loves`、`station.on`: `Turn the radio on`、`station.dial`: `Serendipity`、`station.nowPlaying`: `Now playing`、`station.upNext`: `Up next`、`put.title`: `Send a letter`、`player.watashimo`: `Me too`、`player.reply`: `Reply`、`letter.showOriginal`: `Show original`）。機械的な直訳にしない。
+- [ ] **Step 4: 緑を確認。** `pnpm test`
+- [ ] **Step 5: コミット** `feat: japanese and english ui with translated letters and an original toggle`
 
 ### Task 3: 局ごとの枠決め（world / mine / public）
 
@@ -241,13 +267,16 @@
 - Test: `test/worker/views/layout.test.ts`（新規。ヘッダとフォントの link があること）
 
 **Interfaces:**
-- Produces（この値で始める。本人が別案を選んだらこの表だけ差し替える）:
-  - 配色: `--night #1b1b3a`（背景）、`--cream #f6efe4`（文字）、`--sunset #ff6f61`、`--magenta #e84393`、`--teal #2ec4b6`、`--gold #f4c95d`、`--haze rgba(246,239,228,0.08)`（面）。グラデーション `--sky: linear-gradient(180deg, #2b1f5a 0%, #e84393 55%, #ff6f61 100%)` をホームの上部だけに。
-  - 書体: 見出し `"Dela Gothic One"`（Google Fonts）、本文 `"Zen Kaku Gothic New"`（同）。`--font-display`、`--font-sans` を置き換え。
-  - 部品: `.panel`（丸角 20px、`--haze`、1px の hairline）、`.knob`（円、針つき。`input[type=range]` の見た目を CSS で置き換え）、`.switch`（トグル。ON で `--gold` に点灯）、`.vu`（水平の目盛り。装飾）。スマホ幅（<= 480px）で 1 カラム、タップ 44px。
+- 正本は本人確定の模型 `docs/design/station-mock.html`（2026-11-05）。トークン名と値はそこから写す:
+  - ライト: `--paper #e9f1f8`、`--ink #141b31`、`--ink-2 #44506b`、`--line rgba(20,27,49,.16)`、`--line-strong #c9d2df`、`--haze rgba(20,27,49,.06)`、`--panel #ffffff`、`--aqua #1fb3a7`、`--sky #3f9fff`、`--coral #ff6f7a`、`--magenta #e0409a`、`--lemon #ffd24d`、`--hero #ffffff`。
+  - ダーク（`prefers-color-scheme: dark` と `html[data-theme="dark"]`）: `--paper #121a2e`、`--ink #eef4f8`、`--ink-2 #a9b7cc`、`--line rgba(238,244,248,.14)`、`--line-strong #4b5878`、`--haze rgba(238,244,248,.07)`、`--panel #1a2440`、`--aqua #4fd1c5`、`--sky #7cc4ff`、`--coral #ff8a95`、`--magenta #f06cb6`、`--lemon #ffe08a`、`--hero linear-gradient(160deg,#1c2a52 0%,#2a4a7a 40%,#a04a8a 74%,#ff7a8a 100%)`。
+  - 書体: ロゴ（`Dococa FM` の wordmark）だけ `"Righteous"`、日本語・英語の見出しと本文は `"Zen Kaku Gothic New"`（Google Fonts、`display=swap`）。
+  - 差し色の使いどころ（暖色）: wordmark のグラデーション（coral → magenta → lemon）、パネル上端の 4px の帯（coral / lemon / magenta）、`ON AIR`・見出しラベル・コントロールのラベルは coral、目盛りは coral、針は lemon、お便りの左線は lemon、ボタンの枠は coral、主ボタン（私も）は magenta、作品種別ラベルは magenta。地（paper / panel）と文字（ink）は冷色のまま。
+  - 部品: `.panel`（丸角 22px、`--panel`、1px `--line`、影 `0 18px 40px rgba(20,40,70,.12)`、上端の帯は `::before`）、`.switch`（72×36 のトグル。ON で `--lemon` に点灯、`aria-pressed`）、`.knob`（52px の円、針つき。`input[type=range]` を置き換え）、`.scale`（目盛り + 針）、`.hero`（ライトは白パネル、ダークはグラデーション。枠線は不透明な `--line-strong`、`background-clip: padding-box`）。PC 幅（> 760px）はヒーローが 2 列（左に文、右にキービジュアル）、本体が 2 列（左にラジオと いま流れている、右に このあと流れるもの）。スマホ幅は 1 列、タグラインは折り返す。
+  - テーマ切替: 既定は端末に合わせる。ヘッダに ライト / ダーク / 端末 の 3 択（`html[data-theme]`、`localStorage` に保存。読めなくても動く）。
 
-- [ ] **Step 1: 失敗するテスト。** `GET /` の HTML に `fonts.googleapis.com` の link と `class="site-header"` がある。
-- [ ] **Step 2: 実装。** 既存クラス名（`.player`、`.item-card` など）は変えない。
+- [ ] **Step 1: 失敗するテスト。** `GET /` の HTML に `fonts.googleapis.com` の link（`Righteous` と `Zen+Kaku+Gothic+New`）と `class="site-header"`、テーマ切替の `data-theme-set` ボタンがある。
+- [ ] **Step 2: 実装。** 既存クラス名（`.player`、`.item-card` など）は変えない。模型の CSS を `public/app.css` に移植し、古い `--indigo` 系のトークンは消す。
 - [ ] **Step 3: ブラウザで `/`、`/stations/world`、`/put`、`/settings`、`/items/:id` をスマホ幅（390px）と PC 幅で撮る。** `docs/screenshots/2026-11-0X-theme-*.png`
 - [ ] **Step 4: コミット** `feat: retro-future visual theme and shared header`
 
@@ -268,13 +297,13 @@
 ### Task 13: キービジュアル
 
 **Files:**
-- Create: `public/kv.webp`（1600×900 以下、300 KB 以下）、`public/kv-mobile.webp`
-- Modify: `src/worker/routes/home.tsx`（ホーム上部に `<picture>`）、`public/app.css`
-- Test: `test/worker/routes/home.test.ts`（`kv.webp` への参照）
+- Exists: `public/kv.jpg`（1280 幅、本人確定 2026-11-05）、`public/kv-mobile.jpg`（800 幅）
+- Modify: `src/worker/routes/home.tsx` と `stations.tsx` のヒーロー（`<picture>`: 760px 以下は `kv-mobile.jpg`）、`public/app.css`（`.hero .kv`: 3:2、丸角 16px、影）
+- Test: `test/worker/routes/home.test.ts`（`/kv.jpg` への参照と alt）
 
-- [ ] **Step 1: 画像を 3 案生成して本人に選んでもらう。** 指示: 「机に座ってレトロなラジオを聴いている人。ラジオから伸びる光や電波の線が、世界地図の上の小さな人影（レコード・本・映画のポスターを持つ）につながっている。シティ・ポップ / レトロフューチャーのイラスト。夕方の色（紺、マゼンタ、サーモン、金）。文字を入れない」。Figma の `generate_image` か `codex-image-gen` スキル。
-- [ ] **Step 2: 選ばれた案を webp に変換して置き、ホームに表示。alt は一文。**
-- [ ] **Step 3: コミット** `feat: key visual on the home station`
+- [ ] **Step 1: 失敗するテスト。** `GET /` に `src="/kv.jpg"` と alt `机でレトロなラジオを聴く人と、世界の誰かの好きなもの`（英語設定では `Someone listening to a vintage radio at a desk, and what people around the world love`）。
+- [ ] **Step 2: 実装。** 模型 `docs/design/station-mock.html` の `.hero` と同じ配置（PC 幅は右列、スマホ幅は文の下に全幅）。
+- [ ] **Step 3: コミット** `feat: key visual in the station hero`
 
 ### Task 14: 文書と本番の設定
 
@@ -290,6 +319,7 @@
 
 ## 自己レビュー（計画を書いた時点）
 
+- Spec 追記 F（言語設定）→ Task 2、2b。G（見た目の確定）→ Task 11、13。
 - Spec 追記 A（局・連続再生・途中の反応・はじめの一歩の降格）→ Task 3〜6、12。B（識別・匿名の範囲）→ Task 2、7、8。C（公開局）→ Task 2、3、4、9。D（取り込みの並び）→ Task 2、10。E（文言・見た目・キービジュアル）→ Task 1、11、12、13。
 - 名前の一貫性: `StationKey` / `parseStationKey`（Task 3）を Task 4・5・6 が使う。`playerView`（Task 4）を Task 5 が使う。`requireSignin`（Task 8）を Task 9・10 が使う。`listFavorites`（Task 2）を Task 3・8・10 が使う。
-- 間に合わないときの削る順: Task 13 → 12 → 10 → 9 → 8（マイページだけ落として保護は残す）。Task 1〜7 と 11 は提出の核。
+- 間に合わないときの削る順: Task 12 → 10 → 9 → 8（マイページだけ落として保護は残す）。Task 1、2、2b、3〜7、11、13 は提出の核。

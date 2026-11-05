@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Dococa FM 局の画面の模型（2026-11-05 確定）</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Righteous&family=Zen+Kaku+Gothic+New:wght@400;500;700&display=swap">
+<style>
+/* Layout: the page IS the station screen, responsive. Wide: radio + now playing on the left, up-next on the right. Narrow: one column. Toggles switch dark/light and a 390px phone-width preview. */
+:root {
+  --paper:#e9f1f8; --ink:#141b31; --ink-2:#44506b; --line:rgba(20,27,49,.16); --line-strong:#c9d2df; --haze:rgba(20,27,49,.06); --panel:#ffffff;
+  --aqua:#1fb3a7; --sky:#3f9fff; --coral:#ff6f7a; --magenta:#e0409a; --lemon:#ffd24d; --lamp:#ffd24d;
+  --hero:#ffffff;
+  --knob:radial-gradient(circle at 35% 30%,#ffffff,#e9eef5 60%,#c9d3e0);
+  --fd:"Righteous","Zen Kaku Gothic New",sans-serif; --fs:"Zen Kaku Gothic New","Hiragino Kaku Gothic ProN",system-ui,sans-serif;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --paper:#121a2e; --ink:#eef4f8; --ink-2:#a9b7cc; --line:rgba(238,244,248,.14); --line-strong:#4b5878; --haze:rgba(238,244,248,.07); --panel:#1a2440;
+  --aqua:#4fd1c5; --sky:#7cc4ff; --coral:#ff8a95; --magenta:#f06cb6; --lemon:#ffe08a; --lamp:#ffe08a;
+  --hero:linear-gradient(160deg,#1c2a52 0%,#2a4a7a 40%,#a04a8a 74%,#ff7a8a 100%);
+  --knob:radial-gradient(circle at 35% 30%,rgba(255,255,255,.38),rgba(255,255,255,.08) 55%,rgba(0,0,0,.3));
+  color-scheme:dark; } }
+:root[data-theme="dark"] {
+  --paper:#121a2e; --ink:#eef4f8; --ink-2:#a9b7cc; --line:rgba(238,244,248,.14); --line-strong:#4b5878; --haze:rgba(238,244,248,.07); --panel:#1a2440;
+  --aqua:#4fd1c5; --sky:#7cc4ff; --coral:#ff8a95; --magenta:#f06cb6; --lemon:#ffe08a; --lamp:#ffe08a;
+  --hero:linear-gradient(160deg,#1c2a52 0%,#2a4a7a 40%,#a04a8a 74%,#ff7a8a 100%);
+  --knob:radial-gradient(circle at 35% 30%,rgba(255,255,255,.38),rgba(255,255,255,.08) 55%,rgba(0,0,0,.3));
+  color-scheme:dark; }
+* { box-sizing:border-box; }
+body { background:var(--paper); color:var(--ink); font-family:var(--fs); line-height:1.6; padding-left:max(16px,env(safe-area-inset-left,0px)); padding-right:max(16px,env(safe-area-inset-right,0px)); padding-block:0 48px; }
+.bar { display:flex; flex-wrap:wrap; gap:8px; align-items:center; justify-content:space-between; padding:12px 0; border-bottom:1px solid var(--line); margin-bottom:18px; font-size:13px; color:var(--ink-2); }
+.bar .btns { display:flex; gap:6px; flex-wrap:wrap; }
+.bar button { font:inherit; font-size:13px; color:var(--ink); background:var(--haze); border:1px solid var(--line); border-radius:999px; padding:6px 12px; cursor:pointer; }
+.bar button[aria-pressed="true"] { background:var(--ink); color:var(--paper); border-color:transparent; }
+.bar button:focus-visible { outline:2px solid var(--sky); outline-offset:2px; }
+.frame { max-width:1120px; margin:0 auto; transition:max-width .25s; }
+.frame.phone { max-width:390px; }
+.hero { background:var(--hero); background-clip:padding-box; border:1px solid var(--line-strong); box-shadow:0 18px 40px rgba(20,40,70,.12); border-radius:24px; padding:26px; position:relative; overflow:hidden; display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1.1fr); gap:22px; align-items:center; }
+.hero .copy { padding-top:34px; min-width:0; }
+.frame.phone .hero, .hero.narrow { grid-template-columns:1fr; }
+@media (max-width: 760px) { .hero { grid-template-columns:1fr; } }
+.wordmark { font-family:var(--fd); font-size:clamp(28px,4vw,40px); letter-spacing:.03em; line-height:1; color:var(--coral); background:linear-gradient(90deg,var(--coral),var(--magenta) 70%,var(--lemon)); -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent; width:max-content; max-width:100%; }
+.tagline { margin:8px 0 0; font-size:clamp(14px,1.5vw,16px); color:var(--ink); opacity:.85; white-space:nowrap; }
+.frame.phone .tagline { white-space:normal; text-wrap:balance; }
+@media (max-width: 760px) { .tagline { white-space:normal; text-wrap:balance; } }
+.nav { position:absolute; right:22px; top:22px; display:flex; gap:12px; font-size:13px; color:var(--ink); opacity:.85; }
+.grid { display:grid; grid-template-columns:minmax(0,1.3fr) minmax(0,1fr); gap:22px; margin-top:22px; position:relative; }
+.frame.phone .grid, .frame:not(.phone) .grid.narrow { grid-template-columns:1fr; }
+@media (max-width: 760px) { .grid { grid-template-columns:1fr; } }
+.radio { background:var(--panel); border:1px solid var(--line); border-radius:22px; padding:18px 20px; box-shadow:0 18px 40px rgba(20,40,70,.12); }
+.radio::before, .side::before { content:""; display:block; height:4px; border-radius:4px; background:linear-gradient(90deg,var(--coral),var(--lemon) 55%,var(--magenta)); margin:-4px 0 14px; }
+.face { display:flex; align-items:center; justify-content:space-between; gap:10px; font-size:12px; letter-spacing:.08em; color:var(--coral); border-bottom:1px dashed var(--line); padding-bottom:10px; }
+.face b { font-family:var(--fd); font-size:15px; letter-spacing:.02em; color:var(--ink); }
+.face .live { display:inline-flex; align-items:center; gap:6px; }
+.face .live i { width:8px; height:8px; border-radius:50%; background:var(--coral); box-shadow:0 0 8px var(--coral); }
+.scale { height:12px; margin:14px 0 16px; background:repeating-linear-gradient(90deg,var(--coral) 0 1px,transparent 1px 12px); opacity:.55; position:relative; }
+.scale i { position:absolute; left:58%; top:-5px; width:2px; height:22px; background:var(--lemon); box-shadow:0 0 8px var(--lemon); opacity:1; }
+.ctl { display:flex; align-items:flex-end; justify-content:space-between; gap:14px; flex-wrap:wrap; }
+.ctl > div { display:flex; flex-direction:column; align-items:center; gap:6px; min-width:0; }
+.lbl { font-size:11px; letter-spacing:.08em; color:var(--coral); white-space:nowrap; }
+.switch { width:72px; height:36px; border-radius:18px; background:var(--haze); border:1px solid var(--line); position:relative; cursor:pointer; }
+.switch.on { background:var(--lamp); border-color:transparent; box-shadow:0 0 18px rgba(255,216,107,.55); }
+.switch i { position:absolute; top:3px; left:3px; width:28px; height:28px; border-radius:50%; background:#fff; box-shadow:0 1px 3px rgba(0,0,0,.3); transition:left .2s; }
+.switch.on i { left:39px; }
+.knob { width:52px; height:52px; border-radius:50%; background:var(--knob); border:1px solid var(--line); position:relative; }
+.knob i { position:absolute; left:50%; top:5px; width:2px; height:16px; background:var(--coral); transform-origin:50% 21px; }
+.knob.v i { transform:translateX(-50%) rotate(135deg); }
+.knob.d i { transform:translateX(-50%) rotate(-50deg); }
+.ends { display:flex; justify-content:space-between; width:100%; font-size:10px; color:var(--ink-2); }
+.now { margin-top:18px; display:grid; grid-template-columns:88px minmax(0,1fr); gap:14px; }
+.art { width:88px; height:88px; border-radius:12px; background:linear-gradient(135deg,var(--coral),var(--magenta)); }
+.eyebrow { font-size:11px; letter-spacing:.1em; color:var(--coral); }
+.ttl { font-weight:700; font-size:18px; line-height:1.3; margin-top:2px; }
+.by { font-size:13px; color:var(--ink-2); }
+blockquote { margin:14px 0 0; padding:12px 14px; border-left:3px solid var(--lemon); background:var(--haze); border-radius:0 12px 12px 0; font-size:14px; line-height:1.65; }
+blockquote .ja { display:block; }
+blockquote .en { display:block; color:var(--ink-2); font-size:13px; margin-top:4px; }
+blockquote small { display:block; color:var(--ink-2); margin-top:6px; font-size:12px; }
+.react { display:flex; gap:8px; margin-top:12px; flex-wrap:wrap; }
+.pill { border:1px solid var(--coral); border-radius:999px; padding:7px 14px; font-size:13px; color:var(--ink); background:transparent; }
+.pill.hot { background:var(--magenta); color:#fff; border-color:transparent; font-weight:700; }
+.hero .kv { display:block; width:100%; max-width:100%; height:auto; aspect-ratio:3/2; object-fit:cover; border-radius:16px; box-shadow:0 14px 34px rgba(10,20,40,.25); position:relative; z-index:1; }
+.side { background:var(--panel); border:1px solid var(--line); border-radius:22px; padding:18px 20px; min-width:0; }
+.side h4 { margin:0 0 8px; font-family:var(--fd); font-weight:400; font-size:13px; letter-spacing:.08em; color:var(--coral); }
+.side ul { margin:0; padding:0; list-style:none; }
+.side li { display:flex; justify-content:space-between; gap:10px; padding:10px 0; border-top:1px solid var(--line); font-size:14px; }
+.side li span:last-child { color:var(--ink-2); flex-shrink:0; }
+.side li.kind { font-size:11px; color:var(--magenta); letter-spacing:.08em; border:0; padding:8px 0 0; }
+.notes { margin:26px auto 0; max-width:1120px; font-size:13px; color:var(--ink-2); display:grid; gap:6px; }
+.notes b { color:var(--ink); }
+.swatches { display:flex; gap:6px; margin:6px 0; }
+.swatches i { width:22px; height:22px; border-radius:6px; border:1px solid var(--line); }
+@media (prefers-reduced-motion: no-preference) { .switch.on { animation:glow 2.4s ease-in-out infinite alternate; } }
+@keyframes glow { from { box-shadow:0 0 10px rgba(255,216,107,.35); } to { box-shadow:0 0 22px rgba(255,216,107,.7); } }
+</style>
+
+<div class="bar">
+  <span>局の画面の模型（2026-11-05 本人確定）。ボタンでモードと幅を切り替えられます。実装の見た目の正本は public/app.css。</span>
+  <div class="btns">
+    <button id="t-light" type="button" aria-pressed="false">ライト</button>
+    <button id="t-dark" type="button" aria-pressed="false">ダーク</button>
+    <button id="t-auto" type="button" aria-pressed="true">端末に合わせる</button>
+    <span style="width:8px"></span>
+    <button id="w-wide" type="button" aria-pressed="true">PC 幅</button>
+    <button id="w-phone" type="button" aria-pressed="false">スマホ幅</button>
+  </div>
+</div>
+
+<div class="frame" id="frame">
+  <div class="hero">
+    <div class="nav"><span>お便りを送る</span><span>マイページ</span><span>サインイン</span></div>
+    <div class="copy">
+      <div class="wordmark">Dococa FM</div>
+      <p class="tagline">世界のどこかにいる誰かの好きなものが聴こえてくるラジオ</p>
+    </div>
+    <img class="kv" id="kv" alt="机でレトロなラジオを聴く人と、世界の誰かの好きなものをつなぐ電波" src="/kv.jpg">
+  </div>
+  <div class="grid" id="grid">
+    <div>
+      <div class="radio">
+        <div class="face"><span>DOCOCA FM</span><span class="live"><i></i>ON AIR</span></div>
+        <div class="scale"><i></i></div>
+        <div class="ctl">
+          <div><div class="switch on"><i></i></div><div class="lbl">ラジオをつける / 止める</div></div>
+          <div><div class="knob v"><i></i></div><div class="lbl">音量</div></div>
+          <div><div class="knob d"><i></i></div><div class="lbl">セレンディピティ</div></div>
+        </div>
+      </div>
+      <div class="now">
+        <div class="art"></div>
+        <div>
+          <div class="eyebrow">いま流れている</div>
+          <div class="ttl">ニュー・シネマ・パラダイス</div>
+          <div class="by">映画 (1988)</div>
+        </div>
+      </div>
+      <blockquote>
+        <span class="ja">この映画は私にはファドのように聴こえる。サウダージでいっぱいだ。小さな映画館と、少年と、年老いた友人。</span>
+        <span class="en">This film sounds like fado to me, full of saudade. A small cinema, a boy and an old friend.</span>
+        <small>Azulejo Sunday さん（ポルト、ポルトガル）［デモ用］</small>
+      </blockquote>
+      <div class="react"><span class="pill hot">私も</span><span class="pill">一言を送る</span><span class="pill">この作品を聴く・観る</span></div>
+    </div>
+    <aside class="side">
+      <h4>このあと流れるもの</h4>
+      <ul>
+        <li class="kind">音楽</li>
+        <li><span>Blinding Lights</span><span>The Weeknd</span></li>
+        <li class="kind">映画</li>
+        <li><span>となりのトトロ</span><span>1988</span></li>
+        <li class="kind">音楽</li>
+        <li><span>Mr. Brightside</span><span>The Killers</span></li>
+        <li class="kind">本</li>
+        <li><span>博士の愛した数式</span><span>小川洋子</span></li>
+      </ul>
+      <h4 style="margin-top:18px">あなたのラジオ</h4>
+      <ul>
+        <li><span>好きなものを 3 つ送ると、あなた向けのラジオが始まります</span></li>
+      </ul>
+    </aside>
+  </div>
+</div>
+
+
+<div class="notes">
+  <div><b>配色（第 5 稿）</b> 地とパネルの色はそのまま。差し色をキービジュアルの暖色（サンゴ・レモン・マゼンタ）に寄せました: ロゴのグラデーション、パネル上端の細い帯、ON AIR と見出しラベル、目盛りと針、ボタンの枠、お便りの縦線、種別ラベル。</div>
+  <div class="swatches"><i style="background:#e9f1f8"></i><i style="background:#121a2e"></i><i style="background:#3f9fff"></i><i style="background:#1fb3a7"></i><i style="background:#ff6f7a"></i><i style="background:#e0409a"></i><i style="background:#ffd24d"></i></div>
+  <div><b>書体</b> ロゴだけ Righteous。日本語の見出しと本文は Zen Kaku Gothic New。</div>
+  <div><b>文言</b> 「みんなのラジオ」の表示は外し、ラジオ面には局名の代わりに DOCOCA FM と ON AIR だけ。ダイヤルの名前は「セレンディピティ」（端のラベルは無し）。お便りは「送る」。あなた向けのラジオ、〇〇さんのラジオ、ラジオをつける、この作品を聴く・観る。</div>
+  <div><b>キービジュアル</b> PC 幅のとき右上に入ります（画像は Codex の画像生成で作成中。入り次第この場所に差し替えます）。</div>
+</div>
+
+<script>
+(function(){
+  var root=document.documentElement, frame=document.getElementById('frame');
+  function setTheme(v){ if(v==='auto'){root.removeAttribute('data-theme');}else{root.setAttribute('data-theme',v);} ['light','dark','auto'].forEach(function(k){document.getElementById('t-'+k).setAttribute('aria-pressed',String(k===v));}); try{localStorage.setItem('theme',v);}catch(e){} }
+  function setWidth(v){ frame.classList.toggle('phone',v==='phone'); document.getElementById('w-wide').setAttribute('aria-pressed',String(v==='wide')); document.getElementById('w-phone').setAttribute('aria-pressed',String(v==='phone')); }
+  document.getElementById('t-light').onclick=function(){setTheme('light');};
+  document.getElementById('t-dark').onclick=function(){setTheme('dark');};
+  document.getElementById('t-auto').onclick=function(){setTheme('auto');};
+  document.getElementById('w-wide').onclick=function(){setWidth('wide');};
+  document.getElementById('w-phone').onclick=function(){setWidth('phone');};
+  var saved=null; try{saved=localStorage.getItem('theme');}catch(e){}
+  if(saved==='light'||saved==='dark'){setTheme(saved);}
+})();
+</script>
+
+</body></html>
