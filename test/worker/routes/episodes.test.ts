@@ -309,7 +309,7 @@ describe("GET /episodes/:id", () => {
     // A Japanese listener reads the stored translation as the main text, with the original behind a toggle.
     const stored = (await env.DB.prepare("SELECT body_ja FROM letters WHERE id = ?").bind(letterId).first<{ body_ja: string }>())!;
     expect(embedded.originals[letterId]).toEqual({ main: stored.body_ja, original: "A letter from far away." });
-    expect(JSON.parse(html.match(/id="player-i18n">([\s\S]*?)<\/script>/)![1]!)["player.original"]).toBe("原文");
+    expect(JSON.parse(html.match(/id="player-i18n">([\s\S]*?)<\/script>/)![1]!)["letter.showOriginal"]).toBe("原文を見る");
     const json = (await (await get(`/episodes/${id}.json`, cookie)).json()) as { originals: Record<string, unknown> };
     expect(json.originals[letterId]).toEqual({ main: expect.any(String), original: "A letter from far away." });
   });

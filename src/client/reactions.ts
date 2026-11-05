@@ -13,6 +13,13 @@ export async function postLetter(fields: Record<string, string>): Promise<boolea
   }
 }
 
+/** The form fields and the `sent` key of a 私も or a 一言 on the letter being read; null for an empty reply. */
+export function reactionOf(kind: "watashimo" | "reply", itemId: string | undefined, letterId: string | undefined, body = ""): { fields: Record<string, string>; key: string } | null {
+  if (!itemId || !letterId) return null;
+  if (kind === "watashimo") return { fields: { kind, itemId, parentLetterId: letterId }, key: `w:${letterId}` };
+  return body.trim() === "" ? null : { fields: { kind, body, itemId, parentLetterId: letterId }, key: `r:${letterId}` };
+}
+
 export function saveDial(value: string): void {
   void fetch("/settings/dial", { method: "POST", headers: FORM, body: new URLSearchParams({ dial: value }).toString() }).catch(() => {});
 }

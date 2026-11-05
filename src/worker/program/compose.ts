@@ -1,4 +1,5 @@
 import { t } from "../i18n/t";
+import { siteLabel } from "../letters/label";
 import type { Item, Letter, ScriptLine, Segment } from "../types";
 import type { DjLines } from "./script";
 import type { Selection } from "./select";
@@ -15,17 +16,8 @@ const fixed = (text: string): ScriptLine => ({ type: "dj", text, fixed: true });
 /** Every template a `fixed` line is made from; the quote check reads only what was filled into them. */
 export const FIXED_TEMPLATES = ["script.readingOnly", "script.letterFrom", "script.workOnly", "script.foundVoice", "script.reaction", "script.replyReaction"] as const;
 
-/** Where a found voice was found, said aloud: YouTube by name, otherwise the host without www. */
-export function siteName(sourceUrl: string | null): string {
-  let host = "";
-  try {
-    host = new URL(sourceUrl ?? "").hostname.toLowerCase();
-  } catch {
-    return t("script.web");
-  }
-  if (host === "youtu.be" || host === "youtube.com" || host.endsWith(".youtube.com")) return "YouTube";
-  return host.replace(/^www\./, "") || t("script.web");
-}
+/** Where a found voice was found, said aloud; the same label the screens show. */
+export const siteName = (sourceUrl: string | null): string => siteLabel(sourceUrl) || t("script.web");
 
 /** The letter as stored: the reader reads `bodyJa`, word for word. */
 const read = (l: Letter): ScriptLine => ({

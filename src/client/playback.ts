@@ -1,4 +1,5 @@
 /** Line playback shared by the episode player and the station player: clips, Web Speech, the bed, Media Session. */
+import { siteLabel, whoLine } from "../worker/letters/label";
 import type { ScriptLine, Segment } from "../worker/types";
 import { createBed, createClipPlayer } from "./audio";
 import { loadVoices, pickVoice, speak } from "./speech";
@@ -143,22 +144,28 @@ export const outLabel = (str: (key: string) => string, key: string): string | nu
   return label === `out.${key}` ? null : label;
 };
 
-const siteOf = (url: string): string => {
-  try {
-    return new URL(url).hostname.replace(/^www\./, "");
-  } catch {
-    return "";
-  }
-};
-
 export function foundLabel(l: LetterLine, url: string, str: (key: string) => string): string {
-  const site = siteOf(url);
+  const site = siteLabel(url);
   return fmt(str(site ? "player.foundSource" : "player.foundSourceNoSite"), { author: l.sourceAuthor ?? "", site });
 }
 
 export function whoOf(l: LetterLine, str: (key: string) => string): string {
   if (l.kind === "found") return l.sourceAuthor ?? "";
-  const who = l.radioName ? fmt(str("letter.who"), { name: l.radioName }) : str("listener.anonymous");
-  const named = l.place ? fmt(str("letter.whoPlace"), { who, place: l.place }) : who;
-  return l.demo ? fmt(str("letter.whoDemo"), { who: named, demo: str("listener.demo") }) : named;
+  return whoLine(l, (key, params) => fmt(str(key), params ?? {}));
+}
+
+export type NextReason = "limit" | "empty" | "failed";
+
+/** Asks for the listener's next episode. The same mapping for both players: 429 is today's limit, 409 is a station with nothing to play. */
+export async function fetchNext(url: string): Promise<{ ok: true; body: Record<string, unknown> } | { ok: false; reason: NextReason }> {
+  try {
+    const res = await fetch(url, { method: "POST" });
+    if (res.status === 429) return { ok: false, reason: "limit" };
+    if (res.status === 409) return { ok: false, reason: "empty" };
+    if (!res.ok) return { ok: false, reason: "failed" };
+    const body = (await res.json()) as unknown;
+    return typeof body === "object" && body !== null ? { ok: true, body: body as Record<string, unknown> } : { ok: false, reason: "failed" };
+  } catch {
+    return { ok: false, reason: "failed" };
+  }
 }

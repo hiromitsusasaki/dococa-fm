@@ -2,6 +2,7 @@ import type { Item, Letter } from "../worker/types";
 import { displayText } from "../worker/letters/display";
 import { type Lang, tFor } from "../worker/i18n/t";
 import { ja } from "../worker/i18n/ja";
+import { whoLine } from "../worker/letters/label";
 
 type CardItem = Pick<Item, "kind" | "title" | "creator" | "year" | "imageUrl">;
 
@@ -57,9 +58,7 @@ export function isHttpUrl(s: string | null): s is string {
 /** The radio-name line; a demo account carries the 「デモ用」 mark at the end so nobody mistakes its letters for a real listener's. */
 export const whoOf = (l: Pick<Letter, "radioName" | "place"> & { demo?: boolean }, lang: Lang): string => {
   const t = tFor(lang);
-  const who = l.radioName ? t("letter.who", { name: l.radioName }) : t("listener.anonymous");
-  const named = l.place ? t("letter.whoPlace", { who, place: l.place }) : who;
-  return l.demo ? t("letter.whoDemo", { who: named, demo: t("listener.demo") }) : named;
+  return whoLine(l, (key, params) => t(key, params));
 };
 
 export function ReportForm({ letterId, lang }: { letterId: string; lang: Lang }) {

@@ -1,8 +1,8 @@
 /** @jsxImportSource hono/jsx/dom */
 import { flushSync } from "hono/jsx/dom";
 import { createRoot } from "hono/jsx/dom/client";
-import { bindMediaSession, createLinePlayer, type LetterLine, type PlayerEpisode, type PlayerItem, syncMediaSession, whoOf } from "./playback";
-import { postLetter, saveDial } from "./reactions";
+import { bindMediaSession, createLinePlayer, fetchNext, type LetterLine, type PlayerEpisode, type PlayerItem, syncMediaSession, whoOf } from "./playback";
+import { postLetter, reactionOf, saveDial } from "./reactions";
 import { StationScreen, type UpNextRow } from "./station-view";
 
 export type StationOptions = {
@@ -79,16 +79,10 @@ export function mountStation(root: HTMLElement, opts: StationOptions) {
   }
 
   async function requestNext(): Promise<Fetched> {
-    try {
-      const res = await fetch(opts.nextUrl, { method: "POST" });
-      if (res.status === 429) return { ok: false, reason: "limit" };
-      if (res.status === 409) return { ok: false, reason: "empty" };
-      if (!res.ok) return { ok: false, reason: "failed" };
-      const body = (await res.json()) as { episode?: unknown };
-      return playable(body.episode) ? { ok: true, view: body.episode } : { ok: false, reason: "failed" };
-    } catch {
-      return { ok: false, reason: "failed" };
-    }
+    const r = await fetchNext(opts.nextUrl);
+    if (!r.ok) return r;
+    const episode = r.body.episode;
+    return playable(episode) ? { ok: true, view: episode } : { ok: false, reason: "failed" };
   }
 
   /** The listener's latest episode, to pick up where the last visit left off; null when there is none or it cannot be read. */
@@ -232,6 +226,11 @@ export function mountStation(root: HTMLElement, opts: StationOptions) {
     else setState({ sendFailed: true });
   }
 
+  function react(kind: "watashimo" | "reply", body?: string) {
+    const r = reactionOf(kind, state.current?.segments[state.seg]?.itemId, letterNow()?.letterId, body);
+    if (r) void send(r.fields, r.key);
+  }
+
   const lineNow = () => state.current?.segments[state.seg]?.lines[state.line];
   const letterNow = (): LetterLine | null => {
     const l = lineNow();
@@ -278,16 +277,8 @@ export function mountStation(root: HTMLElement, opts: StationOptions) {
         volume: setVolume,
         dial: saveDial,
         toggleReply: () => setState({ replyOpen: !state.replyOpen }),
-        watashimo() {
-          const itemId = state.current?.segments[state.seg]?.itemId;
-          const l = letterNow();
-          if (l && itemId) void send({ kind: "watashimo", itemId, parentLetterId: l.letterId }, `w:${l.letterId}`);
-        },
-        reply(body: string) {
-          const itemId = state.current?.segments[state.seg]?.itemId;
-          const l = letterNow();
-          if (l && itemId && body.trim() !== "") void send({ kind: "reply", body, itemId, parentLetterId: l.letterId }, `r:${l.letterId}`);
-        },
+        watashimo: () => react("watashimo"),
+        reply: (body: string) => react("reply", body),
       },
     };
   }

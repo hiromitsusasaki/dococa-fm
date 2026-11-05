@@ -6,6 +6,7 @@ import { LetterQuote } from "./letter-quote";
 import {
   bindMediaSession,
   createLinePlayer,
+  fetchNext,
   isHttpUrl,
   type LetterLine,
   outLabel,
@@ -14,7 +15,7 @@ import {
   type PlayerOriginals,
   syncMediaSession,
 } from "./playback";
-import { onReleased, postLetter, saveDial } from "./reactions";
+import { onReleased, postLetter, reactionOf, saveDial } from "./reactions";
 
 export type { PlayerEpisode, PlayerItem, PlayerOriginals };
 export type PlayerOptions = {
@@ -69,13 +70,10 @@ export function mountPlayer(root: HTMLElement, episode: PlayerEpisode, opts: Pla
   const sync = () => syncMediaSession(itemOf(state.seg), state.status === "playing");
 
   function ensureNext(): Promise<Next> {
-    prefetch ??= fetch(opts.nextUrl, { method: "POST" })
-      .then(async (res): Promise<Next> => {
-        if (res.status === 429) return { ok: false, reason: "limit" };
-        const body = res.ok ? ((await res.json()) as { id?: unknown }) : null;
-        return typeof body?.id === "string" && body.id !== "" ? { ok: true, id: body.id } : { ok: false, reason: "failed" };
-      })
-      .catch((): Next => ({ ok: false, reason: "failed" }));
+    prefetch ??= fetchNext(opts.nextUrl).then((r): Next => {
+      if (!r.ok) return { ok: false, reason: r.reason === "limit" ? "limit" : "failed" };
+      return typeof r.body.id === "string" && r.body.id !== "" ? { ok: true, id: r.body.id } : { ok: false, reason: "failed" };
+    });
     return prefetch;
   }
 
@@ -86,7 +84,7 @@ export function mountPlayer(root: HTMLElement, episode: PlayerEpisode, opts: Pla
     const next = await ensureNext();
     if (signal.aborted) return;
     if (next.ok) return navigate(`/episodes/${encodeURIComponent(next.id)}`);
-    setState({ status: "ended", loading: false, message: str(next.reason === "limit" ? "player.limit" : "player.failed") });
+    setState({ status: "ended", loading: false, message: str(next.reason === "limit" ? "station.limit" : "station.failed") });
   }
 
   async function run(fromSeg: number, fromLine: number, signal: AbortSignal) {
@@ -137,6 +135,11 @@ export function mountPlayer(root: HTMLElement, episode: PlayerEpisode, opts: Pla
     else setState({ message: str("player.sendFailed") });
   }
 
+  function react(kind: "watashimo" | "reply", body?: string) {
+    const r = reactionOf(kind, segments[state.seg]?.itemId, currentLetter()?.letterId, body);
+    if (r) void send(r.fields, r.key);
+  }
+
   const currentLetter = (): LetterLine | null => {
     const l = lineOf(state.seg, state.line);
     return l?.type === "letter" ? l : null;
@@ -147,16 +150,8 @@ export function mountPlayer(root: HTMLElement, episode: PlayerEpisode, opts: Pla
     toggle: () => (state.status === "playing" ? pause() : play()),
     next,
     toggleReply: () => setState({ replyOpen: !state.replyOpen }),
-    watashimo() {
-      const l = currentLetter();
-      const itemId = segments[state.seg]?.itemId;
-      if (l && itemId) void send({ kind: "watashimo", itemId, parentLetterId: l.letterId }, `w:${l.letterId}`);
-    },
-    reply(body) {
-      const l = currentLetter();
-      const itemId = segments[state.seg]?.itemId;
-      if (l && itemId && body.trim() !== "") void send({ kind: "reply", body, itemId, parentLetterId: l.letterId }, `r:${l.letterId}`);
-    },
+    watashimo: () => react("watashimo"),
+    reply: (body) => react("reply", body),
     saveDial,
     dial: opts.dial ?? 0.3,
     item: (seg) => itemOf(seg),
@@ -221,7 +216,7 @@ function Screen({ s, view }: { s: State; view: View }) {
         {line?.type === "dj" && <p class="player-dj">{line.text}</p>}
         {line?.type === "preview" && <p class="player-dj" aria-hidden="true">♪</p>}
         {letter && (
-          <LetterQuote letter={letter} original={original} str={str} toggleKey="player.original" />
+          <LetterQuote letter={letter} original={original} str={str} toggleKey="letter.showOriginal" />
         )}
       </div>
       {s.message && <p class="player-message" role="alert">{s.message}</p>}
@@ -273,7 +268,7 @@ function Screen({ s, view }: { s: State; view: View }) {
         </a>
       )}
       <label class="player-dial">
-        <span>{str("player.dial")}</span>
+        <span>{str("station.dial")}</span>
         <input type="range" min="0" max="1" step="0.1" value={String(view.dial)} ref={onReleased(view.saveDial)} />
       </label>
     </div>

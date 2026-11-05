@@ -14,10 +14,10 @@ const strings: Record<string, string> = {
   "player.sendFailed": "送れませんでした",
   "player.again": "この作品を聴く・観る",
   "player.put": "お便りを送る",
-  "player.dial": "セレンディピティ",
+  "station.dial": "セレンディピティ",
   "player.loading": "読み込み中",
-  "player.failed": "番組を作れませんでした",
-  "player.limit": "今日の番組はここまで",
+  "station.failed": "電波が届きませんでした",
+  "station.limit": "今日の分はここまで。また明日",
   "letter.who": "{name}さん",
   "letter.whoPlace": "{who}（{place}）",
   "listener.anonymous": "名無しのリスナー",
@@ -301,13 +301,13 @@ describe("player", () => {
       originals: { L1: { main: "夜中にひとりで少し泣いた。", original: "Cried a little, alone at midnight." } },
       segments: [{ ...one.segments[0]!, lines: [letter("L1", "夜中にひとりで少し泣いた。")] }],
     };
-    mountPlayer(root, translated, opts({ strings: { ...strings, "player.original": "原文" } }));
+    mountPlayer(root, translated, opts({ strings: { ...strings, "letter.showOriginal": "原文を見る" } }));
     await tap("toggle");
     await vi.waitFor(() => expect(spoken).toEqual(["夜中にひとりで少し泣いた。"]));
     const quote = root.querySelector(".player-letter")!;
     expect(quote.textContent).toContain("夜中にひとりで少し泣いた。");
     const original = quote.querySelector("details.player-original")!;
-    expect(original.querySelector("summary")!.textContent).toBe("原文");
+    expect(original.querySelector("summary")!.textContent).toBe("原文を見る");
     expect(original.textContent).toContain("Cried a little, alone at midnight.");
   });
 
@@ -441,7 +441,7 @@ describe("player", () => {
     fetchMock.mockImplementation(() => respond(429, { error: "limit" }));
     mountPlayer(root, { ...one, segments: [{ ...one.segments[0]!, lines: [{ type: "dj", text: "only" }] }] }, opts());
     await tap("toggle");
-    await vi.waitFor(() => expect(root.textContent).toContain("今日の番組はここまで"));
+    await vi.waitFor(() => expect(root.textContent).toContain("今日の分はここまで"));
     expect(navigate).not.toHaveBeenCalled();
     expect(btn("toggle").textContent).toContain("再生");
   });
@@ -450,7 +450,7 @@ describe("player", () => {
     fetchMock.mockImplementation(() => respond(503, { error: "unavailable" }));
     mountPlayer(root, { ...one, segments: [{ ...one.segments[0]!, lines: [{ type: "dj", text: "only" }] }] }, opts());
     await tap("toggle");
-    await vi.waitFor(() => expect(root.textContent).toContain("番組を作れませんでした"));
+    await vi.waitFor(() => expect(root.textContent).toContain("電波が届きませんでした"));
     expect(navigate).not.toHaveBeenCalled();
   });
 
