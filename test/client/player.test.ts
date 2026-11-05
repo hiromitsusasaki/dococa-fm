@@ -14,7 +14,7 @@ const strings: Record<string, string> = {
   "player.sendFailed": "送れませんでした",
   "player.again": "もう一度体験する",
   "player.put": "一通置く",
-  "player.dial": "遠くのダイヤル",
+  "player.dial": "セレンディピティ",
   "player.loading": "読み込み中",
   "player.failed": "番組を作れませんでした",
   "player.limit": "今日の番組はここまで",
