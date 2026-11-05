@@ -140,6 +140,30 @@ describe("GET /tts", () => {
     expect(await env.BUCKET.get(`tts/${ep.id}/0.mp3`)).toBeNull();
   });
 
+  it("answers 502 without a request or a stored clip when the service-account json is invalid", async () => {
+    const { cookie, ep } = await setup();
+    const { fn } = stubFetch([[GOOGLE, () => json({ audioContent: audio })]]);
+    const res = await call(`/tts?episode=${ep.id}&line=0`, cookie, { ...env, GOOGLE_TTS_SA_JSON: "{}" });
+    expect(res.status).toBe(502);
+    expect(await res.json()).toEqual({ error: "tts failed" });
+    expect(fn).not.toHaveBeenCalled();
+    expect(await env.BUCKET.get(`tts/${ep.id}/0.mp3`)).toBeNull();
+  });
+
+  it("answers 502 and never calls the TTS endpoint when the token endpoint fails", async () => {
+    const { cookie, ep } = await setup();
+    const other = await makeServiceAccount("uncached@test-project.iam.gserviceaccount.com");
+    const { fn } = stubFetch([
+      ["https://oauth2.googleapis.com/token", () => json({}, 500)],
+      [GOOGLE, () => json({ audioContent: audio })],
+    ]);
+    const res = await call(`/tts?episode=${ep.id}&line=0`, cookie, { ...env, GOOGLE_TTS_SA_JSON: other.json });
+    expect(res.status).toBe(502);
+    expect(await res.json()).toEqual({ error: "tts failed" });
+    expect(fn.mock.calls.map(([u]) => String(u))).toEqual(["https://oauth2.googleapis.com/token"]);
+    expect(await env.BUCKET.get(`tts/${ep.id}/0.mp3`)).toBeNull();
+  });
+
   it("never logs the key when fetch itself throws", async () => {
     const { cookie, ep } = await setup();
     const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});

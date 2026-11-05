@@ -1,5 +1,5 @@
 import type { Env } from "../env";
-import { accessToken, parseServiceAccount } from "./google-auth";
+import { accessToken, parseServiceAccount, type ServiceAccount } from "./google-auth";
 import { DJ_STYLE_PROMPT } from "./style";
 
 const ENDPOINT = "https://texttospeech.googleapis.com/v1/text:synthesize";
@@ -38,12 +38,11 @@ function fromBase64(b64: string): Uint8Array {
   return Uint8Array.from(bin, (c) => c.charCodeAt(0));
 }
 
-async function synthesizeChunk(env: Env, text: string, voice: "male" | "female"): Promise<Uint8Array> {
-  const sa = parseServiceAccount(env.GOOGLE_TTS_SA_JSON);
+async function synthesizeChunk(env: Env, sa: ServiceAccount, text: string, voice: "male" | "female"): Promise<Uint8Array> {
   const token = await accessToken(sa);
   const res = await fetch(ENDPOINT, {
     method: "POST",
-    headers: { "content-type": "application/json", authorization: `Bearer ${token}`, "x-goog-user-project": sa.project_id },
+    headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
     body: JSON.stringify({
       input: { text, prompt: DJ_STYLE_PROMPT },
       voice: { languageCode: "ja-JP", name: VOICE_NAME[voice], modelName: env.GEMINI_TTS_MODEL || DEFAULT_MODEL },
@@ -60,8 +59,9 @@ async function synthesizeChunk(env: Env, text: string, voice: "male" | "female")
 
 /** Reads `text` aloud as MP3. Long text goes out in pieces and the MP3 frames are joined in order. */
 export async function synthesize(env: Env, text: string, voice: "male" | "female"): Promise<ArrayBuffer> {
+  const sa = parseServiceAccount(env.GOOGLE_TTS_SA_JSON);
   const parts: Uint8Array[] = [];
-  for (const chunk of splitText(text)) parts.push(await synthesizeChunk(env, chunk, voice));
+  for (const chunk of splitText(text)) parts.push(await synthesizeChunk(env, sa, chunk, voice));
   const out = new Uint8Array(parts.reduce((n, p) => n + p.length, 0));
   let at = 0;
   for (const p of parts) {

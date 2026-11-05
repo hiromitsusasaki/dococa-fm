@@ -30,7 +30,7 @@ describe("synthesize", () => {
     const [url, init] = ttsCalls()[0]!;
     expect(String(url)).toBe(URL_PREFIX);
     expect(init?.method).toBe("POST");
-    expect(init?.headers).toMatchObject({ authorization: "Bearer tok-test", "x-goog-user-project": "test-project" });
+    expect(init?.headers).toMatchObject({ authorization: "Bearer tok-test" });
     const body = JSON.parse(String(init?.body));
     expect(body).toEqual({
       input: { text: "こんばんは。", prompt: DJ_STYLE_PROMPT },
