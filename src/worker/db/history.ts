@@ -7,12 +7,13 @@ type Row = Record<string, unknown>;
 const ROWS_PER_UPSERT = 20;
 
 /** One multi-row statement per 20 rows, sent as one batch. */
-export async function upsertHistory(db: D1Database, rows: HistoryRow[], opts: { clearSpotifyRanksOf?: string } = {}): Promise<void> {
+export async function upsertHistory(db: D1Database, rows: HistoryRow[], opts: { clearRanksOf?: string } = {}): Promise<void> {
   if (rows.length === 0) return;
   const stmts: D1PreparedStatement[] = [];
-  // A re-import is the new truth: a track that fell out of the top lists must not keep its old rank. Same batch, so it is atomic.
-  if (opts.clearSpotifyRanksOf) {
-    stmts.push(db.prepare("UPDATE history SET rank = NULL WHERE listener_id = ? AND source = 'spotify'").bind(opts.clearSpotifyRanksOf));
+  // A re-import is the new truth: every rank (a manual favourite's included) comes from the latest import and nowhere else.
+  // Same batch, so it is atomic.
+  if (opts.clearRanksOf) {
+    stmts.push(db.prepare("UPDATE history SET rank = NULL WHERE listener_id = ?").bind(opts.clearRanksOf));
   }
   for (let i = 0; i < rows.length; i += ROWS_PER_UPSERT) {
     const chunk = rows.slice(i, i + ROWS_PER_UPSERT);

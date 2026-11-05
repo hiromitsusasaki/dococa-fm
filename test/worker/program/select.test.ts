@@ -195,6 +195,24 @@ describe("selectProgram", () => {
       return { x, mine };
     };
 
+    it("is not consumed by an episode of another station", async () => {
+      const f = await buildFixture();
+      const { x, mine } = await addOwnLetterWithReaction(f, new Date(Date.now() - 60_000).toISOString());
+      await insertLetter(env.DB, letterDraft(x.id, { kind: "watashimo", listenerId: f.b.id, parentLetterId: mine.id }));
+      await insertEpisode(env.DB, {
+        listenerId: f.a.id,
+        segments: [],
+        verified: true,
+        report: { verbatim: true, sources: true, topical: true, pii: true, details: [] },
+        station: "world",
+        createdAt: new Date(Date.now() + 60_000).toISOString(),
+      });
+      for (const seed of ["s", "t", "u", "v", "w", "x", "y", "z"]) {
+        const p = await selectProgram(env.DB, { ...f.a, dial: 0.3 }, { seed });
+        expect([x.id, f.items[0]]).toContain(p[0]?.itemId);
+      }
+    });
+
     it("puts the item that got a reaction since the last episode first, as near", async () => {
       const f = await buildFixture();
       const { x, mine } = await addOwnLetterWithReaction(f, new Date(Date.now() - 60_000).toISOString());

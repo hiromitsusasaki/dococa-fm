@@ -66,9 +66,21 @@ describe("history", () => {
     const me = await createListener(env.DB);
     const a = await insertItem(env.DB, itemDraft());
     await upsertHistory(env.DB, [{ listenerId: me.id, itemId: a.id, source, occurredAt: null, rank: null }]);
-    await upsertHistory(env.DB, [{ listenerId: me.id, itemId: a.id, source: "spotify", occurredAt: "2026-01-01T00:00:00.000Z", rank: 4 }], { clearSpotifyRanksOf: me.id });
+    await upsertHistory(env.DB, [{ listenerId: me.id, itemId: a.id, source: "spotify", occurredAt: "2026-01-01T00:00:00.000Z", rank: 4 }], { clearRanksOf: me.id });
     const [row] = await listFavorites(env.DB, me.id, 10);
     expect(row).toMatchObject({ source, rank: 4, occurredAt: "2026-01-01T00:00:00.000Z" });
+  });
+
+  it("a re-import clears every rank of the listener, a manual favourite's included", async () => {
+    const me = await createListener(env.DB);
+    const [a, b] = await Promise.all(["A", "B"].map((title) => insertItem(env.DB, itemDraft({ title, externalIds: {} }))));
+    await upsertHistory(env.DB, [
+      { listenerId: me.id, itemId: a!.id, source: "manual", occurredAt: null, rank: 1 },
+      { listenerId: me.id, itemId: b!.id, source: "spotify", occurredAt: null, rank: 2 },
+    ]);
+    await upsertHistory(env.DB, [{ listenerId: me.id, itemId: b!.id, source: "spotify", occurredAt: null, rank: 1 }], { clearRanksOf: me.id });
+    const ranks = Object.fromEntries((await listHistory(env.DB, me.id, 10)).map((r) => [r.item.title, r.rank]));
+    expect(ranks).toEqual({ A: null, B: 1 });
   });
 
   it("listFavorites leaves out what a service played and orders by rank", async () => {
