@@ -1,7 +1,7 @@
 /** @jsxImportSource hono/jsx/dom */
 import { flushSync } from "hono/jsx/dom";
 import { createRoot } from "hono/jsx/dom/client";
-import { bindMediaSession, createLinePlayer, type LetterLine, type PlayerEpisode, type PlayerItem, syncMediaSession } from "./playback";
+import { bindMediaSession, createLinePlayer, type LetterLine, type PlayerEpisode, type PlayerItem, syncMediaSession, whoOf } from "./playback";
 import { postLetter, saveDial } from "./reactions";
 import { StationScreen, type UpNextRow } from "./station-view";
 
@@ -243,7 +243,9 @@ export function mountStation(root: HTMLElement, opts: StationOptions) {
     const add = (ep: PlayerEpisode, from: number) => {
       ep.segments.slice(from).forEach((s, n) => {
         const item = ep.items[s.itemId];
-        if (item) rows.push({ key: `${ep.id}:${from + n}`, kind: item.kind ?? null, title: item.title, creator: item.creator });
+        if (!item) return;
+        const first = s.lines.find((l): l is LetterLine => l.type === "letter");
+        rows.push({ key: `${ep.id}:${from + n}`, kind: item.kind ?? null, title: item.title, creator: item.creator, ...(first ? { sender: whoOf(first, str) } : {}) });
       });
     };
     if (state.current) add(state.current, state.seg + 1);

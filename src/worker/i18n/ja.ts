@@ -183,7 +183,6 @@ export const ja = {
   "station.growStart": "好きなものを 3 つ送る",
   "station.growHelp": "好きなものを 3 つ送ると、あなた向けのラジオが始まります",
   "letter.showOriginal": "原文を見る",
-  "letter.showTranslation": "訳を見る",
   "signin.google": "Google でサインイン",
   "signin.needed": "好きなものを送るには、サインインが要ります。聴くのと「私も」「一言」はそのままどうぞ",
   "signin.out": "サインアウト",

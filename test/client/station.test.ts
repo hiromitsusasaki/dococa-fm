@@ -266,6 +266,20 @@ describe("station: playing", () => {
     expect(root.querySelector("ol")).toBeNull();
   });
 
+  it("names the sender of the next letter in the list, and only for a work that has one", async () => {
+    const ep = view("epS", [["a", [dj("a1")]], ["b", [dj("b1"), letter("L2", "こんにちは")]], ["c", [dj("c1")]]]);
+    nextReplies = [ok(ep), ok(epB())];
+    autoEnd = false;
+    mountStation(root, opts());
+    await power();
+    await vi.waitFor(() => expect(spoken).toEqual(["a1"]));
+    const rows = [...root.querySelectorAll(".up-next li")];
+    expect(rows[0]!.textContent).toContain("曲B");
+    expect(rows[0]!.querySelector(".sender")?.textContent).toBe("しずくさん（松本）");
+    expect(rows[1]!.textContent).toContain("曲C");
+    expect(rows[1]!.querySelector(".sender")).toBeNull();
+  });
+
   it("shows the letter being read with its sender and a toggle for the original", async () => {
     const ep = view("epL", [["a", [{ ...letter("L9", "こんにちは") }]]], { L9: { main: "こんにちは", original: "Hello" } });
     nextReplies = [ok(ep)];

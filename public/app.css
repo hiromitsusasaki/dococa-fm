@@ -740,6 +740,12 @@ button.pill {
   color: var(--ink-2);
 }
 
+.up-next .sender {
+  flex: 1 0 100%;
+  color: var(--ink-2);
+  font-size: 13px;
+}
+
 .kind {
   color: var(--magenta);
   font-size: 11px;

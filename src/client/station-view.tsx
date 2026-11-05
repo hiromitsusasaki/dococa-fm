@@ -3,7 +3,8 @@ import { LetterQuote } from "./letter-quote";
 import { isHttpUrl, type LetterLine, outLabel, type PlayerItem, type PlayerOriginals } from "./playback";
 import { onReleased } from "./reactions";
 
-export type UpNextRow = { key: string; kind: string | null; title: string; creator: string };
+/** `sender` is the first reader's name line; absent for a work nobody has written about. */
+export type UpNextRow = { key: string; kind: string | null; title: string; creator: string; sender?: string };
 
 export type StationScreenProps = {
   str: (key: string) => string;
@@ -160,6 +161,7 @@ export function StationScreen(p: StationScreenProps) {
               {r.kind && <span class="kind">{kindLabel(str, r.kind)}</span>}
               <span class="title">{r.title}</span>
               <span class="creator">{r.creator}</span>
+              {r.sender && <span class="sender">{r.sender}</span>}
             </li>
           ))}
         </ul>

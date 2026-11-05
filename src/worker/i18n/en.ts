@@ -186,7 +186,6 @@ export const en: Record<keyof typeof ja, string> = {
   "station.growStart": "Send three things you love",
   "station.growHelp": "Send 3 favorites and a radio made for you begins",
   "letter.showOriginal": "Show original",
-  "letter.showTranslation": "Show translation",
   "signin.google": "Sign in with Google",
   "signin.needed": "You need to sign in to send your favorites. Listening, \"Me too\" and replies work as they are",
   "signin.out": "Sign out",
