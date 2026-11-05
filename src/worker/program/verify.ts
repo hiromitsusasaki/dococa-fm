@@ -13,6 +13,8 @@ import { maskDataYears, TOPICAL } from "./topical-words";
  */
 const MEASURE =
   /[0-9]+\s*(?:人|名|通|件|位)|[一二三四五六七八九十百千万]+(?:人|名|通|件)(?=の方|から|も|が|に|届|ほど|目)|何(?:人|名|通|件|曲|作品|冊|本|枚)も|回再生|第[0-9一二三四五六七八九十]+位|ランキング|一致率|再生回数|(?<![0-9])(?!1\s*(?:曲|作品|冊|本|枚|話))[0-9]+\s*(?:曲|作品|冊|本|枚|話)|(?<![一二三四五六七八九十百千万])(?!一(?:曲|作品|冊|本|枚|話))[一二三四五六七八九十百千万]+(?:曲|作品|冊|本|枚|話)/u;
+/** Nothing is played on this radio: the DJ introduces and reads, never invites the listener to listen or watch. */
+const PLAYBACK = /(かけ(ます|ましょう|る)|流し(ます|ましょう)|お聴きください|聴いてください|観てください|お楽しみください|どうぞ)/u;
 /** Ten code points shared with a letter is a quote, not a coincidence. */
 const QUOTE_WINDOW = 10;
 /** Stands in for a work's title or creator on both sides of the quote check. */
@@ -136,6 +138,11 @@ export function verifyEpisode(
           topical = false;
           details.push(`measure: ${at}: ${count[0]}`);
         }
+      }
+      const play = !line.fixed ? text.match(PLAYBACK) : null;
+      if (play) {
+        topical = false;
+        details.push(`playback: ${at}: ${play[0]}`);
       }
       // A letterless segment must not hand over to a reader who has nothing to read.
       if (!line.fixed && !hasLetter && /お便り|読み上げ/u.test(text)) {

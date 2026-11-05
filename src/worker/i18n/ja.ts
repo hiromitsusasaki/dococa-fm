@@ -149,6 +149,7 @@ export const ja = {
   "takedown.submit": "送る",
   "takedown.received": "受け付けました。確認します。",
   "script.readingOnly": "お便りを読みます。",
+  "script.letterFrom": "{who}からのお便りです。",
   "script.foundVoice": "ネットで見つけた声です。{author}さん、{site}のコメントから。",
   "script.web": "ウェブ",
   "script.reaction": "{who}から『私も』が届いています",

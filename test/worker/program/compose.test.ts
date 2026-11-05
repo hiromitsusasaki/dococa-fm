@@ -76,11 +76,17 @@ describe("composeEpisode", () => {
       items,
     );
     for (const seg of segs) {
-      expect(seg.lines[0]).toEqual({ type: "dj", text: "お便りを読みます。", fixed: true });
+      expect(seg.lines[0]).toEqual({ type: "dj", text: "みなとさん（函館）からのお便りです。", fixed: true });
       // Only template lines: the reading cue and the spoken found-voice source.
       expect(seg.lines.filter((l) => l.type === "dj").every((l) => l.type === "dj" && l.fixed === true)).toBe(true);
     }
     expect(segs[0]!.lines.filter((l) => l.type === "letter")).toHaveLength(2);
+  });
+
+  it("keeps the plain reading cue for an anonymous sender", () => {
+    const anon = letter({ id: "n", radioName: "", place: "" });
+    const [seg] = composeEpisode([{ itemId: "i1", slot: "near", letterIds: ["n"], reactionIds: [] }], null, byId([anon]), items);
+    expect(seg!.lines[0]).toEqual({ type: "dj", text: "お便りを読みます。", fixed: true });
   });
 
   it.each([

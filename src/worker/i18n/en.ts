@@ -152,6 +152,7 @@ export const en: Record<keyof typeof ja, string> = {
   "takedown.submit": "Send",
   "takedown.received": "Got it. We'll take a look.",
   "script.readingOnly": "Reading the letters.",
+  "script.letterFrom": "A letter from {who}.",
   "script.foundVoice": "A voice found online. {author}, from a comment on {site}.",
   "script.web": "the web",
   "script.reaction": "A \"me too\" from {who}",

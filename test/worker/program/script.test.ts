@@ -8,7 +8,7 @@ import { item, letter } from "./fixtures";
 const keyed = { ...env, ANTHROPIC_API_KEY: "sk-test" } as Env;
 const lines = (n: number) =>
   toolUse("write_script", {
-    segments: Array.from({ length: n }, (_, i) => ({ say_before: `前の話 ${i}`, say_after: `次にかける理由 ${i}` })),
+    segments: Array.from({ length: n }, (_, i) => ({ say_before: `前の話 ${i}`, say_after: `次のお便りへのつなぎ ${i}` })),
   });
 const found = letter({
   id: "f1",
@@ -40,11 +40,20 @@ afterEach(() => {
 });
 
 describe("writeDjLines", () => {
+  it("asks for introductions and handovers, never playback", async () => {
+    create.mockResolvedValue(lines(6));
+    await writeDjLines(keyed, input);
+    const req = create.mock.calls[0]![0];
+    const asked = JSON.stringify({ messages: req.messages, tools: req.tools });
+    expect(asked).not.toContain("かけ");
+    expect(asked).toContain("お便りです");
+  });
+
   it("returns one sayBefore/sayAfter per segment from the forced write_script tool", async () => {
     create.mockResolvedValue(lines(6));
     const out = await writeDjLines(keyed, input);
     expect(out).toHaveLength(6);
-    expect(out[0]).toEqual({ sayBefore: "前の話 0", sayAfter: "次にかける理由 0" });
+    expect(out[0]).toEqual({ sayBefore: "前の話 0", sayAfter: "次のお便りへのつなぎ 0" });
     expect(create).toHaveBeenCalledTimes(1);
   });
 

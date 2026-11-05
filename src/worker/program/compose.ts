@@ -13,7 +13,7 @@ const dj = (text: string): ScriptLine => ({ type: "dj", text });
 const fixed = (text: string): ScriptLine => ({ type: "dj", text, fixed: true });
 
 /** Every template a `fixed` line is made from; the quote check reads only what was filled into them. */
-export const FIXED_TEMPLATES = ["script.readingOnly", "script.foundVoice", "script.reaction", "script.replyReaction"] as const;
+export const FIXED_TEMPLATES = ["script.readingOnly", "script.letterFrom", "script.foundVoice", "script.reaction", "script.replyReaction"] as const;
 
 /** Where a found voice was found, said aloud: YouTube by name, otherwise the host without www. */
 export function siteName(sourceUrl: string | null): string {
@@ -67,7 +67,10 @@ export function composeEpisode(
     if (!item) throw new Error(`item missing: ${p.itemId}`);
     const said = djLines?.[i];
     const lines: ScriptLine[] = [];
-    if (!said) lines.push(fixed(t("script.readingOnly")));
+    if (!said) {
+      const first = p.letterIds.map((id) => letters.get(id)).find((l) => l?.kind !== "found");
+      lines.push(fixed(first && (first.radioName !== "" || first.place !== "") ? t("script.letterFrom", { who: who(first) }) : t("script.readingOnly")));
+    }
     else if (said.sayBefore !== "") lines.push(dj(said.sayBefore));
     for (const id of p.letterIds) {
       const l = letters.get(id);

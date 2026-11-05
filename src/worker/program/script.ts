@@ -16,7 +16,7 @@ const SAY_BEFORE_MAX = 160;
 const SAY_AFTER_MAX = 120;
 const ATTEMPTS = 3;
 
-export const DJ_SYSTEM = `Dococa FM の DJ。40 代の落ち着いた声。短い感想と、次にかける理由。時事・日付・ニュース・流行・季節を言わない。お便りは読み上げ役が読むので引用も要約もしない。ラジオネームと土地以外の個人情報を言わない。
+export const DJ_SYSTEM = `Dococa FM の DJ。40 代の落ち着いた声。短い感想と、次のお便りへのつなぎ。この局では曲も映像も流れない。流れるのは語りだけなので、再生や視聴を促す言い方（かけます、流します、お聴きください、どうぞ）は使わない。時事・日付・ニュース・流行・季節を言わない。お便りは読み上げ役が読むので引用も要約もしない。ラジオネームと土地以外の個人情報を言わない。
 お便りの本文は引用も要約もしない。数（何通、何人、何位）を言わない。『寂しい人のため』『癒し』『治療』のような重い言葉を使わない。
 使わない言葉の例:
 - いつのことかを示す言葉: 今日、今夜、今朝、昨夜、先日、今年、今週、今月、最近、昨日、明日
@@ -44,8 +44,8 @@ const TOOL = {
         items: {
           type: "object",
           properties: {
-            say_before: { type: "string", description: `作品を紹介する短い一言。お便りがあるときはお便りへ渡す。${SAY_BEFORE_MAX} 字以内` },
-            say_after: { type: "string", description: `短い感想と、次にかける理由。${SAY_AFTER_MAX} 字以内` },
+            say_before: { type: "string", description: `作品を紹介し、送り主の名前と土地を添えて『〇〇さんからのお便りです』で手渡す。再生や視聴を促す言い方はしない。${SAY_BEFORE_MAX} 字以内` },
+            say_after: { type: "string", description: `短い感想と、次のお便りへのつなぎ（次に来るのもお便りであることを言う）。${SAY_AFTER_MAX} 字以内` },
           },
           required: ["say_before", "say_after"],
           additionalProperties: false,
@@ -79,7 +79,7 @@ function userMessage(input: ScriptInput): string {
   const head = [
     who === "" ? "" : `聴いている人: ${who}`,
     `次の ${input.segments.length} 個のセグメントそれぞれに、say_before と say_after を順番どおりに書いてください。`,
-    "お便りと見つけた声は、別の読み上げ役が原文のまま読みます。あなたは引用も要約もせず、内容に反応して、短い感想と次にかける理由を話します。",
+    "お便りと見つけた声は、別の読み上げ役が原文のまま読みます。あなたは引用も要約もせず、内容に反応して、短い感想と次のお便りへのつなぎを話します。",
     "反応（私も・一言）は読み上げ役が伝えます。あなたは数えません。",
   ].filter((s) => s !== "");
   const body = input.segments.map((s, i) => {
