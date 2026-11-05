@@ -111,6 +111,8 @@ episodes.get("/episodes/:id", async (c) => {
   const listener = c.get("listener");
   const lang = listener.lang;
   const t = tFor(lang);
+  const seg = Number(c.req.query("seg") ?? "");
+  const startSeg = Number.isInteger(seg) && seg >= 0 && seg < segments.length ? seg : 0;
   const stored = await getItemsByIds(c.env.DB, segments.map((s) => s.itemId));
   const rows = segments.flatMap((s) => {
     const item = stored.get(s.itemId);
@@ -122,7 +124,7 @@ episodes.get("/episodes/:id", async (c) => {
   return c.html(
     <Layout title={t("episode.title")} script="player" lang={lang} listener={listener} path={currentPath(c)}>
       <main class="episode-page">
-        <div id="player" data-episode-id={episode.id} data-voice={listener.voice} data-next-url={`/episodes/${episode.id}/next`} data-tts-url={episode.cloudTts ? "/tts" : ""} data-dial={String(listener.dial)}></div>
+        <div id="player" data-episode-id={episode.id} data-voice={listener.voice} data-next-url={`/episodes/${episode.id}/next`} data-tts-url={episode.cloudTts ? "/tts" : ""} data-dial={String(listener.dial)} data-start-seg={String(startSeg)}></div>
         <ol class="program">
           {rows.map((r) => (
             <li>

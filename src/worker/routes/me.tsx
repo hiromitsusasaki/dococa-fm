@@ -1,10 +1,11 @@
 import { Hono } from "hono";
-import { ItemCard, whoOf } from "../../views/components";
+import { ItemCard, LetterText, ReactionForms, whoOf } from "../../views/components";
 import { Layout } from "../../views/layout";
 import { currentPath, requireSignin } from "../auth/require-signin";
 import type { Variables } from "../auth/session";
 import { listFavorites } from "../db/history";
 import { getItemsByIds } from "../db/items";
+import { listHeardLetters } from "../db/listens";
 import { listLettersByListener, listReactionsToListener } from "../db/letters";
 import type { Env } from "../env";
 import { displayText } from "../letters/display";
@@ -13,6 +14,8 @@ import { stationUrl } from "../program/station";
 
 const FAVORITES_LIMIT = 20;
 const REACTIONS_LIMIT = 50;
+const JST_OFFSET_MS = 9 * 60 * 60 * 1000;
+const jstDate = (iso: string): string => new Date(Date.parse(iso) + JST_OFFSET_MS).toISOString().slice(0, 10);
 
 export const me = new Hono<{ Bindings: Env; Variables: Variables }>();
 
@@ -27,6 +30,7 @@ me.get("/me", requireSignin, async (c) => {
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.id.localeCompare(a.id))
     .slice(0, REACTIONS_LIMIT);
   const items = await getItemsByIds(c.env.DB, reactions.map((r) => r.itemId));
+  const heard = await listHeardLetters(c.env.DB, listener.id);
   const publicUrl = listener.stationPublic && listener.stationSlug ? stationUrl(c.env, listener.stationSlug) : null;
   return c.html(
     <Layout title={t("me.title")} lang={lang} listener={listener} path={currentPath(c)}>
@@ -44,6 +48,31 @@ me.get("/me", requireSignin, async (c) => {
               </li>
             ))}
           </ul>
+        </section>
+        <section class="me-heard">
+          <h2>{t("me.heard")}</h2>
+          {heard.length === 0 ? (
+            <p class="muted">{t("me.heardNone")}</p>
+          ) : (
+            <ul>
+              {heard.map((h) => (
+                <li>
+                  <a href={`/items/${h.item.id}`}>
+                    <ItemCard item={h.item} heading="h3" lang={lang} />
+                  </a>
+                  <LetterText letter={h.letter} lang={lang} />
+                  <p class="letter-who">{whoOf(h.letter, lang)}</p>
+                  <p class="muted">{t("me.heardOn", { date: jstDate(h.heardAt) })}</p>
+                  <p>
+                    <a href={`/episodes/${h.episodeId}?seg=${h.segmentIndex}`}>{t("me.replay")}</a>
+                  </p>
+                  <div class="letter-actions">
+                    <ReactionForms letterId={h.letter.id} itemId={h.item.id} lang={lang} />
+                  </div>
+                </li>
+                ))}
+            </ul>
+          )}
         </section>
         <section class="me-reactions">
           <h2>{t("me.reactions")}</h2>

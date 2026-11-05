@@ -23,6 +23,8 @@ export type PlayerOptions = {
   /** When set, dj and letter lines are mp3s from `${ttsUrl}?episode=&line=` instead of Web Speech. */
   ttsUrl: string | null;
   dial?: number;
+  /** Segment to start from (line 0), for "listen again" links; out of range means 0. */
+  startSeg?: number;
   strings?: Record<string, string>;
   navigate?: (url: string) => void;
 };
@@ -47,7 +49,8 @@ export function mountPlayer(root: HTMLElement, episode: PlayerEpisode, opts: Pla
   const player = createLinePlayer({ voiceURI: opts.voiceURI, ttsUrl: opts.ttsUrl });
   const reactRoot = createRoot(root);
 
-  let state: State = { status: "idle", seg: 0, line: 0, loading: false, message: null, replyOpen: false, sent: {} };
+  const startSeg = Number.isInteger(opts.startSeg) && opts.startSeg! >= 0 && opts.startSeg! < segments.length ? opts.startSeg! : 0;
+  let state: State = { status: "idle", seg: startSeg, line: 0, loading: false, message: null, replyOpen: false, sent: {} };
   let abort = new AbortController();
   let prefetch: Promise<Next> | null = null;
   const lineOf = (seg: number, line: number): ScriptLine | undefined => segments[seg]?.lines[line];
@@ -118,7 +121,7 @@ export function mountPlayer(root: HTMLElement, episode: PlayerEpisode, opts: Pla
   function play() {
     if (state.status === "playing") return;
     if (state.status === "paused") startAt(state.seg, state.line);
-    else startAt(0, 0);
+    else startAt(state.status === "idle" ? startSeg : 0, 0);
   }
 
   function next() {
@@ -283,11 +286,13 @@ function boot() {
   if (!el || !json) return;
   const strings = JSON.parse(document.getElementById("player-i18n")?.textContent ?? "{}") as Record<string, string>;
   const dial = Number.parseFloat(el.dataset.dial ?? "");
+  const startSeg = Number.parseInt(el.dataset.startSeg ?? "", 10);
   mountPlayer(el, JSON.parse(json.textContent ?? "") as PlayerEpisode, {
     voiceURI: el.dataset.voice ?? "",
     nextUrl: el.dataset.nextUrl ?? "",
     ttsUrl: el.dataset.ttsUrl ? el.dataset.ttsUrl : null,
     ...(Number.isFinite(dial) ? { dial } : {}),
+    ...(Number.isFinite(startSeg) ? { startSeg } : {}),
     strings,
   });
 }

@@ -107,6 +107,29 @@ function Reaction({ r, lang }: { r: Letter; lang: Lang }) {
   );
 }
 
+/** The 私も and 一言 forms under a letter. */
+export function ReactionForms({ letterId, itemId, lang }: { letterId: string; itemId: string; lang: Lang }) {
+  const t = tFor(lang);
+  return (
+    <>
+      <form method="post" action="/letters">
+        <input type="hidden" name="itemId" value={itemId} />
+        <input type="hidden" name="kind" value="watashimo" />
+        <input type="hidden" name="parentLetterId" value={letterId} />
+        <input type="hidden" name="body" value={t("reaction.watashimo")} />
+        <button type="submit">{t("reaction.watashimoButton")}</button>
+      </form>
+      <form method="post" action="/letters" class="reply-form">
+        <input type="hidden" name="itemId" value={itemId} />
+        <input type="hidden" name="kind" value="reply" />
+        <input type="hidden" name="parentLetterId" value={letterId} />
+        <input type="text" name="body" maxlength={200} placeholder={t("reaction.replyPlaceholder")} aria-label={t("reaction.reply")} />
+        <button type="submit">{t("reaction.replySubmit")}</button>
+      </form>
+    </>
+  );
+}
+
 function LetterCard({ letter, reactions, itemId, lang }: { letter: Letter; reactions: Letter[]; itemId: string; lang: Lang }) {
   const t = tFor(lang);
   return (
@@ -129,20 +152,7 @@ function LetterCard({ letter, reactions, itemId, lang }: { letter: Letter; react
       )}
       {reactions.length > 0 && <ul class="reactions">{reactions.map((r) => <Reaction r={r} lang={lang} />)}</ul>}
       <div class="letter-actions">
-        <form method="post" action="/letters">
-          <input type="hidden" name="itemId" value={itemId} />
-          <input type="hidden" name="kind" value="watashimo" />
-          <input type="hidden" name="parentLetterId" value={letter.id} />
-          <input type="hidden" name="body" value={t("reaction.watashimo")} />
-          <button type="submit">{t("reaction.watashimoButton")}</button>
-        </form>
-        <form method="post" action="/letters" class="reply-form">
-          <input type="hidden" name="itemId" value={itemId} />
-          <input type="hidden" name="kind" value="reply" />
-          <input type="hidden" name="parentLetterId" value={letter.id} />
-          <input type="text" name="body" maxlength={200} placeholder={t("reaction.replyPlaceholder")} aria-label={t("reaction.reply")} />
-          <button type="submit">{t("reaction.replySubmit")}</button>
-        </form>
+        <ReactionForms letterId={letter.id} itemId={itemId} lang={lang} />
         <ReportForm letterId={letter.id} lang={lang} />
       </div>
     </li>

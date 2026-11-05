@@ -136,6 +136,22 @@ describe("global daily caps", () => {
   });
 });
 
+describe("GET /episodes/:id?seg", () => {
+  it("starts from a valid segment and falls back to 0 otherwise", async () => {
+    const cookie = await newSession();
+    const seg = (itemId: string) => ({ itemId, slot: "near" as const, lines: [{ type: "dj" as const, text: "d" }] });
+    const a = await insertItem(env.DB, itemDraft());
+    const b = await insertItem(env.DB, itemDraft({ externalIds: { itunes: "9" } }));
+    const ep = await insertEpisode(env.DB, { listenerId: idOf(cookie), segments: [seg(a.id), seg(b.id)], verified: true, report: {} as Episode["report"] });
+    const start = async (q: string) => (await (await get(`/episodes/${ep.id}${q}`, cookie)).text()).match(/data-start-seg="(\d+)"/)?.[1];
+    expect(await start("")).toBe("0");
+    expect(await start("?seg=1")).toBe("1");
+    expect(await start("?seg=2")).toBe("0");
+    expect(await start("?seg=-1")).toBe("0");
+    expect(await start("?seg=x")).toBe("0");
+  });
+});
+
 describe("unverified episodes", () => {
   it("are not rendered or served as JSON", async () => {
     const cookie = await newSession();

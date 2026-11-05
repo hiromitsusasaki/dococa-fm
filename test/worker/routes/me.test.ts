@@ -5,6 +5,7 @@ import { upsertHistory } from "../../../src/worker/db/history";
 import { insertItem } from "../../../src/worker/db/items";
 import { insertLetter } from "../../../src/worker/db/letters";
 import { updateListener } from "../../../src/worker/db/listeners";
+import { insertEpisode } from "../../../src/worker/db/episodes";
 import { t } from "../../../src/worker/i18n/t";
 import { resetDb } from "../../helpers/db";
 import { itemDraft, letterDraft } from "../db/helpers";
@@ -68,5 +69,37 @@ describe("GET /me", () => {
     expect(await (await get("/me", cookie)).text()).toContain('href="/settings"');
     await updateListener(env.DB, idOf(cookie), { stationPublic: true, stationSlug: "hiro-fm" });
     expect(await (await get("/me", cookie)).text()).toContain("/stations/s:hiro-fm");
+  });
+
+  it("lists letters heard, with replay link, reactions and no counts", async () => {
+    const cookie = await signedInSession();
+    const me = idOf(cookie);
+    const a = await insertItem(env.DB, itemDraft({ title: "曲A" }));
+    const b = await insertItem(env.DB, itemDraft({ title: "曲B", externalIds: { itunes: "2" } }));
+    const la = await insertLetter(env.DB, letterDraft(a.id, { body: "Aへのお便り", bodyJa: "Aへのお便り", radioName: "ミナミ", place: "那覇" }));
+    const lb = await insertLetter(env.DB, letterDraft(b.id, { body: "Bへのお便り", bodyJa: "Bへのお便り" }));
+    const line = (l: typeof la) => ({ type: "letter" as const, letterId: l.id, text: l.body, radioName: l.radioName, place: l.place, kind: "letter" as const, sourceUrl: null, sourceAuthor: null });
+    const ep = await insertEpisode(env.DB, {
+      listenerId: me,
+      segments: [
+        { itemId: a.id, slot: "near", lines: [line(la)] },
+        { itemId: b.id, slot: "far", lines: [line(lb)] },
+      ],
+      verified: true,
+      report: { verbatim: true, sources: true, topical: true, pii: true, details: [] },
+    });
+    const html = await (await get("/me", cookie)).text();
+    expect(html).toContain(t("me.heard"));
+    expect(html).toContain("Bへのお便り");
+    expect(html).toContain("那覇");
+    expect(html).toContain(`href="/episodes/${ep.id}?seg=1"`);
+    expect(html).toContain(`name="parentLetterId" value="${lb.id}"`);
+    expect(html).not.toMatch(/\d+ ?件/);
+    expect(html).not.toMatch(/\d+ letters/);
+  });
+
+  it("says so when nothing has been heard", async () => {
+    const html = await (await get("/me", await signedInSession())).text();
+    expect(html).toContain(t("me.heardNone"));
   });
 });

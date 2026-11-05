@@ -174,6 +174,17 @@ const tap = async (action: string) => {
 };
 
 describe("player", () => {
+  it("starts from the given segment, and ignores one out of range", async () => {
+    mountPlayer(root, three, opts({ startSeg: 1 }));
+    await tap("toggle");
+    await vi.waitFor(() => expect(spoken).toEqual(["b1", "c1", "c2"]));
+    root.innerHTML = "";
+    spoken.length = 0;
+    mountPlayer(root, three, opts({ startSeg: 7 }));
+    await tap("toggle");
+    await vi.waitFor(() => expect(spoken[0]).toBe("a1"));
+  });
+
   it("plays nothing until the listener taps play", async () => {
     mountPlayer(root, one, opts());
     await flush();

@@ -49,6 +49,7 @@
 | Task 14 | 文書と本番の設定 | 未着手 |
 | Task 16（Phase 2） | DJ の語り口 | 完了。DJ は作品を紹介してお便りを読むだけで、「かけます」「どうぞ」などの再生・視聴の誘いは言わない。verify の `playback:` が dj 行（固定文を除く）で落とし、再生成の対象。固定の手渡しは名前か土地がある送り主なら `script.letterFrom`（「{who}からのお便りです。」）、匿名は `script.readingOnly`。ローカルで eval 3 回、`playback:` は 0 件 |
 | Task 15 | 土地を選択式に | 完了。設定の「土地」は国の select と、日本の都道府県・アメリカの州の select（`placeCountry` / `placeRegion`、0007 で列を追加）。地域は選んだ国のものだけ受け付け、合わないと 422。保存で `place` に `placeLabel(…, "ja")` の文字列（島根、カリフォルニア州、アメリカ、ポルトガル）を入れ、お便りと DJ はこれまでどおり `place` を読む。自由入力の欄は無くなり、国を選ぶまでは旧データの `place` をそのまま残す（「選ばない」に戻すと消える）。一覧は `src/worker/geo/places.ts`（日本語名は 204 か国（日本を含む）、残りは英語名）。デモ用シード（`scripts/lib/seed.ts`）のペルソナの `place` は自由文字列のまま（`POST /admin/listeners` 経由で `place` だけに入る）。スクリーンショットは `docs/screenshots/2026-11-05-settings-place.png` |
+| Task 17（Phase 2） | 聴いたお便り | 完了。`/me` に `me.heard`: 検証済みの直近 30 回から読まれたお便りを新しい順に最大 50 件（同じお便りは最新 1 件、非公開は除く、返信は除く）。作品カード、主文と原文、送り主、JST の日付、`もう一度聴く`（`/episodes/<id>?seg=<n>`、n は公開分のセグメント位置）、私も・一言のフォーム。件数は出さない。`GET /episodes/:id?seg=n` は範囲外なら 0 で `data-start-seg`、プレイヤーは idle からの再生をそのセグメントから始める。スクリーンショットは `docs/screenshots/2026-11-05-me-heard.png` |
 
 ## 2026-11-04 最終修正 完了。次は本人作業（push・鍵・デプロイ・public 化）
 
