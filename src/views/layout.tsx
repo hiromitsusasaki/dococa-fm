@@ -1,4 +1,5 @@
 import type { Child } from "hono/jsx";
+import { raw } from "hono/html";
 import { type Lang, tFor } from "../worker/i18n/t";
 import type { Listener } from "../worker/types";
 
@@ -13,12 +14,29 @@ type LayoutProps = { title: string; children?: Child; /** The client entry to lo
   | { listener?: undefined; path?: undefined }
 );
 
+const FONTS_HREF = "https://fonts.googleapis.com/css2?family=Righteous&family=Zen+Kaku+Gothic+New:wght@400;500;700&display=swap";
+
+/** Runs in the head, before first paint: a saved light/dark choice goes onto `html[data-theme]`; "auto" or an unreadable store leaves it off, so the device decides. */
+const THEME_BOOT = `try{var t=localStorage.getItem("dfm.theme");if(t==="light"||t==="dark")document.documentElement.setAttribute("data-theme",t)}catch(e){}`;
+
+/** Wires the three header buttons: set `data-theme`, remember the choice (best effort) and mirror it in `aria-pressed`. */
+const THEME_WIRE = `(function(){var r=document.documentElement,bs=document.querySelectorAll("[data-theme-set]");function cur(){var t=r.getAttribute("data-theme");return t==="light"||t==="dark"?t:"auto"}function show(){var c=cur();bs.forEach(function(b){b.setAttribute("aria-pressed",String(b.getAttribute("data-theme-set")===c))})}bs.forEach(function(b){b.addEventListener("click",function(){var v=b.getAttribute("data-theme-set");if(v==="auto")r.removeAttribute("data-theme");else r.setAttribute("data-theme",v);try{if(v==="auto")localStorage.removeItem("dfm.theme");else localStorage.setItem("dfm.theme",v)}catch(e){}show()})});show()})();`;
+
+const THEMES = ["light", "dark", "auto"] as const;
+
 function SiteHeader({ listener, path, lang }: { listener?: Listener; path?: string; lang: Lang }) {
   const t = tFor(lang);
   const signedIn = listener !== undefined && listener.googleSub !== null;
   return (
     <header class="site-header">
-      <a class="site-name" href="/">{t("app.name")}</a>
+      <a class="site-name wordmark" href="/">{t("app.name")}</a>
+      <div class="theme-toggle" role="group" aria-label={t("theme.label")}>
+        {THEMES.map((mode) => (
+          <button type="button" data-theme-set={mode} aria-pressed="false">
+            {t(`theme.${mode}`)}
+          </button>
+        ))}
+      </div>
       {listener && (
         <nav>
           <a href="/put">{t("home.put")}</a>
@@ -48,7 +66,7 @@ export function Layout({ title, children, script, lang = "ja", listener, path, o
         <meta charset="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <title>{title === t("app.name") ? title : `${title} | ${t("app.name")}`}</title>
-        <meta name="theme-color" content="#0f0f1e" />
+        <meta name="theme-color" content="#121a2e" />
         {og && (
           <>
             <meta property="og:title" content={og.title} />
@@ -59,11 +77,16 @@ export function Layout({ title, children, script, lang = "ja", listener, path, o
         )}
         <link rel="manifest" href="/manifest.webmanifest" />
         <link rel="icon" href="/icon.svg" type="image/svg+xml" />
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous" />
+        <link rel="stylesheet" href={FONTS_HREF} />
         <link rel="stylesheet" href="/app.css" />
+        <script>{raw(THEME_BOOT)}</script>
       </head>
       <body>
         <SiteHeader listener={listener} path={path} lang={lang} />
         {children}
+        <script>{raw(THEME_WIRE)}</script>
         {script && (
           <script
             type="module"
