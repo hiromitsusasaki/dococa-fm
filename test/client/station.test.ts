@@ -386,6 +386,49 @@ describe("station: failures", () => {
   });
 });
 
+describe("station: retro controls", () => {
+  const needle = (sel: string) => root.querySelector<HTMLElement>(`${sel} .knob-body`)!.style.getPropertyValue("--angle");
+
+  it("ON lights the switch and shows ON AIR on the dial face; OFF hides it", async () => {
+    nextReplies = [ok(epA())];
+    autoEnd = false;
+    mountStation(root, opts());
+    await power();
+    await vi.waitFor(() => expect(spoken).toEqual(["a1"]));
+    expect(root.querySelector('button.switch[aria-pressed="true"]')).not.toBeNull();
+    expect(root.querySelector(".face .live")).not.toBeNull();
+    await power();
+    expect(root.querySelector(".face .live")).toBeNull();
+  });
+
+  it("the volume needle follows the range", async () => {
+    mountStation(root, opts());
+    await flush();
+    expect(needle(".knob-volume")).toBe("81deg");
+    const input = root.querySelector<HTMLInputElement>('input[data-action="volume"]')!;
+    input.value = "0";
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    await flush();
+    expect(needle(".knob-volume")).toBe("-135deg");
+  });
+
+  it("the dial needle follows the range and world has no dial knob", async () => {
+    mountStation(root, opts({ stationKey: "mine", dial: 0.5 }));
+    await flush();
+    expect(needle(".knob-dial")).toBe("0deg");
+    const input = el("dial") as HTMLInputElement;
+    input.value = "1";
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    expect(needle(".knob-dial")).toBe("135deg");
+  });
+
+  it("world has no dial knob", async () => {
+    mountStation(root, opts());
+    await flush();
+    expect(root.querySelector(".knob-dial")).toBeNull();
+  });
+});
+
 describe("station: volume", () => {
   const volume = () => root.querySelector<HTMLInputElement>('input[data-action="volume"]')!;
   const setVolume = async (v: string) => {

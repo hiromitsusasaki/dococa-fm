@@ -51,8 +51,9 @@ export function StationScreen(p: StationScreenProps) {
         <div class="face">
           <span class="brand">DOCOCA FM</span>
           {p.power === "on" && <span class="live">{str("station.onAir")}</span>}
+          {p.power === "tuning" && <span class="tuning">{str("station.tuning")}</span>}
         </div>
-        <div class="scale" aria-hidden="true"></div>
+        <div class={p.power === "on" ? "scale sweep" : "scale"} aria-hidden="true"></div>
         <div class="controls">
           <div class="control">
             <button type="button" class="switch" data-action="power" aria-pressed={String(lit)} aria-label={str("station.onOff")} disabled={p.grow} onClick={p.on.power}></button>
@@ -61,12 +62,31 @@ export function StationScreen(p: StationScreenProps) {
             </span>
           </div>
           <label class="knob knob-volume">
-            <input type="range" min="0" max="100" step="1" data-action="volume" value={String(Math.round(p.volume * 100))} onInput={(e: Event) => p.on.volume(Number((e.currentTarget as HTMLInputElement).value) / 100)} />
+            <span class="knob-body" style={{ "--angle": angle(p.volume) }}>
+              <i></i>
+              <input type="range" min="0" max="100" step="1" data-action="volume" aria-label={str("station.volume")} value={String(Math.round(p.volume * 100))} onInput={(e: Event) => p.on.volume(Number((e.currentTarget as HTMLInputElement).value) / 100)} />
+            </span>
             <span class="control-label">{str("station.volume")}</span>
           </label>
           {p.dial !== null && (
             <label class="knob knob-dial">
-              <input type="range" min="0" max="1" step="0.1" data-action="dial" value={String(p.dial)} ref={onReleased(p.on.dial)} />
+              <span class="knob-body" style={{ "--angle": angle(p.dial) }}>
+                <i></i>
+                <input
+                  type="range"
+                  min="0"
+                  max="1"
+                  step="0.1"
+                  data-action="dial"
+                  aria-label={str("station.dial")}
+                  value={String(p.dial)}
+                  ref={onReleased(p.on.dial)}
+                  onInput={(e: Event) => {
+                    const input = e.currentTarget as HTMLInputElement;
+                    input.parentElement?.style.setProperty("--angle", angle(Number(input.value)));
+                  }}
+                />
+              </span>
               <span class="control-label">{str("station.dial")}</span>
             </label>
           )}
@@ -155,6 +175,11 @@ export function StationScreen(p: StationScreenProps) {
       </aside>
     </div>
   );
+}
+
+/** The needle sweeps from -135deg (0) to +135deg (1). */
+function angle(fraction: number): string {
+  return `${Math.round(-135 + 270 * Math.min(1, Math.max(0, fraction)))}deg`;
 }
 
 /** `kind.*` is shipped for the labels; an unknown kind shows nothing rather than its key. */
