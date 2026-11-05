@@ -1,5 +1,6 @@
 import type { Listener } from "../types";
-import { ECHO_SQL, FALLBACK_SQL, FAR_SQL, letterIdsSql, NEAR_SQL, NEIGHBOR_SQL } from "./select-sql";
+import { ECHO_SQL, FALLBACK_SQL, FAR_SQL, letterIdsSql, NEAR_SQL, NEIGHBOR_SQL, OWNER_FAVORITES_SQL } from "./select-sql";
+import type { StationKey } from "./station";
 
 export type Slot = "near" | "neighbor" | "far";
 export type Selection = { itemId: string; slot: Slot; letterIds: string[] };
@@ -63,13 +64,33 @@ function interleave(lists: Selection[][]): Selection[] {
   return out;
 }
 
+/** Letters the listener may hear for each item, up to the per-segment cap, in a seeded order. */
+async function withLetters(db: D1Database, listener: Listener, itemIds: string[], slot: Slot, rng: () => number): Promise<Selection[]> {
+  const readable = await letterIdsByItem(db, listener.id, itemIds);
+  return itemIds.map((itemId) => ({ itemId, slot, letterIds: shuffle(readable.get(itemId) ?? [], rng).slice(0, MAX_LETTERS_PER_SEGMENT) }));
+}
+
+/** The world station: far only, for anyone. No echo and no fallback: nothing here is the listener's own. */
+async function worldProgram(db: D1Database, listener: Listener, size: number, rng: () => number): Promise<Selection[]> {
+  const pool = shuffle(await ids(db, FAR_SQL, listener.id), rng).slice(0, size);
+  return withLetters(db, listener, pool, "far", rng);
+}
+
+/** A public station: the owner's favourites only. An item nobody has written about is still played, introduced by the DJ alone. */
+async function publicProgram(db: D1Database, listener: Listener, ownerId: string, size: number, rng: () => number): Promise<Selection[]> {
+  const pool = shuffle(await ids(db, OWNER_FAVORITES_SQL, ownerId), rng).slice(0, size);
+  return withLetters(db, listener, pool, "near", rng);
+}
+
 export async function selectProgram(
   db: D1Database,
   listener: Listener,
-  opts: { size?: number; seed?: string } = {},
+  opts: { size?: number; seed?: string; station?: StationKey } = {},
 ): Promise<Selection[]> {
   const size = Math.max(0, Math.floor(opts.size ?? 6));
   const rng = seededRng(opts.seed ?? crypto.randomUUID());
+  if (opts.station?.kind === "world") return worldProgram(db, listener, size, rng);
+  if (opts.station?.kind === "public") return publicProgram(db, listener, opts.station.ownerId, size, rng);
   const dial = Math.min(1, Math.max(0, listener.dial));
 
   const farQuota = Math.min(size, Math.max(1, Math.round(size * dial)));

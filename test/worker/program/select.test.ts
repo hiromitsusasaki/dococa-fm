@@ -255,3 +255,55 @@ describe("selectProgram", () => {
     });
   });
 });
+
+describe("selectProgram stations", () => {
+  beforeEach(() => resetDb(env.DB));
+
+  it("world: a brand-new listener gets far items only, with others' letters", async () => {
+    const f = await buildFixture();
+    const fresh = await createListener(env.DB);
+    const p = await selectProgram(env.DB, fresh, { station: { kind: "world" }, size: 3, seed: "w" });
+    expect(p).toHaveLength(3);
+    expect(p.every((s) => s.slot === "far" && s.letterIds.length > 0)).toBe(true);
+    expect(new Set(p.map((s) => s.itemId)).size).toBe(3);
+    expect(f.items.length).toBe(12);
+  });
+
+  it("world: no echo and no fallback for a listener with history", async () => {
+    const f = await buildFixture();
+    const p = await selectProgram(env.DB, f.a, { station: { kind: "world" }, size: 10, seed: "w" });
+    const own = new Set(f.items.slice(0, 4));
+    expect(p.length).toBeGreaterThan(0);
+    expect(p.every((s) => s.slot === "far" && !own.has(s.itemId))).toBe(true);
+  });
+
+  it("public: only the owner's favourites, letterless ones included, never the listener's own letters", async () => {
+    const owner = await createListener(env.DB);
+    const guest = await createListener(env.DB);
+    const other = await createListener(env.DB);
+    const items: string[] = [];
+    for (let n = 0; n < 4; n++) items.push((await insertItem(env.DB, itemDraft({ title: `fav-${n}` }))).id);
+    const outsider = (await insertItem(env.DB, itemDraft({ title: "not-a-favourite" }))).id;
+    await upsertHistory(env.DB, [
+      { listenerId: owner.id, itemId: items[0] as string, source: "manual", occurredAt: null, rank: 1 },
+      { listenerId: owner.id, itemId: items[1] as string, source: "url", occurredAt: null, rank: 2 },
+      { listenerId: owner.id, itemId: items[2] as string, source: "manual", occurredAt: null, rank: null },
+      { listenerId: owner.id, itemId: items[3] as string, source: "spotify", occurredAt: null, rank: 3 },
+    ]);
+    await insertLetter(env.DB, letterDraft(items[0] as string, { listenerId: other.id, body: "other on 0" }));
+    await insertLetter(env.DB, letterDraft(items[0] as string, { listenerId: owner.id, body: "owner on 0" }));
+    await insertLetter(env.DB, letterDraft(outsider, { listenerId: other.id, body: "other on outsider" }));
+
+    const p = await selectProgram(env.DB, guest, { station: { kind: "public", ownerId: owner.id }, size: 6, seed: "p" });
+    expect(p.map((s) => s.itemId).sort()).toEqual([items[0], items[1], items[2]].sort());
+    expect(p.every((s) => s.slot === "near")).toBe(true);
+    expect(p.find((s) => s.itemId === items[1])?.letterIds).toEqual([]);
+    expect(p.find((s) => s.itemId === items[0])?.letterIds).toHaveLength(2);
+
+    const ownerListening = await selectProgram(env.DB, owner, { station: { kind: "public", ownerId: owner.id }, size: 6, seed: "p" });
+    expect(ownerListening.find((s) => s.itemId === items[0])?.letterIds).toHaveLength(1);
+    const letters = await env.DB.prepare("SELECT id FROM letters WHERE listener_id = ?").bind(owner.id).all<{ id: string }>();
+    const ownIds = new Set(letters.results.map((r) => r.id));
+    expect(ownerListening.flatMap((s) => s.letterIds).some((id) => ownIds.has(id))).toBe(false);
+  });
+});

@@ -6,6 +6,7 @@ import type { Episode, Item, Letter, Listener, VerifyReport } from "../types";
 import { composeEpisode, MAX_REACTIONS, type SegmentPlan } from "./compose";
 import { type DjLines, writeDjLines } from "./script";
 import { selectProgram } from "./select";
+import type { StationKey } from "./station";
 import { verifyEpisode } from "./verify";
 
 const DJ_ATTEMPTS = 2;
@@ -47,7 +48,7 @@ export async function buildEpisode(
   env: Env,
   db: D1Database,
   listener: Listener,
-  opts: { size?: number; seed?: string } = {},
+  opts: { size?: number; seed?: string; station?: StationKey } = {},
 ): Promise<Episode> {
   const selection = await selectProgram(db, listener, opts);
   // Three reads for the whole plan, whatever its size: D1 counts queries per invocation.
