@@ -187,6 +187,7 @@ export const ja = {
   "me.reactions": "届いた反応",
   "me.station": "あなたの公開ラジオ",
   "me.nobody": "まだ反応はありません",
+  "me.reply": "一言",
   "settings.station": "公開ラジオ",
   "settings.stationPublic": "あなたの好きなものだけのラジオを公開する",
   "settings.stationSlug": "ラジオの URL",

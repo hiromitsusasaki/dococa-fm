@@ -26,7 +26,7 @@ export function PutPage({ listener, card, itemId, url, body, error, history = []
   const lang = listener.lang;
   const t = tFor(lang);
   return (
-    <Layout title={t("put.title")} lang={lang}>
+    <Layout title={t("put.title")} lang={lang} listener={listener} path="/put">
       <main class="put">
         <h1>{t("put.title")}</h1>
         {error && <p class="form-error" role="alert">{error}</p>}
@@ -64,7 +64,12 @@ export function PutPage({ listener, card, itemId, url, body, error, history = []
             <a href="/auth/spotify">{t("put.connectSpotify")}</a>
           </p>
         )}
-        {(card || itemId) && (
+        {(card || itemId) && listener.googleSub === null && (
+          <p class="put-signin" role="status">
+            {t("signin.needed")} <a href={`/auth/google?next=${encodeURIComponent(itemId ? `/put?itemId=${itemId}` : `/put?url=${encodeURIComponent(url ?? "")}`)}`}>{t("signin.google")}</a>
+          </p>
+        )}
+        {(card || itemId) && listener.googleSub !== null && (
           <form method="post" action="/letters" class="put-form">
             {questions.length > 0 && (
               <section class="put-questions">

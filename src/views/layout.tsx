@@ -1,11 +1,42 @@
 import type { Child } from "hono/jsx";
 import { type Lang, tFor } from "../worker/i18n/t";
+import type { Listener } from "../worker/types";
 
 type LayoutProps = { title: string; children?: Child; /** The client entry to load: `player` or `station`. */
-  script?: "player" | "station"; lang?: Lang };
+  script?: "player" | "station"; lang?: Lang;
+  /** The session's listener; without one the header shows only the wordmark. */
+  listener?: Listener;
+  /** Where sign-in should come back to; the my page when left out. */
+  path?: string };
+
+function SiteHeader({ listener, path, lang }: { listener?: Listener; path?: string; lang: Lang }) {
+  const t = tFor(lang);
+  const signedIn = listener !== undefined && listener.googleSub !== null;
+  return (
+    <header class="site-header">
+      <a class="site-name" href="/">{t("app.name")}</a>
+      {listener && (
+        <nav>
+          <a href="/put">{t("home.put")}</a>
+          {signedIn ? (
+            <>
+              <a href="/me">{t("me.title")}</a>
+              <span class="site-user">{t("signin.as", { name: listener.displayName })}</span>
+              <form method="post" action="/auth/signout">
+                <button type="submit" class="quiet">{t("signin.out")}</button>
+              </form>
+            </>
+          ) : (
+            <a href={path ? `/auth/google?next=${encodeURIComponent(path)}` : "/auth/google"}>{t("signin.google")}</a>
+          )}
+        </nav>
+      )}
+    </header>
+  );
+}
 
 /** `lang` is the listener's; pages outside the session (admin, health) leave it at Japanese. */
-export function Layout({ title, children, script, lang = "ja" }: LayoutProps) {
+export function Layout({ title, children, script, lang = "ja", listener, path }: LayoutProps) {
   const t = tFor(lang);
   return (
     <html lang={lang}>
@@ -19,6 +50,7 @@ export function Layout({ title, children, script, lang = "ja" }: LayoutProps) {
         <link rel="stylesheet" href="/app.css" />
       </head>
       <body>
+        <SiteHeader listener={listener} path={path} lang={lang} />
         {children}
         {script && (
           <script

@@ -7,7 +7,7 @@ import { t } from "../../../src/worker/i18n/t";
 import { resetDb } from "../../helpers/db";
 import { okReply, stubAnthropic } from "../../helpers/anthropic";
 import { itemDraft, letterDraft } from "../db/helpers";
-import { get, newSession, postForm } from "./helpers";
+import { get, signedInSession, postForm } from "./helpers";
 
 let create: ReturnType<typeof stubAnthropic>;
 
@@ -32,7 +32,7 @@ async function seedItem() {
 describe("POST /letters", () => {
   it("stores a japanese letter verbatim and redirects to the item", async () => {
     const item = await seedItem();
-    const cookie = await newSession();
+    const cookie = await signedInSession();
     await postForm("/settings", cookie, { radioName: "ヒロ", place: "大船渡", voice: "", dial: "0.3" });
     const res = await postForm("/letters", cookie, { itemId: item.id, body: "中学の頃、毎日聴いていた" });
     expect(res.status).toBe(303);
@@ -45,7 +45,7 @@ describe("POST /letters", () => {
 
   it("judges the work's title and creator in the same moderation call", async () => {
     const item = await insertItem(env.DB, itemDraft({ title: "宣伝<タイトル>", creator: "誰かのチャンネル" }));
-    const res = await postForm("/letters", await newSession(), { itemId: item.id, body: "いい曲" });
+    const res = await postForm("/letters", await signedInSession(), { itemId: item.id, body: "いい曲" });
     expect(res.status).toBe(303);
     const req = create.mock.calls[0]![0];
     const user = String(req.messages[0].content);
@@ -59,7 +59,7 @@ describe("POST /letters", () => {
   it("keeps the original and stores the translation for english", async () => {
     const item = await seedItem();
     create.mockResolvedValueOnce(verdict({ ok: true })).mockResolvedValueOnce(translation("15 歳のときに大好きだった"));
-    const res = await postForm("/letters", await newSession(), { itemId: item.id, body: "I loved this at 15" });
+    const res = await postForm("/letters", await signedInSession(), { itemId: item.id, body: "I loved this at 15" });
     expect(res.status).toBe(303);
     const [l] = await listLettersForItem(env.DB, item.id);
     expect(l).toMatchObject({ body: "I loved this at 15", bodyJa: "15 歳のときに大好きだった", lang: "en" });
@@ -67,7 +67,7 @@ describe("POST /letters", () => {
 
   it("stores the english original as bodyEn and asks for the japanese translation only", async () => {
     const item = await seedItem();
-    const res = await postForm("/letters", await newSession(), { itemId: item.id, body: "I loved this at 15" });
+    const res = await postForm("/letters", await signedInSession(), { itemId: item.id, body: "I loved this at 15" });
     expect(res.status).toBe(303);
     const [l] = await listLettersForItem(env.DB, item.id);
     expect(l).toMatchObject({ body: "I loved this at 15", bodyJa: "[ja] translated", bodyEn: "I loved this at 15", lang: "en" });
@@ -76,7 +76,7 @@ describe("POST /letters", () => {
 
   it("translates a japanese letter into english for bodyEn", async () => {
     const item = await seedItem();
-    await postForm("/letters", await newSession(), { itemId: item.id, body: "中学の頃、毎日聴いていた" });
+    await postForm("/letters", await signedInSession(), { itemId: item.id, body: "中学の頃、毎日聴いていた" });
     const [l] = await listLettersForItem(env.DB, item.id);
     expect(l).toMatchObject({ bodyJa: "中学の頃、毎日聴いていた", bodyEn: "[en] translated" });
     const req = create.mock.calls[1]![0];
@@ -86,7 +86,7 @@ describe("POST /letters", () => {
 
   it("translates a letter in a third language into both japanese and english", async () => {
     const item = await seedItem();
-    await postForm("/letters", await newSession(), { itemId: item.id, body: "Me encantó esta canción, ¡gracias!" });
+    await postForm("/letters", await signedInSession(), { itemId: item.id, body: "Me encantó esta canción, ¡gracias!" });
     const [l] = await listLettersForItem(env.DB, item.id);
     expect(l).toMatchObject({ lang: "other", bodyJa: "[ja] translated", bodyEn: "[en] translated" });
     expect(create).toHaveBeenCalledTimes(3);
@@ -96,7 +96,7 @@ describe("POST /letters", () => {
     const item = await seedItem();
     vi.spyOn(console, "error").mockImplementation(() => {});
     create.mockImplementation((req) => (req.tools?.[0]?.input_schema?.required?.[0] === "en" ? Promise.reject(new Error("boom")) : okReply(req)));
-    const res = await postForm("/letters", await newSession(), { itemId: item.id, body: "中学の頃、毎日聴いていた" });
+    const res = await postForm("/letters", await signedInSession(), { itemId: item.id, body: "中学の頃、毎日聴いていた" });
     expect(res.status).toBe(303);
     const [l] = await listLettersForItem(env.DB, item.id);
     expect(l).toMatchObject({ bodyJa: "中学の頃、毎日聴いていた", bodyEn: null, status: "public" });
@@ -105,11 +105,11 @@ describe("POST /letters", () => {
   it("does not store a translation that carries a url, and does not reject the letter", async () => {
     const item = await seedItem();
     create.mockImplementation((req) => (req.tools?.[0]?.name === "translate" ? { content: [{ type: "tool_use", id: "t", name: "translate", input: { en: "see https://evil.example/x", ja: "https://evil.example/x を見て" } }] } : okReply(req)));
-    const res = await postForm("/letters", await newSession(), { itemId: item.id, body: "中学の頃、毎日聴いていた" });
+    const res = await postForm("/letters", await signedInSession(), { itemId: item.id, body: "中学の頃、毎日聴いていた" });
     expect(res.status).toBe(303);
     const [l] = await listLettersForItem(env.DB, item.id);
     expect(l!.bodyEn).toBeNull();
-    const res2 = await postForm("/letters", await newSession(), { itemId: item.id, body: "I loved this at 15" });
+    const res2 = await postForm("/letters", await signedInSession(), { itemId: item.id, body: "I loved this at 15" });
     expect(res2.status).toBe(303);
     const en = (await listLettersForItem(env.DB, item.id)).find((x) => x.lang === "en")!;
     expect(en.bodyJa).toBe("I loved this at 15"); // the original stands in; bodyJa is NOT NULL
@@ -119,14 +119,14 @@ describe("POST /letters", () => {
     const item = await seedItem();
     const long = "あ".repeat(600);
     create.mockImplementation((req) => (req.tools?.[0]?.name === "translate" ? { content: [{ type: "tool_use", id: "t", name: "translate", input: { en: long } }] } : okReply(req)));
-    const res = await postForm("/letters", await newSession(), { itemId: item.id, body: "いい曲" });
+    const res = await postForm("/letters", await signedInSession(), { itemId: item.id, body: "いい曲" });
     expect(res.status).toBe(303);
     expect((await listLettersForItem(env.DB, item.id))[0]!.bodyEn).toBeNull();
   });
 
   it("letter_body_over_200_chars_rejected", async () => {
     const item = await seedItem();
-    const res = await postForm("/letters", await newSession(), { itemId: item.id, body: "あ".repeat(201) });
+    const res = await postForm("/letters", await signedInSession(), { itemId: item.id, body: "あ".repeat(201) });
     expect(res.status).toBe(422);
     expect(await res.text()).toContain(t("letters.tooLong"));
     expect(await listLettersForItem(env.DB, item.id)).toHaveLength(0);
@@ -136,19 +136,19 @@ describe("POST /letters", () => {
   it("accepts exactly 200 code points", async () => {
     const item = await seedItem();
     create.mockResolvedValueOnce(verdict({ ok: true })).mockResolvedValueOnce(translation("笑顔"));
-    const res = await postForm("/letters", await newSession(), { itemId: item.id, body: "😀".repeat(200) });
+    const res = await postForm("/letters", await signedInSession(), { itemId: item.id, body: "😀".repeat(200) });
     expect(res.status).toBe(303);
   });
 
   it("rejects an empty body with 422", async () => {
     const item = await seedItem();
-    const res = await postForm("/letters", await newSession(), { itemId: item.id, body: "  " });
+    const res = await postForm("/letters", await signedInSession(), { itemId: item.id, body: "  " });
     expect(res.status).toBe(422);
     expect(await res.text()).toContain(t("letters.empty"));
   });
 
   it("POST /letters with unresolvable url → 422", async () => {
-    const res = await postForm("/letters", await newSession(), { url: "https://example.org/nothing", body: "いい曲" });
+    const res = await postForm("/letters", await signedInSession(), { url: "https://example.org/nothing", body: "いい曲" });
     expect(res.status).toBe(422);
     expect(await res.text()).toContain(t("put.notFound"));
   });
@@ -156,7 +156,7 @@ describe("POST /letters", () => {
   it("returns 422 with the reason when moderation rejects", async () => {
     const item = await seedItem();
     create.mockResolvedValue(verdict({ ok: false, reason: "ad" }));
-    const res = await postForm("/letters", await newSession(), { itemId: item.id, body: "買ってね" });
+    const res = await postForm("/letters", await signedInSession(), { itemId: item.id, body: "買ってね" });
     expect(res.status).toBe(422);
     const html = await res.text();
     expect(html).toContain(t("letters.rejected"));
@@ -166,7 +166,7 @@ describe("POST /letters", () => {
 
   it("returns 429 for the same text within 10 minutes", async () => {
     const item = await seedItem();
-    const cookie = await newSession();
+    const cookie = await signedInSession();
     expect((await postForm("/letters", cookie, { itemId: item.id, body: "同じ文" })).status).toBe(303);
     const again = await postForm("/letters", cookie, { itemId: item.id, body: "同じ文" });
     expect(again.status).toBe(429);
@@ -177,7 +177,7 @@ describe("POST /letters", () => {
     const item = await seedItem();
     vi.spyOn(console, "error").mockImplementation(() => {});
     create.mockRejectedValue(new Error("boom"));
-    const res = await postForm("/letters", await newSession(), { itemId: item.id, body: "いい曲" });
+    const res = await postForm("/letters", await signedInSession(), { itemId: item.id, body: "いい曲" });
     expect(res.status).toBe(503);
     expect(await res.text()).toContain(t("letters.unavailable"));
   });
@@ -186,7 +186,7 @@ describe("POST /letters", () => {
     const item = await seedItem();
     vi.spyOn(console, "error").mockImplementation(() => {});
     create.mockResolvedValue({ content: [{ type: "text", text: "はい" }] });
-    const res = await postForm("/letters", await newSession(), { itemId: item.id, body: "いい曲" });
+    const res = await postForm("/letters", await signedInSession(), { itemId: item.id, body: "いい曲" });
     expect(res.status).toBe(503);
     expect(await res.text()).toContain(t("letters.unavailable"));
     expect(await listLettersForItem(env.DB, item.id)).toHaveLength(0);
@@ -197,21 +197,21 @@ describe("POST /letters", () => {
     vi.spyOn(console, "error").mockImplementation(() => {});
     const noTool = { content: [{ type: "text", text: "はい" }] };
     create.mockResolvedValueOnce(verdict({ ok: true })).mockResolvedValueOnce(noTool).mockResolvedValueOnce(noTool);
-    const res = await postForm("/letters", await newSession(), { itemId: item.id, body: "I loved this at 15" });
+    const res = await postForm("/letters", await signedInSession(), { itemId: item.id, body: "I loved this at 15" });
     expect(res.status).toBe(503);
     expect(await res.text()).toContain(t("letters.unavailable"));
     expect(await listLettersForItem(env.DB, item.id)).toHaveLength(0);
   });
 
   it("returns 422 for an unknown item id", async () => {
-    const res = await postForm("/letters", await newSession(), { itemId: "nope", body: "いい曲" });
+    const res = await postForm("/letters", await signedInSession(), { itemId: "nope", body: "いい曲" });
     expect(res.status).toBe(422);
   });
 
   it("stores a reply under its parent without count side effects", async () => {
     const item = await seedItem();
     const parent = await insertLetter(env.DB, letterDraft(item.id));
-    const res = await postForm("/letters", await newSession(), { itemId: item.id, body: "わかる", kind: "reply", parentLetterId: parent.id });
+    const res = await postForm("/letters", await signedInSession(), { itemId: item.id, body: "わかる", kind: "reply", parentLetterId: parent.id });
     expect(res.status).toBe(303);
     const rows = await env.DB.prepare("SELECT kind, parent_letter_id FROM letters WHERE kind = 'reply'").all();
     expect(rows.results).toEqual([{ kind: "reply", parent_letter_id: parent.id }]);
@@ -220,7 +220,7 @@ describe("POST /letters", () => {
   it("watashimo has fixed text, skips Claude, and a second one is 409", async () => {
     const item = await seedItem();
     const parent = await insertLetter(env.DB, letterDraft(item.id));
-    const cookie = await newSession();
+    const cookie = await signedInSession();
     const form = { itemId: item.id, kind: "watashimo", parentLetterId: parent.id, body: "ignored" };
     expect((await postForm("/letters", cookie, form)).status).toBe(303);
     expect(create).not.toHaveBeenCalled();
@@ -233,7 +233,7 @@ describe("POST /letters", () => {
     const item = await seedItem();
     const a = await insertLetter(env.DB, letterDraft(item.id, { body: "一通目" }));
     const b = await insertLetter(env.DB, letterDraft(item.id, { body: "二通目" }));
-    const cookie = await newSession();
+    const cookie = await signedInSession();
     for (const p of [a, b]) {
       const res = await postForm("/letters", cookie, { itemId: item.id, kind: "watashimo", parentLetterId: p.id, body: "x" });
       expect(res.status).toBe(303);
@@ -244,7 +244,7 @@ describe("POST /letters", () => {
 
   it("watashimo without a parent is 422", async () => {
     const item = await seedItem();
-    const res = await postForm("/letters", await newSession(), { itemId: item.id, kind: "watashimo", body: "x" });
+    const res = await postForm("/letters", await signedInSession(), { itemId: item.id, kind: "watashimo", body: "x" });
     expect(res.status).toBe(422);
   });
 });
@@ -259,39 +259,39 @@ describe("POST /letters parent validation", () => {
   it("rejects a plain letter that names a parent", async () => {
     const item = await seedItem();
     const parent = await insertLetter(env.DB, letterDraft(item.id));
-    await badParent(await postForm("/letters", await newSession(), { itemId: item.id, body: "いい曲", parentLetterId: parent.id }));
+    await badParent(await postForm("/letters", await signedInSession(), { itemId: item.id, body: "いい曲", parentLetterId: parent.id }));
   });
 
   it("rejects a reply to a parent that does not exist", async () => {
     const item = await seedItem();
-    await badParent(await postForm("/letters", await newSession(), { itemId: item.id, kind: "reply", body: "わかる", parentLetterId: "nope" }));
+    await badParent(await postForm("/letters", await signedInSession(), { itemId: item.id, kind: "reply", body: "わかる", parentLetterId: "nope" }));
   });
 
   it("rejects a reply whose parent belongs to another item", async () => {
     const item = await seedItem();
     const other = await insertItem(env.DB, itemDraft({ title: "Other", externalIds: { itunes: "2" } }));
     const parent = await insertLetter(env.DB, letterDraft(other.id));
-    await badParent(await postForm("/letters", await newSession(), { itemId: item.id, kind: "reply", body: "わかる", parentLetterId: parent.id }));
+    await badParent(await postForm("/letters", await signedInSession(), { itemId: item.id, kind: "reply", body: "わかる", parentLetterId: parent.id }));
   });
 
   it("rejects a reaction to a parent that is no longer public", async () => {
     const item = await seedItem();
     const parent = await insertLetter(env.DB, letterDraft(item.id, { status: "rejected" }));
-    await badParent(await postForm("/letters", await newSession(), { itemId: item.id, kind: "reply", body: "わかる", parentLetterId: parent.id }));
+    await badParent(await postForm("/letters", await signedInSession(), { itemId: item.id, kind: "reply", body: "わかる", parentLetterId: parent.id }));
   });
 
   it("rejects a reaction to a reaction", async () => {
     const item = await seedItem();
     const parent = await insertLetter(env.DB, letterDraft(item.id));
     const reply = await insertLetter(env.DB, letterDraft(item.id, { kind: "reply", parentLetterId: parent.id }));
-    await badParent(await postForm("/letters", await newSession(), { itemId: item.id, kind: "watashimo", body: "x", parentLetterId: reply.id }));
+    await badParent(await postForm("/letters", await signedInSession(), { itemId: item.id, kind: "watashimo", body: "x", parentLetterId: reply.id }));
   });
 });
 
 describe("GET /put", () => {
   it("shows the item card and the form for itemId", async () => {
     const item = await seedItem();
-    const html = await (await get(`/put?itemId=${item.id}`, await newSession())).text();
+    const html = await (await get(`/put?itemId=${item.id}`, await signedInSession())).text();
     expect(html).toContain("Blue in Green");
     expect(html).toContain('name="body"');
     expect(html).toContain('maxlength="200"');
@@ -300,7 +300,7 @@ describe("GET /put", () => {
 
   it("shows the sender line the same way the item page does", async () => {
     const item = await seedItem();
-    const cookie = await newSession();
+    const cookie = await signedInSession();
     await postForm("/settings", cookie, { radioName: "ヒロ", place: "大船渡", voice: "", dial: "0.3" });
     const who = t("letter.whoPlace", { who: t("letter.who", { name: "ヒロ" }), place: "大船渡" });
     expect(await (await get(`/put?itemId=${item.id}`, cookie)).text()).toContain(who);
@@ -309,7 +309,7 @@ describe("GET /put", () => {
   });
 
   it("says not found for an unresolvable url", async () => {
-    const res = await get(`/put?url=${encodeURIComponent("https://example.org/x")}`, await newSession());
+    const res = await get(`/put?url=${encodeURIComponent("https://example.org/x")}`, await signedInSession());
     expect(res.status).toBe(200);
     const html = await res.text();
     expect(html).toContain(t("put.notFound"));
@@ -321,7 +321,7 @@ describe("GET /put", () => {
 describe("reactions, report, takedown, bookmarklet", () => {
   it("shows reactions only to the letter's author", async () => {
     const item = await seedItem();
-    const cookie = await newSession();
+    const cookie = await signedInSession();
     const own = await postForm("/letters", cookie, { itemId: item.id, body: "元の一通" });
     expect(own.status).toBe(303);
     const [parent] = await listLettersForItem(env.DB, item.id);
@@ -332,12 +332,12 @@ describe("reactions, report, takedown, bookmarklet", () => {
     expect(html).toContain("返信の人");
     expect(html).toContain("高知");
     expect(html).toContain("わかる");
-    expect((await get(`/letters/${parent!.id}/reactions`, await newSession())).status).toBe(404);
+    expect((await get(`/letters/${parent!.id}/reactions`, await signedInSession())).status).toBe(404);
   });
 
   it("puts a report form on every reaction", async () => {
     const item = await seedItem();
-    const cookie = await newSession();
+    const cookie = await signedInSession();
     await postForm("/letters", cookie, { itemId: item.id, body: "元の一通" });
     const [parent] = await listLettersForItem(env.DB, item.id);
     const r = await insertLetter(env.DB, letterDraft(item.id, { kind: "reply", parentLetterId: parent!.id }));
@@ -347,7 +347,7 @@ describe("reactions, report, takedown, bookmarklet", () => {
 
   it("shows the original of an english reaction on the reactions page", async () => {
     const item = await seedItem();
-    const cookie = await newSession();
+    const cookie = await signedInSession();
     await postForm("/letters", cookie, { itemId: item.id, body: "元の一通" });
     const [parent] = await listLettersForItem(env.DB, item.id);
     await insertLetter(env.DB, letterDraft(item.id, { kind: "reply", body: "Me too, truly", bodyJa: "私も、本当に", lang: "en", parentLetterId: parent!.id }));
@@ -359,7 +359,7 @@ describe("reactions, report, takedown, bookmarklet", () => {
   it("report adds a row and leaves status alone", async () => {
     const item = await seedItem();
     const letter = await insertLetter(env.DB, letterDraft(item.id));
-    const res = await postForm(`/letters/${letter.id}/report`, await newSession(), { reason: "迷惑" });
+    const res = await postForm(`/letters/${letter.id}/report`, await signedInSession(), { reason: "迷惑" });
     expect(res.status).toBe(303);
     expect(res.headers.get("location")).toBe(`/items/${item.id}`);
     const rows = await env.DB.prepare("SELECT letter_id, reason FROM reports").all();
@@ -368,11 +368,11 @@ describe("reactions, report, takedown, bookmarklet", () => {
   });
 
   it("report on a missing letter is 404", async () => {
-    expect((await postForm("/letters/nope/report", await newSession(), {})).status).toBe(404);
+    expect((await postForm("/letters/nope/report", await signedInSession(), {})).status).toBe(404);
   });
 
   it("takedown stores url and reason", async () => {
-    const cookie = await newSession();
+    const cookie = await signedInSession();
     const res = await postForm("/takedown", cookie, { url: "https://example.org/post", reason: "私の投稿です" });
     expect(res.status).toBe(200);
     expect(await res.text()).toContain(t("takedown.received"));
@@ -382,12 +382,12 @@ describe("reactions, report, takedown, bookmarklet", () => {
   it("takedown form can be prefilled from a found letter", async () => {
     const item = await seedItem();
     const l = await insertLetter(env.DB, letterDraft(item.id, { kind: "found", sourceUrl: "https://example.org/p", sourceAuthor: "誰か" }));
-    const html = await (await get(`/takedown?letterId=${l.id}`, await newSession())).text();
+    const html = await (await get(`/takedown?letterId=${l.id}`, await signedInSession())).text();
     expect(html).toContain("https://example.org/p");
   });
 
   it("bookmarklet page shows the javascript: one-liner", async () => {
-    const html = await (await get("/bookmarklet", await newSession())).text();
+    const html = await (await get("/bookmarklet", await signedInSession())).text();
     expect(html).toContain("javascript:location.href=");
     expect(html).toContain("/put?url=");
   });

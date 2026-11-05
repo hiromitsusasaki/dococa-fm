@@ -1,0 +1,80 @@
+import { Hono } from "hono";
+import { ItemCard, whoOf } from "../../views/components";
+import { Layout } from "../../views/layout";
+import { requireSignin } from "../auth/require-signin";
+import type { Variables } from "../auth/session";
+import { listFavorites } from "../db/history";
+import { getItemsByIds } from "../db/items";
+import { listLettersByListener, listReactionsToListener } from "../db/letters";
+import type { Env } from "../env";
+import { displayText } from "../letters/display";
+import { tFor } from "../i18n/t";
+
+const FAVORITES_LIMIT = 20;
+
+export const me = new Hono<{ Bindings: Env; Variables: Variables }>();
+
+me.get("/me", requireSignin, async (c) => {
+  const listener = c.get("listener");
+  const lang = listener.lang;
+  const t = tFor(lang);
+  const favorites = await listFavorites(c.env.DB, listener.id, FAVORITES_LIMIT);
+  const sent = await listLettersByListener(c.env.DB, listener.id);
+  const reactions = await listReactionsToListener(c.env.DB, listener.id, [...new Set(sent.map((l) => l.itemId))]);
+  const items = await getItemsByIds(c.env.DB, reactions.map((r) => r.itemId));
+  const stationUrl = listener.stationPublic && listener.stationSlug ? `${c.env.PUBLIC_ORIGIN}/stations/s:${listener.stationSlug}` : null;
+  return c.html(
+    <Layout title={t("me.title")} lang={lang} listener={listener} path="/me">
+      <main class="me">
+        <h1>{t("me.title")}</h1>
+        <section class="me-favorites">
+          <h2>{t("me.favorites")}</h2>
+          <ul>
+            {favorites.map(({ item }) => (
+              <li>
+                <a href={`/items/${item.id}`}>
+                  <ItemCard item={item} heading="h2" lang={lang} />
+                </a>
+                <a href={`/put?itemId=${item.id}`}>{t("put.title")}</a>
+              </li>
+            ))}
+          </ul>
+        </section>
+        <section class="me-reactions">
+          <h2>{t("me.reactions")}</h2>
+          {reactions.length === 0 ? (
+            <p class="muted">{t("me.nobody")}</p>
+          ) : (
+            <ul>
+              {reactions.map((r) => (
+                <li>
+                  <p class="letter-who">{whoOf(r, lang)}</p>
+                  <p>{t(r.kind === "watashimo" ? "reaction.watashimo" : "me.reply")}</p>
+                  {r.kind === "reply" && <p class="letter-body">{displayText(r, lang).main}</p>}
+                  <p class="muted">
+                    <a href={`/items/${r.itemId}`}>{items.get(r.itemId)?.title ?? ""}</a>
+                  </p>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+        <section class="me-station">
+          <h2>{t("me.station")}</h2>
+          {stationUrl ? (
+            <p>
+              <a href={stationUrl}>{stationUrl}</a>
+            </p>
+          ) : (
+            <p>
+              <a href="/settings">{t("settings.station")}</a>
+            </p>
+          )}
+        </section>
+        <form method="post" action="/auth/signout">
+          <button type="submit">{t("signin.out")}</button>
+        </form>
+      </main>
+    </Layout>,
+  );
+});

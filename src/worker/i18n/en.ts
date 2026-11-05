@@ -190,6 +190,7 @@ export const en: Record<keyof typeof ja, string> = {
   "me.reactions": "Reactions you got",
   "me.station": "Your public radio",
   "me.nobody": "No reactions yet",
+  "me.reply": "A note",
   "settings.station": "Public radio",
   "settings.stationPublic": "Make a radio of only your favorites public",
   "settings.stationSlug": "Radio URL",

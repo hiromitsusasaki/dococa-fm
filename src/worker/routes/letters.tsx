@@ -1,8 +1,9 @@
 import { zValidator } from "@hono/zod-validator";
-import { type Context, Hono } from "hono";
+import { type Context, Hono, type MiddlewareHandler } from "hono";
 import { z } from "zod";
 import { LetterText, ReportForm, whoOf } from "../../views/components";
 import { Layout } from "../../views/layout";
+import { requireSignin } from "../auth/require-signin";
 import type { Variables } from "../auth/session";
 import { getItem } from "../db/items";
 import { displayText } from "../letters/display";
@@ -12,6 +13,7 @@ import type { ja } from "../i18n/ja";
 import { type Lang, tFor } from "../i18n/t";
 import { createLetter } from "../letters/create";
 import type { ItemDraft } from "../resolve";
+import type { Listener } from "../types";
 import { PutPage } from "./put";
 
 type AppContext = Context<{ Bindings: Env; Variables: Variables }>;
@@ -34,8 +36,15 @@ async function putError(c: AppContext, form: Partial<LetterForm>, error: string,
   return c.html(<PutPage listener={c.get("listener")} card={card} itemId={itemId} url={form.url} body={form.body} error={error} />, status);
 }
 
+/** Only a new letter needs an account; 私も and a reply stay open to anonymous listeners. */
+const signinForLetters: MiddlewareHandler<{ Bindings: Env; Variables: Variables }> = async (c, next) => {
+  const kind = (await c.req.parseBody()).kind;
+  return kind === "watashimo" || kind === "reply" ? next() : requireSignin(c, next);
+};
+
 letters.post(
   "/letters",
+  signinForLetters,
   zValidator("form", letterSchema, (result, ctx) => {
     if (!result.success) return putError(ctx as AppContext, {}, tFor((ctx as AppContext).get("listener").lang)("letters.invalid"), 422);
   }),
@@ -56,7 +65,7 @@ letters.get("/letters/:id/reactions", async (c) => {
   const lang = c.get("listener").lang;
   const t = tFor(lang);
   return c.html(
-    <Layout title={t("reaction.title")} lang={lang}>
+    <Layout title={t("reaction.title")} lang={lang} listener={c.get("listener")}>
       <main class="reactions-page">
         <h1>{t("reaction.title")}</h1>
         <LetterText letter={letter} lang={lang} />
@@ -90,10 +99,10 @@ letters.post("/letters/:id/report", zValidator("form", reportSchema, (r, c) => (
   return c.redirect(`/items/${letter.itemId}`, 303);
 });
 
-function TakedownPage(props: { url?: string; received?: boolean; invalid?: boolean; lang: Lang }) {
-  const t = tFor(props.lang);
+function TakedownPage(props: { url?: string; received?: boolean; invalid?: boolean; listener: Listener }) {
+  const t = tFor(props.listener.lang);
   return (
-    <Layout title={t("takedown.title")} lang={props.lang}>
+    <Layout title={t("takedown.title")} lang={props.listener.lang} listener={props.listener}>
       <main class="takedown">
         <h1>{t("takedown.title")}</h1>
         {props.received ? (
@@ -121,14 +130,14 @@ function TakedownPage(props: { url?: string; received?: boolean; invalid?: boole
 letters.get("/takedown", async (c) => {
   const id = c.req.query("letterId");
   const letter = id ? await getLetter(c.env.DB, id) : null;
-  return c.html(<TakedownPage url={letter?.sourceUrl ?? undefined} lang={c.get("listener").lang} />);
+  return c.html(<TakedownPage url={letter?.sourceUrl ?? undefined} listener={c.get("listener")} />);
 });
 
 const takedownSchema = z.object({ url: z.string().trim().min(1).max(2000), reason: z.string().trim().max(500).default("") });
 
-letters.post("/takedown", zValidator("form", takedownSchema, (r, c) => (r.success ? undefined : c.html(<TakedownPage invalid lang={(c as AppContext).get("listener").lang} />, 422))), async (c) => {
+letters.post("/takedown", zValidator("form", takedownSchema, (r, c) => (r.success ? undefined : c.html(<TakedownPage invalid listener={(c as AppContext).get("listener")} />, 422))), async (c) => {
   await insertTakedown(c.env.DB, c.req.valid("form"));
-  return c.html(<TakedownPage received lang={c.get("listener").lang} />);
+  return c.html(<TakedownPage received listener={c.get("listener")} />);
 });
 
 /** The origin the bookmarklet sends people to; null when the configured one is not a plain http(s) origin. */
@@ -148,7 +157,7 @@ letters.get("/bookmarklet", (c) => {
   const lang = c.get("listener").lang;
   const t = tFor(lang);
   return c.html(
-    <Layout title={t("bookmarklet.title")} lang={lang}>
+    <Layout title={t("bookmarklet.title")} lang={lang} listener={c.get("listener")}>
       <main class="bookmarklet">
         <h1>{t("bookmarklet.title")}</h1>
         {code ? (

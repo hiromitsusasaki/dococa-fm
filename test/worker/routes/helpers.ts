@@ -1,4 +1,6 @@
 import { SELF } from "cloudflare:test";
+import { env } from "cloudflare:workers";
+import { updateListener } from "../../../src/worker/db/listeners";
 
 export const BASE = "http://example.com";
 
@@ -19,3 +21,11 @@ export function postForm(path: string, cookie: string, body: Record<string, stri
 }
 
 export const get = (path: string, cookie: string) => SELF.fetch(`${BASE}${path}`, { headers: { cookie } });
+
+/** A session whose listener is bound to a Google account, as after sign-in. */
+export async function signedInSession(displayName = "Hiro"): Promise<string> {
+  const cookie = await newSession();
+  const id = cookie.split("=")[1]!.split(".")[0]!;
+  await updateListener(env.DB, id, { googleSub: `g-${crypto.randomUUID()}`, displayName });
+  return cookie;
+}

@@ -40,7 +40,7 @@
 | Task 5 | 局プレイヤー | 完了（`/stations/:key` のページと `station.js`。行の再生は `playback.ts` に共通化。ON で直近の回に復帰か新規作成、残り 2 セグメントで次の回を先読み） |
 | Task 6 | ホームを局に | 完了。局パネルの見た目（左寄せ、DOCOCA FM と ON AIR の間隔）は Task 11 で整える |
 | Task 7 | Google サインイン | 完了（OIDC を Worker 内で。`/auth/google`、`/auth/google/callback`、`POST /auth/signout`。実キーでの実機確認は本人作業の後） |
-| Task 8 | 保護とマイページ | 未着手 |
+| Task 8 | 保護とマイページ | 完了（`requireSignin` で `/start`・`/auth/spotify`・`POST /letters`（`kind=letter`）・`/me` を保護。`GET /put` は閲覧可で、匿名にはフォームの代わりにサインイン案内。ヘッダ `.site-header` と `/me`。`POST /put` は存在しないので対象外） |
 | Task 9 | 公開局 | 未着手 |
 | Task 10 | 取り込みの順位 | 未着手 |
 | Task 11 | 見た目の方針 | 未着手 |

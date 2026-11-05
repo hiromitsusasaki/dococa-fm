@@ -8,7 +8,7 @@ import { okReply, stubAnthropic } from "../../helpers/anthropic";
 import { resetDb } from "../../helpers/db";
 import { json, stubFetch } from "../../helpers/fetch";
 import { letterDraft } from "../db/helpers";
-import { BASE, get, newSession, postForm } from "./helpers";
+import { BASE, get, signedInSession, postForm } from "./helpers";
 
 const idOf = (cookie: string) => cookie.split("=")[1]!.split(".")[0]!;
 
@@ -41,7 +41,7 @@ afterEach(() => {
 
 describe("GET /start", () => {
   it("shows three favourite fields, each with an optional one-liner", async () => {
-    const html = await (await get("/start", await newSession())).text();
+    const html = await (await get("/start", await signedInSession())).text();
     expect(html).toContain(t("start.title"));
     expect(html).toMatch(/<form[^>]*method="post"[^>]*action="\/start"/);
     for (const n of [1, 2, 3]) {
@@ -55,7 +55,7 @@ describe("GET /start", () => {
 describe("POST /start", () => {
   it("registers three titles as manual history and goes to my station", async () => {
     stubSearch({ 曲A: 1, 曲B: 2, 曲C: 3 });
-    const cookie = await newSession();
+    const cookie = await signedInSession();
     const res = await postForm("/start", cookie, { fav1: "曲A", fav2: "曲B", fav3: "曲C" });
     expect(res.status).toBe(303);
     expect(res.headers.get("location")).toBe("/stations/mine");
@@ -67,7 +67,7 @@ describe("POST /start", () => {
 
   it("goes on with the rest when one field cannot be resolved", async () => {
     stubSearch({ 曲A: 1, 曲C: 3 });
-    const cookie = await newSession();
+    const cookie = await signedInSession();
     const res = await postForm("/start", cookie, { fav1: "曲A", fav2: "存在しない何か", fav3: "曲C" });
     expect(res.status).toBe(303);
     expect((await listHistory(env.DB, idOf(cookie), 10)).map((r) => r.item.title).sort()).toEqual(["曲A", "曲C"]);
@@ -75,7 +75,7 @@ describe("POST /start", () => {
 
   it("answers 422 with the form and a hint when none can be resolved, storing nothing", async () => {
     stubSearch({});
-    const cookie = await newSession();
+    const cookie = await signedInSession();
     const res = await postForm("/start", cookie, { fav1: "ない1", fav2: "ない2", fav3: "" });
     expect(res.status).toBe(422);
     const html = await res.text();
@@ -89,7 +89,7 @@ describe("POST /start", () => {
 
   it("answers 422 when every field is empty", async () => {
     stubSearch({});
-    const res = await postForm("/start", await newSession(), { fav1: "", fav2: " ", fav3: "" });
+    const res = await postForm("/start", await signedInSession(), { fav1: "", fav2: " ", fav3: "" });
     expect(res.status).toBe(422);
   });
 
@@ -98,7 +98,7 @@ describe("POST /start", () => {
       ["https://itunes.apple.com/lookup", () => json({ results: [track(9, "Url Song")] })],
       ["https://itunes.apple.com/search", () => json({ results: [track(9, "Url Song")] })],
     ]);
-    const cookie = await newSession();
+    const cookie = await signedInSession();
     const res = await postForm("/start", cookie, { fav1: "https://music.apple.com/jp/album/x/1?i=9", fav2: "https://example.invalid/nothing", fav3: "" });
     expect(res.status).toBe(303);
     expect((await listHistory(env.DB, idOf(cookie), 10)).map((r) => r.item.title)).toEqual(["Url Song"]);
@@ -107,7 +107,7 @@ describe("POST /start", () => {
 
   it("registers one history row when two fields name the same work", async () => {
     stubSearch({ 曲A: 1 });
-    const cookie = await newSession();
+    const cookie = await signedInSession();
     const res = await postForm("/start", cookie, { fav1: "曲A", fav2: "曲A", fav3: "" });
     expect(res.status).toBe(303);
     expect(await listHistory(env.DB, idOf(cookie), 10)).toHaveLength(1);
@@ -118,7 +118,7 @@ describe("POST /start", () => {
       ["https://itunes.apple.com/lookup", () => json({ results: [track(9, "Url Song")] })],
       ["https://itunes.apple.com/search", () => json({ results: [track(5, "Searched")] })],
     ]);
-    const cookie = await newSession();
+    const cookie = await signedInSession();
     const res = await postForm("/start", cookie, { fav1: "music.apple.com/jp/album/x/1?i=9", fav2: "http://localhost/x", fav3: "" });
     expect(res.status).toBe(303);
     expect((await listHistory(env.DB, idOf(cookie), 10)).map((r) => r.item.title)).toEqual(["Url Song"]);
@@ -127,7 +127,7 @@ describe("POST /start", () => {
 
   it("keeps an item only registered here off the home page until a public letter is on it", async () => {
     stubSearch({ 曲A: 1 });
-    const cookie = await newSession();
+    const cookie = await signedInSession();
     await postForm("/start", cookie, { fav1: "曲A" });
     // A listener who has started is no longer new, so the page is the plain home.
     expect(await (await get("/", cookie)).text()).not.toContain("最近の作品");
@@ -147,7 +147,7 @@ describe("POST /start", () => {
     });
     (env as { ANTHROPIC_API_KEY: string }).ANTHROPIC_API_KEY = "sk-test";
     create.mockImplementation((req) => (String(req.messages?.[0]?.content).includes("買ってね") ? verdict({ ok: false, reason: "ad" }) : okReply(req)));
-    const cookie = await newSession();
+    const cookie = await signedInSession();
     const res = await postForm("/start", cookie, { fav1: "曲A", note1: "  中学の頃、毎日聴いていた ", fav2: "曲B", note2: "買ってね" });
     expect(res.status).toBe(303);
     expect(await listHistory(env.DB, idOf(cookie), 10)).toHaveLength(2);
@@ -159,7 +159,7 @@ describe("POST /start", () => {
   it("does not block the start when the judgement service is down", async () => {
     stubSearch({ 曲A: 1 });
     (env as { ANTHROPIC_API_KEY: string }).ANTHROPIC_API_KEY = "";
-    const cookie = await newSession();
+    const cookie = await signedInSession();
     const res = await postForm("/start", cookie, { fav1: "曲A", note1: "好きでした" });
     expect(res.status).toBe(303);
     expect(await listHistory(env.DB, idOf(cookie), 10)).toHaveLength(1);
@@ -168,7 +168,7 @@ describe("POST /start", () => {
 
 describe("GET /episodes/new", () => {
   it("does not exist: a GET never creates an episode", async () => {
-    const cookie = await newSession();
+    const cookie = await signedInSession();
     const res = await SELF.fetch(`${BASE}/episodes/new`, { headers: { cookie }, redirect: "manual" });
     expect(res.status).toBe(404);
   });
@@ -176,13 +176,13 @@ describe("GET /episodes/new", () => {
 
 describe("home and bookmarklet", () => {
   it("sends a brand-new listener from the home page to /start", async () => {
-    const html = await (await get("/", await newSession())).text();
+    const html = await (await get("/", await signedInSession())).text();
     expect(html).not.toMatch(/<form[^>]*action="\/episodes"/);
     expect(html).toMatch(/href="\/start"[^>]*>好きなものを 3 つ送って、あなたのラジオを始める/);
   });
 
   it("explains the bookmarklet on /put and /settings", async () => {
-    const cookie = await newSession();
+    const cookie = await signedInSession();
     for (const path of ["/put", "/settings"]) {
       const html = await (await get(path, cookie)).text();
       expect(html).toContain('href="/bookmarklet"');

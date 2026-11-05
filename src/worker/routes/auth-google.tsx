@@ -37,7 +37,7 @@ authGoogle.get("/auth/google", (c) => {
   if (!c.env.GOOGLE_OAUTH_CLIENT_ID) {
     const t = tFor(c.get("listener").lang);
     return c.html(
-      <Layout title={t("signin.unavailable")} lang={c.get("listener").lang}>
+      <Layout title={t("signin.unavailable")} lang={c.get("listener").lang} listener={c.get("listener")}>
         <main class="settings">
           <p role="status">{t("signin.unavailable")}</p>
           <p>

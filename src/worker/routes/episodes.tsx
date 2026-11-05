@@ -17,10 +17,11 @@ export const episodes = new Hono<{ Bindings: Env; Variables: Variables }>();
 
 const JST_OFFSET_MS = 9 * 60 * 60 * 1000;
 
-function MessagePage({ message, start, lang }: { message: string; start?: boolean; lang: Lang }) {
+function MessagePage({ message, start, listener }: { message: string; start?: boolean; listener: Listener }) {
+  const lang = listener.lang;
   const t = tFor(lang);
   return (
-    <Layout title={t("episode.title")} lang={lang}>
+    <Layout title={t("episode.title")} lang={lang} listener={listener}>
       <main class="episode-page">
         <p role="alert">{message}</p>
         {start && (
@@ -53,8 +54,8 @@ export const startEpisode = async (c: Context<{ Bindings: Env; Variables: Variab
   const t = tFor(lang);
   const made = await makeEpisode(c.env, c.get("listener"));
   if (made.ok) return c.redirect(`/episodes/${made.id}`, 303);
-  if (made.reason === "empty") return c.html(<MessagePage message={t("episode.empty")} start lang={lang} />, 200);
-  return c.html(<MessagePage message={t(made.reason === "limit" ? "episode.limit" : "episode.unavailable")} lang={lang} />, made.reason === "limit" ? 429 : 503);
+  if (made.reason === "empty") return c.html(<MessagePage message={t("episode.empty")} start listener={c.get("listener")} />, 200);
+  return c.html(<MessagePage message={t(made.reason === "limit" ? "episode.limit" : "episode.unavailable")} listener={c.get("listener")} />, made.reason === "limit" ? 429 : 503);
 };
 
 episodes.post("/episodes", startEpisode);
@@ -68,7 +69,7 @@ episodes.get("/episodes", async (c) => {
     title: e.title ?? t("episode.untitled"),
   }));
   return c.html(
-    <Layout title={t("episode.archive")} lang={lang}>
+    <Layout title={t("episode.archive")} lang={lang} listener={c.get("listener")}>
       <main class="archive">
         <h1>{t("episode.archive")}</h1>
         {rows.length === 0 ? (
@@ -118,7 +119,7 @@ episodes.get("/episodes/:id", async (c) => {
   // The page already says whether the cloud voice is on (data-tts-url), so the embedded json keeps its old shape.
   const { cloudTts: _cloudTts, ...pageJson } = toPlayerView(episode, loaded, stored);
   return c.html(
-    <Layout title={t("episode.title")} script="player" lang={lang}>
+    <Layout title={t("episode.title")} script="player" lang={lang} listener={listener}>
       <main class="episode-page">
         <div id="player" data-episode-id={episode.id} data-voice={listener.voice} data-next-url={`/episodes/${episode.id}/next`} data-tts-url={episode.cloudTts ? "/tts" : ""} data-dial={String(listener.dial)}></div>
         <ol class="program">

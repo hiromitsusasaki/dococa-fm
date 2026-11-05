@@ -1,10 +1,12 @@
 import { Hono } from "hono";
 import { Layout } from "../../views/layout";
 import type { Variables } from "../auth/session";
+import { requireSignin } from "../auth/require-signin";
 import { upsertHistory } from "../db/history";
 import type { Env } from "../env";
-import { type Lang, tFor } from "../i18n/t";
+import { tFor } from "../i18n/t";
 import { createLetter } from "../letters/create";
+import type { Listener } from "../types";
 import { type ItemDraft, resolveOrCreateMany, resolveUrl, searchByText } from "../resolve";
 
 const SLOTS = [1, 2, 3] as const;
@@ -12,10 +14,11 @@ const MAX_FIELD = 300;
 
 type Values = Record<`fav${1 | 2 | 3}` | `note${1 | 2 | 3}`, string>;
 
-function StartPage({ values, error, lang }: { values?: Partial<Values>; error?: boolean; lang: Lang }) {
+function StartPage({ values, error, listener }: { values?: Partial<Values>; error?: boolean; listener: Listener }) {
+  const lang = listener.lang;
   const t = tFor(lang);
   return (
-    <Layout title={t("start.title")} lang={lang}>
+    <Layout title={t("start.title")} lang={lang} listener={listener}>
       <main class="start">
         <h1>{t("start.title")}</h1>
         <p>{t("start.lead")}</p>
@@ -55,9 +58,9 @@ async function resolveFavorite(q: string, env: Env): Promise<ItemDraft | null> {
 
 export const start = new Hono<{ Bindings: Env; Variables: Variables }>();
 
-start.get("/start", (c) => c.html(<StartPage lang={c.get("listener").lang} />));
+start.get("/start", requireSignin, (c) => c.html(<StartPage listener={c.get("listener")} />));
 
-start.post("/start", async (c) => {
+start.post("/start", requireSignin, async (c) => {
   const listener = c.get("listener");
   const form = await c.req.parseBody();
   const field = (k: string) => (typeof form[k] === "string" ? (form[k] as string).trim().slice(0, MAX_FIELD) : "");
@@ -65,7 +68,7 @@ start.post("/start", async (c) => {
 
   const resolved = await Promise.all(SLOTS.map(async (n) => (values[`fav${n}`] ? { n, draft: await resolveFavorite(values[`fav${n}`], c.env) } : { n, draft: null })));
   const found = resolved.filter((r): r is { n: 1 | 2 | 3; draft: ItemDraft } => r.draft !== null);
-  if (found.length === 0) return c.html(<StartPage values={values} error lang={listener.lang} />, 422);
+  if (found.length === 0) return c.html(<StartPage values={values} error listener={listener} />, 422);
 
   // One lookup and one insert for all three; two drafts that are the same work resolve to one item.
   const stored = await resolveOrCreateMany(c.env.DB, found.map((f) => f.draft));

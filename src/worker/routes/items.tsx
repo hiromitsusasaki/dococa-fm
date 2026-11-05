@@ -12,11 +12,12 @@ export const items = new Hono<{ Bindings: Env; Variables: Variables }>();
 items.get("/items/:id", async (c) => {
   const item = await getItem(c.env.DB, c.req.param("id"));
   if (!item) return c.notFound();
-  const lang = c.get("listener").lang;
+  const listener = c.get("listener");
+  const lang = listener.lang;
   const t = tFor(lang);
   const letters = await listLettersForItem(c.env.DB, item.id);
   return c.html(
-    <Layout title={item.title} lang={lang}>
+    <Layout title={item.title} lang={lang} listener={listener} path={c.req.path}>
       <main class="item-page">
         <ItemCard item={item} lang={lang} />
         <OutLinks item={item} lang={lang} />

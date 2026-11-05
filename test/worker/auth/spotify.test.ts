@@ -8,7 +8,7 @@ import { createListener, getListener, updateListener } from "../../../src/worker
 import { t } from "../../../src/worker/i18n/t";
 import { json, stubFetch } from "../../helpers/fetch";
 import { resetDb } from "../../helpers/db";
-import { BASE, newSession } from "../routes/helpers";
+import { BASE, signedInSession } from "../routes/helpers";
 
 let warn: ReturnType<typeof vi.spyOn>;
 const mutable = env as { SPOTIFY_CLIENT_ID: string };
@@ -192,13 +192,13 @@ describe("importSpotifyHistory", () => {
 describe("spotify routes", () => {
   it("shows a not-configured page when there is no client id", async () => {
     mutable.SPOTIFY_CLIENT_ID = "";
-    const res = await SELF.fetch(`${BASE}/auth/spotify`, { redirect: "manual", headers: { cookie: await newSession() } });
+    const res = await SELF.fetch(`${BASE}/auth/spotify`, { redirect: "manual", headers: { cookie: await signedInSession() } });
     expect(res.status).toBe(200);
     expect(await res.text()).toContain(t("spotify.notConfigured"));
   });
 
   it("GET /auth/spotify sets the pkce cookie and redirects to spotify", async () => {
-    const res = await SELF.fetch(`${BASE}/auth/spotify`, { redirect: "manual", headers: { cookie: await newSession() } });
+    const res = await SELF.fetch(`${BASE}/auth/spotify`, { redirect: "manual", headers: { cookie: await signedInSession() } });
     expect(res.status).toBe(302);
     const cookie = res.headers.get("set-cookie") ?? "";
     expect(cookie).toMatch(/dfm_pkce=[\w-]+\.[\w-]{43,128}/);
@@ -217,7 +217,7 @@ describe("spotify routes", () => {
   });
 
   async function begin() {
-    const session = await newSession();
+    const session = await signedInSession();
     const res = await SELF.fetch(`${BASE}/auth/spotify`, { redirect: "manual", headers: { cookie: session } });
     const pkce = (res.headers.get("set-cookie") ?? "").match(/dfm_pkce=[^;]+/)![0];
     const state = new URL(res.headers.get("location")!).searchParams.get("state")!;
