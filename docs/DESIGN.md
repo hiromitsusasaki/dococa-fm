@@ -95,7 +95,7 @@ CSS 変数は `:root` にライト、`@media (prefers-color-scheme: dark)` と `
 | お便り | お便りを送る / 送る | Send a letter / Send |
 | 反応 | 私も / 一言を送る | Me too / Reply |
 | 出口 | この作品を聴く・観る | Listen or watch |
-| 原文 | 原文を見る / 訳を見る | Show original / Show translation |
+| 原文 | 原文を見る（`<details>` で原文を開く。閉じる文言は持たない） | Show original |
 | デモ | ［デモ用］ | [Demo] |
 
 使わない言葉: 「局」「みんなのラジオ」「置く」（お便りは送る）、「世界の局」「遠くのダイヤル」「知らないものの割合」、順位や件数を示す数字。DJ の台詞では再生・視聴を促す語（かけます／流します／お聴きください／どうぞ）も使わない。曲も映像も流れず、流れるのは語りだけだから。
