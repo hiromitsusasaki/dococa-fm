@@ -305,6 +305,24 @@
 - [ ] **Step 2: 実装。** 模型 `docs/design/station-mock.html` の `.hero` と同じ配置（PC 幅は右列、スマホ幅は文の下に全幅）。
 - [ ] **Step 3: コミット** `feat: key visual in the station hero`
 
+### Task 15: 土地を選択式にする（国 + 都道府県／州）
+
+**Files:**
+- Create: `migrations/0007_place.sql`、`src/worker/geo/places.ts`（国の一覧と、日本の都道府県・アメリカの州）、`src/worker/geo/place-label.ts`
+- Modify: `src/worker/types.ts`（Listener に `placeCountry: string | null; placeRegion: string | null`）、`src/worker/db/listeners.ts`、`src/worker/routes/settings.tsx`、`src/worker/letters/create.ts`（お便りの `place` を選択値から作る）、`scripts/lib/seed.ts`（ペルソナの土地を選択値に）
+- Test: `test/worker/geo/place-label.test.ts`、`test/worker/routes/settings.test.ts`
+
+**Interfaces:**
+- Produces: `COUNTRIES: { code: string; ja: string; en: string }[]`（ISO 3166-1 alpha-2、日本語名と英語名）、`REGIONS: Record<"JP" | "US", { code: string; ja: string; en: string }[]>`；`placeLabel(country, region, lang): string`（JP は都道府県名だけ、例「島根県」→ 表示は「島根」、US は州名 + ", USA"、他は国名）；`POST /settings` は `placeCountry`（必須ではない）と `placeRegion`（国に一覧があるときだけ）を受け、`place` 文字列は `placeLabel(…, "ja")` で埋める（旧データとの互換のため `place` 列は残す）。
+- 画面: 設定で国の select、国が JP / US のときだけ地域の select（JS なしで動くよう、国を変えたら送信して再描画でもよい）。
+- お便りには `radioName` と `place`（ラベル）だけが入る。DJ の読みも同じラベル。
+
+- [ ] **Step 1: 失敗するテスト。** `placeLabel("JP","13","ja")` が `東京`、`("JP","13","en")` が `Tokyo, Japan`、`("US","CA","ja")` が `カリフォルニア州、アメリカ`、`("PT",null,"ja")` が `ポルトガル`、未知の国コードは `""`。設定保存で `placeCountry=JP&placeRegion=32` → `place` が `島根`；`placeRegion` が一覧に無い → 422。
+- [ ] **Step 2: 失敗を確認。**
+- [ ] **Step 3: 実装。** 一覧は静的な TS（外部 API は使わない）。国名の日本語は主要 60 か国を手で持ち、残りは英語名で代用してよい。
+- [ ] **Step 4: 緑を確認。** 設定画面のスクリーンショットを撮る。
+- [ ] **Step 5: コミット** `feat: pick a place from country and region lists`
+
 ### Task 14: 文書と本番の設定
 
 **Files:**
@@ -322,4 +340,4 @@
 - Spec 追記 F（言語設定）→ Task 2、2b。G（見た目の確定）→ Task 11、13。
 - Spec 追記 A（局・連続再生・途中の反応・はじめの一歩の降格）→ Task 3〜6、12。B（識別・匿名の範囲）→ Task 2、7、8。C（公開局）→ Task 2、3、4、9。D（取り込みの並び）→ Task 2、10。E（文言・見た目・キービジュアル）→ Task 1、11、12、13。
 - 名前の一貫性: `StationKey` / `parseStationKey`（Task 3）を Task 4・5・6 が使う。`playerView`（Task 4）を Task 5 が使う。`requireSignin`（Task 8）を Task 9・10 が使う。`listFavorites`（Task 2）を Task 3・8・10 が使う。
-- 間に合わないときの削る順: Task 12 → 10 → 9 → 8（マイページだけ落として保護は残す）。Task 1、2、2b、3〜7、11、13 は提出の核。
+- 間に合わないときの削る順: Task 15 → 12 → 10 → 9 → 8（マイページだけ落として保護は残す）。Task 1、2、2b、3〜7、11、13 は提出の核。Phase 3（音声の事前生成）は別計画。
