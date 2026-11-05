@@ -10,7 +10,7 @@ import { verifyEpisode } from "./verify";
 
 const DJ_ATTEMPTS = 2;
 /** Checks a rephrased script can fix; verbatim and sources failures come from the data. */
-const RETRYABLE = /^(?:topical|measure|pii): /;
+const RETRYABLE = /^(?:topical|measure|pii|announce): /;
 
 /** Even the readings-only episode failed verification: the data itself is bad, and nothing may air. */
 export class EpisodeUnverifiedError extends Error {

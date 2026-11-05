@@ -44,7 +44,7 @@ const TOOL = {
         items: {
           type: "object",
           properties: {
-            say_before: { type: "string", description: `作品を紹介し、お便りへ渡す短い一言。${SAY_BEFORE_MAX} 字以内` },
+            say_before: { type: "string", description: `作品を紹介する短い一言。お便りがあるときはお便りへ渡す。${SAY_BEFORE_MAX} 字以内` },
             say_after: { type: "string", description: `短い感想と、次にかける理由。${SAY_AFTER_MAX} 字以内` },
           },
           required: ["say_before", "say_after"],
@@ -72,6 +72,8 @@ function reactionTag(l: Letter): string {
   return `<reaction kind="${l.kind === "reply" ? "一言" : "私も"}"${attr("from", l.radioName)}${attr("place", l.place)}/>`;
 }
 
+const NO_LETTER_NOTE = "この作品へのお便りはまだありません。読み上げ役に渡さず、作品の紹介から say_after へつなげてください。";
+
 function userMessage(input: ScriptInput): string {
   const who = [input.listener.radioName, input.listener.place].filter((s) => s !== "").map(escapeTags).join("、");
   const head = [
@@ -87,6 +89,7 @@ function userMessage(input: ScriptInput): string {
     return [
       `<segment n="${i + 1}" slot="${SLOT_LABEL[s.slot]}">`,
       `<work>${work.join("\n")}</work>`,
+      ...(s.letters.length === 0 && s.reactions.length === 0 ? [NO_LETTER_NOTE] : []),
       ...s.letters.map(letterTag),
       ...s.reactions.map(reactionTag),
       "</segment>",

@@ -101,7 +101,9 @@ describe("composeEpisode", () => {
 describe("fixed templates", () => {
   it.each(FIXED_TEMPLATES)("%s says nothing the dj checks would refuse, so a fixed line never needs them", (key) => {
     const text = t(key, { who: "みなとさん（函館）", author: "@jazzcat", site: "YouTube" });
-    const r = verifyEpisode([{ itemId: "i1", slot: "near", lines: [{ type: "dj", text }] }], new Map(), listener());
+    // The segment carries a letter so the announce check, which only fires in a letterless segment, stays out of it.
+    const aLetter = { type: "letter" as const, letterId: plain.id, text: plain.bodyJa, radioName: plain.radioName, place: plain.place, kind: plain.kind, sourceUrl: null, sourceAuthor: null };
+    const r = verifyEpisode([{ itemId: "i1", slot: "near", lines: [{ type: "dj", text }, aLetter] }], letters, listener());
     expect(r).toMatchObject({ topical: true, pii: true });
   });
 });

@@ -96,6 +96,8 @@ export function verifyEpisode(
       if (y != null) years.add(y);
     }
 
+    const hasLetter = seg.lines.some((l) => l.type === "letter");
+
     seg.lines.forEach((line, li) => {
       const at = `segment ${si + 1} line ${li + 1}`;
       if (line.type === "letter") {
@@ -134,6 +136,11 @@ export function verifyEpisode(
           topical = false;
           details.push(`measure: ${at}: ${count[0]}`);
         }
+      }
+      // A letterless segment must not hand over to a reader who has nothing to read.
+      if (!line.fixed && !hasLetter && /お便り|読み上げ/u.test(text)) {
+        topical = false;
+        details.push(`announce: ${at}: announces a letter in a segment with none`);
       }
       if (!line.fixed && EMAIL.test(text)) {
         pii = false;

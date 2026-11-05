@@ -177,6 +177,21 @@ describe("verifyEpisode", () => {
     expect(verifyEpisode(episode(fixedDj(`みなとさん（${plain.bodyJa}）から『私も』が届いています`)), letters, me).pii).toBe(false);
   });
 
+  describe("announcing a letter", () => {
+    const announce = dj("この作品へのお便りを、読み上げ役にお願いします。");
+    it("fails a dj line that announces a letter in a segment with none", () => {
+      const r = verifyEpisode(episode(announce, dj("次の一曲へ。")), letters, me);
+      expect(r.topical).toBe(false);
+      expect(r.details).toEqual(["announce: segment 1 line 1: announces a letter in a segment with none"]);
+    });
+    it("passes the same line when the segment has a letter", () => {
+      expect(verifyEpisode(episode(announce, read(plain)), letters, me).details).toEqual([]);
+    });
+    it("passes a letterless segment that does not mention letters", () => {
+      expect(verifyEpisode(episode(dj("静かな一曲から。"), dj("次へ。")), letters, me).details).toEqual([]);
+    });
+  });
+
   describe("years from the data", () => {
     const items = byId([item({ id: "i1", year: 2016 })]);
     const withYear = letter({ id: "y", year: 2019, body: "高校のとき", bodyJa: "高校のとき" });
