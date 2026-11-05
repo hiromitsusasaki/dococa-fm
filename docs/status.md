@@ -26,6 +26,26 @@
   - [ ] `/settings` の `/mcp/<token>` を Claude のカスタムコネクタに登録（サーバー側は確認済み）。
   - [ ] 下の「public 化前チェックリスト」の残り（GitHub 設定、gitleaks、public 化）。
 
+## Phase 2 の進み
+
+| タスク | 内容 | 状態 |
+|---|---|---|
+| Task 1 | 一文と文言 | 完了 |
+| Task 2 | | 未着手 |
+| Task 2b | | 未着手 |
+| Task 3 | | 未着手 |
+| Task 4 | | 未着手 |
+| Task 5 | | 未着手 |
+| Task 6 | | 未着手 |
+| Task 7 | | 未着手 |
+| Task 8 | | 未着手 |
+| Task 9 | | 未着手 |
+| Task 10 | | 未着手 |
+| Task 11 | | 未着手 |
+| Task 12 | | 未着手 |
+| Task 13 | | 未着手 |
+| Task 14 | | 未着手 |
+
 ## 2026-11-04 最終修正 完了。次は本人作業（push・鍵・デプロイ・public 化）
 
 - 設計書・計画は本人承認済み。実行方式は **Subagent-driven**（`superpowers:subagent-driven-development`）。

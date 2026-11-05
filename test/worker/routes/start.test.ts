@@ -178,7 +178,7 @@ describe("home and bookmarklet", () => {
   it("sends the listen button of a brand-new listener to /start", async () => {
     const html = await (await get("/", await newSession())).text();
     expect(html).not.toMatch(/<form[^>]*action="\/episodes"/);
-    expect(html).toMatch(/href="\/start"[^>]*>番組を聴く/);
+    expect(html).toMatch(/href="\/start"[^>]*>あなたのラジオをつける/);
   });
 
   it("explains the bookmarklet on /put and /settings", async () => {

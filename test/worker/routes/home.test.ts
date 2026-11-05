@@ -24,10 +24,10 @@ describe("GET /", () => {
     const res = await get("/", cookie);
     expect(res.status).toBe(200);
     const html = await res.text();
-    expect(html).toContain("世界のどこかの、好きなものが流れてくるラジオ");
+    expect(html).toContain("世界のどこかにいる誰かの好きなものが聴こえてくるラジオ");
     expect(html).toMatch(/<form[^>]*method="post"[^>]*action="\/episodes"/);
-    expect(html).toContain("番組を聴く");
-    expect(html).toMatch(/href="\/put"[^>]*>一通置く/);
+    expect(html).toContain("あなたのラジオをつける");
+    expect(html).toMatch(/href="\/put"[^>]*>お便りを送る/);
     expect(html).toContain("最近の作品");
     expect(html).toContain("作品6");
     expect(html).toContain("作品1<");
@@ -44,6 +44,6 @@ describe("GET /", () => {
     await upsertHistory(env.DB, [{ listenerId: id, itemId: item.id, source: "manual", occurredAt: null }]);
     const html = await (await get("/", cookie)).text();
     expect(html).not.toContain('href="/start"');
-    expect(html).toContain("番組を聴く");
+    expect(html).toContain("あなたのラジオをつける");
   });
 });

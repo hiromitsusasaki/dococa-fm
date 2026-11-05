@@ -1,7 +1,7 @@
 {
   "name": "Dococa FM",
   "short_name": "Dococa FM",
-  "description": "世界のどこかの、好きなものが流れてくるラジオ",
+  "description": "世界のどこかにいる誰かの好きなものが聴こえてくるラジオ",
   "lang": "ja",
   "display": "standalone",
   "start_url": "/",

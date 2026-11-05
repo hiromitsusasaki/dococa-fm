@@ -8,6 +8,11 @@ describe("t", () => {
 
   it("returns the app name and tagline", () => {
     expect(t("app.name")).toBe("Dococa FM");
-    expect(t("app.tagline")).toBe("世界のどこかの、好きなものが流れてくるラジオ");
+    expect(t("app.tagline")).toBe("世界のどこかにいる誰かの好きなものが聴こえてくるラジオ");
+  });
+
+  it("has the station vocabulary", () => {
+    expect(t("station.on")).toBe("ラジオをつける");
+    expect(t("station.dial")).toBe("セレンディピティ");
   });
 });
