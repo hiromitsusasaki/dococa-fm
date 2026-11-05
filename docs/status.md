@@ -51,7 +51,12 @@ Phase 2（ラジオ中心の体験への作り替え）の実装は、すべて 
 - 聴いたお便りは、生成済みの回から導いている（実際の再生は記録していない）。Phase 3 で、クライアントから再生を記録する。
 - 先読みの応答が途中で失われると、同じ枠をもう一度作って 1 日の枠を余分に使うことがある（冪等キーは入れていない）。
 - セッション cookie はサインイン・サインアウトで回さない（リスナー id の決定的な HMAC のまま。サインアウトはブラウザ側の削除だけ）。v1 の既知の設計。
-- お便りの無い作品を枠に入れない（本人確認中）。
+- お便りの無い作品を枠に入れない（本人決定 2026-11-06。番組はお便りのある作品だけで組み、Phase 1 の FALLBACK プールと公開局の例外を外す。Phase 3 で実装）。影響箇所（最終レビュー I3 より。ずれないように全部まとめて直す）:
+  - `src/worker/program/select-sql.ts` の `FALLBACK_SQL` と `select.ts` でのその利用。無くすと、他人のお便りが無い新規リスナーの `mine` は短いか空になる（`/start` → `/stations/mine` が 409 `empty` になる）ので、`station.empty` の文言と grow の経路を確かめる。
+  - `select.ts` の `publicProgram` は誰も書いていない作品をわざと残している → `letterIds.length > 0` で絞る（`worldProgram` は `FAR_SQL` で既にお便りのみ）。
+  - `compose.ts` の `script.workOnly` と `FIXED_TEMPLATES`、i18n の `script.workOnly`、`script.ts` の `NO_LETTER_NOTE`、`verify.ts` の `announce` 規則と `build.ts` の `RETRYABLE`。
+  - `stored.ts` の `publicView`（お便りが全部非公開になった枠を落とす現在の扱いを維持するか決める）。`/me` の聴いた履歴と `?seg=` の再生は `publicView` の添字を共有しているので、両方そこを通す。
+  - テスト: `select` / `compose` / `verify` / `build` / `station` の fallback・workOnly の fixture。
 - `letters.place` は日本語のラベルで持つ（DJ が日本語で読むため。英語の画面でも「島根」と出る。設計書 Addendum H に明記。英語表示はコードから引き直す Phase 3）。
 
 ## Phase 2 の進み
