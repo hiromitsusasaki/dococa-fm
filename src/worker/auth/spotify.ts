@@ -76,18 +76,19 @@ type SpotifyTrack = {
 };
 type Entry = { track: SpotifyTrack; at: string | null; rank?: number };
 
-async function readTracks(path: string, token: string, pick: (item: any) => Entry | null): Promise<Entry[]> {
+/** The entries of one list; null when the read failed (an empty list is a real answer, a failure is not). */
+async function readTracks(path: string, token: string, pick: (item: any) => Entry | null): Promise<Entry[] | null> {
   try {
     const res = await fetch(`${API}${path}`, { headers: { authorization: `Bearer ${token}` } });
     if (!res.ok) {
       console.warn(`[dococa] spotify ${path.split("?")[0]} returned ${res.status}; skipping it`);
-      return [];
+      return null;
     }
     const body = (await res.json()) as { items?: unknown[] };
     return (body.items ?? []).flatMap((item) => pick(item) ?? []);
   } catch {
     console.warn(`[dococa] spotify ${path.split("?")[0]} failed; skipping it`);
-    return [];
+    return null;
   }
 }
 
@@ -182,8 +183,13 @@ export async function importSpotifyHistory(env: Env, db: D1Database, listener: L
     await readTracks("/me/top/tracks?limit=50&time_range=short_term", access, (t) => ({ track: t, at: null })),
     await readTracks("/me/player/recently-played?limit=50", access, (i) => ({ track: i?.track, at: isoOrNull(i?.played_at) })),
     await readTracks("/me/tracks?limit=50", access, (i) => ({ track: i?.track, at: isoOrNull(i?.added_at) })),
-  ].map((l) => l.filter((e) => e.track));
-  const entries = uniqueTracks(lists);
+  ];
+  const entries = uniqueTracks(lists.map((l) => (l ?? []).filter((e) => e.track)));
+  if (entries.length === 0) {
+    // Both top lists read fine and are empty: the old ranks are stale. If either read failed, nothing is known, so nothing is cleared.
+    if (lists[0] !== null && lists[1] !== null) await upsertHistory(db, [], { clearRanksOf: listener.id });
+    return 0;
+  }
 
   const drafts = await Promise.all(entries.map((e) => draftFor(env, e.track)));
   // At most 40 tracks, one lookup and one batched insert: the callback stays well inside D1's per-invocation limit.

@@ -28,7 +28,7 @@ const T2: Fake = { id: "s2", name: "Song Two", artist: "Artist B", itunes: "102"
 const T3: Fake = { id: "s3", name: "Song Three", artist: "Artist C", itunes: "103" };
 const T4: Fake = { id: "s4", name: "Lost Song", artist: "Artist D" };
 
-type Opts = { top?: Fake[]; recent?: Fake[]; saved?: Fake[]; tokenStatus?: number; recentStatus?: number; newRefresh?: string; itunes?: Fake[] };
+type Opts = { topStatus?: number; top?: Fake[]; recent?: Fake[]; saved?: Fake[]; tokenStatus?: number; recentStatus?: number; newRefresh?: string; itunes?: Fake[] };
 
 function stubWorld(o: Opts = {}) {
   const known = o.itunes ?? [T1, T2, T3];
@@ -42,7 +42,7 @@ function stubWorld(o: Opts = {}) {
         return json({ access_token: "at-1", refresh_token: o.newRefresh ?? "rt-from-spotify" });
       },
     ],
-    ["https://api.spotify.com/v1/me/top/tracks", () => json({ items: (o.top ?? [T1, T2]).map(track) })],
+    ["https://api.spotify.com/v1/me/top/tracks", () => (o.topStatus && o.topStatus !== 200 ? json({}, o.topStatus) : json({ items: (o.top ?? [T1, T2]).map(track) }))],
     [
       "https://api.spotify.com/v1/me/player/recently-played",
       () =>
@@ -198,6 +198,29 @@ describe("importSpotifyHistory", () => {
     const rows = await listHistory(env.DB, listener.id, 50);
     const rank = (id: string) => rows.find((r) => r.item.externalIds.spotify === id)!.rank;
     expect([rank("s1"), rank("s2")]).toEqual([null, 1]);
+  });
+
+  const rankOf = async (listenerId: string, spotifyId: string) => (await listHistory(env.DB, listenerId, 50)).find((r) => r.item.externalIds.spotify === spotifyId)!.rank;
+
+  it("clears the old ranks when a re-import succeeds and finds nothing", async () => {
+    stubWorld({ top: [T1, T2], recent: [], saved: [] });
+    const listener = await connectedListener();
+    await importSpotifyHistory(env, env.DB, listener);
+    expect(await rankOf(listener.id, "s1")).toBe(1);
+    vi.unstubAllGlobals();
+    stubWorld({ top: [], recent: [], saved: [] });
+    expect(await importSpotifyHistory(env, env.DB, listener)).toBe(0);
+    expect([await rankOf(listener.id, "s1"), await rankOf(listener.id, "s2")]).toEqual([null, null]);
+  });
+
+  it("keeps the old ranks when the top lists could not be read", async () => {
+    stubWorld({ top: [T1, T2], recent: [], saved: [] });
+    const listener = await connectedListener();
+    await importSpotifyHistory(env, env.DB, listener);
+    vi.unstubAllGlobals();
+    stubWorld({ topStatus: 500, recent: [], saved: [] });
+    expect(await importSpotifyHistory(env, env.DB, listener)).toBe(0);
+    expect([await rankOf(listener.id, "s1"), await rankOf(listener.id, "s2")]).toEqual([1, 2]);
   });
 
   it("takes 20 long-term, 10 short-term, 10 recent and fills the rest from saved, 40 at most", async () => {

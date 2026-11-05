@@ -8,7 +8,7 @@ const ROWS_PER_UPSERT = 20;
 
 /** One multi-row statement per 20 rows, sent as one batch. */
 export async function upsertHistory(db: D1Database, rows: HistoryRow[], opts: { clearRanksOf?: string } = {}): Promise<void> {
-  if (rows.length === 0) return;
+  if (rows.length === 0 && !opts.clearRanksOf) return;
   const stmts: D1PreparedStatement[] = [];
   // A re-import is the new truth: every rank (a manual favourite's included) comes from the latest import and nowhere else.
   // Same batch, so it is atomic.

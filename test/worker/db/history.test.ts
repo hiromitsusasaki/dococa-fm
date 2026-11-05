@@ -83,6 +83,15 @@ describe("history", () => {
     expect(ranks).toEqual({ A: null, B: 1 });
   });
 
+  it("clears ranks even when there are no rows to write", async () => {
+    const me = await createListener(env.DB);
+    const a = await insertItem(env.DB, itemDraft());
+    await upsertHistory(env.DB, [{ listenerId: me.id, itemId: a.id, source: "spotify", occurredAt: null, rank: 2 }]);
+    await upsertHistory(env.DB, [], { clearRanksOf: me.id });
+    expect((await listHistory(env.DB, me.id, 10))[0]?.rank).toBeNull();
+    await upsertHistory(env.DB, []);
+  });
+
   it("listFavorites leaves out what a service played and orders by rank", async () => {
     const me = await createListener(env.DB);
     const [a, b, c] = await Promise.all(["A", "B", "C"].map((title) => insertItem(env.DB, itemDraft({ title, externalIds: {} }))));
