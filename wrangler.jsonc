@@ -9,7 +9,12 @@
   ],
   "r2_buckets": [{ "binding": "BUCKET", "bucket_name": "dococa-audio" }],
   "assets": { "binding": "ASSETS", "not_found_handling": "none", "run_worker_first": true },
-  // Set to the deployed origin (e.g. https://dococa.example.workers.dev) before `pnpm run deploy`. Empty refuses
-  // every request with 500. Local dev sets it in .dev.vars.
-  "vars": { "PUBLIC_ORIGIN": "https://dococa-fm.promitsu.workers.dev" }
+  // The custom domain (Cloudflare Registrar zone). Other hosts, including workers.dev, redirect here.
+  "routes": [{ "pattern": "dococafm.app", "custom_domain": true }],
+  // Keep the workers.dev host alive so old links land on the redirect to PUBLIC_ORIGIN; no per-version preview urls.
+  "workers_dev": true,
+  "preview_urls": false,
+  // Must match the custom domain above: it drives the same-origin check, the Secure cookie, the Spotify
+  // redirect and the MCP url. Empty refuses every request with 500. Local dev sets it in .dev.vars.
+  "vars": { "PUBLIC_ORIGIN": "https://dococafm.app" }
 }

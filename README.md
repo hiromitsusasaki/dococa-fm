@@ -106,7 +106,7 @@ pnpm wrangler d1 create dococa            # 出力の database_id を wrangler.j
 pnpm wrangler r2 bucket create dococa-audio
 pnpm wrangler secret put ANTHROPIC_API_KEY   # .dev.vars.example の鍵を 1 つずつ（ADMIN_TOKEN、SESSION_SECRET、SPOTIFY_CLIENT_ID、GOOGLE_TTS_SA_JSON、TMDB_API_KEY、YOUTUBE_API_KEY、任意で GOOGLE_BOOKS_API_KEY）
 pnpm db:migrate
-# wrangler.jsonc の vars.PUBLIC_ORIGIN にデプロイ先の origin（例 https://dococa-fm.<account>.workers.dev）を書いてから
+# wrangler.jsonc の routes にカスタムドメイン、vars.PUBLIC_ORIGIN にその origin（例 https://dococafm.app）を書いてから
 pnpm run deploy   # pnpm deploy は pnpm 組み込みの別コマンドなので、run を付ける
 ```
 
