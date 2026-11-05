@@ -33,7 +33,7 @@ async function orEmpty(search: Promise<ItemDraft[]>): Promise<ItemDraft[]> {
 
 const searchers = (q: string, env: Env): Record<ItemKind, () => Promise<ItemDraft[]>> => ({
   music: () => searchItunes(q),
-  book: () => searchBooks(q),
+  book: () => searchBooks(q, env.GOOGLE_BOOKS_API_KEY),
   film: () => searchTmdb(q, env.TMDB_API_KEY),
 });
 
@@ -141,7 +141,7 @@ async function resolveKnown(url: string, env: Env): Promise<ItemDraft | null> {
     if (track) return withOrigin(track, parsed, url);
   }
   if (parsed.provider === "amazon" && parsed.id && /^\d/.test(parsed.id)) {
-    const [book] = await orEmpty(searchBooks(`isbn:${parsed.id}`));
+    const [book] = await orEmpty(searchBooks(`isbn:${parsed.id}`, env.GOOGLE_BOOKS_API_KEY));
     if (book) return withOrigin({ ...book, externalIds: { ...book.externalIds, isbn: book.externalIds.isbn ?? parsed.id } }, parsed, url);
     return resolveOgp(parsed, url, env, parsed.id);
   }

@@ -8,6 +8,8 @@ export type Env = {
   GOOGLE_TTS_SA_JSON: string;
   TMDB_API_KEY: string;
   YOUTUBE_API_KEY: string;
+  /** 任意: Google Books API のキー。無いと共有の無料枠で 429 になりやすい */
+  GOOGLE_BOOKS_API_KEY?: string;
   ADMIN_TOKEN: string;
   SESSION_SECRET: string;
   EPISODE_DAILY_LIMIT?: string;

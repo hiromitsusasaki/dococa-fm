@@ -32,11 +32,12 @@ function toDraft(v: Volume): ItemDraft | null {
   };
 }
 
-export async function searchBooks(text: string): Promise<ItemDraft[]> {
+/** `key` is optional; without it Google serves the shared anonymous quota, which is often exhausted (429). */
+export async function searchBooks(text: string, key?: string): Promise<ItemDraft[]> {
   const compact = text.replace(/[-\s]/g, "");
   const q = ISBN_PATTERN.test(compact) ? `isbn:${compact}` : text;
-  const body = await fetchJson<{ items?: Volume[] }>(
-    `https://www.googleapis.com/books/v1/volumes?${new URLSearchParams({ q, maxResults: "5" })}`,
-  );
+  const params = new URLSearchParams({ q, maxResults: "5" });
+  if (key) params.set("key", key);
+  const body = await fetchJson<{ items?: Volume[] }>(`https://www.googleapis.com/books/v1/volumes?${params}`);
   return (body?.items ?? []).flatMap((v) => toDraft(v) ?? []);
 }

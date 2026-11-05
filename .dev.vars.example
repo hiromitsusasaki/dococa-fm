@@ -8,6 +8,8 @@ GOOGLE_TTS_SA_JSON=
 TMDB_API_KEY=
 # YouTube Data API v3 のキー（見つけた声の収集）
 YOUTUBE_API_KEY=
+# 任意: Google Books API のキー（Library で Books API を有効化して作る。YouTube のキーに Books API を足して同じ値でもよい）。無いと鍵なしの共有枠で 429 になり本が解決できない
+GOOGLE_BOOKS_API_KEY=
 # 管理 API の Bearer トークン
 ADMIN_TOKEN=
 # セッション cookie の署名用ランダム文字列

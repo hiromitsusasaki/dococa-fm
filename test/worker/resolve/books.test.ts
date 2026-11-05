@@ -47,6 +47,17 @@ describe("searchBooks", () => {
     ]);
   });
 
+  it("adds key= to the request only when a key is given", async () => {
+    const { calls } = stubFetch([["https://www.googleapis.com/books/v1/volumes", () => json({ items: [] })]]);
+    await searchBooks("t", "K123");
+    await searchBooks("t");
+    await searchBooks("t", "");
+    const [withKey = "", without = "", empty = ""] = calls();
+    expect(new URL(withKey).searchParams.get("key")).toBe("K123");
+    expect(without).not.toContain("key=");
+    expect(empty).not.toContain("key=");
+  });
+
   it("handles sparse volumes and missing items", async () => {
     stubFetch([["https://www.googleapis.com/books/v1/volumes", () => json({ items: [{ id: "x", volumeInfo: { title: "T" } }] })]]);
     expect(await searchBooks("t")).toEqual([
