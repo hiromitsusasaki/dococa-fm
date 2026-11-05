@@ -96,6 +96,14 @@ describe("composeEpisode", () => {
     expect(seg!.lines[0]).toEqual({ type: "dj", text: "お便りを読みます。", fixed: true });
   });
 
+  it("introduces the work, not a letter, in a letterless fallback segment", () => {
+    const [seg] = composeEpisode([{ itemId: "i2", slot: "near", letterIds: [], reactionIds: [] }], null, letters, items);
+    const t0 = (seg!.lines[0] as { text: string }).text;
+    expect(t0).toMatch(/^続いては、『.+』です。$/);
+    expect(t0).not.toContain("お便り");
+    expect(seg!.lines[0]).toMatchObject({ type: "dj", fixed: true });
+  });
+
   it("keeps the plain reading cue for an anonymous sender", () => {
     const anon = letter({ id: "n", radioName: "", place: "" });
     const [seg] = composeEpisode([{ itemId: "i1", slot: "near", letterIds: ["n"], reactionIds: [] }], null, byId([anon]), items);
