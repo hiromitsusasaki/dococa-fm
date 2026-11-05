@@ -67,14 +67,14 @@ export function composeEpisode(
     if (!item) throw new Error(`item missing: ${p.itemId}`);
     const said = djLines?.[i];
     const lines: ScriptLine[] = [];
-    if (!said) {
-      const first = p.letterIds.map((id) => letters.get(id)).find((l) => l?.kind !== "found");
-      lines.push(fixed(first && (first.radioName !== "" || first.place !== "") ? t("script.letterFrom", { who: who(first) }) : t("script.readingOnly")));
-    }
-    else if (said.sayBefore !== "") lines.push(dj(said.sayBefore));
+    if (said && said.sayBefore !== "") lines.push(dj(said.sayBefore));
+    if (!said && p.letterIds.length === 0) lines.push(fixed(t("script.readingOnly")));
     for (const id of p.letterIds) {
       const l = letters.get(id);
       if (!l) continue;
+      if (!said && l.kind !== "found") {
+        lines.push(fixed(l.radioName === "" ? t("script.readingOnly") : t("script.letterFrom", { who: who(l) })));
+      }
       if (l.kind === "found") {
         lines.push(fixed(t("script.foundVoice", { author: l.sourceAuthor ?? "", site: siteName(l.sourceUrl) })));
       }

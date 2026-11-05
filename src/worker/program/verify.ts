@@ -14,7 +14,8 @@ import { maskDataYears, TOPICAL } from "./topical-words";
 const MEASURE =
   /[0-9]+\s*(?:人|名|通|件|位)|[一二三四五六七八九十百千万]+(?:人|名|通|件)(?=の方|から|も|が|に|届|ほど|目)|何(?:人|名|通|件|曲|作品|冊|本|枚)も|回再生|第[0-9一二三四五六七八九十]+位|ランキング|一致率|再生回数|(?<![0-9])(?!1\s*(?:曲|作品|冊|本|枚|話))[0-9]+\s*(?:曲|作品|冊|本|枚|話)|(?<![一二三四五六七八九十百千万])(?!一(?:曲|作品|冊|本|枚|話))[一二三四五六七八九十百千万]+(?:曲|作品|冊|本|枚|話)/u;
 /** Nothing is played on this radio: the DJ introduces and reads, never invites the listener to listen or watch. */
-const PLAYBACK = /(かけ(ます|ましょう|る)|流し(ます|ましょう)|お聴きください|聴いてください|観てください|お楽しみください|どうぞ)/u;
+const PLAYBACK =
+  /(?<!語り|問い|呼び|話し|働き|追い|声を|心に|気に|手間を|時間を|鍵を|電話を)かけ(?:ます|ましょう|る|てみ|てください)|(?<!涙を|汗を|水に|聞き)流し(?:ます|ましょう)|お聴きください|聴いて(?:みて)?ください|観てください|お楽しみください|どうぞ(?!よろしく)/u;
 /** Ten code points shared with a letter is a quote, not a coincidence. */
 const QUOTE_WINDOW = 10;
 /** Stands in for a work's title or creator on both sides of the quote check. */
@@ -139,7 +140,7 @@ export function verifyEpisode(
           details.push(`measure: ${at}: ${count[0]}`);
         }
       }
-      const play = !line.fixed ? text.match(PLAYBACK) : null;
+      const play = !line.fixed ? mask(text).match(PLAYBACK) : null;
       if (play) {
         topical = false;
         details.push(`playback: ${at}: ${play[0]}`);

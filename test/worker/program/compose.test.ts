@@ -83,6 +83,19 @@ describe("composeEpisode", () => {
     expect(segs[0]!.lines.filter((l) => l.type === "letter")).toHaveLength(2);
   });
 
+  it("hands over before every named non-found letter in the readings-only fallback", () => {
+    const b = letter({ id: "b", radioName: "そら", place: "" });
+    const [seg] = composeEpisode([{ itemId: "i1", slot: "near", letterIds: ["a", "b"], reactionIds: [] }], null, byId([plain, b]), items);
+    const texts = seg!.lines.filter((l) => l.type === "dj").map((l) => (l as { text: string }).text);
+    expect(texts).toEqual(["みなとさん（函館）からのお便りです。", "そらさんからのお便りです。"]);
+  });
+
+  it("does not say 'someone' for a sender with a place but no radio name", () => {
+    const p = letter({ id: "p", radioName: "", place: "函館" });
+    const [seg] = composeEpisode([{ itemId: "i1", slot: "near", letterIds: ["p"], reactionIds: [] }], null, byId([p]), items);
+    expect(seg!.lines[0]).toEqual({ type: "dj", text: "お便りを読みます。", fixed: true });
+  });
+
   it("keeps the plain reading cue for an anonymous sender", () => {
     const anon = letter({ id: "n", radioName: "", place: "" });
     const [seg] = composeEpisode([{ itemId: "i1", slot: "near", letterIds: ["n"], reactionIds: [] }], null, byId([anon]), items);

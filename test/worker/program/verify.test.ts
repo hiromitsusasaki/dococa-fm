@@ -36,10 +36,16 @@ const episode = (...lines: ScriptLine[]): Segment[] => [{ itemId: "i1", slot: "n
 const clean = () => episode(dj("静かな一曲から。"), read(plain), read(translated, translated.body), fixedDj("ネットで見つけた声です。@jazzcatさん、YouTubeのコメントから。"), read(found), dj("次は遠くの一通へ。"));
 
 describe("verifyEpisode playback words", () => {
-  it.each(["次はこの曲をかけます", "どうぞ", "お聴きください"])("fails a dj line %s with playback:", (text) => {
+  it.each(["次はこの曲をかけます", "どうぞ", "お聴きください", "この曲をかけてください", "かけてみましょう", "聴いてみてください"])("fails a dj line %s with playback:", (text) => {
     const r = verifyEpisode(episode(dj(text), read(plain)), letters, me);
     expect(r.topical).toBe(false);
     expect(r.details.some((d) => d.startsWith("playback: segment 1 line 1: "))).toBe(true);
+  });
+
+  it("does not read a work title as talk", () => {
+    const titled = byId([item({ id: "i1", title: "どうぞこのまま" })]);
+    const r = verifyEpisode(episode(dj("『どうぞこのまま』という映画です。"), read(plain)), letters, me, titled);
+    expect(r.details.filter((d) => d.startsWith("playback:"))).toEqual([]);
   });
 
   it("exempts fixed lines", () => {
@@ -49,6 +55,10 @@ describe("verifyEpisode playback words", () => {
   it.each([
     "続いては、ポルトの Azulejo Sunday さんから、『ニュー・シネマ・パラダイス』へのお便り",
     "この映画は私にはファドのように聴こえる",
+    "語りかけるような歌声",
+    "問いかける映画",
+    "涙を流します",
+    "どうぞよろしく",
   ])("passes %s", (text) => {
     expect(verifyEpisode(episode(dj(text), read(plain)), letters, me).details.filter((d) => d.startsWith("playback:"))).toEqual([]);
   });

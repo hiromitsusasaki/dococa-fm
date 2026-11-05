@@ -175,7 +175,7 @@ export const en: Record<keyof typeof ja, string> = {
   "station.volume": "Volume",
   "station.dial": "Serendipity",
   "station.nowPlaying": "Now playing",
-  "station.upNext": "Up next",
+  "station.upNext": "Up next: letters",
   "station.tuning": "Tuning in",
   "station.limit": "That's all for today. See you tomorrow",
   "station.failed": "The signal didn't reach you. Wait a moment and try again",

@@ -172,7 +172,7 @@ export const ja = {
   "station.volume": "音量",
   "station.dial": "セレンディピティ",
   "station.nowPlaying": "いま流れている",
-  "station.upNext": "このあと流れるもの",
+  "station.upNext": "このあとのお便り",
   "station.tuning": "チューニング中",
   "station.limit": "今日の分はここまで。また明日",
   "station.failed": "電波が届きませんでした。少し待ってもう一度",

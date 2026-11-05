@@ -10,7 +10,7 @@ const strings: Record<string, string> = {
   "station.volume": "音量",
   "station.dial": "セレンディピティ",
   "station.nowPlaying": "いま流れている",
-  "station.upNext": "このあと流れるもの",
+  "station.upNext": "このあとのお便り",
   "station.tuning": "チューニング中",
   "station.limit": "今日の分はここまで。また明日",
   "station.failed": "電波が届きませんでした",
@@ -258,7 +258,7 @@ describe("station: playing", () => {
     await power();
     await vi.waitFor(() => expect(spoken).toEqual(["a1"]));
     const rows = [...root.querySelectorAll(".up-next li")].map((li) => li.textContent);
-    expect(root.querySelector(".side")!.textContent).toContain("このあと流れるもの");
+    expect(root.querySelector(".side")!.textContent).toContain("このあとのお便り");
     expect(rows[0]).toContain("映画");
     expect(rows[0]).toContain("曲B");
     expect(rows[0]).toContain("作者B");
