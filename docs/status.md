@@ -42,7 +42,7 @@
 | Task 7 | Google サインイン | 完了（OIDC を Worker 内で。`/auth/google`、`/auth/google/callback`、`POST /auth/signout`。実キーでの実機確認は本人作業の後） |
 | Task 8 | 保護とマイページ | 完了（`requireSignin` で `/start`・`/auth/spotify`・`POST /letters`（`kind=letter`）・`/me` を保護。`GET /put` は閲覧可で、匿名にはフォームの代わりにサインイン案内。ヘッダ `.site-header` と `/me`。`POST /put` は存在しないので対象外） |
 | Task 9 | 公開局 | 完了（設定で `stationPublic`・`stationSlug`（空なら表示名から生成、衝突は 422 `settings.slugTaken`、生成のときは乱数を足して 1 回再試行）。`/stations/s:<slug>` に OGP。`POST /settings` をレート制限の対象に。匿名は公開の項目が出ず、送っても無視。見た目は Task 11 で整える） |
-| Task 10 | 取り込みの順位 | 完了（取り込みは long_term 20＋short_term 10 に 1..n の `rank`、直近 10 と保存済みは `rank` なし、計 40。取り込みは `manual`/`url` の `source` を上書きしない。サインイン済みの `GET /put` は好きなもの→`put.imported.top`→`put.imported.recent` の順で順位の数字なし、各候補に `POST /put/register`（要サインイン、履歴に無ければ 404、`manual` にして 303 `/put?itemId=`）） |
+| Task 10 | 取り込みの順位 | 完了（取り込みは long_term 20＋short_term 10 に 1..n の `rank`、直近 10 と保存済みは `rank` なし、計 40。取り込みは `manual`/`url` の `source` を上書きしない。サインイン済みの `GET /put` は好きなもの→`put.imported.top`→`put.imported.recent` の順で順位の数字なし、各候補に `POST /put/register`（要サインイン、履歴に無ければ 404、`manual` にして 303 `/put?itemId=`）。お気に入りの並び（公開局・マイページ）は Spotify の順位を引き継ぐ。手で順位を付ける経路は無い（v1 の決定）。再取り込みは古い順位を消す） |
 | Task 11 | 見た目の方針 | 未着手 |
 | Task 12 | レトロラジオのコントロール | 未着手 |
 | Task 13 | キービジュアル | 未着手 |

@@ -62,13 +62,13 @@ describe("history", () => {
     expect((await listHistory(env.DB, me.id, 10))[0]?.rank).toBe(1);
   });
 
-  it("a spotify import does not demote a manual or url favourite", async () => {
+  it.each(["manual", "url"] as const)("a spotify import does not demote a %s favourite", async (source) => {
     const me = await createListener(env.DB);
     const a = await insertItem(env.DB, itemDraft());
-    await upsertHistory(env.DB, [{ listenerId: me.id, itemId: a.id, source: "manual", occurredAt: null, rank: null }]);
-    await upsertHistory(env.DB, [{ listenerId: me.id, itemId: a.id, source: "spotify", occurredAt: "2026-01-01T00:00:00.000Z", rank: 4 }]);
+    await upsertHistory(env.DB, [{ listenerId: me.id, itemId: a.id, source, occurredAt: null, rank: null }]);
+    await upsertHistory(env.DB, [{ listenerId: me.id, itemId: a.id, source: "spotify", occurredAt: "2026-01-01T00:00:00.000Z", rank: 4 }], { clearSpotifyRanksOf: me.id });
     const [row] = await listFavorites(env.DB, me.id, 10);
-    expect(row).toMatchObject({ source: "manual", rank: 4, occurredAt: "2026-01-01T00:00:00.000Z" });
+    expect(row).toMatchObject({ source, rank: 4, occurredAt: "2026-01-01T00:00:00.000Z" });
   });
 
   it("listFavorites leaves out what a service played and orders by rank", async () => {

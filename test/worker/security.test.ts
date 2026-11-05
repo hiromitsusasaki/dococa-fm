@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import app from "../../src/worker/index";
 import { createListener, updateListener } from "../../src/worker/db/listeners";
 import { t } from "../../src/worker/i18n/t";
-import { WindowStore } from "../../src/worker/security/rate-limit";
+import { WindowStore, isRateLimited } from "../../src/worker/security/rate-limit";
 import { countingD1 } from "../helpers/d1-count";
 import { resetDb } from "../helpers/db";
 import { newSession } from "./routes/helpers";
@@ -326,5 +326,12 @@ describe("session exemptions", () => {
       expect(res.headers.get("set-cookie"), path).toBeNull();
     }
     expect((await env.DB.prepare("SELECT COUNT(*) AS n FROM listeners").first<{ n: number }>())!.n).toBe(0);
+  });
+});
+
+describe("isRateLimited for /put/register", () => {
+  it("limits the register post and not a get", () => {
+    expect(isRateLimited("POST", "/put/register", new URLSearchParams())).toBe(true);
+    expect(isRateLimited("GET", "/put/register", new URLSearchParams())).toBe(false);
   });
 });

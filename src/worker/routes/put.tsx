@@ -66,12 +66,12 @@ export function PutPage({ listener, card, itemId, url, body, error, history = []
               </section>
             )}
             {(picker.top.length > 0 || picker.recent.length > 0) && <h2>{t("put.fromHistory")}</h2>}
-            {[["put.imported.top", picker.top], ["put.imported.recent", picker.recent]].map(([key, items]) =>
-              (items as Item[]).length > 0 ? (
+            {([["put.imported.top", picker.top], ["put.imported.recent", picker.recent]] as const).map(([key, items]) =>
+              items.length > 0 ? (
                 <section class="put-imported-group">
-                  <h3>{t(key as "put.imported.top")}</h3>
+                  <h3>{t(key)}</h3>
                   <ul>
-                    {(items as Item[]).map((item) => (
+                    {items.map((item) => (
                       <li>
                         <PickLink item={item} />
                         <form method="post" action="/put/register" class="put-register">

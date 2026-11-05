@@ -191,6 +191,6 @@ export async function importSpotifyHistory(env: Env, db: D1Database, listener: L
   const rows: HistoryRow[] = items.map((item, i) => ({ listenerId: listener.id, itemId: item.id, source: "spotify", occurredAt: entries[i]!.at, rank: entries[i]!.rank ?? null }));
   // Two Spotify tracks can resolve to one stored item; the batch upsert must not see the same key twice.
   const byItem = new Map(rows.map((r) => [r.itemId, r]));
-  await upsertHistory(db, [...byItem.values()]);
+  await upsertHistory(db, [...byItem.values()], { clearSpotifyRanksOf: listener.id });
   return byItem.size;
 }

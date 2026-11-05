@@ -188,6 +188,18 @@ describe("importSpotifyHistory", () => {
     expect([rank("s1"), rank("s2"), rank("s3"), rank("s4")]).toEqual([1, 2, null, null]);
   });
 
+  it("a re-import clears the rank of a track that fell out of the top lists", async () => {
+    stubWorld({ top: [T1, T2], recent: [], saved: [] });
+    const listener = await connectedListener();
+    await importSpotifyHistory(env, env.DB, listener);
+    vi.unstubAllGlobals();
+    stubWorld({ top: [T2], recent: [T1], saved: [] });
+    await importSpotifyHistory(env, env.DB, listener);
+    const rows = await listHistory(env.DB, listener.id, 50);
+    const rank = (id: string) => rows.find((r) => r.item.externalIds.spotify === id)!.rank;
+    expect([rank("s1"), rank("s2")]).toEqual([null, 1]);
+  });
+
   it("takes 20 long-term, 10 short-term, 10 recent and fills the rest from saved, 40 at most", async () => {
     const many = (p: string, n: number) => Array.from({ length: n }, (_, i): Fake => ({ id: `${p}${i}`, name: `${p} ${i}`, artist: "Artist" }));
     const long = many("l", 30);
