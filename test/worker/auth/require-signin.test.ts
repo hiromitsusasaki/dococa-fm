@@ -70,6 +70,15 @@ describe("site header", () => {
   });
 });
 
+describe("sign-in link", () => {
+  it("returns to the page it is shown on", async () => {
+    const next = async (path: string) => (await (await get(path, await newSession())).text()).match(/href="\/auth\/google\?next=([^"]*)"/)?.[1];
+    expect(await next("/")).toBe("%2F");
+    expect(await next("/stations/world")).toBe("%2Fstations%2Fworld");
+    expect(await next("/settings")).toBe("%2Fsettings");
+  });
+});
+
 describe("GET /put", () => {
   it("shows an anonymous listener the sign-in notice instead of the form", async () => {
     const item = await insertItem(env.DB, itemDraft());

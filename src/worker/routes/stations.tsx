@@ -12,6 +12,7 @@ import { makeEpisode } from "../program/create";
 import { playerView } from "../program/player-view";
 import { type StationKey, parseStationKey, stationColumn, stationLabel } from "../program/station";
 import { jsonForScript } from "./episodes";
+import { currentPath } from "../auth/require-signin";
 import type { Listener } from "../types";
 
 export const stations = new Hono<{ Bindings: Env; Variables: Variables }>();
@@ -36,6 +37,8 @@ export type StationPageProps = {
   label: string;
   lang: Lang;
   listener: Listener;
+  /** The page's own path, for the header's sign-in link. */
+  path: string;
   voice: string;
   dial: number;
   /** A `mine` station with no history yet: the player shows how to start instead of tuning. */
@@ -49,9 +52,9 @@ export type StationPageProps = {
 };
 
 /** The station screen: the player mounts into `#station` and takes everything it needs from its data attributes. */
-export function StationPage({ stationKey, label, lang, listener, voice, dial, grow, title, children, intro }: StationPageProps) {
+export function StationPage({ stationKey, label, lang, listener, path, voice, dial, grow, title, children, intro }: StationPageProps) {
   return (
-    <Layout title={title ?? label} script="station" lang={lang} listener={listener}>
+    <Layout title={title ?? label} script="station" lang={lang} listener={listener} path={path}>
       <main class="station-page">
         <h1 class="station-name">{label}</h1>
         {intro}
@@ -101,7 +104,7 @@ stations.get("/stations/:key", async (c) => {
 
   if (!asJson) {
     const grow = station.key.kind === "mine" && (await listHistory(c.env.DB, listener.id, 1)).length === 0;
-    return c.html(<StationPage stationKey={raw} label={label} lang={listener.lang} listener={listener} voice={listener.voice} dial={listener.dial} grow={grow} />);
+    return c.html(<StationPage stationKey={raw} label={label} lang={listener.lang} listener={listener} path={currentPath(c)} voice={listener.voice} dial={listener.dial} grow={grow} />);
   }
 
   // Resume after a reload: the listener's latest verified episode made on this station.

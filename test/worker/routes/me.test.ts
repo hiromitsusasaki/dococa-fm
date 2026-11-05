@@ -40,6 +40,24 @@ describe("GET /me", () => {
     expect(html).not.toMatch(/\d+ ?件/);
   });
 
+  it("lists reactions newest first and shows no counts in English either", async () => {
+    const cookie = await signedInSession();
+    const me = idOf(cookie);
+    await updateListener(env.DB, me, { lang: "en" });
+    const item = await insertItem(env.DB, itemDraft());
+    const mine = await insertLetter(env.DB, letterDraft(item.id, { listenerId: me }));
+    const react = async (name: string, at: string) => {
+      const r = await insertLetter(env.DB, letterDraft(item.id, { kind: "watashimo", body: "", bodyJa: "", parentLetterId: mine.id, radioName: name, place: "" }));
+      await env.DB.prepare("UPDATE letters SET created_at = ? WHERE id = ?").bind(at, r.id).run();
+    };
+    await react("Older", "2026-01-01T00:00:00.000Z");
+    await react("Newer", "2026-02-01T00:00:00.000Z");
+    const html = await (await get("/me", cookie)).text();
+    expect(html.indexOf("Newer")).toBeGreaterThan(-1);
+    expect(html.indexOf("Newer")).toBeLessThan(html.indexOf("Older"));
+    expect(html).not.toMatch(/\d+ (reactions|people|letters)/);
+  });
+
   it("says nobody has reacted yet when nobody has", async () => {
     const html = await (await get("/me", await signedInSession())).text();
     expect(html).toContain(t("me.nobody"));

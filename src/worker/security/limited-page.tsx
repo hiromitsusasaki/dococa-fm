@@ -1,5 +1,6 @@
 import type { Context } from "hono";
 import { Layout } from "../../views/layout";
+import { currentPath } from "../auth/require-signin";
 import { tFor } from "../i18n/t";
 import type { Listener } from "../types";
 
@@ -12,15 +13,20 @@ export function tooManyRequests(c: Context): Response | Promise<Response> {
   const t = tFor(lang);
   const wantsJson = path.startsWith("/api/") || /^\/episodes\/[^/]+\/next$/.test(path);
   if (wantsJson) return c.json({ error: "rate_limited" }, 429);
+  const body = (
+    <main class="episode-page">
+      <p role="alert">{t("rate.limited")}</p>
+      <p>
+        <a href="/">{t("episode.home")}</a>
+      </p>
+    </main>
+  );
   return c.html(
-    <Layout title={t("rate.limited")} lang={lang} listener={listener}>
-      <main class="episode-page">
-        <p role="alert">{t("rate.limited")}</p>
-        <p>
-          <a href="/">{t("episode.home")}</a>
-        </p>
-      </main>
-    </Layout>,
+    listener ? (
+      <Layout title={t("rate.limited")} lang={lang} listener={listener} path={currentPath(c)}>{body}</Layout>
+    ) : (
+      <Layout title={t("rate.limited")} lang={lang}>{body}</Layout>
+    ),
     429,
   );
 }

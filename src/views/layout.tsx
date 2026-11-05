@@ -4,10 +4,12 @@ import type { Listener } from "../worker/types";
 
 type LayoutProps = { title: string; children?: Child; /** The client entry to load: `player` or `station`. */
   script?: "player" | "station"; lang?: Lang;
-  /** The session's listener; without one the header shows only the wordmark. */
-  listener?: Listener;
-  /** Where sign-in should come back to; the my page when left out. */
-  path?: string };
+} & (
+  /** With the session's listener the header needs the current path, so its sign-in link comes back here. */
+  | { listener: Listener; path: string }
+  /** Without one the header shows only the wordmark. */
+  | { listener?: undefined; path?: undefined }
+);
 
 function SiteHeader({ listener, path, lang }: { listener?: Listener; path?: string; lang: Lang }) {
   const t = tFor(lang);
@@ -27,7 +29,7 @@ function SiteHeader({ listener, path, lang }: { listener?: Listener; path?: stri
               </form>
             </>
           ) : (
-            <a href={path ? `/auth/google?next=${encodeURIComponent(path)}` : "/auth/google"}>{t("signin.google")}</a>
+            <a href={`/auth/google?next=${encodeURIComponent(path ?? "/")}`}>{t("signin.google")}</a>
           )}
         </nav>
       )}

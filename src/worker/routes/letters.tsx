@@ -3,7 +3,7 @@ import { type Context, Hono, type MiddlewareHandler } from "hono";
 import { z } from "zod";
 import { LetterText, ReportForm, whoOf } from "../../views/components";
 import { Layout } from "../../views/layout";
-import { requireSignin } from "../auth/require-signin";
+import { currentPath, requireSignin } from "../auth/require-signin";
 import type { Variables } from "../auth/session";
 import { getItem } from "../db/items";
 import { displayText } from "../letters/display";
@@ -65,7 +65,7 @@ letters.get("/letters/:id/reactions", async (c) => {
   const lang = c.get("listener").lang;
   const t = tFor(lang);
   return c.html(
-    <Layout title={t("reaction.title")} lang={lang} listener={c.get("listener")}>
+    <Layout title={t("reaction.title")} lang={lang} listener={c.get("listener")} path={currentPath(c)}>
       <main class="reactions-page">
         <h1>{t("reaction.title")}</h1>
         <LetterText letter={letter} lang={lang} />
@@ -99,10 +99,10 @@ letters.post("/letters/:id/report", zValidator("form", reportSchema, (r, c) => (
   return c.redirect(`/items/${letter.itemId}`, 303);
 });
 
-function TakedownPage(props: { url?: string; received?: boolean; invalid?: boolean; listener: Listener }) {
+function TakedownPage(props: { url?: string; received?: boolean; invalid?: boolean; listener: Listener; path: string }) {
   const t = tFor(props.listener.lang);
   return (
-    <Layout title={t("takedown.title")} lang={props.listener.lang} listener={props.listener}>
+    <Layout title={t("takedown.title")} lang={props.listener.lang} listener={props.listener} path={props.path}>
       <main class="takedown">
         <h1>{t("takedown.title")}</h1>
         {props.received ? (
@@ -130,14 +130,14 @@ function TakedownPage(props: { url?: string; received?: boolean; invalid?: boole
 letters.get("/takedown", async (c) => {
   const id = c.req.query("letterId");
   const letter = id ? await getLetter(c.env.DB, id) : null;
-  return c.html(<TakedownPage url={letter?.sourceUrl ?? undefined} listener={c.get("listener")} />);
+  return c.html(<TakedownPage url={letter?.sourceUrl ?? undefined} listener={c.get("listener")} path={currentPath(c)} />);
 });
 
 const takedownSchema = z.object({ url: z.string().trim().min(1).max(2000), reason: z.string().trim().max(500).default("") });
 
-letters.post("/takedown", zValidator("form", takedownSchema, (r, c) => (r.success ? undefined : c.html(<TakedownPage invalid listener={(c as AppContext).get("listener")} />, 422))), async (c) => {
+letters.post("/takedown", zValidator("form", takedownSchema, (r, c) => (r.success ? undefined : c.html(<TakedownPage invalid listener={(c as AppContext).get("listener")} path="/takedown" />, 422))), async (c) => {
   await insertTakedown(c.env.DB, c.req.valid("form"));
-  return c.html(<TakedownPage received listener={c.get("listener")} />);
+  return c.html(<TakedownPage received listener={c.get("listener")} path="/takedown" />);
 });
 
 /** The origin the bookmarklet sends people to; null when the configured one is not a plain http(s) origin. */
@@ -157,7 +157,7 @@ letters.get("/bookmarklet", (c) => {
   const lang = c.get("listener").lang;
   const t = tFor(lang);
   return c.html(
-    <Layout title={t("bookmarklet.title")} lang={lang} listener={c.get("listener")}>
+    <Layout title={t("bookmarklet.title")} lang={lang} listener={c.get("listener")} path={currentPath(c)}>
       <main class="bookmarklet">
         <h1>{t("bookmarklet.title")}</h1>
         {code ? (

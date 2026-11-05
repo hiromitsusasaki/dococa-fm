@@ -7,6 +7,7 @@ import { newMcpToken, updateListener } from "../db/listeners";
 import { looksLikeContact } from "../program/pii-patterns";
 import type { Env } from "../env";
 import { tFor } from "../i18n/t";
+import { currentPath } from "../auth/require-signin";
 import type { Listener } from "../types";
 
 /** The DJ says radio names and places aloud, so they may not be an address, a phone number or a url. */
@@ -22,11 +23,11 @@ const schema = z.object({
 
 type FormValues = Pick<Listener, "radioName" | "place" | "voice" | "dial" | "lang">;
 
-function SettingsPage(props: { values: FormValues; listener: Listener; listenerId: string; mcpUrl: string; spotifyConnected: boolean; spotifyFailed?: boolean; signinFailed?: boolean; saved?: boolean; invalid?: boolean }) {
-  const { values, listener, listenerId, mcpUrl, spotifyConnected, spotifyFailed, signinFailed, saved, invalid } = props;
+function SettingsPage(props: { values: FormValues; listener: Listener; path: string; listenerId: string; mcpUrl: string; spotifyConnected: boolean; spotifyFailed?: boolean; signinFailed?: boolean; saved?: boolean; invalid?: boolean }) {
+  const { values, listener, path, listenerId, mcpUrl, spotifyConnected, spotifyFailed, signinFailed, saved, invalid } = props;
   const t = tFor(values.lang);
   return (
-    <Layout title={t("settings.title")} lang={values.lang} listener={listener}>
+    <Layout title={t("settings.title")} lang={values.lang} listener={listener} path={path}>
       <main class="settings">
         <h1>{t("settings.title")}</h1>
         {signinFailed && <p class="settings-error" role="alert">{t("signin.failed")}</p>}
@@ -106,7 +107,7 @@ export const settings = new Hono<{ Bindings: Env; Variables: Variables }>();
 settings.get("/settings", (c) => {
   const listener = c.get("listener");
   return c.html(
-    <SettingsPage values={listener} listener={listener} listenerId={listener.id} mcpUrl={mcpUrlOf(c.env, listener)} spotifyConnected={listener.spotifyRefreshToken !== null} spotifyFailed={c.req.query("spotify") === "failed"} signinFailed={c.req.query("signin") === "failed"} saved={c.req.query("saved") === "1"} />,
+    <SettingsPage values={listener} listener={listener} path={currentPath(c)} listenerId={listener.id} mcpUrl={mcpUrlOf(c.env, listener)} spotifyConnected={listener.spotifyRefreshToken !== null} spotifyFailed={c.req.query("spotify") === "failed"} signinFailed={c.req.query("signin") === "failed"} saved={c.req.query("saved") === "1"} />,
   );
 });
 
@@ -116,7 +117,7 @@ settings.post(
     if (result.success) return;
     const c = ctx as SettingsContext;
     const listener = c.get("listener");
-    return c.html(<SettingsPage values={listener} listener={listener} listenerId={listener.id} mcpUrl={mcpUrlOf(c.env, listener)} spotifyConnected={listener.spotifyRefreshToken !== null} invalid />, 422);
+    return c.html(<SettingsPage values={listener} listener={listener} path={currentPath(c)} listenerId={listener.id} mcpUrl={mcpUrlOf(c.env, listener)} spotifyConnected={listener.spotifyRefreshToken !== null} invalid />, 422);
   }),
   async (c) => {
     await updateListener(c.env.DB, c.get("listener").id, c.req.valid("form"));

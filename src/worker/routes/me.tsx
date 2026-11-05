@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { ItemCard, whoOf } from "../../views/components";
 import { Layout } from "../../views/layout";
-import { requireSignin } from "../auth/require-signin";
+import { currentPath, requireSignin } from "../auth/require-signin";
 import type { Variables } from "../auth/session";
 import { listFavorites } from "../db/history";
 import { getItemsByIds } from "../db/items";
@@ -11,6 +11,7 @@ import { displayText } from "../letters/display";
 import { tFor } from "../i18n/t";
 
 const FAVORITES_LIMIT = 20;
+const REACTIONS_LIMIT = 50;
 
 export const me = new Hono<{ Bindings: Env; Variables: Variables }>();
 
@@ -20,11 +21,14 @@ me.get("/me", requireSignin, async (c) => {
   const t = tFor(lang);
   const favorites = await listFavorites(c.env.DB, listener.id, FAVORITES_LIMIT);
   const sent = await listLettersByListener(c.env.DB, listener.id);
-  const reactions = await listReactionsToListener(c.env.DB, listener.id, [...new Set(sent.map((l) => l.itemId))]);
+  // The query pages through the ids in chunks, each newest first; merge them before cutting.
+  const reactions = (await listReactionsToListener(c.env.DB, listener.id, [...new Set(sent.map((l) => l.itemId))]))
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.id.localeCompare(a.id))
+    .slice(0, REACTIONS_LIMIT);
   const items = await getItemsByIds(c.env.DB, reactions.map((r) => r.itemId));
   const stationUrl = listener.stationPublic && listener.stationSlug ? `${c.env.PUBLIC_ORIGIN}/stations/s:${listener.stationSlug}` : null;
   return c.html(
-    <Layout title={t("me.title")} lang={lang} listener={listener} path="/me">
+    <Layout title={t("me.title")} lang={lang} listener={listener} path={currentPath(c)}>
       <main class="me">
         <h1>{t("me.title")}</h1>
         <section class="me-favorites">
@@ -33,7 +37,7 @@ me.get("/me", requireSignin, async (c) => {
             {favorites.map(({ item }) => (
               <li>
                 <a href={`/items/${item.id}`}>
-                  <ItemCard item={item} heading="h2" lang={lang} />
+                  <ItemCard item={item} heading="h3" lang={lang} />
                 </a>
                 <a href={`/put?itemId=${item.id}`}>{t("put.title")}</a>
               </li>

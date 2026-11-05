@@ -12,10 +12,13 @@ function wantsJson(c: AppContext): boolean {
   return accept.includes("application/json") && !accept.includes("text/html");
 }
 
+/** The current path with its query, for links that should come back to this page. */
+export const currentPath = (c: { req: { path: string; url: string } }): string => c.req.path + new URL(c.req.url).search;
+
 /** The page to come back to: a form post has no page of its own at /letters, so it returns to /put. */
 function returnPath(c: AppContext): string {
   if (c.req.method !== "GET" && c.req.path === "/letters") return "/put";
-  return c.req.path + new URL(c.req.url).search;
+  return currentPath(c);
 }
 
 export const requireSignin: MiddlewareHandler<{ Bindings: Env; Variables: Variables }> = async (c, next) => {

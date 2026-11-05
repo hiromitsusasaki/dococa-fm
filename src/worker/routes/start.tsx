@@ -18,7 +18,7 @@ function StartPage({ values, error, listener }: { values?: Partial<Values>; erro
   const lang = listener.lang;
   const t = tFor(lang);
   return (
-    <Layout title={t("start.title")} lang={lang} listener={listener}>
+    <Layout title={t("start.title")} lang={lang} listener={listener} path="/start">
       <main class="start">
         <h1>{t("start.title")}</h1>
         <p>{t("start.lead")}</p>

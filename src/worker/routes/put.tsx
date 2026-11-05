@@ -25,8 +25,9 @@ export type PutPageProps = {
 export function PutPage({ listener, card, itemId, url, body, error, history = [], questions = [], imported }: PutPageProps) {
   const lang = listener.lang;
   const t = tFor(lang);
+  const here = itemId ? `/put?itemId=${itemId}` : url ? `/put?url=${encodeURIComponent(url)}` : "/put";
   return (
-    <Layout title={t("put.title")} lang={lang} listener={listener} path="/put">
+    <Layout title={t("put.title")} lang={lang} listener={listener} path={here}>
       <main class="put">
         <h1>{t("put.title")}</h1>
         {error && <p class="form-error" role="alert">{error}</p>}
@@ -66,7 +67,7 @@ export function PutPage({ listener, card, itemId, url, body, error, history = []
         )}
         {(card || itemId) && listener.googleSub === null && (
           <p class="put-signin" role="status">
-            {t("signin.needed")} <a href={`/auth/google?next=${encodeURIComponent(itemId ? `/put?itemId=${itemId}` : `/put?url=${encodeURIComponent(url ?? "")}`)}`}>{t("signin.google")}</a>
+            {t("signin.needed")} <a href={`/auth/google?next=${encodeURIComponent(here)}`}>{t("signin.google")}</a>
           </p>
         )}
         {(card || itemId) && listener.googleSub !== null && (

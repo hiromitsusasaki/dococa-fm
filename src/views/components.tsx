@@ -5,7 +5,7 @@ import { ja } from "../worker/i18n/ja";
 
 type CardItem = Pick<Item, "kind" | "title" | "creator" | "year" | "imageUrl">;
 
-export function ItemCard({ item, heading: Heading = "h1", lang }: { item: CardItem; heading?: "h1" | "h2"; lang: Lang }) {
+export function ItemCard({ item, heading: Heading = "h1", lang }: { item: CardItem; heading?: "h1" | "h2" | "h3"; lang: Lang }) {
   const t = tFor(lang);
   return (
     <section class="item-card">

@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { ItemCard, LetterList, OutLinks } from "../../views/components";
 import { Layout } from "../../views/layout";
+import { currentPath } from "../auth/require-signin";
 import type { Variables } from "../auth/session";
 import { getItem } from "../db/items";
 import { listLettersForItem } from "../db/letters";
@@ -17,7 +18,7 @@ items.get("/items/:id", async (c) => {
   const t = tFor(lang);
   const letters = await listLettersForItem(c.env.DB, item.id);
   return c.html(
-    <Layout title={item.title} lang={lang} listener={listener} path={c.req.path}>
+    <Layout title={item.title} lang={lang} listener={listener} path={currentPath(c)}>
       <main class="item-page">
         <ItemCard item={item} lang={lang} />
         <OutLinks item={item} lang={lang} />

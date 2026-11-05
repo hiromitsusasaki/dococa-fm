@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import { Layout } from "../../views/layout";
+import { currentPath } from "../auth/require-signin";
 import { exchangeGoogleCode, googleAuthorizeUrl, parseIdToken } from "../auth/google";
 import { type Variables, clearSessionCookie, setSessionCookie } from "../auth/session";
 import { getListenerByGoogleSub, updateListener } from "../db/listeners";
@@ -37,7 +38,7 @@ authGoogle.get("/auth/google", (c) => {
   if (!c.env.GOOGLE_OAUTH_CLIENT_ID) {
     const t = tFor(c.get("listener").lang);
     return c.html(
-      <Layout title={t("signin.unavailable")} lang={c.get("listener").lang} listener={c.get("listener")}>
+      <Layout title={t("signin.unavailable")} lang={c.get("listener").lang} listener={c.get("listener")} path={currentPath(c)}>
         <main class="settings">
           <p role="status">{t("signin.unavailable")}</p>
           <p>
