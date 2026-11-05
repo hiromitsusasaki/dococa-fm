@@ -1,7 +1,7 @@
 import { isHttpUrl } from "../../views/components";
 import { getItemsByIds } from "../db/items";
 import type { Lang } from "../i18n/t";
-import type { Episode, Segment } from "../types";
+import type { Episode, Item, Segment } from "../types";
 import { loadPublicEpisode, type Originals } from "./stored";
 
 export type PlayerItem = { title: string; creator: string; imageUrl: string | null; outLinks: Record<string, string> };
@@ -17,11 +17,12 @@ export type PlayerView = {
   cloudTts: boolean;
 };
 
-export async function playerView(db: D1Database, episode: Episode, lang: Lang): Promise<PlayerView> {
-  const { segments, originals, storedIndex } = await loadPublicEpisode(db, episode, lang);
-  const stored = await getItemsByIds(db, segments.map((s) => s.itemId));
+type Loaded = Pick<Awaited<ReturnType<typeof loadPublicEpisode>>, "segments" | "originals" | "storedIndex">;
+
+/** The pure part: a page that already holds the loaded letters and works builds the view without reading again. */
+export function toPlayerView(episode: Episode, loaded: Loaded, stored: ReadonlyMap<string, Item>): PlayerView {
   const items: Record<string, PlayerItem> = {};
-  for (const s of segments) {
+  for (const s of loaded.segments) {
     const item = stored.get(s.itemId);
     if (!item) continue;
     items[item.id] = {
@@ -31,5 +32,10 @@ export async function playerView(db: D1Database, episode: Episode, lang: Lang): 
       outLinks: Object.fromEntries(Object.entries(item.outLinks).filter(([, href]) => isHttpUrl(href))),
     };
   }
-  return { id: episode.id, segments, items, originals, ttsLines: storedIndex, cloudTts: episode.cloudTts };
+  return { id: episode.id, segments: loaded.segments, items, originals: loaded.originals, ttsLines: loaded.storedIndex, cloudTts: episode.cloudTts };
+}
+
+export async function playerView(db: D1Database, episode: Episode, lang: Lang): Promise<PlayerView> {
+  const loaded = await loadPublicEpisode(db, episode, lang);
+  return toPlayerView(episode, loaded, await getItemsByIds(db, loaded.segments.map((s) => s.itemId)));
 }

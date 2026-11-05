@@ -10,7 +10,6 @@ import { itemDraft, letterDraft } from "../db/helpers";
 import { newSession } from "./helpers";
 
 const ORIGIN = "http://127.0.0.1:5173";
-const idOf = (cookie: string) => cookie.split("=")[1]!.split(".")[0]!;
 type Body = { episode: { id: string; segments: { slot: string; itemId: string }[]; items: Record<string, unknown>; cloudTts: boolean }; station: { key: string; label: string } };
 
 const postNext = (key: string, cookie: string, e: object = env, headers: Record<string, string> = { origin: ORIGIN }) =>
@@ -98,6 +97,17 @@ describe("POST /stations/:key/next", () => {
   });
 });
 
+describe("rate limit", () => {
+  it("counts the station post against the IP bucket, so a fresh cookie does not escape it", async () => {
+    await seedWorld();
+    const slow = { ...env, RATE_LIMIT_PER_MINUTE: "1" };
+    const headers = { origin: ORIGIN, "cf-connecting-ip": "203.0.113.9" };
+    let last = 200;
+    for (let n = 0; n < 8 && last !== 429; n++) last = (await postNext("world", await newSession(), slow, headers)).status;
+    expect(last).toBe(429);
+  });
+});
+
 describe("GET /stations/:key.json", () => {
   it("answers 204 before any episode, then the latest verified one in the same shape", async () => {
     await seedWorld();
@@ -117,6 +127,5 @@ describe("GET /stations/:key.json", () => {
     const stranger = await newSession();
     expect((await app.request("/stations/world.json", { headers: { cookie: stranger } }, env)).status).toBe(204);
     expect((await app.request("/stations/bogus.json", { headers: { cookie: stranger } }, env)).status).toBe(404);
-    expect(idOf(stranger)).toBeTruthy();
   });
 });

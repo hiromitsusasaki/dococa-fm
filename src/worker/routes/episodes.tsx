@@ -9,7 +9,7 @@ import type { Env } from "../env";
 import { ja } from "../i18n/ja";
 import { type Lang, tFor } from "../i18n/t";
 import { makeEpisode } from "../program/create";
-import { playerView } from "../program/player-view";
+import { toPlayerView } from "../program/player-view";
 import { loadPublicEpisode } from "../program/stored";
 import type { Episode, Listener, ScriptLine } from "../types";
 
@@ -102,7 +102,8 @@ episodes.get("/episodes/:id", async (c) => {
   // Only the builder stores verified rows; reading verified rows only is a second lock, not the first.
   if (!episode) return c.notFound();
   // Letters rejected or taken down since the episode was made are left out of every exit.
-  const { segments, originals } = await loadPublicEpisode(c.env.DB, episode, c.get("listener").lang);
+  const loaded = await loadPublicEpisode(c.env.DB, episode, c.get("listener").lang);
+  const { segments, originals } = loaded;
   if (asJson) return c.json({ ...episode, segments, originals });
 
   const listener = c.get("listener");
@@ -115,7 +116,7 @@ episodes.get("/episodes/:id", async (c) => {
     return [{ item, slot: s.slot, readers: s.lines.filter((l): l is Extract<ScriptLine, { type: "letter" }> => l.type === "letter") }];
   });
   // The page already says whether the cloud voice is on (data-tts-url), so the embedded json keeps its old shape.
-  const { cloudTts: _cloudTts, ...pageJson } = await playerView(c.env.DB, episode, lang);
+  const { cloudTts: _cloudTts, ...pageJson } = toPlayerView(episode, loaded, stored);
   return c.html(
     <Layout title={t("episode.title")} script lang={lang}>
       <main class="episode-page">
