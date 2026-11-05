@@ -10,3 +10,4 @@ dist/
 .found/
 .env
 .env.*
+.playwright-cli/
