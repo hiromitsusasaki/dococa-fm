@@ -64,6 +64,7 @@ export const letterIdsSql = (items: number): string => `SELECT l.id, l.item_id F
   WHERE l.item_id IN (${Array.from({ length: items }, (_, i) => `?${i + 2}`).join(", ")}) AND ${OTHERS_TEXT} AND ${NOT_ME}
   ORDER BY l.item_id, l.id`;
 
+/** Keep the predicate and ORDER in step with `listFavorites` in db/history.ts. */
 /** A public station's pool (?1 = the owner): the owner's favourites, best-ranked first. Letters are read separately. */
 export const OWNER_FAVORITES_SQL = `SELECT h.item_id FROM history h
   WHERE h.listener_id = ?1 AND h.source IN ('manual', 'url')

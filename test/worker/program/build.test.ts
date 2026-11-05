@@ -1,5 +1,6 @@
 import { env } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { upsertHistory } from "../../../src/worker/db/history";
 import { insertItem } from "../../../src/worker/db/items";
 import { insertLetter } from "../../../src/worker/db/letters";
 import { createListener } from "../../../src/worker/db/listeners";
@@ -191,4 +192,18 @@ describe("buildEpisode", () => {
     expect(err).toBeInstanceOf(EpisodeUnverifiedError);
     expect((err as EpisodeUnverifiedError).report.pii).toBe(false);
   });
+
+  it("a public station builds a verified episode from a letterless favourite", async () => {
+    const owner = await createListener(env.DB);
+    const guest = await createListener(env.DB);
+    const item = (await insertItem(env.DB, itemDraft({ title: "お気に入り" }))).id;
+    await upsertHistory(env.DB, [{ listenerId: owner.id, itemId: item, source: "manual", occurredAt: null, rank: 1 }]);
+    const ep = await buildEpisode(keyless, env.DB, guest, { station: { kind: "public", ownerId: owner.id }, seed: "t" });
+    expect(ep.verified).toBe(true);
+    expect(ep.listenerId).toBe(guest.id);
+    expect(ep.segments).toHaveLength(1);
+    expect(ep.segments[0]?.lines.filter((l) => l.type === "letter")).toEqual([]);
+    expect(ep.segments[0]?.lines.some((l) => l.type === "dj")).toBe(true);
+  });
+
 });

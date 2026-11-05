@@ -260,13 +260,12 @@ describe("selectProgram stations", () => {
   beforeEach(() => resetDb(env.DB));
 
   it("world: a brand-new listener gets far items only, with others' letters", async () => {
-    const f = await buildFixture();
+    await buildFixture();
     const fresh = await createListener(env.DB);
     const p = await selectProgram(env.DB, fresh, { station: { kind: "world" }, size: 3, seed: "w" });
     expect(p).toHaveLength(3);
     expect(p.every((s) => s.slot === "far" && s.letterIds.length > 0)).toBe(true);
     expect(new Set(p.map((s) => s.itemId)).size).toBe(3);
-    expect(f.items.length).toBe(12);
   });
 
   it("world: no echo and no fallback for a listener with history", async () => {
