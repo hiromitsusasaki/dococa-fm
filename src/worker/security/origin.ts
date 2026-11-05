@@ -46,3 +46,23 @@ export const requirePublicOrigin: MiddlewareHandler<{ Bindings: Env }> = async (
   }
   return c.text("Server is not configured", 500);
 };
+
+/**
+ * Only PUBLIC_ORIGIN's host serves the app. Another host (the old workers.dev one) would fail every form post on the
+ * origin check and set cookies for the wrong host, so GET/HEAD are sent on to the canonical origin and the rest is refused.
+ * The redirect is built from PUBLIC_ORIGIN and the path, never from the incoming host. /healthz answers anywhere.
+ */
+export const canonicalHost: MiddlewareHandler<{ Bindings: Env }> = async (c, next) => {
+  let canonical: string;
+  try {
+    canonical = new URL(c.env.PUBLIC_ORIGIN).host;
+  } catch {
+    return next();
+  }
+  // A request without a Host header (in-process calls, tests) has no host to be wrong about.
+  const host = c.req.header("host")?.trim().toLowerCase();
+  if (host === undefined || host === canonical || c.req.path === "/healthz") return next();
+  if (c.req.method !== "GET" && c.req.method !== "HEAD") return c.text("Forbidden", 403);
+  const { pathname, search } = new URL(c.req.url);
+  return c.redirect(`${normalized(c.env.PUBLIC_ORIGIN)}${pathname}${search}`, 301);
+};

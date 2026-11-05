@@ -282,6 +282,38 @@ describe("PUBLIC_ORIGIN guard", () => {
   });
 });
 
+describe("canonical host", () => {
+  const prod = { ...e, PUBLIC_ORIGIN: "https://dococafm.app" };
+  const OLD = "dococa-fm.promitsu.workers.dev";
+
+  it("redirects a GET on another host to PUBLIC_ORIGIN, keeping path and query, without a cookie", async () => {
+    const res = await app.request("/items/abc?x=1", { headers: { host: OLD } }, prod);
+    expect(res.status).toBe(301);
+    expect(res.headers.get("location")).toBe("https://dococafm.app/items/abc?x=1");
+    expect(res.headers.get("set-cookie")).toBeNull();
+  });
+
+  it("does not redirect the canonical host", async () => {
+    expect((await app.request("/items/abc?x=1", { headers: { host: "dococafm.app" } }, prod)).status).not.toBe(301);
+  });
+
+  it("keeps /healthz up on any host", async () => {
+    expect((await app.request("/healthz", { headers: { host: OLD } }, prod)).status).toBe(200);
+  });
+
+  it("refuses a write on another host", async () => {
+    const res = await app.request("/letters", { method: "POST", headers: { host: OLD, "content-type": "application/x-www-form-urlencoded" }, body: "itemId=x&body=hello" }, prod);
+    expect(res.status).toBe(403);
+  });
+
+  it("treats localhost as another host for a 127.0.0.1 dev origin", async () => {
+    expect((await app.request("/", { headers: { host: "127.0.0.1:5173" } }, e)).status).not.toBe(301);
+    const res = await app.request("/settings?a=b", { headers: { host: "localhost:5173" } }, e);
+    expect(res.status).toBe(301);
+    expect(res.headers.get("location")).toBe("http://127.0.0.1:5173/settings?a=b");
+  });
+});
+
 describe("session exemptions", () => {
   it("do not create listener rows for static assets and /api", async () => {
     for (const path of ["/app.css", "/icon.svg", "/manifest.webmanifest", "/bed.mp3", "/healthz", "/api/search"]) {

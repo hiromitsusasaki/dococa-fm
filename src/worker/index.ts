@@ -15,7 +15,7 @@ import { settings } from "./routes/settings";
 import { start } from "./routes/start";
 import { tts } from "./routes/tts";
 import { limitBodies } from "./security/body-limit";
-import { requirePublicOrigin, sameOriginOnly } from "./security/origin";
+import { canonicalHost, requirePublicOrigin, sameOriginOnly } from "./security/origin";
 import { ipRateLimit, listenerRateLimit } from "./security/rate-limit";
 
 const app = new Hono<{ Bindings: Env; Variables: Variables }>();
@@ -24,6 +24,7 @@ const app = new Hono<{ Bindings: Env; Variables: Variables }>();
 app.use("*", secureHeaders({ referrerPolicy: "strict-origin-when-cross-origin" }));
 // Cheap refusals come before the session middleware so they never mint a listener row.
 app.use("*", requirePublicOrigin);
+app.use("*", canonicalHost);
 app.use("*", limitBodies);
 app.use("*", sameOriginOnly);
 app.use("*", ipRateLimit);
