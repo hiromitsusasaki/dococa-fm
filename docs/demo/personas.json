@@ -1,0 +1,245 @@
+{
+  "note": "All fictional, made by AI for the demo. No real person is meant.",
+  "personas": [
+    {
+      "radioName": "ちくわ坂",
+      "country": "日本",
+      "place": "広島県尾道",
+      "ageGroup": "40代",
+      "taste": "70年代の歌謡曲とシティポップをレコードで聴くのが好き。",
+      "lang": "ja"
+    },
+    {
+      "radioName": "夜更かしカモメ",
+      "country": "日本",
+      "place": "北海道旭川",
+      "ageGroup": "20代",
+      "taste": "深夜に読むミステリー小説と、静かなインディーロックが好き。",
+      "lang": "ja"
+    },
+    {
+      "radioName": "Sertão Moon",
+      "country": "ブラジル",
+      "place": "レシフェ",
+      "ageGroup": "30代",
+      "taste": "フォホーやMPBなど、ブラジル北東部の音楽を愛している。",
+      "lang": "en"
+    },
+    {
+      "radioName": "Tea and Thunder",
+      "country": "ケニア",
+      "place": "ナイロビ",
+      "ageGroup": "10代",
+      "taste": "アフロビーツとヒップホップ、それに最新のSF映画が好き。",
+      "lang": "en"
+    },
+    {
+      "radioName": "Fjord Reader",
+      "country": "ノルウェー",
+      "place": "ベルゲン",
+      "ageGroup": "60代",
+      "taste": "北欧の犯罪小説と古い小説の朗読を、雨の日に楽しむ。",
+      "lang": "en"
+    },
+    {
+      "radioName": "Lotus Cinema",
+      "country": "インド",
+      "place": "コルカタ",
+      "ageGroup": "50代",
+      "taste": "60年代から70年代のベンガル映画と、その主題歌が大好き。",
+      "lang": "en"
+    },
+    {
+      "radioName": "Kiwi Vinyl",
+      "country": "ニュージーランド",
+      "place": "ダニーデン",
+      "ageGroup": "20代",
+      "taste": "80年代のジャングルポップやインディーのカセットを集めている。",
+      "lang": "en"
+    },
+    {
+      "radioName": "Abuela Jazz",
+      "country": "アルゼンチン",
+      "place": "ロサリオ",
+      "ageGroup": "70代",
+      "taste": "タンゴとジャズの古い録音を、毎朝ラジオで聴く。",
+      "lang": "en"
+    },
+    {
+      "radioName": "Medina Beats",
+      "country": "モロッコ",
+      "place": "フェズ",
+      "ageGroup": "30代",
+      "taste": "グナワと電子音楽を混ぜた音楽が好きで、ドキュメンタリー映画もよく観る。",
+      "lang": "en"
+    },
+    {
+      "radioName": "Pierogi Pages",
+      "country": "ポーランド",
+      "place": "クラクフ",
+      "ageGroup": "40代",
+      "taste": "現代の翻訳文学とクラシックのピアノ曲を好んで読み、聴いている。",
+      "lang": "en"
+    },
+    {
+      "radioName": "みかん電車",
+      "country": "日本",
+      "place": "愛媛県松山市",
+      "ageGroup": "40代",
+      "taste": "通勤中に聴く80年代シティポップと昭和の歌謡曲が好きな音楽派。",
+      "lang": "ja"
+    },
+    {
+      "radioName": "Mekong Sunrise",
+      "country": "ベトナム",
+      "place": "カントー",
+      "ageGroup": "20代",
+      "taste": "インディーフォークとローファイ音楽を朝のカフェで聴くのが好き。",
+      "lang": "en"
+    },
+    {
+      "radioName": "Highland Reel",
+      "country": "スコットランド",
+      "place": "インヴァネス",
+      "ageGroup": "60代",
+      "taste": "伝統的なフィドル音楽と歴史小説を愛する読書好き。",
+      "lang": "en"
+    },
+    {
+      "radioName": "Andean Pixel",
+      "country": "ペルー",
+      "place": "クスコ",
+      "ageGroup": "10代",
+      "taste": "アニメ映画とゲーム音楽に夢中で、最近はシンセウェーブも聴く。",
+      "lang": "en"
+    },
+    {
+      "radioName": "Desert Rose Tapes",
+      "country": "アラブ首長国連邦",
+      "place": "アルアイン",
+      "ageGroup": "30代",
+      "taste": "1970年代のアラビア語ポップスとソウルのカセットを集めている。",
+      "lang": "en"
+    },
+    {
+      "radioName": "Maple Syrup Noir",
+      "country": "カナダ",
+      "place": "ケベック州トロワリヴィエール",
+      "ageGroup": "50代",
+      "taste": "フィルム・ノワールと古いミステリー映画を好む映画ファン。",
+      "lang": "en"
+    },
+    {
+      "radioName": "Savanna Bookworm",
+      "country": "ナイジェリア",
+      "place": "イバダン",
+      "ageGroup": "30代",
+      "taste": "現代アフリカ文学とアフロビーツを行き来する本と音楽の人。",
+      "lang": "en"
+    },
+    {
+      "radioName": "Baltic Amber",
+      "country": "リトアニア",
+      "place": "クライペダ",
+      "ageGroup": "70代",
+      "taste": "クラシック音楽とオペラの放送を長年聴き続けている。",
+      "lang": "en"
+    },
+    {
+      "radioName": "Isla Tropicana",
+      "country": "フィリピン",
+      "place": "セブ市",
+      "ageGroup": "20代",
+      "taste": "OPMのバラードと韓国ドラマのサントラが好きな音楽派。",
+      "lang": "en"
+    },
+    {
+      "radioName": "Bayou Blue Hour",
+      "country": "アメリカ",
+      "place": "ルイジアナ州ラファイエット",
+      "ageGroup": "40代",
+      "taste": "ケイジャン音楽とブルースを週末のセッションで楽しむ音楽好き。",
+      "lang": "en"
+    },
+    {
+      "radioName": "Anatolian Kettle",
+      "country": "トルコ",
+      "place": "エスキシェヒル",
+      "ageGroup": "40代",
+      "taste": "70年代アナトリア・ロックやサイケ・フォークのレコードを集め、古い喫茶店で聴くのが好き。",
+      "lang": "en"
+    },
+    {
+      "radioName": "Kimchi Cassette",
+      "country": "韓国",
+      "place": "全州",
+      "ageGroup": "20代",
+      "taste": "90年代のK-POPやシティポップ風のインディー音楽を、カセットで集めている。",
+      "lang": "en"
+    },
+    {
+      "radioName": "Tango del Sur Chico",
+      "country": "チリ",
+      "place": "バルディビア",
+      "ageGroup": "60代",
+      "taste": "詩集とラテンアメリカ文学、それにフォルクローレのラジオ番組が好き。",
+      "lang": "en"
+    },
+    {
+      "radioName": "Ubuntu Grooves",
+      "country": "南アフリカ",
+      "place": "ダーバン",
+      "ageGroup": "30代",
+      "taste": "アマピアノやアフロハウス、ジャズの現代的なミックスをよく聴く。",
+      "lang": "en"
+    },
+    {
+      "radioName": "Fika Frames",
+      "country": "スウェーデン",
+      "place": "ウメオ",
+      "ageGroup": "50代",
+      "taste": "北欧ミステリー映画や、静かな家族ドラマを夜に観るのが好き。",
+      "lang": "en"
+    },
+    {
+      "radioName": "Himalayan Static",
+      "country": "ネパール",
+      "place": "ポカラ",
+      "ageGroup": "10代",
+      "taste": "ローファイ・ヒップホップとアニメ映画のサントラを、勉強中に流している。",
+      "lang": "en"
+    },
+    {
+      "radioName": "Outback Paperback",
+      "country": "オーストラリア",
+      "place": "アリススプリングス",
+      "ageGroup": "70代",
+      "taste": "歴史小説と冒険記を読み、カントリーやフォークの古い曲を楽しむ。",
+      "lang": "en"
+    },
+    {
+      "radioName": "Nile Night Reel",
+      "country": "エジプト",
+      "place": "アレクサンドリア",
+      "ageGroup": "30代",
+      "taste": "黄金期のエジプト映画とクラシックなアラブ歌謡の組み合わせが好き。",
+      "lang": "en"
+    },
+    {
+      "radioName": "Azulejo Sunday",
+      "country": "ポルトガル",
+      "place": "ポルト",
+      "ageGroup": "40代",
+      "taste": "ファドとボサノヴァ、それにゆったりした短編小説を日曜に楽しむ。",
+      "lang": "en"
+    },
+    {
+      "radioName": "しじみ列車",
+      "country": "日本",
+      "place": "島根県松江市",
+      "ageGroup": "50代",
+      "taste": "昭和の歌謡曲とフォークを聴き、時代小説を読むのが好き。",
+      "lang": "ja"
+    }
+  ]
+}
