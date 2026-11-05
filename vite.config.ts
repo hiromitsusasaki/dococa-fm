@@ -7,7 +7,7 @@ export default defineConfig({
     client: {
       build: {
         rollupOptions: {
-          input: { player: "src/client/player.tsx" },
+          input: { player: "src/client/player.tsx", station: "src/client/station.tsx" },
           output: { entryFileNames: "assets/[name].js" },
         },
       },

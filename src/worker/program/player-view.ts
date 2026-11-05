@@ -4,7 +4,7 @@ import type { Lang } from "../i18n/t";
 import type { Episode, Item, Segment } from "../types";
 import { loadPublicEpisode, type Originals } from "./stored";
 
-export type PlayerItem = { title: string; creator: string; imageUrl: string | null; outLinks: Record<string, string> };
+export type PlayerItem = { title: string; creator: string; imageUrl: string | null; outLinks: Record<string, string>; kind: Item["kind"]; year: number | null };
 
 /** Everything the client player needs for one episode: what may still air, the works on screen and the letters as read. */
 export type PlayerView = {
@@ -28,6 +28,8 @@ export function toPlayerView(episode: Episode, loaded: Loaded, stored: ReadonlyM
     items[item.id] = {
       title: item.title,
       creator: item.creator,
+      kind: item.kind,
+      year: item.year,
       imageUrl: isHttpUrl(item.imageUrl) ? item.imageUrl : null,
       outLinks: Object.fromEntries(Object.entries(item.outLinks).filter(([, href]) => isHttpUrl(href))),
     };

@@ -129,3 +129,53 @@ describe("GET /stations/:key.json", () => {
     expect((await app.request("/stations/bogus.json", { headers: { cookie: stranger } }, env)).status).toBe(404);
   });
 });
+
+describe("GET /stations/:key (page)", () => {
+  const page = (key: string, cookie: string) => app.request(`/stations/${key}`, { headers: { cookie } }, env);
+
+  it("world: the mount point carries the urls and the player script and strings come with it", async () => {
+    const res = await page("world", await newSession());
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toContain("text/html");
+    const html = await res.text();
+    expect(html).toContain('id="station"');
+    expect(html).toContain('data-next-url="/stations/world/next"');
+    expect(html).toContain('data-resume-url="/stations/world.json"');
+    expect(html).toContain('data-station-key="world"');
+    expect(html).toContain('data-grow="0"');
+    expect(html).toMatch(/<script type="module" src="\/(assets\/station\.js|src\/client\/station\.tsx)">/);
+    const i18n = JSON.parse(html.match(/<script type="application\/json" id="station-i18n">(.*?)<\/script>/s)![1]!) as Record<string, string>;
+    expect(i18n["station.onOff"]).toBe("ラジオをつける / 止める");
+    expect(i18n["letter.showOriginal"]).toBeDefined();
+    expect(i18n["kind.music"]).toBeDefined();
+    expect(i18n["out.spotify"]).toBeDefined();
+    expect(i18n["home.start"]).toBeUndefined();
+    expect(html).toContain("<title>Dococa FM | ");
+  });
+
+  it("404s an unknown key, an unknown slug and a station that is not public", async () => {
+    const cookie = await newSession();
+    expect((await page("nonsense", cookie)).status).toBe(404);
+    expect((await page("s:nobody", cookie)).status).toBe(404);
+    const owner = await createListener(env.DB);
+    await updateListener(env.DB, owner.id, { stationSlug: "hiro", stationPublic: false });
+    expect((await page("s:hiro", cookie)).status).toBe(404);
+  });
+
+  it("a public station is titled with its owner's name", async () => {
+    const owner = await createListener(env.DB, { radioName: "ヒロ" });
+    await updateListener(env.DB, owner.id, { stationSlug: "hiro", stationPublic: true });
+    const html = await (await page("s:hiro", await newSession())).text();
+    expect(html).toContain('data-next-url="/stations/s:hiro/next"');
+    expect(html).toContain("ヒロ");
+  });
+
+  it("mine with no history asks the player to show how to start; with history it does not", async () => {
+    const cookie = await newSession();
+    expect(await (await page("mine", cookie)).text()).toContain('data-grow="1"');
+    const listenerId = (await env.DB.prepare("SELECT id FROM listeners ORDER BY created_at DESC LIMIT 1").first<{ id: string }>())!.id;
+    const it = await insertItem(env.DB, itemDraft({ title: "mine-1" }));
+    await upsertHistory(env.DB, [{ listenerId, itemId: it.id, source: "manual", occurredAt: null, rank: 1 }]);
+    expect(await (await page("mine", cookie)).text()).toContain('data-grow="0"');
+  });
+});

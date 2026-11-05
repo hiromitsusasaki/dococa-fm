@@ -37,7 +37,7 @@ function MessagePage({ message, start, lang }: { message: string; start?: boolea
 }
 
 /** JSON inside a script element: every `<` becomes a unicode escape so no `</script>` or `<!--` can occur. */
-const jsonForScript = (value: unknown): string => JSON.stringify(value).replace(/</g, "\\u003c");
+export const jsonForScript = (value: unknown): string => JSON.stringify(value).replace(/</g, "\\u003c");
 
 /** What the client player needs to know: the labels it shows, as `t()` values, since `t()` is server-only. */
 const PLAYER_KEY = /^(player\.|out\.|letter\.who|listener\.(?:anonymous|demo)$)/;
@@ -118,7 +118,7 @@ episodes.get("/episodes/:id", async (c) => {
   // The page already says whether the cloud voice is on (data-tts-url), so the embedded json keeps its old shape.
   const { cloudTts: _cloudTts, ...pageJson } = toPlayerView(episode, loaded, stored);
   return c.html(
-    <Layout title={t("episode.title")} script lang={lang}>
+    <Layout title={t("episode.title")} script="player" lang={lang}>
       <main class="episode-page">
         <div id="player" data-episode-id={episode.id} data-voice={listener.voice} data-next-url={`/episodes/${episode.id}/next`} data-tts-url={episode.cloudTts ? "/tts" : ""} data-dial={String(listener.dial)}></div>
         <ol class="program">

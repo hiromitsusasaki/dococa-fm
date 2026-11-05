@@ -272,7 +272,7 @@ describe("GET /episodes/:id", () => {
     await env.DB.prepare("UPDATE items SET out_links = ? WHERE id = ?").bind(JSON.stringify({ spotify: "https://open.spotify.com/x", youtube: "javascript:alert(1)" }), near.id).run();
     const html = await (await get(`/episodes/${id}`, cookie)).text();
     const items = JSON.parse(html.match(/id="episode-json">([\s\S]*?)<\/script>/)![1]!).items;
-    expect(Object.keys(items[near.id]).sort()).toEqual(["creator", "imageUrl", "outLinks", "title"]);
+    expect(Object.keys(items[near.id]).sort()).toEqual(["creator", "imageUrl", "kind", "outLinks", "title", "year"]);
     expect(items[near.id].title).toBe("手元の曲");
     expect(items[near.id].outLinks).toEqual({ spotify: "https://open.spotify.com/x" });
     const strings = JSON.parse(html.match(/id="player-i18n">([\s\S]*?)<\/script>/)![1]!);

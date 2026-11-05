@@ -1,7 +1,8 @@
 import type { Child } from "hono/jsx";
 import { type Lang, tFor } from "../worker/i18n/t";
 
-type LayoutProps = { title: string; children?: Child; script?: boolean; lang?: Lang };
+type LayoutProps = { title: string; children?: Child; /** The client entry to load: `player` or `station`. */
+  script?: "player" | "station"; lang?: Lang };
 
 /** `lang` is the listener's; pages outside the session (admin, health) leave it at Japanese. */
 export function Layout({ title, children, script, lang = "ja" }: LayoutProps) {
@@ -22,7 +23,7 @@ export function Layout({ title, children, script, lang = "ja" }: LayoutProps) {
         {script && (
           <script
             type="module"
-            src={import.meta.env.DEV ? "/src/client/player.tsx" : "/assets/player.js"}
+            src={import.meta.env.DEV ? `/src/client/${script}.tsx` : `/assets/${script}.js`}
           />
         )}
       </body>
