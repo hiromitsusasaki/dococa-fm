@@ -130,26 +130,32 @@ export function ReactionForms({ letterId, itemId, lang }: { letterId: string; it
   );
 }
 
+/** Where a found voice came from: its author, the link, and the way to ask for takedown. */
+export function LetterSource({ letter, lang }: { letter: Pick<Letter, "id" | "sourceAuthor" | "sourceUrl">; lang: Lang }) {
+  const t = tFor(lang);
+  return (
+    <p class="letter-source">
+      {t("item.source")}: {letter.sourceAuthor ?? ""}
+      {isHttpUrl(letter.sourceUrl) && (
+        <>
+          {" "}
+          <a href={letter.sourceUrl} rel="noopener noreferrer nofollow" target="_blank">
+            {letter.sourceUrl}
+          </a>
+        </>
+      )}{" "}
+      <a href={`/takedown?letterId=${letter.id}`}>{t("item.takedown")}</a>
+    </p>
+  );
+}
+
 function LetterCard({ letter, reactions, itemId, lang }: { letter: Letter; reactions: Letter[]; itemId: string; lang: Lang }) {
   const t = tFor(lang);
   return (
     <li class="letter" id={`letter-${letter.id}`}>
       <LetterText letter={letter} lang={lang} />
       {letter.kind !== "found" && <p class="letter-who">{whoOf(letter, lang)}</p>}
-      {letter.kind === "found" && (
-        <p class="letter-source">
-          {t("item.source")}: {letter.sourceAuthor ?? ""}
-          {isHttpUrl(letter.sourceUrl) && (
-            <>
-              {" "}
-              <a href={letter.sourceUrl} rel="noopener noreferrer nofollow" target="_blank">
-                {letter.sourceUrl}
-              </a>
-            </>
-          )}{" "}
-          <a href={`/takedown?letterId=${letter.id}`}>{t("item.takedown")}</a>
-        </p>
-      )}
+      {letter.kind === "found" && <LetterSource letter={letter} lang={lang} />}
       {reactions.length > 0 && <ul class="reactions">{reactions.map((r) => <Reaction r={r} lang={lang} />)}</ul>}
       <div class="letter-actions">
         <ReactionForms letterId={letter.id} itemId={itemId} lang={lang} />

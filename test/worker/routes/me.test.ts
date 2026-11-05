@@ -102,4 +102,21 @@ describe("GET /me", () => {
     const html = await (await get("/me", await signedInSession())).text();
     expect(html).toContain(t("me.heardNone"));
   });
+
+  it("shows a heard found voice with its source, not as an anonymous listener", async () => {
+    const cookie = await signedInSession();
+    const a = await insertItem(env.DB, itemDraft());
+    const found = await insertLetter(env.DB, letterDraft(a.id, { kind: "found", radioName: "", place: "", sourceAuthor: "@jazzcat", sourceUrl: "https://youtu.be/x", body: "so good", bodyJa: "とてもいい" }));
+    await insertEpisode(env.DB, {
+      listenerId: idOf(cookie),
+      segments: [{ itemId: a.id, slot: "far", lines: [{ type: "letter", letterId: found.id, text: "とてもいい", radioName: "", place: "", kind: "found", sourceUrl: "https://youtu.be/x", sourceAuthor: "@jazzcat" }] }],
+      verified: true,
+      report: { verbatim: true, sources: true, topical: true, pii: true, details: [] },
+    });
+    const html = await (await get("/me", cookie)).text();
+    expect(html).toContain("@jazzcat");
+    expect(html).toContain('href="https://youtu.be/x"');
+    expect(html).toContain(`/takedown?letterId=${found.id}`);
+    expect(html).not.toContain(t("listener.anonymous"));
+  });
 });

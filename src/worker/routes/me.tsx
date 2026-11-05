@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { ItemCard, LetterText, ReactionForms, whoOf } from "../../views/components";
+import { ItemCard, LetterSource, LetterText, ReactionForms, whoOf } from "../../views/components";
 import { Layout } from "../../views/layout";
 import { currentPath, requireSignin } from "../auth/require-signin";
 import type { Variables } from "../auth/session";
@@ -61,7 +61,7 @@ me.get("/me", requireSignin, async (c) => {
                     <ItemCard item={h.item} heading="h3" lang={lang} />
                   </a>
                   <LetterText letter={h.letter} lang={lang} />
-                  <p class="letter-who">{whoOf(h.letter, lang)}</p>
+                  {h.letter.kind === "found" ? <LetterSource letter={h.letter} lang={lang} /> : <p class="letter-who">{whoOf(h.letter, lang)}</p>}
                   <p class="muted">{t("me.heardOn", { date: jstDate(h.heardAt) })}</p>
                   <p>
                     <a href={`/episodes/${h.episodeId}?seg=${h.segmentIndex}`}>{t("me.replay")}</a>
@@ -70,7 +70,7 @@ me.get("/me", requireSignin, async (c) => {
                     <ReactionForms letterId={h.letter.id} itemId={h.item.id} lang={lang} />
                   </div>
                 </li>
-                ))}
+              ))}
             </ul>
           )}
         </section>

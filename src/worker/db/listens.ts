@@ -17,6 +17,7 @@ export type HeardLetter = {
 
 /** The letters the listener's recent verified episodes read aloud, newest first, one row per letter. */
 export async function listHeardLetters(db: D1Database, listenerId: string, limit = 50): Promise<HeardLetter[]> {
+  // The listener's own letters never appear here: the episode selector never reads them to their author.
   const episodes = await listVerifiedEpisodes(db, listenerId, EPISODE_WINDOW);
   const ids = episodes.flatMap((e) => e.segments.flatMap((s) => s.lines.flatMap((l) => (l.type === "letter" && l.kind !== "reply" ? [l.letterId] : []))));
   const letters = await getLettersByIds(db, ids);
