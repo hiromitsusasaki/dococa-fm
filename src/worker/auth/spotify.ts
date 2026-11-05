@@ -185,9 +185,11 @@ export async function importSpotifyHistory(env: Env, db: D1Database, listener: L
     await readTracks("/me/tracks?limit=50", access, (i) => ({ track: i?.track, at: isoOrNull(i?.added_at) })),
   ];
   const entries = uniqueTracks(lists.map((l) => (l ?? []).filter((e) => e.track)));
+  // Ranks come only from the two top lists. When both were read, the old ranks are stale (even if the lists are empty);
+  // when either read failed, nothing is known about the ranks, so none are cleared (manual favourites included).
+  const clearRanksOf = lists[0] !== null && lists[1] !== null ? listener.id : undefined;
   if (entries.length === 0) {
-    // Both top lists read fine and are empty: the old ranks are stale. If either read failed, nothing is known, so nothing is cleared.
-    if (lists[0] !== null && lists[1] !== null) await upsertHistory(db, [], { clearRanksOf: listener.id });
+    await upsertHistory(db, [], { clearRanksOf });
     return 0;
   }
 
@@ -197,6 +199,6 @@ export async function importSpotifyHistory(env: Env, db: D1Database, listener: L
   const rows: HistoryRow[] = items.map((item, i) => ({ listenerId: listener.id, itemId: item.id, source: "spotify", occurredAt: entries[i]!.at, rank: entries[i]!.rank ?? null }));
   // Two Spotify tracks can resolve to one stored item; the batch upsert must not see the same key twice.
   const byItem = new Map(rows.map((r) => [r.itemId, r]));
-  await upsertHistory(db, [...byItem.values()], { clearRanksOf: listener.id });
+  await upsertHistory(db, [...byItem.values()], { clearRanksOf });
   return byItem.size;
 }

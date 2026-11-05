@@ -223,6 +223,16 @@ describe("importSpotifyHistory", () => {
     expect([await rankOf(listener.id, "s1"), await rankOf(listener.id, "s2")]).toEqual([1, 2]);
   });
 
+  it("keeps the old ranks when the top lists failed but recently played came back", async () => {
+    stubWorld({ top: [T1, T2], recent: [], saved: [] });
+    const listener = await connectedListener();
+    await importSpotifyHistory(env, env.DB, listener);
+    vi.unstubAllGlobals();
+    stubWorld({ topStatus: 500, recent: [T3], saved: [] });
+    expect(await importSpotifyHistory(env, env.DB, listener)).toBe(1);
+    expect([await rankOf(listener.id, "s1"), await rankOf(listener.id, "s2"), await rankOf(listener.id, "s3")]).toEqual([1, 2, null]);
+  });
+
   it("takes 20 long-term, 10 short-term, 10 recent and fills the rest from saved, 40 at most", async () => {
     const many = (p: string, n: number) => Array.from({ length: n }, (_, i): Fake => ({ id: `${p}${i}`, name: `${p} ${i}`, artist: "Artist" }));
     const long = many("l", 30);
