@@ -4,7 +4,7 @@ import { Layout } from "../../views/layout";
 import { currentPath } from "../auth/require-signin";
 import { exchangeGoogleCode, googleAuthorizeUrl, parseIdToken } from "../auth/google";
 import { type Variables, clearSessionCookie, setSessionCookie } from "../auth/session";
-import { getListenerByGoogleSub, updateListener } from "../db/listeners";
+import { bindGoogleSub, getListenerByGoogleSub } from "../db/listeners";
 import type { Env } from "../env";
 import { tFor } from "../i18n/t";
 
@@ -91,14 +91,18 @@ authGoogle.get("/auth/google/callback", async (c) => {
     // Never overwrite a listener that is already bound to another Google account.
     if (current.googleSub !== null) return c.redirect(FAILED, 303);
     // The Google name stays private (header and /me only). The public radio name is only ever what the listener types.
-    const displayName = profile.name || profile.email.split("@")[0] || undefined;
+    const displayName = profile.name || profile.email.split("@")[0] || "";
+    let bound = false;
     try {
-      await updateListener(c.env.DB, current.id, { googleSub: profile.sub, displayName });
+      bound = await bindGoogleSub(c.env.DB, current.id, profile.sub, displayName);
     } catch {
       // google_sub is UNIQUE: someone bound the same account between our lookup and this write.
+    }
+    if (!bound) {
+      // Lost a race: either this account now belongs to a listener (switch to it), or this listener got bound to another account (fail).
       const winner = await getListenerByGoogleSub(c.env.DB, profile.sub);
       if (!winner) return c.redirect(FAILED, 303);
-      await setSessionCookie(c, winner.id);
+      if (winner.id !== current.id) await setSessionCookie(c, winner.id);
     }
   }
   return c.redirect(next, 303);

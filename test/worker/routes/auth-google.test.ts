@@ -183,6 +183,57 @@ describe("GET /auth/google/callback", () => {
     expect(sidOf(res)).toBe(owner.id);
   });
 
+  it("fails, and keeps the first account, when the listener is bound to another account between lookup and write", async () => {
+    const sid = await newSession();
+    const id = sid.split("=")[1]!.split(".")[0]!;
+    const s = await start(sid);
+    stubGoogle({ sub: "g-second" }, s.nonce);
+    const real = listeners.getListenerByGoogleSub;
+    let calls = 0;
+    const spy = vi.spyOn(listeners, "getListenerByGoogleSub").mockImplementation(async (db, sub) => {
+      if (calls++ === 0) {
+        await updateListener(db, id, { googleSub: "g-first", displayName: "First" });
+        return null;
+      }
+      return real(db, sub);
+    });
+    const res = await manual(`/auth/google/callback?code=abc&state=${s.state}`, s.cookie);
+    spy.mockRestore();
+    expect(res.headers.get("location")).toBe("/settings?signin=failed");
+    const after = await getListener(env.DB, id);
+    expect(after?.googleSub).toBe("g-first");
+    expect(after?.displayName).toBe("First");
+  });
+
+  it("carries on when the same account got bound to this listener between lookup and write", async () => {
+    const sid = await newSession();
+    const id = sid.split("=")[1]!.split(".")[0]!;
+    const s = await start(sid);
+    stubGoogle({}, s.nonce);
+    const real = listeners.getListenerByGoogleSub;
+    let calls = 0;
+    const spy = vi.spyOn(listeners, "getListenerByGoogleSub").mockImplementation(async (db, sub) => {
+      if (calls++ === 0) {
+        await updateListener(db, id, { googleSub: sub, displayName: "Aiko" });
+        return null;
+      }
+      return real(db, sub);
+    });
+    const res = await manual(`/auth/google/callback?code=abc&state=${s.state}`, s.cookie);
+    spy.mockRestore();
+    expect(res.headers.get("location")).toBe("/me");
+    expect(sidOf(res)).toBeUndefined();
+  });
+
+  it("binds with a write that only succeeds while google_sub is empty", async () => {
+    const a = await createListener(env.DB, { lang: "ja" });
+    expect(await listeners.bindGoogleSub(env.DB, a.id, "g-a", "A")).toBe(true);
+    expect(await listeners.bindGoogleSub(env.DB, a.id, "g-b", "B")).toBe(false);
+    expect((await getListener(env.DB, a.id))?.googleSub).toBe("g-a");
+    const b = await createListener(env.DB, { lang: "ja" });
+    await expect(listeners.bindGoogleSub(env.DB, b.id, "g-a", "B")).rejects.toThrow();
+  });
+
   it("switches the session to the listener that already owns the sub", async () => {
     const owner = await createListener(env.DB, { lang: "ja" });
     await updateListener(env.DB, owner.id, { googleSub: "g-1", displayName: "Aiko" });

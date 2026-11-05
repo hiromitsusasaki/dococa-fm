@@ -134,6 +134,15 @@ export async function updateListener(db: D1Database, id: string, patch: Partial<
   return getListener(db, id);
 }
 
+/**
+ * Binds a Google account to a listener that has none yet. The write itself checks `google_sub IS NULL`, so two callbacks
+ * racing on one listener cannot overwrite each other: the loser gets false. A sub already bound elsewhere throws (UNIQUE).
+ */
+export async function bindGoogleSub(db: D1Database, id: string, googleSub: string, displayName: string): Promise<boolean> {
+  const res = await db.prepare("UPDATE listeners SET google_sub = ?, display_name = ? WHERE id = ? AND google_sub IS NULL").bind(googleSub, displayName, id).run();
+  return (res.meta.changes ?? 0) > 0;
+}
+
 /** Whether the listener has played or written anything yet, without reading either list. */
 export async function hasActivity(db: D1Database, id: string): Promise<boolean> {
   const row = await db
