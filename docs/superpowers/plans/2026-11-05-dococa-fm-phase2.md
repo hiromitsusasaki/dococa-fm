@@ -340,6 +340,24 @@
 - [ ] **Step 4: 緑を確認。** `pnpm eval --runs 3` をローカルで回して `playback:` が 0 件であることを見る（鍵がある端末で）。
 - [ ] **Step 5: コミット** `feat: the dj introduces and reads letters, never plays`
 
+### Task 17: 聴いたお便り（マイページ）
+
+**Files:**
+- Create: `src/worker/db/listens.ts`（自分の検証済みの回の segments から、読まれたお便りを新しい順に展開する `listHeardLetters(db, listenerId, limit): Promise<{ episodeId; segmentIndex; letter: Letter; item: Item; heardAt }[]>`。回は `episodes.created_at` 降順、回の中は segment 順。同じお便りは最新の 1 件に寄せる）
+- Modify: `src/worker/routes/me.tsx`（セクション `me.heard`）、`src/worker/routes/episodes.tsx`（`GET /episodes/:id?seg=<n>` で指定の segment から再生を始める: `#player` の `data-start-seg`）、`src/client/player.tsx`（`data-start-seg` を読んで `seg` の初期値に）、`src/worker/i18n/ja.ts` / `en.ts`（`me.heard`: `聴いたお便り` / `Letters you've heard`、`me.replay`: `もう一度聴く` / `Listen again`、`me.heardOn`: `{date} に聴いた` / `Heard on {date}`）
+- Test: `test/worker/db/listens.test.ts`、`test/worker/routes/me.test.ts`、`test/client/player.test.ts`
+
+**Interfaces:**
+- Consumes: Task 8 の `/me`（`requireSignin`）、既存の `POST /letters`（watashimo / reply）。
+- Produces: `/me` に `me.heard` セクション（最大 50 件）。各行: 作品カード（題名・作者）、お便りの主文（`displayText`）、送り主（`letter.whoPlace`）、`me.heardOn`（JST の日付）、`me.replay` リンク `/episodes/<id>?seg=<n>`、私も（`POST /letters` kind=watashimo）、一言（kind=reply）。自分のお便りは出ない（元々読まれない）。
+- `GET /episodes/:id?seg=n` は `n` が範囲外なら 0 から。
+
+- [ ] **Step 1: 失敗するテスト。** `listens.test.ts`: 2 回分の回を持つリスナーで、新しい回のお便りが先、同じ letterId は 1 件、limit が効く。`me.test.ts`: サインイン済みで `me.heard` と `me.replay` のリンク `/episodes/<id>?seg=1` がある；数字の集計（`\d+ 件` / `\d+ letters`）が無い。`player.test.ts`: `data-start-seg="1"` で `seg` が 1 から始まる。
+- [ ] **Step 2: 失敗を確認。**
+- [ ] **Step 3: 実装。**
+- [ ] **Step 4: 緑を確認。** スクリーンショット `docs/screenshots/2026-11-0X-me-heard.png`。
+- [ ] **Step 5: コミット** `feat: letters you have heard, with replay and reactions, on the my page`
+
 ### Task 14: 文書と本番の設定
 
 **Files:**
@@ -357,4 +375,4 @@
 - Spec 追記 F（言語設定）→ Task 2、2b。G（見た目の確定）→ Task 11、13。
 - Spec 追記 A（局・連続再生・途中の反応・はじめの一歩の降格）→ Task 3〜6、12。B（識別・匿名の範囲）→ Task 2、7、8。C（公開局）→ Task 2、3、4、9。D（取り込みの並び）→ Task 2、10。E（文言・見た目・キービジュアル）→ Task 1、11、12、13。
 - 名前の一貫性: `StationKey` / `parseStationKey`（Task 3）を Task 4・5・6 が使う。`playerView`（Task 4）を Task 5 が使う。`requireSignin`（Task 8）を Task 9・10 が使う。`listFavorites`（Task 2）を Task 3・8・10 が使う。
-- 間に合わないときの削る順: Task 15 → 12 → 10 → 9 → 8（マイページだけ落として保護は残す）。Task 1、2、2b、3〜7、11、13、16 は提出の核。Phase 3（音声の事前生成、英語の DJ）は別計画。
+- 間に合わないときの削る順: Task 15 → 12 → 10 → 9 → 8（マイページだけ落として保護は残す）。Task 1、2、2b、3〜7、11、13、16 は提出の核。Task 17 は Task 8 の後ならいつでもよい。Phase 3（音声の事前生成、英語の DJ）は別計画。
