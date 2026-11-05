@@ -33,7 +33,7 @@ async function buildFixture(): Promise<Fixture> {
   const i = (n: number) => items[n] as string;
   await upsertHistory(
     env.DB,
-    [0, 1, 2, 3].map((n) => ({ listenerId: a.id, itemId: i(n), source: "manual" as const, occurredAt: null })),
+    [0, 1, 2, 3].map((n) => ({ listenerId: a.id, itemId: i(n), source: "manual" as const, occurredAt: null, rank: null })),
   );
   const put = (itemId: string, over: Parameters<typeof letterDraft>[1]) => insertLetter(env.DB, letterDraft(itemId, over));
 
@@ -94,7 +94,7 @@ describe("selectProgram", () => {
   it("fills a short near pool from the listener's own works first, then from far, and keeps length 6", async () => {
     const f = await buildFixture();
     const d = await createListener(env.DB);
-    await upsertHistory(env.DB, [{ listenerId: d.id, itemId: f.items[3] as string, source: "manual", occurredAt: null }]);
+    await upsertHistory(env.DB, [{ listenerId: d.id, itemId: f.items[3] as string, source: "manual", occurredAt: null, rank: null }]);
     const p = await selectProgram(env.DB, { ...d, dial: 0.3 }, { seed: "s" });
     expect(p).toHaveLength(6);
     expect(p.filter((s) => s.slot === "near")).toEqual([{ itemId: f.items[3], slot: "near", letterIds: [] }]);
@@ -113,7 +113,7 @@ describe("selectProgram", () => {
     for (let n = 0; n < 3; n++) {
       const it = await insertItem(env.DB, itemDraft({ title: `mine-${n}`, externalIds: { itunes: `m${n}` } }));
       mine.push(it.id);
-      await upsertHistory(env.DB, [{ listenerId: judge.id, itemId: it.id, source: "manual", occurredAt: null }]);
+      await upsertHistory(env.DB, [{ listenerId: judge.id, itemId: it.id, source: "manual", occurredAt: null, rank: null }]);
     }
     // One of them carries the judge's own one-liner from /start: it still counts as nobody else's.
     await insertLetter(env.DB, letterDraft(mine[0]!, { listenerId: judge.id, body: "my note" }));
@@ -136,7 +136,7 @@ describe("selectProgram", () => {
   it("uses history-only items as the last resort and never pads with duplicates", async () => {
     const d = await createListener(env.DB);
     const only = await insertItem(env.DB, itemDraft({ title: "only" }));
-    await upsertHistory(env.DB, [{ listenerId: d.id, itemId: only.id, source: "manual", occurredAt: null }]);
+    await upsertHistory(env.DB, [{ listenerId: d.id, itemId: only.id, source: "manual", occurredAt: null, rank: null }]);
     const p = await selectProgram(env.DB, d, { seed: "s" });
     expect(p).toEqual([{ itemId: only.id, slot: "near", letterIds: [] }]);
   });

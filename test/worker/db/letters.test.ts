@@ -27,6 +27,13 @@ describe("letters", () => {
     expect(await getLetter(env.DB, "nope")).toBeNull();
   });
 
+  it("bodyEn is null by default and round-trips when given", async () => {
+    const item = await insertItem(env.DB, itemDraft());
+    expect((await insertLetter(env.DB, letterDraft(item.id))).bodyEn).toBeNull();
+    const en = await insertLetter(env.DB, letterDraft(item.id, { bodyEn: "Thank you" }));
+    expect((await getLetter(env.DB, en.id))?.bodyEn).toBe("Thank you");
+  });
+
   it("listLettersForItem returns only public, oldest first", async () => {
     const item = await insertItem(env.DB, itemDraft());
     const other = await insertItem(env.DB, itemDraft({ title: "x", externalIds: {} }));

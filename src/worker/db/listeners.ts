@@ -9,11 +9,15 @@ function rowToListener(r: Row): Listener {
     place: r.place as string,
     voice: r.voice as string,
     dial: r.dial as number,
-    lang: r.lang as "ja",
+    lang: r.lang as Listener["lang"],
     mcpToken: r.mcp_token as string,
     spotifyRefreshToken: (r.spotify_refresh_token as string | null) ?? null,
     cloudTtsUsed: r.cloud_tts_used === 1,
     demo: r.demo === 1,
+    googleSub: (r.google_sub as string | null) ?? null,
+    displayName: r.display_name as string,
+    stationPublic: r.station_public === 1,
+    stationSlug: (r.station_slug as string | null) ?? null,
     createdAt: r.created_at as string,
   };
 }
@@ -38,6 +42,10 @@ export async function createListener(db: D1Database, init: Partial<Pick<Listener
     spotifyRefreshToken: null,
     cloudTtsUsed: false,
     demo: init.demo ?? false,
+    googleSub: null,
+    displayName: "",
+    stationPublic: false,
+    stationSlug: null,
     createdAt: new Date().toISOString(),
   };
   await db
@@ -82,6 +90,17 @@ export async function getListenerByMcpToken(db: D1Database, token: string): Prom
   return row ? rowToListener(row) : null;
 }
 
+export async function getListenerByGoogleSub(db: D1Database, sub: string): Promise<Listener | null> {
+  const row = await db.prepare("SELECT * FROM listeners WHERE google_sub = ?").bind(sub).first<Row>();
+  return row ? rowToListener(row) : null;
+}
+
+/** Only a public station is found by its slug. */
+export async function getListenerBySlug(db: D1Database, slug: string): Promise<Listener | null> {
+  const row = await db.prepare("SELECT * FROM listeners WHERE station_slug = ? AND station_public = 1").bind(slug).first<Row>();
+  return row ? rowToListener(row) : null;
+}
+
 const COLUMNS = {
   radioName: "radio_name",
   place: "place",
@@ -91,6 +110,10 @@ const COLUMNS = {
   mcpToken: "mcp_token",
   spotifyRefreshToken: "spotify_refresh_token",
   cloudTtsUsed: "cloud_tts_used",
+  googleSub: "google_sub",
+  displayName: "display_name",
+  stationPublic: "station_public",
+  stationSlug: "station_slug",
 } as const;
 
 export async function updateListener(db: D1Database, id: string, patch: Partial<Listener>): Promise<Listener | null> {

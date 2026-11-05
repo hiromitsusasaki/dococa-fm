@@ -21,6 +21,8 @@ export type Letter = {
   kind: LetterKind;
   body: string;
   bodyJa: string;
+  /** The English rendering; null until one is made. */
+  bodyEn: string | null;
   lang: string;
   radioName: string;
   place: string;
@@ -41,13 +43,18 @@ export type Listener = {
   place: string;
   voice: string;
   dial: number;
-  lang: "ja";
+  lang: "ja" | "en";
   mcpToken: string;
   spotifyRefreshToken: string | null;
   /** The listener has already had their one cloud-voice episode. */
   cloudTtsUsed: boolean;
   /** An AI-made persona for the demo, shown with a mark wherever its letters appear. */
   demo: boolean;
+  googleSub: string | null;
+  displayName: string;
+  /** The listener's station is open to anyone at /s/<stationSlug>. */
+  stationPublic: boolean;
+  stationSlug: string | null;
   createdAt: string;
 };
 
@@ -56,6 +63,8 @@ export type HistoryRow = {
   itemId: string;
   source: "spotify" | "url" | "manual";
   occurredAt: string | null;
+  /** Position in an import (1 = most loved); null when the source has no order. */
+  rank: number | null;
 };
 
 export type ScriptLine =

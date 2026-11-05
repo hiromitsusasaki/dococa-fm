@@ -20,6 +20,7 @@ export const letter = (over: Partial<Letter> = {}): Letter => ({
   kind: "letter",
   body: "夜中に一人で聴いて、少しだけ泣きました。",
   bodyJa: "夜中に一人で聴いて、少しだけ泣きました。",
+  bodyEn: null,
   lang: "ja",
   radioName: "みなと",
   place: "函館",
@@ -45,6 +46,10 @@ export const listener = (over: Partial<Listener> = {}): Listener => ({
   mcpToken: "mcp-token-secret-0001",
   spotifyRefreshToken: null,
   demo: false,
+  googleSub: null,
+  displayName: "",
+  stationPublic: false,
+  stationSlug: null,
   createdAt: "2026-01-01T00:00:00Z",
   ...over,
 });

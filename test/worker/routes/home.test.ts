@@ -14,7 +14,7 @@ describe("GET /", () => {
     // The oldest item, so it falls outside the newest six.
     const cookie = await newSession();
     const seen = await insertItem(env.DB, itemDraft({ title: "聴いた曲", externalIds: { itunes: "999" } }));
-    await upsertHistory(env.DB, [{ listenerId: cookie.split("=")[1]!.split(".")[0]!, itemId: seen.id, source: "manual", occurredAt: null }]);
+    await upsertHistory(env.DB, [{ listenerId: cookie.split("=")[1]!.split(".")[0]!, itemId: seen.id, source: "manual", occurredAt: null, rank: null }]);
     await new Promise((r) => setTimeout(r, 2));
     for (let i = 0; i < 7; i++) {
       const it = await insertItem(env.DB, itemDraft({ title: `作品${i}`, externalIds: { itunes: String(i) } }));
@@ -41,7 +41,7 @@ describe("GET /", () => {
     expect(await (await get("/", cookie)).text()).toContain('href="/start"');
     const item = await insertItem(env.DB, itemDraft());
     const id = cookie.split("=")[1]!.split(".")[0]!;
-    await upsertHistory(env.DB, [{ listenerId: id, itemId: item.id, source: "manual", occurredAt: null }]);
+    await upsertHistory(env.DB, [{ listenerId: id, itemId: item.id, source: "manual", occurredAt: null, rank: null }]);
     const html = await (await get("/", cookie)).text();
     expect(html).not.toContain('href="/start"');
     expect(html).toContain("あなたのラジオをつける");

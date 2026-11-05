@@ -32,7 +32,7 @@ describe("GET /put with a history", () => {
   it("lists the history with links to put each one, and offers to connect Spotify", async () => {
     const cookie = await newSession();
     const item = await insertItem(env.DB, itemDraft());
-    await upsertHistory(env.DB, [{ listenerId: await listenerId(cookie), itemId: item.id, source: "spotify", occurredAt: null }]);
+    await upsertHistory(env.DB, [{ listenerId: await listenerId(cookie), itemId: item.id, source: "spotify", occurredAt: null, rank: null }]);
     const html = await (await get("/put", cookie)).text();
     expect(html).toContain(t("put.fromHistory"));
     expect(html).toContain(`/put?itemId=${item.id}`);
@@ -54,7 +54,7 @@ describe("GET /put with a history", () => {
   it("shows the DJ's questions for an item in the history", async () => {
     const cookie = await newSession();
     const item = await insertItem(env.DB, itemDraft());
-    await upsertHistory(env.DB, [{ listenerId: await listenerId(cookie), itemId: item.id, source: "spotify", occurredAt: null }]);
+    await upsertHistory(env.DB, [{ listenerId: await listenerId(cookie), itemId: item.id, source: "spotify", occurredAt: null, rank: null }]);
     const html = await (await get(`/put?itemId=${item.id}`, cookie)).text();
     expect(html).toContain(t("put.questions"));
     expect(html).toContain("誰かと一緒でしたか？");

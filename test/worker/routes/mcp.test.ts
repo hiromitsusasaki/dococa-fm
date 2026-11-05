@@ -47,7 +47,7 @@ async function seed() {
   const other = await createListener(env.DB);
   const near = await insertItem(env.DB, itemDraft({ title: "手元の曲" }));
   const far = await insertItem(env.DB, itemDraft({ title: "遠い国の歌", externalIds: { itunes: "2" } }));
-  await upsertHistory(env.DB, [{ listenerId: me.id, itemId: near.id, source: "manual", occurredAt: null }]);
+  await upsertHistory(env.DB, [{ listenerId: me.id, itemId: near.id, source: "manual", occurredAt: null, rank: null }]);
   for (const it of [near, far]) {
     await insertLetter(env.DB, letterDraft(it.id, { listenerId: other.id, radioName: "しずく", place: "松本", body: `${it.title}への手紙`, bodyJa: `${it.title}への手紙` }));
   }

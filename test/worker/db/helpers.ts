@@ -20,6 +20,7 @@ export const letterDraft = (
   kind: "letter",
   body: "ありがとう",
   bodyJa: "ありがとう",
+  bodyEn: null,
   lang: "ja",
   radioName: "ラジオネーム",
   place: "札幌",

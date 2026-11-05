@@ -4,7 +4,9 @@ import {
   claimCloudTts,
   createListener,
   getListener,
+  getListenerByGoogleSub,
   getListenerByMcpToken,
+  getListenerBySlug,
   updateListener,
 } from "../../../src/worker/db/listeners";
 import { resetDb } from "../../helpers/db";
@@ -57,5 +59,45 @@ describe("listeners", () => {
     expect(await claimCloudTts(env.DB, l.id)).toBe(true);
     expect(await claimCloudTts(env.DB, l.id)).toBe(false);
     expect((await getListener(env.DB, l.id))?.cloudTtsUsed).toBe(true);
+  });
+
+  it("createListener starts without a google identity or a public station", async () => {
+    const l = await createListener(env.DB);
+    expect(l).toMatchObject({ googleSub: null, displayName: "", stationPublic: false, stationSlug: null });
+  });
+
+  it("getListenerByGoogleSub finds the listener who signed in with that account", async () => {
+    const l = await createListener(env.DB);
+    await createListener(env.DB);
+    await updateListener(env.DB, l.id, { googleSub: "g1", displayName: "Hiro" });
+    expect(await getListenerByGoogleSub(env.DB, "g1")).toMatchObject({ id: l.id, googleSub: "g1", displayName: "Hiro" });
+    expect(await getListenerByGoogleSub(env.DB, "g2")).toBeNull();
+  });
+
+  it("getListenerBySlug returns only public stations", async () => {
+    const l = await createListener(env.DB);
+    await updateListener(env.DB, l.id, { stationSlug: "hiro", stationPublic: true });
+    expect((await getListenerBySlug(env.DB, "hiro"))?.id).toBe(l.id);
+    expect((await getListener(env.DB, l.id))?.stationPublic).toBe(true);
+    await updateListener(env.DB, l.id, { stationPublic: false });
+    expect(await getListenerBySlug(env.DB, "hiro")).toBeNull();
+  });
+
+  it("a google account or a slug belongs to one listener", async () => {
+    const a = await createListener(env.DB);
+    const b = await createListener(env.DB);
+    await updateListener(env.DB, a.id, { googleSub: "g1", stationSlug: "hiro" });
+    await expect(updateListener(env.DB, b.id, { googleSub: "g1" })).rejects.toThrow(/UNIQUE/);
+    await expect(updateListener(env.DB, b.id, { stationSlug: "hiro" })).rejects.toThrow(/UNIQUE/);
+  });
+
+  it("many listeners may have no google account or slug", async () => {
+    await createListener(env.DB);
+    await expect(createListener(env.DB)).resolves.toBeDefined();
+  });
+
+  it("lang can be en", async () => {
+    const l = await createListener(env.DB);
+    expect((await updateListener(env.DB, l.id, { lang: "en" }))?.lang).toBe("en");
   });
 });

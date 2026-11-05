@@ -21,7 +21,7 @@ async function seed(cookie: string) {
   const near = await insertItem(env.DB, itemDraft({ title: "手元の曲" }));
   const far1 = await insertItem(env.DB, itemDraft({ title: "遠い国の歌", externalIds: { itunes: "2" } }));
   const far2 = await insertItem(env.DB, itemDraft({ title: "もうひとつの歌", externalIds: { itunes: "3" } }));
-  await upsertHistory(env.DB, [{ listenerId: me, itemId: near.id, source: "manual", occurredAt: null }]);
+  await upsertHistory(env.DB, [{ listenerId: me, itemId: near.id, source: "manual", occurredAt: null, rank: null }]);
   const mine = await insertLetter(env.DB, letterDraft(near.id, { listenerId: me, body: "私の一通", bodyJa: "私の一通" }));
   for (const it of [near, far1, far2]) {
     await insertLetter(env.DB, letterDraft(it.id, { listenerId: other.id, radioName: "しずく", place: "松本", body: `${it.title}への手紙`, bodyJa: `${it.title}への手紙` }));

@@ -82,6 +82,7 @@ export async function createLetter(
     kind,
     body,
     bodyJa,
+    bodyEn: null,
     lang,
     radioName: listener.radioName,
     place: listener.place,

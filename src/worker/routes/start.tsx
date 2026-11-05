@@ -70,7 +70,7 @@ start.post("/start", async (c) => {
   // One lookup and one insert for all three; two drafts that are the same work resolve to one item.
   const stored = await resolveOrCreateMany(c.env.DB, found.map((f) => f.draft));
   const items = found.map(({ n }, i) => ({ n, item: stored[i]! }));
-  await upsertHistory(c.env.DB, items.map(({ item }) => ({ listenerId: listener.id, itemId: item.id, source: "manual", occurredAt: null })));
+  await upsertHistory(c.env.DB, items.map(({ item }) => ({ listenerId: listener.id, itemId: item.id, source: "manual", occurredAt: null, rank: null })));
 
   // Sequential: the letter checks (duplicates, limits) read what the last one wrote.
   // A one-liner that fails its judgement is skipped; it never stops the first episode.

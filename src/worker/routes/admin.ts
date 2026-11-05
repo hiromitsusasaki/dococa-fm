@@ -114,6 +114,7 @@ admin.post("/admin/found", async (c) => {
       kind: "found",
       body: v.body,
       bodyJa,
+      bodyEn: null,
       lang,
       radioName: v.author,
       place: "",

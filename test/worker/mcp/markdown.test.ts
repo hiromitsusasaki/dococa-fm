@@ -8,7 +8,7 @@ const item: Item = {
   previewUrl: null, outLinks: { spotify: "https://open.spotify.com/x", bogus: "javascript:alert(1)" }, externalIds: {}, createdAt: "2026-11-04T00:00:00Z",
 };
 const letter = (over: Partial<Letter>): Letter => ({
-  id: "l1", itemId: "i1", kind: "letter", body: "原文", bodyJa: "原文", lang: "ja", radioName: "ヒロ", place: "大船渡", year: null,
+  id: "l1", itemId: "i1", kind: "letter", body: "原文", bodyJa: "原文", bodyEn: null, lang: "ja", radioName: "ヒロ", place: "大船渡", year: null,
   listenerId: null, parentLetterId: null, sourceUrl: null, sourceAuthor: null, status: "public", demo: false, createdAt: "2026-11-04T00:00:00Z", ...over,
 });
 const lines = {
