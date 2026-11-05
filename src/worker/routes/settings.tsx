@@ -4,6 +4,8 @@ import { z } from "zod";
 import { Layout } from "../../views/layout";
 import type { Variables } from "../auth/session";
 import { newMcpToken, updateListener } from "../db/listeners";
+import { COUNTRIES, REGIONS } from "../geo/places";
+import { isValidRegion, placeLabel } from "../geo/place-label";
 import { looksLikeContact } from "../program/pii-patterns";
 import type { Env } from "../env";
 import { tFor } from "../i18n/t";
@@ -14,9 +16,11 @@ import type { Listener } from "../types";
 /** The DJ says radio names and places aloud, so they may not be an address, a phone number or a url. */
 const notContact = (s: string) => !looksLikeContact(s);
 
-const schema = z.object({
+const fields = z.object({
   radioName: z.string().trim().max(20).refine(notContact),
-  place: z.string().trim().max(30).refine(notContact),
+  /** Empty means no place. */
+  placeCountry: z.string().trim().refine((v) => v === "" || COUNTRIES.some((c) => c.code === v)).default(""),
+  placeRegion: z.string().trim().default(""),
   voice: z.string().max(200),
   dial: z.coerce.number().min(0).max(1),
   lang: z.enum(["ja", "en"]).optional(),
@@ -24,11 +28,13 @@ const schema = z.object({
   /** Empty means "leave it as it is". */
   stationSlug: z.string().trim().toLowerCase().refine((v) => v === "" || SLUG.test(v)).optional(),
 });
+/** The region has to belong to the chosen country. */
+const schema = fields.refine((v) => isValidRegion(v.placeCountry, v.placeRegion));
 
 /** What the station section shows. Absent for an anonymous listener, who cannot publish. */
 type StationView = { isPublic: boolean; slug: string; url: string | null; taken?: boolean };
 
-type FormValues = Pick<Listener, "radioName" | "place" | "voice" | "dial" | "lang">;
+type FormValues = Pick<Listener, "radioName" | "place" | "placeCountry" | "placeRegion" | "voice" | "dial" | "lang">;
 
 function SettingsPage(props: { values: FormValues; listener: Listener; path: string; listenerId: string; mcpUrl: string; spotifyConnected: boolean; spotifyFailed?: boolean; signinFailed?: boolean; saved?: boolean; invalid?: boolean; station?: StationView }) {
   const { values, listener, path, listenerId, mcpUrl, spotifyConnected, spotifyFailed, signinFailed, saved, invalid, station } = props;
@@ -54,10 +60,32 @@ function SettingsPage(props: { values: FormValues; listener: Listener; path: str
             <span>{t("settings.radioName")}</span>
             <input type="text" name="radioName" maxlength={20} value={values.radioName} />
           </label>
-          <label>
-            <span>{t("settings.place")}</span>
-            <input type="text" name="place" maxlength={30} value={values.place} />
-          </label>
+          <fieldset class="settings-place">
+            <legend>{t("settings.place")}</legend>
+            <label>
+              <span>{t("settings.placeCountry")}</span>
+              <select name="placeCountry">
+                <option value="" selected={!values.placeCountry}>{t("settings.placeNone")}</option>
+                {COUNTRIES.map((c) => (
+                  <option value={c.code} selected={values.placeCountry === c.code}>{values.lang === "ja" ? c.ja : c.en}</option>
+                ))}
+              </select>
+              {!values.placeCountry && values.place && <small>{values.place}</small>}
+            </label>
+            <label>
+              <span>{t("settings.placeRegion")}</span>
+              <select name="placeRegion">
+                <option value="" selected={!values.placeRegion}>{t("settings.placeNone")}</option>
+                {(["JP", "US"] as const).map((code) => (
+                  <optgroup label={COUNTRIES.find((c) => c.code === code)![values.lang === "ja" ? "ja" : "en"]}>
+                    {REGIONS[code].map((r) => (
+                      <option value={r.code} selected={values.placeCountry === code && values.placeRegion === r.code}>{values.lang === "ja" ? r.ja : r.en}</option>
+                    ))}
+                  </optgroup>
+                ))}
+              </select>
+            </label>
+          </fieldset>
           <label>
             <span>{t("settings.voice")}</span>
             <input type="text" name="voice" maxlength={200} value={values.voice} />
@@ -156,7 +184,14 @@ settings.post(
   }),
   async (c) => {
     const listener = c.get("listener");
-    const { stationPublic, stationSlug, ...rest } = c.req.valid("form");
+    const { stationPublic, stationSlug, placeCountry, placeRegion, ...other } = c.req.valid("form");
+    // An old free-text place stays until a country is chosen; choosing "none" afterwards clears it.
+    const rest = {
+      ...other,
+      ...(placeCountry === "" && listener.placeCountry === null
+        ? {}
+        : { placeCountry: placeCountry || null, placeRegion: placeRegion || null, place: placeLabel(placeCountry || null, placeRegion || null, "ja") }),
+    };
     // Only a signed-in listener can publish; for anyone else the station fields are dropped without an error.
     if (listener.googleSub === null) {
       await updateListener(c.env.DB, listener.id, rest);
@@ -189,7 +224,7 @@ settings.post("/settings/mcp-token", async (c) => {
 });
 
 /** The player's dial: saves only the dial, effective from the next episode. */
-settings.post("/settings/dial", zValidator("form", schema.pick({ dial: true }), (r, c) => (r.success ? undefined : c.body(null, 422))), async (c) => {
+settings.post("/settings/dial", zValidator("form", fields.pick({ dial: true }), (r, c) => (r.success ? undefined : c.body(null, 422))), async (c) => {
   await updateListener(c.env.DB, c.get("listener").id, c.req.valid("form"));
   return c.body(null, 204);
 });

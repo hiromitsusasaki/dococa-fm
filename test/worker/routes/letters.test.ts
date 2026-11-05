@@ -33,12 +33,12 @@ describe("POST /letters", () => {
   it("stores a japanese letter verbatim and redirects to the item", async () => {
     const item = await seedItem();
     const cookie = await signedInSession();
-    await postForm("/settings", cookie, { radioName: "ヒロ", place: "大船渡", voice: "", dial: "0.3" });
+    await postForm("/settings", cookie, { radioName: "ヒロ", placeCountry: "JP", placeRegion: "32", voice: "", dial: "0.3" });
     const res = await postForm("/letters", cookie, { itemId: item.id, body: "中学の頃、毎日聴いていた" });
     expect(res.status).toBe(303);
     expect(res.headers.get("location")).toBe(`/items/${item.id}`);
     const [l] = await listLettersForItem(env.DB, item.id);
-    expect(l).toMatchObject({ kind: "letter", body: "中学の頃、毎日聴いていた", bodyJa: "中学の頃、毎日聴いていた", lang: "ja", radioName: "ヒロ", place: "大船渡", status: "public" });
+    expect(l).toMatchObject({ kind: "letter", body: "中学の頃、毎日聴いていた", bodyJa: "中学の頃、毎日聴いていた", lang: "ja", radioName: "ヒロ", place: "島根", status: "public" });
     expect(create).toHaveBeenCalledTimes(2); // moderation, then the english translation; ja is not translated to ja
     expect(l!.bodyEn).toBe("[en] translated");
   });
@@ -301,8 +301,8 @@ describe("GET /put", () => {
   it("shows the sender line the same way the item page does", async () => {
     const item = await seedItem();
     const cookie = await signedInSession();
-    await postForm("/settings", cookie, { radioName: "ヒロ", place: "大船渡", voice: "", dial: "0.3" });
-    const who = t("letter.whoPlace", { who: t("letter.who", { name: "ヒロ" }), place: "大船渡" });
+    await postForm("/settings", cookie, { radioName: "ヒロ", placeCountry: "JP", placeRegion: "32", voice: "", dial: "0.3" });
+    const who = t("letter.whoPlace", { who: t("letter.who", { name: "ヒロ" }), place: "島根" });
     expect(await (await get(`/put?itemId=${item.id}`, cookie)).text()).toContain(who);
     await postForm("/letters", cookie, { itemId: item.id, body: "いい曲" });
     expect(await (await get(`/items/${item.id}`, cookie)).text()).toContain(who);

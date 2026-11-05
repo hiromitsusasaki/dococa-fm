@@ -95,20 +95,59 @@ describe("settings", () => {
 
   it("saves radio name, place and dial, then shows them", async () => {
     const cookie = cookieOf(await SELF.fetch(`${BASE}/settings`));
-    const post = await postForm("/settings", cookie, { radioName: "ヒロ", place: "大船渡", voice: "", dial: "0.8" });
+    const post = await postForm("/settings", cookie, { radioName: "ヒロ", placeCountry: "JP", placeRegion: "32", voice: "", dial: "0.8" });
     expect(post.status).toBe(303);
     expect(post.headers.get("location")).toBe("/settings?saved=1");
 
     const html = await (await SELF.fetch(`${BASE}/settings?saved=1`, { headers: { cookie } })).text();
     expect(html).toContain('value="ヒロ"');
-    expect(html).toContain('value="大船渡"');
+    expect(html).toMatch(/<option value="JP" selected/);
+    expect(html).toMatch(/<option value="32" selected/);
     expect(html).toContain('value="0.8"');
     expect(html).toContain("保存しました");
+    const row = await env.DB.prepare("SELECT place, place_country, place_region FROM listeners").first();
+    expect(row).toEqual({ place: "島根", place_country: "JP", place_region: "32" });
+  });
+
+  it("fills the place from a country alone and from a US state", async () => {
+    const cookie = cookieOf(await SELF.fetch(`${BASE}/settings`));
+    await postForm("/settings", cookie, { radioName: "", placeCountry: "PT", placeRegion: "", voice: "", dial: "0.5" });
+    expect(await env.DB.prepare("SELECT place, place_region FROM listeners").first()).toEqual({ place: "ポルトガル", place_region: null });
+    await postForm("/settings", cookie, { radioName: "", placeCountry: "US", placeRegion: "CA", voice: "", dial: "0.5" });
+    expect((await env.DB.prepare("SELECT place FROM listeners").first<{ place: string }>())!.place).toBe("カリフォルニア州、アメリカ");
+  });
+
+  it("clears the place when the country is set back to none", async () => {
+    const cookie = cookieOf(await SELF.fetch(`${BASE}/settings`));
+    await postForm("/settings", cookie, { radioName: "", placeCountry: "JP", placeRegion: "32", voice: "", dial: "0.5" });
+    await postForm("/settings", cookie, { radioName: "", placeCountry: "", placeRegion: "", voice: "", dial: "0.5" });
+    expect(await env.DB.prepare("SELECT place, place_country, place_region FROM listeners").first()).toEqual({ place: "", place_country: null, place_region: null });
+  });
+
+  it("keeps an old free-text place while no country has been chosen", async () => {
+    const cookie = cookieOf(await SELF.fetch(`${BASE}/settings`));
+    await env.DB.prepare("UPDATE listeners SET place = '大船渡'").run();
+    await postForm("/settings", cookie, { radioName: "ヒロ", placeCountry: "", placeRegion: "", voice: "", dial: "0.5" });
+    expect((await env.DB.prepare("SELECT place FROM listeners").first<{ place: string }>())!.place).toBe("大船渡");
+  });
+
+  it.each([
+    ["a region of another country", { placeCountry: "JP", placeRegion: "CA" }],
+    ["a region that is not listed", { placeCountry: "JP", placeRegion: "99" }],
+    ["a region without a country", { placeCountry: "", placeRegion: "13" }],
+    ["a region for a country with no list", { placeCountry: "PT", placeRegion: "13" }],
+    ["an unknown country", { placeCountry: "ZZ", placeRegion: "" }],
+  ])("rejects %s with 422 and saves nothing", async (_name, place) => {
+    const cookie = cookieOf(await SELF.fetch(`${BASE}/settings`));
+    const res = await postForm("/settings", cookie, { radioName: "ヒロ", ...place, voice: "", dial: "0.5" });
+    expect(res.status).toBe(422);
+    expect(await res.text()).toContain("入力を確認してください");
+    expect(await env.DB.prepare("SELECT radio_name, place_country FROM listeners").first()).toEqual({ radio_name: "", place_country: null });
   });
 
   it("rejects dial=1.5 with 422 and the error message, saving nothing", async () => {
     const cookie = cookieOf(await SELF.fetch(`${BASE}/settings`));
-    const res = await postForm("/settings", cookie, { radioName: "ヒロ", place: "", voice: "", dial: "1.5" });
+    const res = await postForm("/settings", cookie, { radioName: "ヒロ", voice: "", dial: "1.5" });
     expect(res.status).toBe(422);
     expect(await res.text()).toContain("入力を確認してください");
     const row = await env.DB.prepare("SELECT radio_name, dial FROM listeners").first<{ radio_name: string; dial: number }>();
@@ -117,7 +156,7 @@ describe("settings", () => {
 
   it("saves only the dial from the player with 204", async () => {
     const cookie = cookieOf(await SELF.fetch(`${BASE}/settings`));
-    await postForm("/settings", cookie, { radioName: "ヒロ", place: "大船渡", voice: "v", dial: "0.2" });
+    await postForm("/settings", cookie, { radioName: "ヒロ", placeCountry: "", placeRegion: "", voice: "v", dial: "0.2" });
     const res = await postForm("/settings/dial", cookie, { dial: "0.9" });
     expect(res.status).toBe(204);
     const row = await env.DB.prepare("SELECT radio_name, voice, dial FROM listeners").first();
@@ -133,7 +172,7 @@ describe("settings", () => {
 
   it("rejects a radio name over 20 characters", async () => {
     const cookie = cookieOf(await SELF.fetch(`${BASE}/settings`));
-    const res = await postForm("/settings", cookie, { radioName: "あ".repeat(21), place: "", voice: "", dial: "0.5" });
+    const res = await postForm("/settings", cookie, { radioName: "あ".repeat(21), voice: "", dial: "0.5" });
     expect(res.status).toBe(422);
   });
 
@@ -141,25 +180,24 @@ describe("settings", () => {
     ["radioName", "a@b.co"],
     ["radioName", "090-1234-5678"],
     ["radioName", "example.com"],
-    ["place", "https://x.example"],
   ])("rejects a %s that is contact details (%s) with 422", async (field, value) => {
     const cookie = cookieOf(await SELF.fetch(`${BASE}/settings`));
-    const res = await postForm("/settings", cookie, { radioName: "ヒロ", place: "", voice: "", dial: "0.5", [field]: value });
+    const res = await postForm("/settings", cookie, { radioName: "ヒロ", voice: "", dial: "0.5", [field]: value });
     expect(res.status).toBe(422);
     expect(await res.text()).toContain("入力を確認してください");
     const row = await env.DB.prepare("SELECT radio_name, place FROM listeners").first<{ radio_name: string; place: string }>();
     expect(row).toEqual({ radio_name: "", place: "" });
   });
 
-  it("accepts an ordinary radio name and place", async () => {
+  it("accepts an ordinary radio name", async () => {
     const cookie = cookieOf(await SELF.fetch(`${BASE}/settings`));
-    const res = await postForm("/settings", cookie, { radioName: "3人家族", place: "大船渡", voice: "", dial: "0.5" });
+    const res = await postForm("/settings", cookie, { radioName: "3人家族", voice: "", dial: "0.5" });
     expect(res.status).toBe(303);
   });
 
   it("escapes user text in the form", async () => {
     const cookie = cookieOf(await SELF.fetch(`${BASE}/settings`));
-    await postForm("/settings", cookie, { radioName: '<b>"x"</b>', place: "", voice: "", dial: "0.5" });
+    await postForm("/settings", cookie, { radioName: '<b>"x"</b>', voice: "", dial: "0.5" });
     const html = await (await SELF.fetch(`${BASE}/settings`, { headers: { cookie } })).text();
     expect(html).not.toContain("<b>");
     expect(html).toContain("&lt;b&gt;");
@@ -196,7 +234,7 @@ describe("public station settings", () => {
 
   it("saves a chosen slug (trimmed, lower-cased) and makes the station public", async () => {
     const cookie = await signedInSession("Hiro");
-    const res = await postForm("/settings", cookie, { radioName: "", place: "", voice: "", dial: "0.5", stationPublic: "1", stationSlug: "  My-Radio " });
+    const res = await postForm("/settings", cookie, { radioName: "", voice: "", dial: "0.5", stationPublic: "1", stationSlug: "  My-Radio " });
     expect(res.status).toBe(303);
     expect(await rowOf("Hiro")).toEqual({ pub: 1, slug: "my-radio" });
     const html = await (await get("/settings", cookie)).text();
@@ -205,7 +243,7 @@ describe("public station settings", () => {
 
   it("generates radio-xxxx when public is turned on without a slug, never from the google name", async () => {
     const cookie = await signedInSession("Hiro Sasaki");
-    await postForm("/settings", cookie, { radioName: "ちくわ", place: "", voice: "", dial: "0.5", stationPublic: "1" });
+    await postForm("/settings", cookie, { radioName: "ちくわ", voice: "", dial: "0.5", stationPublic: "1" });
     const row = await rowOf("Hiro Sasaki");
     expect(row?.pub).toBe(1);
     expect(row?.slug).toMatch(/^radio-[a-z0-9]{4}$/);
@@ -217,14 +255,14 @@ describe("public station settings", () => {
 
   it("keeps the slug when public is turned off, so the URL stays stable", async () => {
     const cookie = await signedInSession("Hiro");
-    await postForm("/settings", cookie, { radioName: "", place: "", voice: "", dial: "0.5", stationPublic: "1", stationSlug: "my-radio" });
-    await postForm("/settings", cookie, { radioName: "", place: "", voice: "", dial: "0.5" });
+    await postForm("/settings", cookie, { radioName: "", voice: "", dial: "0.5", stationPublic: "1", stationSlug: "my-radio" });
+    await postForm("/settings", cookie, { radioName: "", voice: "", dial: "0.5" });
     expect(await rowOf("Hiro")).toEqual({ pub: 0, slug: "my-radio" });
   });
 
   it("422s with the taken message when another listener has the chosen slug", async () => {
-    await postForm("/settings", await signedInSession("Hiro"), { radioName: "", place: "", voice: "", dial: "0.5", stationPublic: "1", stationSlug: "my-radio" });
-    const res = await postForm("/settings", await signedInSession("Other"), { radioName: "", place: "", voice: "", dial: "0.5", stationPublic: "1", stationSlug: "my-radio" });
+    await postForm("/settings", await signedInSession("Hiro"), { radioName: "", voice: "", dial: "0.5", stationPublic: "1", stationSlug: "my-radio" });
+    const res = await postForm("/settings", await signedInSession("Other"), { radioName: "", voice: "", dial: "0.5", stationPublic: "1", stationSlug: "my-radio" });
     expect(res.status).toBe(422);
     expect(await res.text()).toContain("その URL は使われています");
     expect(await rowOf("Other")).toEqual({ pub: 0, slug: null });
@@ -233,13 +271,13 @@ describe("public station settings", () => {
   it("422s for a slug that is too short or has bad characters", async () => {
     const cookie = await signedInSession("Hiro");
     for (const bad of ["ab", "has space", "UPPER_x"]) {
-      expect((await postForm("/settings", cookie, { radioName: "", place: "", voice: "", dial: "0.5", stationSlug: bad })).status).toBe(422);
+      expect((await postForm("/settings", cookie, { radioName: "", voice: "", dial: "0.5", stationSlug: bad })).status).toBe(422);
     }
   });
 
   it("ignores the station fields for an anonymous listener but still saves the rest", async () => {
     const cookie = await newAnon();
-    const res = await postForm("/settings", cookie, { radioName: "Tama", place: "", voice: "", dial: "0.5", stationPublic: "1", stationSlug: "sneaky" });
+    const res = await postForm("/settings", cookie, { radioName: "Tama", voice: "", dial: "0.5", stationPublic: "1", stationSlug: "sneaky" });
     expect(res.status).toBe(303);
     const row = await env.DB.prepare("SELECT radio_name AS n, station_public AS pub, station_slug AS slug FROM listeners WHERE radio_name = 'Tama'").first();
     expect(row).toEqual({ n: "Tama", pub: 0, slug: null });

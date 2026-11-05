@@ -39,6 +39,8 @@ export const listener = (over: Partial<Listener> = {}): Listener => ({
   id: "listener-0001",
   radioName: "ヒロ",
   place: "大船渡",
+  placeCountry: null,
+  placeRegion: null,
   voice: "",
   dial: 0.3,
   lang: "ja",

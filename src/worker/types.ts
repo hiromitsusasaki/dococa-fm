@@ -40,7 +40,12 @@ export type Letter = {
 export type Listener = {
   id: string;
   radioName: string;
+  /** The label letters and the DJ show; made from the two below, or free text on older rows. */
   place: string;
+  /** ISO 3166-1 alpha-2, from the country list. */
+  placeCountry: string | null;
+  /** A prefecture code (JP) or state code (US). */
+  placeRegion: string | null;
   voice: string;
   dial: number;
   lang: "ja" | "en";

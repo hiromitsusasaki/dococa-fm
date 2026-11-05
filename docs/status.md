@@ -47,6 +47,7 @@
 | Task 12 | レトロラジオのコントロール | 完了。`.knob` は 52px の円と coral の針（`--angle` を入力で更新、range は透明で上に重ねてキーボードも可）、ダイヤル面に ON AIR、目盛りの針は ON の間だけゆっくり動く（`prefers-reduced-motion` で止める） |
 | Task 13 | キービジュアル | 完了。`/` の先頭に `.hero`（`h1.wordmark` + タグライン + `<picture>`、760px 以下は `kv-mobile.jpg`）。他の局のページにはヒーローなし。スクリーンショットは `docs/screenshots/2026-11-05-hero-*.png` と `2026-11-05-radio-on.png` |
 | Task 14 | 文書と本番の設定 | 未着手 |
+| Task 15 | 土地を選択式に | 完了。設定の「土地」は国の select と、日本の都道府県・アメリカの州の select（`placeCountry` / `placeRegion`、0007 で列を追加）。地域は選んだ国のものだけ受け付け、合わないと 422。保存で `place` に `placeLabel(…, "ja")` の文字列（島根、カリフォルニア州、アメリカ、ポルトガル）を入れ、お便りと DJ はこれまでどおり `place` を読む。自由入力の欄は無くなり、国を選ぶまでは旧データの `place` をそのまま残す（「選ばない」に戻すと消える）。一覧は `src/worker/geo/places.ts`（日本語名は 204 か国（日本を含む）、残りは英語名）。デモ用シード（`scripts/lib/seed.ts`）のペルソナの `place` は自由文字列のまま（`POST /admin/listeners` 経由で `place` だけに入る）。スクリーンショットは `docs/screenshots/2026-11-05-settings-place.png` |
 
 ## 2026-11-04 最終修正 完了。次は本人作業（push・鍵・デプロイ・public 化）
 

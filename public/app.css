@@ -803,6 +803,21 @@ button.pill {
   margin-top: var(--sp-6);
 }
 
+.settings-place {
+  display: grid;
+  gap: var(--sp-4);
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.settings-place legend {
+  margin-bottom: var(--sp-1);
+  padding: 0;
+  color: var(--ink-2);
+}
+
 .settings label {
   display: grid;
   gap: var(--sp-1);
