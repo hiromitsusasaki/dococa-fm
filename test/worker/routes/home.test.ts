@@ -60,7 +60,10 @@ describe("GET /", () => {
     expect(html).toContain('data-next-url="/stations/world/next"');
     expect(html).toContain('data-grow="0"');
     expect(html).toContain('id="station-i18n"');
-    expect(html.replace(/<script[\s\S]*?<\/script>/g, "")).toContain('class="tune-in">ラジオをつける<');
+    const page = html.replace(/<script[\s\S]*?<\/script>/g, "");
+    expect(page).not.toContain("<h1");
+    expect(page).not.toContain("tune-in");
+    expect(html).toMatch(/id="station-i18n"[^>]*>[^<]*"station\.on":"ラジオをつける"/);
     expect(html).toContain("<title>Dococa FM</title>");
   });
 });

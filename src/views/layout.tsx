@@ -30,13 +30,6 @@ function SiteHeader({ listener, path, lang }: { listener?: Listener; path?: stri
   return (
     <header class="site-header">
       <a class="site-name wordmark" href="/">{t("app.name")}</a>
-      <div class="theme-toggle" role="group" aria-label={t("theme.label")}>
-        {THEMES.map((mode) => (
-          <button type="button" data-theme-set={mode} aria-pressed="false">
-            {t(`theme.${mode}`)}
-          </button>
-        ))}
-      </div>
       {listener && (
         <nav>
           <a href="/put">{t("home.put")}</a>
@@ -53,6 +46,20 @@ function SiteHeader({ listener, path, lang }: { listener?: Listener; path?: stri
           )}
         </nav>
       )}
+      <div class="theme-toggle" role="group" aria-label={t("theme.label")}>
+        {THEMES.map((mode) => (
+          <button type="button" data-theme-set={mode} aria-pressed="false" title={t(`theme.${mode}`)} aria-label={t(`theme.${mode}`)}>
+            {mode === "auto" ? (
+              <>
+                <span class="full" aria-hidden="true">{t("theme.auto")}</span>
+                <span class="short" aria-hidden="true">{t("theme.autoShort")}</span>
+              </>
+            ) : (
+              t(`theme.${mode}`)
+            )}
+          </button>
+        ))}
+      </div>
     </header>
   );
 }

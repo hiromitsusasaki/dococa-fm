@@ -49,17 +49,16 @@ export type StationPageProps = {
   og?: { title: string; description: string; url: string };
   /** Extra content under the player (the home page's links). */
   children?: unknown;
-  /** A hint line directly above the player. */
-  intro?: unknown;
+  /** The home page has no heading of its own yet (the hero brings it); other stations show their name. */
+  hideName?: boolean;
 };
 
 /** The station screen: the player mounts into `#station` and takes everything it needs from its data attributes. */
-export function StationPage({ stationKey, label, lang, listener, path, voice, dial, grow, title, og, children, intro }: StationPageProps) {
+export function StationPage({ stationKey, label, lang, listener, path, voice, dial, grow, title, og, children, hideName }: StationPageProps) {
   return (
     <Layout title={title ?? label} script="station" lang={lang} listener={listener} path={path} og={og}>
       <main class="station-page">
-        <h1 class="station-name">{label}</h1>
-        {intro}
+        {!hideName && <h1 class="station-name">{label}</h1>}
         <div
           id="station"
           data-station-key={stationKey}

@@ -15,6 +15,8 @@
   --hero: #ffffff;
   --knob: radial-gradient(circle at 35% 30%, #ffffff, #e9eef5 60%, #c9d3e0);
   --shadow: 0 18px 40px rgba(20, 40, 70, 0.12);
+  --on-magenta: #141b31;
+  --label: #c93d4d;
   --lamp-glow: rgba(255, 216, 107, 0.55);
   color-scheme: light;
 
@@ -58,6 +60,8 @@
     --coral: #ff8a95;
     --magenta: #f06cb6;
     --lemon: #ffe08a;
+    --on-magenta: #121a2e;
+    --label: var(--coral);
     --hero: #1a2440;
     --knob: radial-gradient(circle at 35% 30%, rgba(255, 255, 255, 0.38), rgba(255, 255, 255, 0.08) 55%, rgba(0, 0, 0, 0.3));
     color-scheme: dark;
@@ -77,6 +81,8 @@
   --coral: #ff8a95;
   --magenta: #f06cb6;
   --lemon: #ffe08a;
+  --on-magenta: #121a2e;
+  --label: var(--coral);
   --hero: #1a2440;
   --knob: radial-gradient(circle at 35% 30%, rgba(255, 255, 255, 0.38), rgba(255, 255, 255, 0.08) 55%, rgba(0, 0, 0, 0.3));
   color-scheme: dark;
@@ -199,26 +205,55 @@ a {
 
 .theme-toggle {
   display: inline-flex;
-  gap: 6px;
-  flex-wrap: wrap;
 }
 
 .theme-toggle button {
-  min-height: 44px;
-  padding: 0 var(--sp-3);
-  border: 1px solid var(--line);
-  border-radius: var(--r-pill);
-  background: var(--haze);
+  position: relative;
+  min-height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--line-strong);
+  border-left-width: 0;
+  background: transparent;
   color: var(--ink);
   font: inherit;
-  font-size: 13px;
+  font-size: 12px;
   cursor: pointer;
 }
 
+/* 44px hit area around the 30px visual height. */
+.theme-toggle button::after {
+  content: "";
+  position: absolute;
+  inset: -7px 0;
+}
+
+.theme-toggle button:first-child {
+  border-left-width: 1px;
+  border-radius: var(--r-pill) 0 0 var(--r-pill);
+}
+
+.theme-toggle button:last-child {
+  border-radius: 0 var(--r-pill) var(--r-pill) 0;
+}
+
 .theme-toggle button[aria-pressed="true"] {
-  border-color: transparent;
   background: var(--ink);
+  border-color: var(--ink);
   color: var(--paper);
+}
+
+.theme-toggle .short {
+  display: none;
+}
+
+@media (max-width: 480px) {
+  .theme-toggle .full {
+    display: none;
+  }
+
+  .theme-toggle .short {
+    display: inline;
+  }
 }
 
 /* Panels: the radio, up next, now playing. The 4px warm band on top is the one place warm colour spreads. */
@@ -299,12 +334,6 @@ a {
   font-size: var(--fs-20);
 }
 
-.tune-in {
-  margin: 0 0 var(--sp-3);
-  color: var(--ink-2);
-  font-size: var(--fs-14);
-}
-
 .station {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
@@ -339,7 +368,7 @@ a {
   gap: 10px;
   padding-bottom: 10px;
   border-bottom: 1px dashed var(--line);
-  color: var(--coral);
+  color: var(--label);
   font-size: 12px;
   letter-spacing: 0.08em;
 }
@@ -404,7 +433,7 @@ a {
 }
 
 .control-label {
-  color: var(--coral);
+  color: var(--label);
   font-size: 11px;
   letter-spacing: 0.08em;
 }
@@ -483,7 +512,7 @@ a {
 
 .eyebrow {
   margin: 0;
-  color: var(--coral);
+  color: var(--label);
   font-size: 11px;
   letter-spacing: 0.1em;
 }
@@ -586,7 +615,7 @@ button.pill {
 .pill.hot {
   border-color: transparent;
   background: var(--magenta);
-  color: #fff;
+  color: var(--on-magenta);
   font-weight: 700;
 }
 
@@ -617,7 +646,7 @@ button.pill {
 /* Up next */
 .side h2 {
   margin: 0 0 var(--sp-2);
-  color: var(--coral);
+  color: var(--label);
   font-weight: 700;
   font-size: 12px;
   letter-spacing: 0.08em;
@@ -681,6 +710,28 @@ button.pill {
   padding: var(--sp-8) var(--sp-4);
 }
 
+.item-page,
+.put,
+.takedown,
+.bookmarklet,
+.reactions-page,
+.me {
+  max-width: 40rem;
+  margin: 0 auto;
+  padding: var(--sp-8) var(--sp-4);
+}
+
+.start,
+.home,
+.episode-page,
+.archive {
+  display: grid;
+  gap: var(--sp-4);
+  max-width: 40rem;
+  margin: 0 auto;
+  padding: var(--sp-8) var(--sp-4);
+}
+
 .settings-form,
 .settings-mcp {
   display: grid;
@@ -694,16 +745,8 @@ button.pill {
   color: var(--ink-2);
 }
 
-.settings input[type="text"] {
-  padding: var(--sp-2) var(--sp-3);
-  border: 1px solid var(--line-strong);
-  border-radius: var(--r-md);
-  background: var(--panel);
-  color: var(--ink);
-  font: inherit;
-}
-
-.settings input[type="range"] {
+.settings input[type="range"],
+.player-dial input {
   accent-color: var(--magenta);
 }
 
@@ -712,35 +755,115 @@ button.pill {
   font-size: var(--fs-14);
 }
 
-.settings button {
+/* Text fields */
+.settings input[type="text"],
+.settings select,
+.put input,
+.put textarea,
+.start-form input,
+.takedown input,
+.takedown textarea,
+.letter-actions input[type="text"],
+.player .reply input,
+.react .reply input {
+  min-height: 44px;
+  padding: var(--sp-2) var(--sp-3);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-md);
+  background: var(--panel);
+  color: var(--ink);
+  font: inherit;
+}
+
+.player .reply input {
+  flex: 1;
+  min-width: 0;
+}
+
+.start-form input {
+  width: 100%;
+}
+
+/* Buttons: outlined in coral; the filled primary is magenta with dark text. */
+.out-links a,
+a.button,
+.item-page button,
+.put button,
+.takedown button,
+.start-form button,
+.player button,
+.player a.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   justify-self: start;
+  min-height: 44px;
+  padding: var(--sp-2) var(--sp-4);
+  border: 1px solid var(--coral);
+  border-radius: var(--r-pill);
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  text-decoration: none;
+  text-align: center;
+  cursor: pointer;
+}
+
+.player button,
+.player a.button {
+  padding: var(--sp-2) var(--sp-6);
+}
+
+.settings button,
+.player button.primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  justify-self: start;
+  min-height: 44px;
   padding: var(--sp-2) var(--sp-6);
   border: 0;
   border-radius: var(--r-pill);
   background: var(--magenta);
-  color: var(--ink);
+  color: var(--on-magenta);
   font: inherit;
+  font-weight: 700;
   cursor: pointer;
+}
+
+button.quiet {
+  border-color: transparent;
+  color: var(--ink-2);
+  font-size: var(--fs-14);
+}
+
+button:disabled,
+.player button:disabled {
+  color: var(--ink-2);
+  cursor: default;
+}
+
+.put-form button {
+  margin-top: var(--sp-2);
+}
+
+.player a:focus-visible,
+.player input:focus-visible {
+  outline: 2px solid var(--sky);
+  outline-offset: 2px;
 }
 
 .settings-note {
   color: var(--sky);
 }
 
-.settings-error {
+.settings-error,
+.form-error,
+.player-message {
   color: var(--magenta);
 }
 
-.item-page,
-.put,
-.takedown,
-.bookmarklet,
-.reactions-page {
-  max-width: 40rem;
-  margin: 0 auto;
-  padding: var(--sp-8) var(--sp-4);
-}
-
+/* Items and letters */
 .item-card {
   display: flex;
   gap: var(--sp-4);
@@ -752,7 +875,18 @@ button.pill {
   object-fit: cover;
 }
 
-.item-kind,
+.item-card h1,
+.item-card h2 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.item-kind {
+  color: var(--magenta);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+}
+
 .item-creator,
 .muted,
 .letter-who,
@@ -770,20 +904,8 @@ button.pill {
   padding: 0;
 }
 
-.out-links a,
-a.button,
-.item-page button,
-.put button,
-.takedown button {
-  display: inline-block;
-  padding: var(--sp-2) var(--sp-4);
-  border: 1px solid var(--line-strong);
-  border-radius: var(--r-pill);
-  background: var(--panel);
-  color: var(--ink);
-  font: inherit;
-  text-decoration: none;
-  cursor: pointer;
+.out-links li {
+  display: contents;
 }
 
 .letters ul,
@@ -824,20 +946,6 @@ a.button,
   gap: var(--sp-2);
 }
 
-.letter-actions input[type="text"],
-.put input,
-.start-form input,
-.put textarea,
-.takedown input,
-.takedown textarea {
-  padding: var(--sp-2) var(--sp-3);
-  border: 1px solid var(--line-strong);
-  border-radius: var(--r-md);
-  background: var(--panel);
-  color: var(--ink);
-  font: inherit;
-}
-
 .put label,
 .takedown label,
 .put-form {
@@ -846,28 +954,10 @@ a.button,
   margin-top: var(--sp-4);
 }
 
-button.quiet {
-  border-color: transparent;
-  color: var(--ink-2);
-  font-size: var(--fs-14);
-}
-
-.form-error {
-  color: var(--magenta);
-}
-
 .bookmarklet pre {
   white-space: pre-wrap;
   word-break: break-all;
   color: var(--ink-2);
-}
-
-.start {
-  display: grid;
-  gap: var(--sp-4);
-  max-width: 40rem;
-  margin: 0 auto;
-  padding: var(--sp-8) var(--sp-4);
 }
 
 .start-form {
@@ -884,32 +974,6 @@ button.quiet {
   border-radius: var(--r-md);
 }
 
-.start-form input {
-  width: 100%;
-  box-sizing: border-box;
-}
-
-.start-form button {
-  justify-self: start;
-  padding: var(--sp-2) var(--sp-4);
-  border: 1px solid var(--line-strong);
-  border-radius: var(--r-pill);
-  background: var(--panel);
-  color: var(--ink);
-  font: inherit;
-  cursor: pointer;
-}
-
-.home,
-.episode-page,
-.archive {
-  display: grid;
-  gap: var(--sp-4);
-  max-width: 40rem;
-  margin: 0 auto;
-  padding: var(--sp-8) var(--sp-4);
-}
-
 .recent-items {
   display: grid;
   gap: var(--sp-3);
@@ -920,6 +984,10 @@ button.quiet {
 .recent-items a {
   color: inherit;
   text-decoration: none;
+}
+
+.recent-items a:hover .item-card h2 {
+  text-decoration: underline;
 }
 
 .program {
@@ -941,7 +1009,7 @@ button.quiet {
   list-style: none;
 }
 
-/* Player */
+/* Episode player (Task 12 gives it the retro controls) */
 .player {
   display: grid;
   gap: var(--sp-4);
@@ -956,7 +1024,7 @@ button.quiet {
   min-height: 7rem;
   padding: var(--sp-4);
   border: 1px solid var(--line);
-  border-radius: var(--r-xl);
+  border-radius: 12px;
   background: var(--haze);
 }
 
@@ -967,7 +1035,6 @@ button.quiet {
 
 .player-message {
   margin: 0;
-  color: var(--magenta);
 }
 
 .player-controls,
@@ -978,56 +1045,10 @@ button.quiet {
   align-items: center;
 }
 
-.player button,
-.player a.button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  justify-self: start;
-  min-height: 44px;
-  padding: var(--sp-2) var(--sp-6);
-  border: 1px solid var(--line-strong);
-  border-radius: var(--r-pill);
-  background: var(--panel);
-  color: var(--ink);
-  font: inherit;
-  text-decoration: none;
-  text-align: center;
-  cursor: pointer;
-}
-
-.player button.primary {
-  border-color: transparent;
-  background: var(--magenta);
-}
-
-.player button:disabled {
-  color: var(--ink-2);
-  cursor: default;
-}
-
-.player button:focus-visible,
-.player a:focus-visible,
-.player input:focus-visible {
-  outline: 2px solid var(--sky);
-  outline-offset: 2px;
-}
-
 .player .reply {
   display: flex;
   flex: 1 1 100%;
   gap: var(--sp-2);
-}
-
-.player .reply input {
-  flex: 1;
-  min-width: 0;
-  padding: var(--sp-2) var(--sp-3);
-  border: 1px solid var(--line-strong);
-  border-radius: var(--r-md);
-  background: var(--panel);
-  color: var(--ink);
-  font: inherit;
 }
 
 .player-again p {
@@ -1038,118 +1059,4 @@ button.quiet {
   display: grid;
   gap: var(--sp-1);
   color: var(--ink-2);
-}
-
-.player-dial input {
-  accent-color: var(--magenta);
-}
-
-/* Primary buttons and links on the page layer. */
-.settings button,
-.player button.primary {
-  min-height: 44px;
-  border: 0;
-  background: var(--magenta);
-  color: #fff;
-  font-weight: 700;
-}
-
-.out-links a,
-a.button,
-.item-page button,
-.put button,
-.takedown button,
-.start-form button,
-.player button,
-.player a.button {
-  min-height: 44px;
-  border-color: var(--coral);
-  color: var(--ink);
-}
-
-.player button.primary {
-  border-color: transparent;
-  color: #fff;
-}
-
-.out-links a,
-a.button,
-.item-page button,
-.put button,
-.takedown button,
-.start-form button {
-  display: inline-flex;
-  align-items: center;
-  background: transparent;
-}
-
-.out-links li {
-  display: contents;
-}
-
-.settings input[type="text"],
-.settings select,
-.put input,
-.put textarea,
-.start-form input,
-.takedown input,
-.takedown textarea,
-.letter-actions input[type="text"],
-.player .reply input,
-.react .reply input {
-  min-height: 44px;
-  padding: var(--sp-2) var(--sp-3);
-  border: 1px solid var(--line-strong);
-  border-radius: var(--r-md);
-  background: var(--panel);
-  color: var(--ink);
-  font: inherit;
-}
-
-.letter,
-.player-line {
-  background: var(--haze);
-}
-
-.item-card h1,
-.item-card h2 {
-  margin: 0;
-  font-size: 18px;
-}
-
-.item-kind {
-  color: var(--magenta);
-  font-size: 11px;
-  letter-spacing: 0.08em;
-}
-
-.recent-items a:hover .item-card h2 {
-  text-decoration: underline;
-}
-
-.settings-error,
-.form-error,
-.player-message {
-  color: var(--magenta);
-}
-
-.settings-note {
-  color: var(--sky);
-}
-
-.player button:disabled,
-button:disabled {
-  color: var(--ink-2);
-}
-
-.player button:focus-visible,
-.player a:focus-visible,
-.player input:focus-visible {
-  outline: 2px solid var(--sky);
-  outline-offset: 2px;
-}
-
-.put-form button {
-  justify-self: start;
-  margin-top: var(--sp-2);
 }
