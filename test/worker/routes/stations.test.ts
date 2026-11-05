@@ -194,14 +194,15 @@ describe("GET /stations/:key (page)", () => {
     expect(await (await page("mine", cookie)).text()).toContain('data-grow="0"');
   });
 
-  it("a public station page carries og tags, titled with the owner's display name", async () => {
-    const owner = await createListener(env.DB, { radioName: "ヒロ" });
-    await updateListener(env.DB, owner.id, { stationSlug: "hiro", stationPublic: true, displayName: "Hiro" });
+  it("a public station page carries og tags, titled with the owner's radio name, never the google display name", async () => {
+    const owner = await createListener(env.DB, { radioName: "ちくわ" });
+    await updateListener(env.DB, owner.id, { stationSlug: "hiro", stationPublic: true, displayName: "Hiro Sasaki" });
     const html = await (await page("s:hiro", await newSession())).text();
-    expect(html).toContain('<meta property="og:title" content="Hiroさんのラジオ"');
+    expect(html).toContain('<meta property="og:title" content="ちくわさんのラジオ"');
     expect(html).toContain('<meta property="og:description" content="世界のどこかにいる誰かの好きなものが聴こえてくるラジオ"');
     expect(html).toContain('<meta property="og:url" content="http://127.0.0.1:5173/stations/s:hiro"');
-    expect(html).toContain("<title>Hiroさんのラジオ | Dococa FM</title>");
+    expect(html).toContain("<title>ちくわさんのラジオ | Dococa FM</title>");
+    expect(html).not.toContain("Hiro");
   });
 
   it("turning the station off makes the page a 404 again", async () => {
@@ -220,5 +221,13 @@ describe("GET /stations/:key (page)", () => {
     const res = await postNext("s:hiro", cookie);
     expect(res.status).toBe(409);
     expect(await res.json()).toEqual({ error: "empty" });
+  });
+
+  it("an owner without a radio name is anonymous on the page, not named after their google account", async () => {
+    const owner = await createListener(env.DB);
+    await updateListener(env.DB, owner.id, { stationSlug: "hiro", stationPublic: true, displayName: "Hiro Sasaki" });
+    const html = await (await page("s:hiro", await newSession())).text();
+    expect(html).toContain("名無しのリスナーさんのラジオ");
+    expect(html).not.toContain("Hiro");
   });
 });

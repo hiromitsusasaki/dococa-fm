@@ -203,26 +203,16 @@ describe("public station settings", () => {
     expect(html).toContain('href="http://127.0.0.1:5173/stations/s:my-radio"');
   });
 
-  it("generates a slug from the display name when public is turned on without one", async () => {
+  it("generates radio-xxxx when public is turned on without a slug, never from the google name", async () => {
     const cookie = await signedInSession("Hiro Sasaki");
-    await postForm("/settings", cookie, { radioName: "", place: "", voice: "", dial: "0.5", stationPublic: "1" });
-    expect(await rowOf("Hiro Sasaki")).toEqual({ pub: 1, slug: "hiro-sasaki" });
+    await postForm("/settings", cookie, { radioName: "ちくわ", place: "", voice: "", dial: "0.5", stationPublic: "1" });
+    const row = await rowOf("Hiro Sasaki");
+    expect(row?.pub).toBe(1);
+    expect(row?.slug).toMatch(/^radio-[a-z0-9]{4}$/);
   });
 
-  it("falls back to radio-xxxx when the name has no usable letters", async () => {
-    const cookie = await signedInSession("ヒロ");
-    await postForm("/settings", cookie, { radioName: "", place: "", voice: "", dial: "0.5", stationPublic: "1" });
-    expect((await rowOf("ヒロ"))?.slug).toMatch(/^radio-[a-z0-9]{4}$/);
-  });
-
-  it("appends a random suffix when the generated slug is taken", async () => {
-    await postForm("/settings", await signedInSession("Hiro"), { radioName: "", place: "", voice: "", dial: "0.5", stationPublic: "1" });
-    const other = await signedInSession("Other");
-    await env.DB.prepare("UPDATE listeners SET display_name = 'Hiro' WHERE display_name = 'Other'").run();
-    await postForm("/settings", other, { radioName: "", place: "", voice: "", dial: "0.5", stationPublic: "1" });
-    const rows = await env.DB.prepare("SELECT station_slug AS slug FROM listeners WHERE station_slug IS NOT NULL ORDER BY station_slug").all<{ slug: string }>();
-    expect(rows.results).toHaveLength(2);
-    expect(rows.results.map((r) => r.slug).some((s) => /^hiro-[a-z0-9]{4}$/.test(s))).toBe(true);
+  it("explains that only the radio name appears on the public page", async () => {
+    expect(await (await get("/settings", await signedInSession())).text()).toContain("公開ページにはラジオネームだけが出ます");
   });
 
   it("keeps the slug when public is turned off, so the URL stays stable", async () => {

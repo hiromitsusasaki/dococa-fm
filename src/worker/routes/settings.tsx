@@ -7,7 +7,7 @@ import { newMcpToken, updateListener } from "../db/listeners";
 import { looksLikeContact } from "../program/pii-patterns";
 import type { Env } from "../env";
 import { tFor } from "../i18n/t";
-import { SLUG, slugFromName, slugSuffix, stationUrl } from "../program/station";
+import { SLUG, slugSuffix, stationUrl } from "../program/station";
 import { currentPath } from "../auth/require-signin";
 import type { Listener } from "../types";
 
@@ -80,6 +80,7 @@ function SettingsPage(props: { values: FormValues; listener: Listener; path: str
                 <input type="text" name="stationSlug" maxlength={24} pattern="[a-z0-9-]{3,24}" value={station.slug} autocapitalize="none" spellcheck={false} />
                 <small>{t("settings.stationSlugHelp")}</small>
               </label>
+              <p class="muted">{t("settings.stationNameHint")}</p>
               {station.taken && <p class="settings-error" role="alert">{t("settings.slugTaken")}</p>}
               {station.url && (
                 <p class="settings-station-url">
@@ -132,7 +133,7 @@ const stationViewOf = (env: Env, listener: Listener, over: Partial<StationView> 
     ? undefined
     : { isPublic: listener.stationPublic, slug: listener.stationSlug ?? "", url: listener.stationSlug ? stationUrl(env, listener.stationSlug) : null, ...over };
 
-const isUniqueViolation = (e: unknown) => String((e as Error)?.message ?? e).includes("UNIQUE");
+const isUniqueViolation = (e: unknown) => String((e as Error)?.message ?? e).includes("station_slug");
 
 const mcpUrlOf = (env: Env, listener: Listener) => `${env.PUBLIC_ORIGIN}/mcp/${listener.mcpToken}`;
 
@@ -164,7 +165,7 @@ settings.post(
 
     const isPublic = stationPublic === "1";
     const chosen = stationSlug || null;
-    let slug = chosen ?? listener.stationSlug ?? (isPublic ? slugFromName(listener.displayName) : null);
+    let slug = chosen ?? listener.stationSlug ?? (isPublic ? `radio-${slugSuffix()}` : null);
     // A generated slug that collides gets a random suffix once; a slug the listener chose that collides is theirs to change.
     for (let attempt = 0; ; attempt++) {
       try {

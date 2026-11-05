@@ -28,17 +28,19 @@ export function stationColumn(key: StationKey | undefined): string {
 export function stationLabel(key: StationKey, ownerName: string, lang: Lang): string {
   if (key.kind === "world") return t("station.world", undefined, lang);
   if (key.kind === "mine") return t("station.mine", undefined, lang);
-  return t("station.public", { name: ownerName }, lang);
+  // The owner's own radio name; never the Google display name, and an owner without one is anonymous.
+  return t("station.public", { name: ownerName || t("listener.anonymous", undefined, lang) }, lang);
 }
 
 /** Where a public station lives; the one builder for `/me`, the settings page and the og tags. */
 export const stationUrl = (env: Pick<Env, "PUBLIC_ORIGIN">, slug: string): string => `${env.PUBLIC_ORIGIN}/stations/s:${slug}`;
 
-/** Four random base36 characters, for a slug that would otherwise collide or be empty. */
-export const slugSuffix = (): string => Array.from(crypto.getRandomValues(new Uint8Array(4)), (b) => (b % 36).toString(36)).join("");
-
-/** A slug from a display name: lower-case ascii words joined by hyphens, at most 24 characters. Too short to be a slug gets `radio-` and a random suffix. */
-export function slugFromName(name: string): string {
-  const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 24).replace(/-+$/, "");
-  return slug.length >= 3 ? slug : `radio-${slugSuffix()}`;
+/** Four random lower-case base36 characters, drawn without modulo bias, for an automatic slug or a collision suffix. */
+export function slugSuffix(): string {
+  let out = "";
+  while (out.length < 4) {
+    const [b] = crypto.getRandomValues(new Uint8Array(1));
+    if (b! < 252) out += (b! % 36).toString(36); // 252 = 7 * 36, so every character is equally likely
+  }
+  return out;
 }

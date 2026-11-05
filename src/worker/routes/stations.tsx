@@ -23,7 +23,7 @@ async function resolve({ DB: db, PUBLIC_ORIGIN }: Pick<Env, "DB" | "PUBLIC_ORIGI
   if (!parsed) return null;
   if (parsed.kind !== "public") return { key: parsed, ownerName: "" };
   const owner = await getListenerBySlug(db, parsed.slug);
-  return owner ? { key: { kind: "public", ownerId: owner.id }, ownerName: owner.displayName || owner.radioName, url: stationUrl({ PUBLIC_ORIGIN }, parsed.slug) } : null;
+  return owner ? { key: { kind: "public", ownerId: owner.id }, ownerName: owner.radioName, url: stationUrl({ PUBLIC_ORIGIN }, parsed.slug) } : null;
 }
 
 /** What the station player needs to know: the labels it shows, as `t()` values, since `t()` is server-only. */

@@ -196,6 +196,7 @@ export const en: Record<keyof typeof ja, string> = {
   "settings.stationSlug": "Radio URL",
   "settings.stationSlugHelp": "Lower-case letters, digits and hyphens, 3 to 24 characters",
   "settings.stationUrl": "Public URL",
+  "settings.stationNameHint": "Only your radio name appears on the public page",
   "settings.slugTaken": "That URL is already taken",
   "put.register": "Add to my favorites",
   "put.imported.top": "Most played",
