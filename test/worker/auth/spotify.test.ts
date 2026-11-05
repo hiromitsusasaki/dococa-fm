@@ -8,7 +8,7 @@ import { createListener, getListener, updateListener } from "../../../src/worker
 import { t } from "../../../src/worker/i18n/t";
 import { json, stubFetch } from "../../helpers/fetch";
 import { resetDb } from "../../helpers/db";
-import { BASE, signedInSession } from "../routes/helpers";
+import { BASE, newSession, signedInSession } from "../routes/helpers";
 
 let warn: ReturnType<typeof vi.spyOn>;
 const mutable = env as { SPOTIFY_CLIENT_ID: string };
@@ -249,6 +249,14 @@ describe("spotify routes", () => {
     return { session, pkce, state };
   }
   const callback = (qs: string, cookie: string) => SELF.fetch(`${BASE}/auth/spotify/callback?${qs}`, { redirect: "manual", headers: { cookie } });
+
+  it("sends an anonymous listener to sign in instead of importing at the callback", async () => {
+    const { pkce, state } = await begin();
+    const anonymous = (await newSession()).split(";")[0]!;
+    const res = await callback(`code=abc&state=${state}`, `${anonymous}; ${pkce}`);
+    expect(res.status).toBe(303);
+    expect(res.headers.get("location")).toMatch(/^\/auth\/google\?next=/);
+  });
 
   it("rejects a callback whose state does not match", async () => {
     const { session, pkce } = await begin();

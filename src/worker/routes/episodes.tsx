@@ -106,7 +106,11 @@ episodes.get("/episodes/:id", async (c) => {
   // Letters rejected or taken down since the episode was made are left out of every exit.
   const loaded = await loadPublicEpisode(c.env.DB, episode, c.get("listener").lang);
   const { segments, originals } = loaded;
-  if (asJson) return c.json({ ...episode, segments, originals });
+  // `station` can carry another listener's id (`public:<id>`) and `report` is the verifier's internals; neither leaves the server.
+  if (asJson) {
+    const { station: _station, report: _report, ...shown } = episode;
+    return c.json({ ...shown, segments, originals });
+  }
 
   const listener = c.get("listener");
   const lang = listener.lang;

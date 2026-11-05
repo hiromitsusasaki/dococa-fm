@@ -337,6 +337,17 @@ describe("GET /episodes/:id", () => {
     expect(ids(json.segments)).not.toContain(line.letterId);
   });
 
+  it("does not put station or report in the episode json", async () => {
+    const { cookie, id } = await make();
+    await env.DB.prepare("UPDATE episodes SET station = 'public:someone-else' WHERE id = ?").bind(id).run();
+    const text = await (await get(`/episodes/${id}.json`, cookie)).text();
+    const json = JSON.parse(text) as Record<string, unknown>;
+    expect(json).not.toHaveProperty("station");
+    expect(json).not.toHaveProperty("report");
+    expect(json.id).toBe(id);
+    expect(text).not.toContain("someone-else");
+  });
+
   it("drops a found voice's source line together with the rejected found voice", async () => {
     const { cookie, id, far1 } = await make();
     const found = await insertLetter(env.DB, letterDraft(far1.id, { kind: "found", listenerId: null, radioName: "", place: "", sourceAuthor: "@jazzcat", sourceUrl: "https://youtu.be/x", body: "so good", bodyJa: "とてもいい" }));

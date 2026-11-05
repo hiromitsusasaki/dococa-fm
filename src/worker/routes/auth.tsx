@@ -47,7 +47,7 @@ auth.get("/auth/spotify", requireSignin, async (c) => {
   return c.redirect(authorizeUrl(c.env, pkce.challenge, pkce.state), 302);
 });
 
-auth.get("/auth/spotify/callback", async (c) => {
+auth.get("/auth/spotify/callback", requireSignin, async (c) => {
   const lang = c.get("listener").lang;
   const t = tFor(lang);
   if (!c.env.SPOTIFY_CLIENT_ID) return c.html(<Notice message={t("spotify.notConfigured")} listener={c.get("listener")} path={currentPath(c)} />);
