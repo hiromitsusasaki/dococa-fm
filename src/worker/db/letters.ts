@@ -127,6 +127,21 @@ export async function listReactionsToListener(db: D1Database, listenerId: string
   return out;
 }
 
+/** The newest public 私も and 一言 that others left on the listener's public letters, whatever the item. One query, cut in SQL. */
+export async function listRecentReactionsToListener(db: D1Database, listenerId: string, limit: number): Promise<Letter[]> {
+  const { results } = await db
+    .prepare(
+      `${SELECT} JOIN letters p ON p.id = letters.parent_letter_id
+       WHERE p.listener_id = ?1 AND p.status = 'public' AND letters.status = 'public'
+         AND letters.kind IN ('watashimo', 'reply') AND (letters.listener_id IS NULL OR letters.listener_id != ?1)
+       ORDER BY letters.created_at DESC, letters.id DESC
+       LIMIT ?2`,
+    )
+    .bind(listenerId, limit)
+    .all<Row>();
+  return results.map(rowToLetter);
+}
+
 export async function listReactionsForLetter(db: D1Database, letterId: string): Promise<Letter[]> {
   const { results } = await db
     .prepare(`${SELECT} WHERE letters.parent_letter_id = ? AND letters.status = 'public' ORDER BY letters.created_at ASC, letters.id ASC`)

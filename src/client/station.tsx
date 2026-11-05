@@ -85,7 +85,7 @@ export function mountStation(root: HTMLElement, opts: StationOptions) {
     return playable(episode) ? { ok: true, view: episode } : { ok: false, reason: "failed" };
   }
 
-  /** The listener's latest episode, to pick up where the last visit left off; null when there is none or it cannot be read. */
+  /** The listener's latest episode on this station, read from its beginning; null when there is none or it cannot be read. */
   async function requestResume(): Promise<PlayerEpisode | null> {
     try {
       const res = await fetch(opts.resumeUrl);

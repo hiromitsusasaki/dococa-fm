@@ -6,7 +6,7 @@ import type { Variables } from "../auth/session";
 import { listFavorites } from "../db/history";
 import { getItemsByIds } from "../db/items";
 import { listHeardLetters } from "../db/listens";
-import { listLettersByListener, listReactionsToListener } from "../db/letters";
+import { listRecentReactionsToListener } from "../db/letters";
 import type { Env } from "../env";
 import { displayText } from "../letters/display";
 import { tFor } from "../i18n/t";
@@ -24,11 +24,7 @@ me.get("/me", requireSignin, async (c) => {
   const lang = listener.lang;
   const t = tFor(lang);
   const favorites = await listFavorites(c.env.DB, listener.id, FAVORITES_LIMIT);
-  const sent = await listLettersByListener(c.env.DB, listener.id);
-  // The query pages through the ids in chunks, each newest first; merge them before cutting.
-  const reactions = (await listReactionsToListener(c.env.DB, listener.id, [...new Set(sent.map((l) => l.itemId))]))
-    .sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.id.localeCompare(a.id))
-    .slice(0, REACTIONS_LIMIT);
+  const reactions = await listRecentReactionsToListener(c.env.DB, listener.id, REACTIONS_LIMIT);
   const items = await getItemsByIds(c.env.DB, reactions.map((r) => r.itemId));
   const heard = await listHeardLetters(c.env.DB, listener.id);
   const publicUrl = listener.stationPublic && listener.stationSlug ? stationUrl(c.env, listener.stationSlug) : null;

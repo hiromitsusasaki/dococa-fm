@@ -118,7 +118,7 @@ Phase 2（ラジオ中心の体験への作り替え）の実装は、すべて 
   ```bash
   pnpm wrangler d1 create dococa                 # 出た database_id を wrangler.jsonc の d1_databases に書く
   pnpm wrangler r2 bucket create dococa-audio
-  for k in ANTHROPIC_API_KEY SPOTIFY_CLIENT_ID GOOGLE_TTS_API_KEY TMDB_API_KEY YOUTUBE_API_KEY ADMIN_TOKEN SESSION_SECRET; do pnpm wrangler secret put $k; done
+  for k in ANTHROPIC_API_KEY SPOTIFY_CLIENT_ID GOOGLE_TTS_SA_JSON TMDB_API_KEY YOUTUBE_API_KEY ADMIN_TOKEN SESSION_SECRET; do pnpm wrangler secret put $k; done
   # 任意: EPISODE_DAILY_LIMIT、EPISODE_GLOBAL_DAILY_LIMIT、CLOUD_TTS_GLOBAL_DAILY_LIMIT、RATE_LIMIT_PER_MINUTE、CLAUDE_MODEL、GEMINI_TTS_MODEL、GEMINI_TTS_VOICE
   # DEV_SKIP_CLAUDE は本番に入れない（開発専用）
   # wrangler.jsonc の vars.PUBLIC_ORIGIN を本番 URL にする（必須。空のままだと /healthz 以外が 500。--var は次の deploy で空に戻るので使わない）
@@ -170,7 +170,7 @@ Phase 2（ラジオ中心の体験への作り替え）の実装は、すべて 
 | Spotify Developer Dashboard のアプリ（redirect `http://127.0.0.1:5173/auth/spotify/callback`、開発モード） | Task 6 | `.dev.vars` の `SPOTIFY_CLIENT_ID` |
 | TMDB API キー | Task 3 | `.dev.vars` の `TMDB_API_KEY` |
 | YouTube Data API v3 キー | Task 13 | `.dev.vars` の `YOUTUBE_API_KEY` |
-| Google Cloud Text-to-Speech の API キー（Gemini-TTS が使えるプロジェクト） | Task 11 | `.dev.vars` の `GOOGLE_TTS_API_KEY` |
+| Google Cloud のサービスアカウント（Vertex AI User。Gemini-TTS 用） | Task 11 | `.dev.vars` の `GOOGLE_TTS_SA_JSON` |
 | Anthropic API キー | Task 5 以降 | `.dev.vars` の `ANTHROPIC_API_KEY` |
 | Cloudflare アカウントで `wrangler login`、D1 / R2 の作成 | Task 15 | 手元の wrangler |
 | 本人のお便り 20〜30 通、知人への依頼 | Task 13〜15 | `POST /letters` か管理 API |
