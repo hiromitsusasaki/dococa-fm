@@ -36,7 +36,7 @@ const episode = (...lines: ScriptLine[]): Segment[] => [{ itemId: "i1", slot: "n
 const clean = () => episode(dj("静かな一曲から。"), read(plain), read(translated, translated.body), fixedDj("ネットで見つけた声です。@jazzcatさん、YouTubeのコメントから。"), read(found), dj("次は遠くの一通へ。"));
 
 describe("verifyEpisode playback words", () => {
-  it.each(["次はこの曲をかけます", "どうぞ", "お聴きください", "この曲をかけてください", "かけてみましょう", "聴いてみてください"])("fails a dj line %s with playback:", (text) => {
+  it.each(["次はこの曲をかけます", "どうぞ", "お聴きください", "この曲をかけてください", "かけてみましょう", "聴いてみてください", "この曲を再生します", "再生しましょう", "お聞きください", "観てみてください", "流してみましょう", "流しましょう", "この曲をおかけします"])("fails a dj line %s with playback:", (text) => {
     const r = verifyEpisode(episode(dj(text), read(plain)), letters, me);
     expect(r.topical).toBe(false);
     expect(r.details.some((d) => d.startsWith("playback: segment 1 line 1: "))).toBe(true);
@@ -59,6 +59,14 @@ describe("verifyEpisode playback words", () => {
     "問いかける映画",
     "涙を流します",
     "どうぞよろしく",
+    "街で見かける人たちの話",
+    "旅に出かける日の歌",
+    "罠を仕かける映画",
+    "押しかけるファンの声",
+    "腰かけて聴く人もいる",
+    "ご迷惑をおかけします",
+    "再生した古い街の映画",
+    "雨音を聞き流します",
   ])("passes %s", (text) => {
     expect(verifyEpisode(episode(dj(text), read(plain)), letters, me).details.filter((d) => d.startsWith("playback:"))).toEqual([]);
   });
