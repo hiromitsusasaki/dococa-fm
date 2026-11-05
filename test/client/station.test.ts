@@ -397,7 +397,9 @@ describe("station: retro controls", () => {
     await vi.waitFor(() => expect(spoken).toEqual(["a1"]));
     expect(root.querySelector('button.switch[aria-pressed="true"]')).not.toBeNull();
     expect(root.querySelector(".face .live")).not.toBeNull();
+    expect(root.querySelector(".scale.sweep")).not.toBeNull();
     await power();
+    expect(root.querySelector(".scale.sweep")).toBeNull();
     expect(root.querySelector(".face .live")).toBeNull();
   });
 
@@ -412,7 +414,7 @@ describe("station: retro controls", () => {
     expect(needle(".knob-volume")).toBe("-135deg");
   });
 
-  it("the dial needle follows the range and world has no dial knob", async () => {
+  it("the dial needle follows the range", async () => {
     mountStation(root, opts({ stationKey: "mine", dial: 0.5 }));
     await flush();
     expect(needle(".knob-dial")).toBe("0deg");

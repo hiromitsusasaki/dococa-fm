@@ -51,7 +51,7 @@ export function StationScreen(p: StationScreenProps) {
         <div class="face">
           <span class="brand">DOCOCA FM</span>
           {p.power === "on" && <span class="live">{str("station.onAir")}</span>}
-          {p.power === "tuning" && <span class="tuning">{str("station.tuning")}</span>}
+          {p.power === "tuning" && <span class="tuning" aria-hidden="true">{str("station.tuning")}</span>}
         </div>
         <div class={p.power === "on" ? "scale sweep" : "scale"} aria-hidden="true"></div>
         <div class="controls">

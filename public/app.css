@@ -465,6 +465,8 @@ a {
 }
 
 .knob {
+  /* Room for the widened hit area of the range inside the wrapper. */
+  min-width: 92px;
   cursor: pointer;
 }
 
@@ -493,13 +495,13 @@ a {
 
 .knob-body:has(input:focus-visible) {
   outline: 2px solid var(--sky);
-  outline-offset: 3px;
+  outline-offset: 2px;
 }
 
 .knob input[type="range"] {
   position: absolute;
-  inset: 0;
-  width: 100%;
+  inset: 0 -20px;
+  width: calc(100% + 40px);
   height: 100%;
   margin: 0;
   opacity: 0;
