@@ -4,6 +4,7 @@ import { type Variables, requireSessionSecret, sessionMiddleware } from "./auth/
 import type { Env } from "./env";
 import { admin } from "./routes/admin";
 import { auth } from "./routes/auth";
+import { authGoogle } from "./routes/auth-google";
 import { api } from "./routes/api";
 import { episodes } from "./routes/episodes";
 import { home } from "./routes/home";
@@ -38,6 +39,7 @@ app.get("/healthz", (c) => c.json({ ok: true }));
 app.route("/", admin);
 app.route("/", api);
 app.route("/", auth);
+app.route("/", authGoogle);
 app.route("/", settings);
 app.route("/", put);
 app.route("/", start);

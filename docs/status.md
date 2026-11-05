@@ -20,6 +20,7 @@
   - [ ] 声の聴き比べ（Task 11 Step 5）: 本番でブラウザから自分の最初の回を聴く（最初の回だけクラウド TTS）。Kore を試すなら `pnpm wrangler secret put GEMINI_TTS_VOICE` に `female` を入れて再生成。`DJ_STYLE_PROMPT`（`src/worker/tts/style.ts`）は耳で 1〜2 回調整。
   - [ ] Spotify Developer Dashboard の Redirect URI を `https://dococafm.app/auth/spotify/callback` に、Website を `https://dococafm.app` に変更（workers.dev 版は消してよい）。TMDB の Application URL も同じく。`/settings` からの Spotify 連携の実機確認は本人のフィードバック待ち。
   - [ ] Google Cloud で Books API を有効化し、キー（YouTube のキーに Books API を足して同じ値でもよい）を `.dev.vars` の `GOOGLE_BOOKS_API_KEY` と Cloudflare secret に入れる。入ったら本の作品を足してデモを追加投入（`--reuse`）。
+  - [ ] Google サインイン（Task 7）: Google Cloud で OAuth クライアント（ウェブ アプリケーション）を作り、承認済みのリダイレクト URI に `https://dococafm.app/auth/google/callback`（開発は `http://127.0.0.1:5173/auth/google/callback`）を登録。`pnpm wrangler secret put GOOGLE_OAUTH_CLIENT_ID` と `GOOGLE_OAUTH_CLIENT_SECRET` で入れ、`.dev.vars` にも写す。同意画面を「本番」に公開（テスト中のままだと登録したテストユーザーしか入れない）。
   - [ ] `printf '30' | pnpm wrangler secret put EPISODE_DAILY_LIMIT`（eval 20 回のため。エージェントの権限では secret の書き込みが拒まれる）。
   - [x] デモ投入（上記）。
   - [ ] eval 20 回: `pnpm eval --origin https://dococafm.app --token "$ADMIN_TOKEN" --listener <id> --runs 20 --out docs/eval/<日付>.md`（`EPISODE_DAILY_LIMIT` を 25 以上に）。
@@ -37,7 +38,7 @@
 | Task 4 | 局の API | 完了（`/stations/:key.json` は局ごとの直近の検証済み回を返す。`episodes.station` を 0006 で追加） |
 | Task 5 | 局プレイヤー | 完了（`/stations/:key` のページと `station.js`。行の再生は `playback.ts` に共通化。ON で直近の回に復帰か新規作成、残り 2 セグメントで次の回を先読み） |
 | Task 6 | ホームを局に | 完了。局パネルの見た目（左寄せ、DOCOCA FM と ON AIR の間隔）は Task 11 で整える |
-| Task 7 | Google サインイン | 未着手 |
+| Task 7 | Google サインイン | 完了（OIDC を Worker 内で。`/auth/google`、`/auth/google/callback`、`POST /auth/signout`。実キーでの実機確認は本人作業の後） |
 | Task 8 | 保護とマイページ | 未着手 |
 | Task 9 | 公開局 | 未着手 |
 | Task 10 | 取り込みの順位 | 未着手 |

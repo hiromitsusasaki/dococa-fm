@@ -22,13 +22,14 @@ const schema = z.object({
 
 type FormValues = Pick<Listener, "radioName" | "place" | "voice" | "dial" | "lang">;
 
-function SettingsPage(props: { values: FormValues; listenerId: string; mcpUrl: string; spotifyConnected: boolean; spotifyFailed?: boolean; saved?: boolean; invalid?: boolean }) {
-  const { values, listenerId, mcpUrl, spotifyConnected, spotifyFailed, saved, invalid } = props;
+function SettingsPage(props: { values: FormValues; listenerId: string; mcpUrl: string; spotifyConnected: boolean; spotifyFailed?: boolean; signinFailed?: boolean; saved?: boolean; invalid?: boolean }) {
+  const { values, listenerId, mcpUrl, spotifyConnected, spotifyFailed, signinFailed, saved, invalid } = props;
   const t = tFor(values.lang);
   return (
     <Layout title={t("settings.title")} lang={values.lang}>
       <main class="settings">
         <h1>{t("settings.title")}</h1>
+        {signinFailed && <p class="settings-error" role="alert">{t("signin.failed")}</p>}
         <p class="settings-name">{values.radioName || t("listener.anonymous")}</p>
         {saved && <p class="settings-note" role="status">{t("settings.saved")}</p>}
         {invalid && <p class="settings-error" role="alert">{t("settings.invalid")}</p>}
@@ -105,7 +106,7 @@ export const settings = new Hono<{ Bindings: Env; Variables: Variables }>();
 settings.get("/settings", (c) => {
   const listener = c.get("listener");
   return c.html(
-    <SettingsPage values={listener} listenerId={listener.id} mcpUrl={mcpUrlOf(c.env, listener)} spotifyConnected={listener.spotifyRefreshToken !== null} spotifyFailed={c.req.query("spotify") === "failed"} saved={c.req.query("saved") === "1"} />,
+    <SettingsPage values={listener} listenerId={listener.id} mcpUrl={mcpUrlOf(c.env, listener)} spotifyConnected={listener.spotifyRefreshToken !== null} spotifyFailed={c.req.query("spotify") === "failed"} signinFailed={c.req.query("signin") === "failed"} saved={c.req.query("saved") === "1"} />,
   );
 });
 

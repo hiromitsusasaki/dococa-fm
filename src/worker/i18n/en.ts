@@ -58,6 +58,8 @@ export const en: Record<keyof typeof ja, string> = {
   "settings.spotifyConnected": "Connected to Spotify",
   "settings.spotifyNotConnected": "Not connected to Spotify",
   "settings.spotifyFailed": "We couldn't import your Spotify history. Please connect again",
+  "signin.unavailable": "Sign-in isn\'t available yet",
+  "signin.failed": "Sign-in didn\'t work. Please try again",
   "settings.spotifyConnect": "Connect Spotify",
   "settings.spotifyDevMode": "Spotify is in development mode, so only allow-listed accounts can use it",
   "bookmarklet.title": "Bookmarklet",

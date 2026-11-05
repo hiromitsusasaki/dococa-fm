@@ -4,6 +4,9 @@ export type Env = {
   ASSETS: Fetcher;
   ANTHROPIC_API_KEY: string;
   SPOTIFY_CLIENT_ID: string;
+  /** Google サインイン（OIDC）の OAuth クライアント。ID が空ならサインインは 503 */
+  GOOGLE_OAUTH_CLIENT_ID: string;
+  GOOGLE_OAUTH_CLIENT_SECRET: string;
   /** Gemini-TTS を呼ぶサービスアカウントの JSON を 1 行で。空ならクラウド TTS は無効 */
   GOOGLE_TTS_SA_JSON: string;
   TMDB_API_KEY: string;

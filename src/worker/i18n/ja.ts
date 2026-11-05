@@ -55,6 +55,8 @@ export const ja = {
   "settings.spotifyConnected": "Spotify とつながっています",
   "settings.spotifyNotConnected": "Spotify とはつながっていません",
   "settings.spotifyFailed": "Spotify の履歴を取り込めませんでした。もう一度つないでください",
+  "signin.unavailable": "サインインはいま用意できていません",
+  "signin.failed": "サインインできませんでした。もう一度お試しください",
   "settings.spotifyConnect": "Spotify をつなぐ",
   "settings.spotifyDevMode": "Spotify 連携は開発モードのため、許可リストに入っているアカウントだけ使えます",
   "bookmarklet.title": "ブックマークレット",

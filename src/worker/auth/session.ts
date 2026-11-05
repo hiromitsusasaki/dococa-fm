@@ -1,5 +1,5 @@
-import type { MiddlewareHandler } from "hono";
-import { getCookie, setCookie } from "hono/cookie";
+import type { Context, MiddlewareHandler } from "hono";
+import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import { createListener, getListener } from "../db/listeners";
 import type { Env } from "../env";
 import type { Listener } from "../types";
@@ -45,6 +45,23 @@ export function isSessionExempt(path: string): boolean {
   return EXEMPT_PREFIXES.some((p) => path === p || path.startsWith(`${p}/`));
 }
 
+type SessionContext = Context<{ Bindings: Env; Variables: Variables }>;
+
+const cookieOptions = (env: Env) => ({
+  httpOnly: true,
+  sameSite: "Lax" as const,
+  path: "/",
+  secure: env.PUBLIC_ORIGIN.startsWith("https://"),
+});
+
+export async function setSessionCookie(c: SessionContext, listenerId: string): Promise<void> {
+  setCookie(c, SESSION_COOKIE, await signSession(listenerId, c.env.SESSION_SECRET), { ...cookieOptions(c.env), maxAge: ONE_YEAR_SECONDS });
+}
+
+export function clearSessionCookie(c: SessionContext): void {
+  deleteCookie(c, SESSION_COOKIE, cookieOptions(c.env));
+}
+
 export const sessionMiddleware: MiddlewareHandler<{ Bindings: Env; Variables: Variables }> = async (c, next) => {
   if (isSessionExempt(c.req.path)) return next();
 
@@ -52,13 +69,7 @@ export const sessionMiddleware: MiddlewareHandler<{ Bindings: Env; Variables: Va
   let listener = id ? await getListener(c.env.DB, id) : null;
   if (!listener) {
     listener = await createListener(c.env.DB, { lang: langFromAcceptLanguage(c.req.header("accept-language")) });
-    setCookie(c, SESSION_COOKIE, await signSession(listener.id, c.env.SESSION_SECRET), {
-      httpOnly: true,
-      sameSite: "Lax",
-      path: "/",
-      maxAge: ONE_YEAR_SECONDS,
-      secure: c.env.PUBLIC_ORIGIN.startsWith("https://"),
-    });
+    await setSessionCookie(c, listener.id);
   }
   c.set("listener", listener);
   return next();
