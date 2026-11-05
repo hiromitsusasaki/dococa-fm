@@ -13,6 +13,9 @@ export type EpisodeData = {
   letters: ReadonlyMap<string, Letter>;
 };
 
+/** Full-width parentheses for Japanese, ASCII with a leading space for English. */
+const paren = (s: string, lang: Lang): string => (lang === "ja" ? `（${s}）` : ` (${s})`);
+
 /** One line of heading text: a title cannot break out of its heading or open a new one. */
 const headingText = (s: string): string => oneLine(s).replace(/^[\s#]+/, "");
 
@@ -52,7 +55,7 @@ export function renderEpisode(episode: Episode, data: EpisodeData, lang: Lang): 
   for (const seg of episode.segments) {
     const item = data.items.get(seg.itemId);
     if (!item) continue;
-    parts.push(`## ${headingText(item.title)} / ${headingText(item.creator)}（${t(`slot.${seg.slot}`)}）\n<!-- itemId: ${item.id} -->`);
+    parts.push(`## ${headingText(item.title)} / ${headingText(item.creator)}${paren(t(`slot.${seg.slot}`), lang)}\n<!-- itemId: ${item.id} -->`);
     parts.push(...seg.lines.map((l) => renderLine(l, data, lang)).filter((s) => s !== ""));
   }
   return parts.join("\n\n");
@@ -62,7 +65,7 @@ const outLabel = (key: string, lang: Lang): string | null => (`out.${key}` in ja
 
 export function renderItemCard(item: Item, lang: Lang): string {
   const t = tFor(lang);
-  const head = `## ${headingText(item.title)}\n${t(`kind.${item.kind}`)} / ${headingText(item.creator)}${item.year !== null ? `（${item.year}）` : ""}\n<!-- itemId: ${item.id} -->`;
+  const head = `## ${headingText(item.title)}\n${t(`kind.${item.kind}`)} / ${headingText(item.creator)}${item.year !== null ? paren(String(item.year), lang) : ""}\n<!-- itemId: ${item.id} -->`;
   const links = Object.entries(item.outLinks).flatMap(([key, href]) => {
     const label = outLabel(key, lang);
     return label && isHttpUrl(href) ? [`- [${label}](${href})`] : [];

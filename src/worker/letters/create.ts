@@ -3,6 +3,7 @@ import { type Lang, detectLang, translateLetter } from "../claude/translate";
 import { getItem } from "../db/items";
 import { countRecentDuplicate, getLetter, hasWatashimo, insertLetter } from "../db/letters";
 import type { Env } from "../env";
+import { saneTranslation } from "./display";
 import type { ja } from "../i18n/ja";
 import { t } from "../i18n/t";
 import { type ItemDraft, resolveOrCreate, resolveUrl } from "../resolve";
@@ -71,11 +72,21 @@ export async function createLetter(
       if (!verdict.ok) return fail(422, "letters.rejected", { reason: verdict.reason, draft });
       lang = detectLang(body);
       // One call per language the letter was not written in; the other column keeps the original.
-      bodyJa = await translateLetter(env, body, lang, "ja");
-      bodyEn = await translateLetter(env, body, lang, "en");
+      // The Japanese text is what the DJ reads, so its failure is fatal. A translation that fails the sanity
+      // check is not stored (the column is NOT NULL for Japanese, so the original stands in for it).
+      const ja = await translateLetter(env, body, lang, "ja");
+      bodyJa = saneTranslation(body, ja) ? ja : body;
     } catch (e) {
       console.error("[dococa] letter judgement failed", e);
       return fail(503, "letters.unavailable", { draft });
+    }
+    // The English rendering is a convenience: if it fails, the letter is still stored and shows its original.
+    try {
+      const en = await translateLetter(env, body, lang, "en");
+      bodyEn = saneTranslation(body, en) ? en : null;
+    } catch (e) {
+      console.error("[dococa] english translation failed", e instanceof Error ? e.name : "error");
+      bodyEn = null;
     }
   }
 

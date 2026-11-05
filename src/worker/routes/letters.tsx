@@ -5,6 +5,7 @@ import { LetterText, ReportForm, whoOf } from "../../views/components";
 import { Layout } from "../../views/layout";
 import type { Variables } from "../auth/session";
 import { getItem } from "../db/items";
+import { displayText } from "../letters/display";
 import { getLetter, insertReport, insertTakedown, listReactionsForLetter } from "../db/letters";
 import type { Env } from "../env";
 import type { ja } from "../i18n/ja";
@@ -65,7 +66,7 @@ letters.get("/letters/:id/reactions", async (c) => {
           <ul>
             {reactions.map((r) => (
               <li class="reaction">
-                <LetterText letter={r} lang={lang} />
+                {r.kind === "watashimo" ? <p class="letter-body">{displayText(r, lang).main}</p> : <LetterText letter={r} lang={lang} />}
                 <p class="letter-who">{whoOf(r, lang)}</p>
                 <ReportForm letterId={r.id} lang={lang} />
               </li>

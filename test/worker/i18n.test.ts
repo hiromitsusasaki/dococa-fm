@@ -55,3 +55,15 @@ describe("langFromAcceptLanguage", () => {
     expect(langFromAcceptLanguage(undefined)).toBe("ja");
   });
 });
+
+describe("saneTranslation", () => {
+  it("rejects urls, emails, phones and runaway length, and accepts a normal translation", async () => {
+    const { saneTranslation } = await import("../../src/worker/letters/display");
+    expect(saneTranslation("hello", "こんにちは")).toBe(true);
+    expect(saneTranslation("hello", "see https://x.example")).toBe(false);
+    expect(saneTranslation("hello", "mail a@b.com")).toBe(false);
+    expect(saneTranslation("hello", "call 090-1234-5678")).toBe(false);
+    expect(saneTranslation("hello", "a".repeat(401))).toBe(false);
+    expect(saneTranslation("a".repeat(150), "a".repeat(300))).toBe(true);
+  });
+});

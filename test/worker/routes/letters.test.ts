@@ -92,6 +92,38 @@ describe("POST /letters", () => {
     expect(create).toHaveBeenCalledTimes(3);
   });
 
+  it("stores the letter with bodyEn null when only the english translation fails", async () => {
+    const item = await seedItem();
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    create.mockImplementation((req) => (req.tools?.[0]?.input_schema?.required?.[0] === "en" ? Promise.reject(new Error("boom")) : okReply(req)));
+    const res = await postForm("/letters", await newSession(), { itemId: item.id, body: "中学の頃、毎日聴いていた" });
+    expect(res.status).toBe(303);
+    const [l] = await listLettersForItem(env.DB, item.id);
+    expect(l).toMatchObject({ bodyJa: "中学の頃、毎日聴いていた", bodyEn: null, status: "public" });
+  });
+
+  it("does not store a translation that carries a url, and does not reject the letter", async () => {
+    const item = await seedItem();
+    create.mockImplementation((req) => (req.tools?.[0]?.name === "translate" ? { content: [{ type: "tool_use", id: "t", name: "translate", input: { en: "see https://evil.example/x", ja: "https://evil.example/x を見て" } }] } : okReply(req)));
+    const res = await postForm("/letters", await newSession(), { itemId: item.id, body: "中学の頃、毎日聴いていた" });
+    expect(res.status).toBe(303);
+    const [l] = await listLettersForItem(env.DB, item.id);
+    expect(l!.bodyEn).toBeNull();
+    const res2 = await postForm("/letters", await newSession(), { itemId: item.id, body: "I loved this at 15" });
+    expect(res2.status).toBe(303);
+    const en = (await listLettersForItem(env.DB, item.id)).find((x) => x.lang === "en")!;
+    expect(en.bodyJa).toBe("I loved this at 15"); // the original stands in; bodyJa is NOT NULL
+  });
+
+  it("does not store a translation three times longer than the source", async () => {
+    const item = await seedItem();
+    const long = "あ".repeat(600);
+    create.mockImplementation((req) => (req.tools?.[0]?.name === "translate" ? { content: [{ type: "tool_use", id: "t", name: "translate", input: { en: long } }] } : okReply(req)));
+    const res = await postForm("/letters", await newSession(), { itemId: item.id, body: "いい曲" });
+    expect(res.status).toBe(303);
+    expect((await listLettersForItem(env.DB, item.id))[0]!.bodyEn).toBeNull();
+  });
+
   it("letter_body_over_200_chars_rejected", async () => {
     const item = await seedItem();
     const res = await postForm("/letters", await newSession(), { itemId: item.id, body: "あ".repeat(201) });

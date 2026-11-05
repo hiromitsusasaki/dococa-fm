@@ -78,7 +78,7 @@ export function LetterText({ letter, lang }: { letter: Pick<Letter, "body" | "bo
   return (
     <>
       <p class="letter-body">{main}</p>
-      {original !== null && (
+      {original !== null && original !== main && (
         <details class="letter-original">
           <summary>{t("letter.showOriginal")}</summary>
           <p>{original}</p>

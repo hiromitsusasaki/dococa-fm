@@ -78,7 +78,7 @@ describe("renderEpisode in english", () => {
     expect(md.indexOf("> I listened every day in junior high")).toBeGreaterThan(-1);
     expect(md.indexOf("> 中学の頃、毎日聴いていた")).toBeGreaterThan(md.indexOf("> I listened"));
     expect(md).toContain(`— ${t("letter.whoPlace", { who: t("letter.who", { name: "ヒロ" }, "en"), place: "大船渡" }, "en")}`);
-    expect(md).toContain(`（${t("slot.near", undefined, "en")}）`);
+    expect(md).toContain(` (${t("slot.near", undefined, "en")})`);
   });
 });
 

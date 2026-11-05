@@ -123,7 +123,6 @@ export const ja = {
   "item.putLetter": "自分もお便りを送る",
   "item.source": "出典",
   "item.takedown": "削除を依頼する",
-  "item.originalBody": "原文",
   "letter.who": "{name}さん",
   "letter.whoPlace": "{who}（{place}）",
   "letter.whoDemo": "{who}［{demo}］",
