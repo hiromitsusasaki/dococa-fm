@@ -2,7 +2,73 @@
 
 > 新しいセッションはまずここを読む。更新はタスクの区切りごと（最新を上に）。
 
-## 2026-11-05 本番デプロイ・Gemini-TTS・デモ投入 完了。次は Books の鍵・eval 20 回・声と台本の調整・public 化
+## 2026-11-05 Phase 2 完了（ローカル）。次は本人作業 → デプロイ → public 化
+
+Phase 2（ラジオ中心の体験への作り替え）の実装は、すべて main にコミット済み（push は未）。本番は Phase 1 の状態のままなので、下の本人作業を済ませてからデプロイする。本番 URL は `https://dococafm.app`、再デプロイは `pnpm run deploy`。
+
+### 本人作業
+
+- [ ] GCP で OAuth クライアント（種類: ウェブ アプリケーション）を作る。承認済みのリダイレクト URI は `https://dococafm.app/auth/google/callback` と `http://127.0.0.1:5173/auth/google/callback`。
+- [ ] `pnpm wrangler secret put GOOGLE_OAUTH_CLIENT_ID` と `pnpm wrangler secret put GOOGLE_OAUTH_CLIENT_SECRET` を実行し、`.dev.vars` にも同じ値を写す。
+- [ ] OAuth の同意画面を「本番」に公開する（テスト中のままだと、登録したテストユーザーしか入れない）。
+- [ ] Google Cloud で Books API を有効化し、キーを `.dev.vars` の `GOOGLE_BOOKS_API_KEY` と `pnpm wrangler secret put GOOGLE_BOOKS_API_KEY` に入れる（YouTube のキーに Books API を足して同じ値でもよい）。入ったら本のデモを追加投入する（`pnpm seed --items <file> --personas 30 --reuse --origin https://dococafm.app`）。
+- [ ] `pnpm db:migrate` で本番に 0005〜0007 を当てる（0005 station、0006 episode_station、0007 place）。
+- [ ] `pnpm run deploy`。
+- [ ] 本番で確かめる: ホームの「ラジオをつける」、Google サインイン、`/me`、公開局 `/stations/s:<slug>`、日本語と英語の切り替え。
+- [ ] Spotify Developer Dashboard の Redirect URI を `https://dococafm.app/auth/spotify/callback`、Website を `https://dococafm.app` に。TMDB の Application URL も同じく（済んでいなければ。新ドメインに揃える）。
+- [ ] `/settings` の `/mcp/<token>` を Claude のカスタムコネクタに登録する。
+- [ ] eval 20 回: `printf '30' | pnpm wrangler secret put EPISODE_DAILY_LIMIT` のあと、`pnpm eval --origin https://dococafm.app --token "$ADMIN_TOKEN" --listener <id> --runs 20 --out docs/eval/<日付>.md`。結果を README の eval 表に書く。
+- [ ] 声の聴き比べ（Phase 1 の Task 11 Step 5）が済んでいなければ、本番で自分の最初の回を聴く。
+- [ ] public 化後の GitHub 設定（fork PR の承認など）と、public 化前チェックリストの残り（下の 2026-11-04 の節）。gitleaks は public 化の直前にもう一度。
+
+### 決定（Phase 2 の判断。台帳に記録したもの）
+
+- タスクの番号は、2b を 2 と 3 の間に置く（実行順は 1、2、2b、3〜14）。言語設定が `t()` の署名を変え、以降の画面すべてに効くため。
+- 画面の文言から「局」を外す（`me.station`、`settings.station*` の文言）。DESIGN.md が画面での「局」を禁じている。
+- Spotify の取り込みは、履歴の `source` が `manual` / `url` のものを `spotify` で上書きしない。上書きすると好きなものの一覧から消える。
+- お便りの翻訳には健全性の検査を置く。URL・メール・電話・住所・郵便番号を含むか、長さが `max(400, 原文の 2 倍)` 字を超えたら、翻訳だけを捨てて原文を出す。お便り自体は拒まない。
+- 翻訳が失敗しても投稿は通す（英訳は fail open）。日本語の本文は原文にフォールバックし（NOT NULL で DJ が読む）、`body_en` は null。
+- 翻訳の検査は、連絡先らしさの判定（`looksLikeContact`）の全体を使い、投稿時の判定と揃える。
+- 局ごとに回を分けるため、`episodes.station`（`world` / `mine` / `public:<ownerId>`）を 0006 で足し、`GET /stations/:key.json` は局ごとに絞る。別の局の回には復帰しない。
+- Google アカウントへの紐づけは、現在のリスナーの `google_sub` が空のときだけ行う。別の Google アカウントに紐づいたリスナーへは上書きせず失敗にする。サインイン後の戻り先 `next` は同一オリジンのパスだけを通す。
+- セッション cookie は、紐づけで回さない（リスナー id の決定的な HMAC という既存の設計）。
+- 公開局のラベルと自動の slug は、ラジオネームだけから作る（Google の表示名は公開しない）。自動の slug は乱数の `radio-xxxx`。ユーザーが自分で決めてもよい。
+- 見た目のトークンに `--on-magenta`（マゼンタ上の文字色）と `--label`（ライトで濃くした coral）を足す。コントラスト不足への対処で、DESIGN.md に反映済み。
+- お便りの無いセグメントのフォールバックは、作品を紹介する（`script.workOnly`）。「お便りを読みます」とは言わない。
+- DJ は「かけます」「どうぞ」などの再生の誘いを言わない。verify の `playback:` が落とし、再生成する。
+
+### 保留 / Phase 3
+
+- 音声の事前生成（作品 × お便りの単位）。
+- 合間のトークの定型化。
+- 英語の DJ（今の DJ の台本は日本語のみ）。
+- お便りの無い作品を枠に入れない（本人確認中）。
+- `letters.place` を日本語のラベルで持っている件（英語の画面でも日本語の土地名が出る）。
+
+## Phase 2 の進み
+
+| タスク | 内容 | 状態 |
+|---|---|---|
+| Task 1 | 一文と文言 | 完了 |
+| Task 2 | スキーマ | 完了 |
+| Task 2b | 言語設定 | 完了 |
+| Task 3 | 局ごとの枠決め | 完了 |
+| Task 4 | 局の API | 完了（`/stations/:key.json` は局ごとの直近の検証済み回を返す。`episodes.station` を 0006 で追加） |
+| Task 5 | 局プレイヤー | 完了（`/stations/:key` のページと `station.js`。行の再生は `playback.ts` に共通化。ON で直近の回に復帰か新規作成、残り 2 セグメントで次の回を先読み） |
+| Task 6 | ホームを局に | 完了。局パネルの見た目（左寄せ、DOCOCA FM と ON AIR の間隔）は Task 11 で整える |
+| Task 7 | Google サインイン | 完了（OIDC を Worker 内で。`/auth/google`、`/auth/google/callback`、`POST /auth/signout`。実キーでの実機確認は本人作業の後） |
+| Task 8 | 保護とマイページ | 完了（`requireSignin` で `/start`・`/auth/spotify`・`POST /letters`（`kind=letter`）・`/me` を保護。`GET /put` は閲覧可で、匿名にはフォームの代わりにサインイン案内。ヘッダ `.site-header` と `/me`。`POST /put` は存在しないので対象外） |
+| Task 9 | 公開局 | 完了（設定で `stationPublic`・`stationSlug`（空なら表示名から生成、衝突は 422 `settings.slugTaken`、生成のときは乱数を足して 1 回再試行）。`/stations/s:<slug>` に OGP。`POST /settings` をレート制限の対象に。匿名は公開の項目が出ず、送っても無視。見た目は Task 11 で整える） |
+| Task 10 | 取り込みの順位 | 完了（取り込みは long_term 20＋short_term 10 に 1..n の `rank`、直近 10 と保存済みは `rank` なし、計 40。取り込みは `manual`/`url` の `source` を上書きしない。サインイン済みの `GET /put` は好きなもの→`put.imported.top`→`put.imported.recent` の順で順位の数字なし、各候補に `POST /put/register`（要サインイン、履歴に無ければ 404、`manual` にして 303 `/put?itemId=`）。お気に入りの並び（公開局・マイページ）は Spotify の順位を引き継ぐ。手で順位を付ける経路は無い（v1 の決定）。再取り込みは古い順位を消す） |
+| Task 11 | 見た目の方針 | 完了。トークン（ライト / ダーク）、Google Fonts、`.panel` `.hero` `.pill` `.site-header`、テーマ切替（`dfm.theme`）、1120px の 2 列レイアウト。スクリーンショットは `docs/screenshots/2026-11-05-theme-*.png`。`.hero` のマークアップとキービジュアルは Task 13、ノブとスイッチの作り込みは Task 12 |
+| Task 12 | レトロラジオのコントロール | 完了。`.knob` は 52px の円と coral の針（`--angle` を入力で更新、range は透明で上に重ねてキーボードも可）、ダイヤル面に ON AIR、目盛りの針は ON の間だけゆっくり動く（`prefers-reduced-motion` で止める） |
+| Task 13 | キービジュアル | 完了。`/` の先頭に `.hero`（`h1.wordmark` + タグライン + `<picture>`、760px 以下は `kv-mobile.jpg`）。他の局のページにはヒーローなし。スクリーンショットは `docs/screenshots/2026-11-05-hero-*.png` と `2026-11-05-radio-on.png` |
+| Task 14 | 文書と本番の設定 | 完了。README・SECURITY・この status を Phase 2 に合わせた |
+| Task 16（Phase 2） | DJ の語り口 | 完了。DJ は作品を紹介してお便りを読むだけで、「かけます」「どうぞ」などの再生・視聴の誘いは言わない。verify の `playback:` が dj 行（固定文を除く）で落とし、再生成の対象。固定の手渡しは名前か土地がある送り主なら `script.letterFrom`（「{who}からのお便りです。」）、匿名は `script.readingOnly`。ローカルで eval 3 回、`playback:` は 0 件 |
+| Task 15 | 土地を選択式に | 完了。設定の「土地」は国の select と、日本の都道府県・アメリカの州の select（`placeCountry` / `placeRegion`、0007 で列を追加）。地域は選んだ国のものだけ受け付け、合わないと 422。保存で `place` に `placeLabel(…, "ja")` の文字列（島根、カリフォルニア州、アメリカ、ポルトガル）を入れ、お便りと DJ はこれまでどおり `place` を読む。自由入力の欄は無くなり、国を選ぶまでは旧データの `place` をそのまま残す（「選ばない」に戻すと消える）。一覧は `src/worker/geo/places.ts`（日本語名は 204 か国（日本を含む）、残りは英語名）。デモ用シード（`scripts/lib/seed.ts`）のペルソナの `place` は自由文字列のまま（`POST /admin/listeners` 経由で `place` だけに入る）。スクリーンショットは `docs/screenshots/2026-11-05-settings-place.png` |
+| Task 17（Phase 2） | 聴いたお便り | 完了。`/me` に `me.heard`: 検証済みの直近 30 回から読まれたお便りを新しい順に最大 50 件（同じお便りは最新 1 件、非公開は除く、返信は除く）。作品カード、主文と原文、送り主、JST の日付、`もう一度聴く`（`/episodes/<id>?seg=<n>`、n は公開分のセグメント位置）、私も・一言のフォーム。件数は出さない。`GET /episodes/:id?seg=n` は範囲外なら 0 で `data-start-seg`、プレイヤーは idle からの再生をそのセグメントから始める。スクリーンショットは `docs/screenshots/2026-11-05-me-heard.png` |
+
+## 2026-11-05 本番デプロイ・Gemini-TTS・デモ投入 完了（Phase 1 の締め）。次は Books の鍵・eval 20 回・声と台本の調整・public 化
 
 - 本番 URL: **https://dococafm.app**（カスタムドメイン、Cloudflare Registrar で 2026-11-05 取得。旧 `https://dococa-fm.promitsu.workers.dev` は新ドメインへ 301）（Cloudflare account `promitsu.jp`、Worker `dococa-fm`、D1 `dococa`（APAC、`database_id` は wrangler.jsonc に記入済み）、R2 `dococa-audio`。migrations 0001〜0004 適用済み、secret 7 件投入済み（`GOOGLE_TTS_API_KEY` は `GOOGLE_TTS_SA_JSON` に置き換え、旧 secret は 2026-11-05 に削除））。認証は ops-mac の `.env` の `CLOUDFLARE_API_TOKEN`（gitignore 済み）。再デプロイは `pnpm run deploy`。
 - ローカル確認: ops-mac で `pnpm dev` を起動中（ログ `.wrangler/dev-ops-mac.log`）。main-mac からは `ssh -L 5173:127.0.0.1:5173 ops-mac` を張って `http://127.0.0.1:5173` を開く（`PUBLIC_ORIGIN` が 127.0.0.1 なので Origin 検査も通る）。
@@ -27,29 +93,6 @@
   - [ ] eval 20 回: `pnpm eval --origin https://dococafm.app --token "$ADMIN_TOKEN" --listener <id> --runs 20 --out docs/eval/<日付>.md`（`EPISODE_DAILY_LIMIT` を 25 以上に）。
   - [ ] `/settings` の `/mcp/<token>` を Claude のカスタムコネクタに登録（サーバー側は確認済み）。
   - [ ] 下の「public 化前チェックリスト」の残り（GitHub 設定、gitleaks、public 化）。
-
-## Phase 2 の進み
-
-| タスク | 内容 | 状態 |
-|---|---|---|
-| Task 1 | 一文と文言 | 完了 |
-| Task 2 | スキーマ | 完了 |
-| Task 2b | 言語設定 | 完了 |
-| Task 3 | 局ごとの枠決め | 完了 |
-| Task 4 | 局の API | 完了（`/stations/:key.json` は局ごとの直近の検証済み回を返す。`episodes.station` を 0006 で追加） |
-| Task 5 | 局プレイヤー | 完了（`/stations/:key` のページと `station.js`。行の再生は `playback.ts` に共通化。ON で直近の回に復帰か新規作成、残り 2 セグメントで次の回を先読み） |
-| Task 6 | ホームを局に | 完了。局パネルの見た目（左寄せ、DOCOCA FM と ON AIR の間隔）は Task 11 で整える |
-| Task 7 | Google サインイン | 完了（OIDC を Worker 内で。`/auth/google`、`/auth/google/callback`、`POST /auth/signout`。実キーでの実機確認は本人作業の後） |
-| Task 8 | 保護とマイページ | 完了（`requireSignin` で `/start`・`/auth/spotify`・`POST /letters`（`kind=letter`）・`/me` を保護。`GET /put` は閲覧可で、匿名にはフォームの代わりにサインイン案内。ヘッダ `.site-header` と `/me`。`POST /put` は存在しないので対象外） |
-| Task 9 | 公開局 | 完了（設定で `stationPublic`・`stationSlug`（空なら表示名から生成、衝突は 422 `settings.slugTaken`、生成のときは乱数を足して 1 回再試行）。`/stations/s:<slug>` に OGP。`POST /settings` をレート制限の対象に。匿名は公開の項目が出ず、送っても無視。見た目は Task 11 で整える） |
-| Task 10 | 取り込みの順位 | 完了（取り込みは long_term 20＋short_term 10 に 1..n の `rank`、直近 10 と保存済みは `rank` なし、計 40。取り込みは `manual`/`url` の `source` を上書きしない。サインイン済みの `GET /put` は好きなもの→`put.imported.top`→`put.imported.recent` の順で順位の数字なし、各候補に `POST /put/register`（要サインイン、履歴に無ければ 404、`manual` にして 303 `/put?itemId=`）。お気に入りの並び（公開局・マイページ）は Spotify の順位を引き継ぐ。手で順位を付ける経路は無い（v1 の決定）。再取り込みは古い順位を消す） |
-| Task 11 | 見た目の方針 | 完了。トークン（ライト / ダーク）、Google Fonts、`.panel` `.hero` `.pill` `.site-header`、テーマ切替（`dfm.theme`）、1120px の 2 列レイアウト。スクリーンショットは `docs/screenshots/2026-11-05-theme-*.png`。`.hero` のマークアップとキービジュアルは Task 13、ノブとスイッチの作り込みは Task 12 |
-| Task 12 | レトロラジオのコントロール | 完了。`.knob` は 52px の円と coral の針（`--angle` を入力で更新、range は透明で上に重ねてキーボードも可）、ダイヤル面に ON AIR、目盛りの針は ON の間だけゆっくり動く（`prefers-reduced-motion` で止める） |
-| Task 13 | キービジュアル | 完了。`/` の先頭に `.hero`（`h1.wordmark` + タグライン + `<picture>`、760px 以下は `kv-mobile.jpg`）。他の局のページにはヒーローなし。スクリーンショットは `docs/screenshots/2026-11-05-hero-*.png` と `2026-11-05-radio-on.png` |
-| Task 14 | 文書と本番の設定 | 未着手 |
-| Task 16（Phase 2） | DJ の語り口 | 完了。DJ は作品を紹介してお便りを読むだけで、「かけます」「どうぞ」などの再生・視聴の誘いは言わない。verify の `playback:` が dj 行（固定文を除く）で落とし、再生成の対象。固定の手渡しは名前か土地がある送り主なら `script.letterFrom`（「{who}からのお便りです。」）、匿名は `script.readingOnly`。ローカルで eval 3 回、`playback:` は 0 件 |
-| Task 15 | 土地を選択式に | 完了。設定の「土地」は国の select と、日本の都道府県・アメリカの州の select（`placeCountry` / `placeRegion`、0007 で列を追加）。地域は選んだ国のものだけ受け付け、合わないと 422。保存で `place` に `placeLabel(…, "ja")` の文字列（島根、カリフォルニア州、アメリカ、ポルトガル）を入れ、お便りと DJ はこれまでどおり `place` を読む。自由入力の欄は無くなり、国を選ぶまでは旧データの `place` をそのまま残す（「選ばない」に戻すと消える）。一覧は `src/worker/geo/places.ts`（日本語名は 204 か国（日本を含む）、残りは英語名）。デモ用シード（`scripts/lib/seed.ts`）のペルソナの `place` は自由文字列のまま（`POST /admin/listeners` 経由で `place` だけに入る）。スクリーンショットは `docs/screenshots/2026-11-05-settings-place.png` |
-| Task 17（Phase 2） | 聴いたお便り | 完了。`/me` に `me.heard`: 検証済みの直近 30 回から読まれたお便りを新しい順に最大 50 件（同じお便りは最新 1 件、非公開は除く、返信は除く）。作品カード、主文と原文、送り主、JST の日付、`もう一度聴く`（`/episodes/<id>?seg=<n>`、n は公開分のセグメント位置）、私も・一言のフォーム。件数は出さない。`GET /episodes/:id?seg=n` は範囲外なら 0 で `data-start-seg`、プレイヤーは idle からの再生をそのセグメントから始める。スクリーンショットは `docs/screenshots/2026-11-05-me-heard.png` |
 
 ## 2026-11-04 最終修正 完了。次は本人作業（push・鍵・デプロイ・public 化）
 

@@ -19,12 +19,22 @@
 
 - `/admin/*` は `ADMIN_TOKEN`（Bearer）が必須です。`/mcp/<token>` は推測できない token だけが鍵です。
 - 書き込みの `POST` は同一オリジンのみです。`Origin` があれば `PUBLIC_ORIGIN` と一致が必要で、無いときは `Sec-Fetch-Site` が `same-origin` か `none` のときだけ通します（curl などブラウザ以外は通ります。Cookie を持たないため）。
-- レート制限: `POST /letters`、`/episodes`、`/episodes/:id/next`、`/start`、`/takedown`、お便りの通報、`GET /put?itemId=|url=`、`/api/*` は、IP（`CF-Connecting-IP`）とリスナーのそれぞれで 1 分 20 回までです。`GET /tts` はリスナーごとに 1 分 60 回、IP ごとに 120 回です。`/mcp/*` は下の規則です。超えると 429 を返します。
+- レート制限: `POST /letters`、`/settings`、`/auth/signout`、`/episodes`、`/episodes/:id/next`、`/stations/:key/next`、`/start`、`/put/register`、`/takedown`、お便りの通報、`GET /auth/google`、`GET /put?itemId=|url=`、`/api/*` は、IP（`CF-Connecting-IP`）とリスナーのそれぞれで 1 分 20 回までです。`GET /tts` はリスナーごとに 1 分 60 回、IP ごとに 120 回です。`/mcp/*` は下の規則です。超えると 429 を返します。
 - リクエストの本文は、`/admin/*` 以外 64 KB まで、`/admin/*` は 1 MB までです（超えると 413）。
 - クラウドの声は、同じ行への同時の要求でも合成を 1 回だけ呼びます（D1 の `tts_claims` で取り合い、負けた要求は R2 に音声ができるのを待ちます）。
 - `PUBLIC_ORIGIN` が空のときは、`/healthz` 以外すべて 500 を返します。鍵が空のときにお便りの判定と翻訳を素通しにするのは、`DEV_SKIP_CLAUDE=1` を明示した開発環境だけです。
 - 番組の作成は、リスナーごとの 1 日の上限（`EPISODE_DAILY_LIMIT`、既定 10）と、全体の 1 日の上限（`EPISODE_GLOBAL_DAILY_LIMIT`、既定 300）があります。クラウドの声（Gemini-TTS）には全体の 1 日の上限（`CLOUD_TTS_GLOBAL_DAILY_LIMIT`、既定 50）があり、超えるとブラウザの音声に切り替わります。どの上限も `0` は停止、日は日本時間で数えます。
 - `secureHeaders()` で標準のセキュリティヘッダを付けています。CSP は付けていません（プレイヤーが JSON の script ブロックとバンドルを使うため）。
+
+### Google サインインと秘密
+
+- `GOOGLE_OAUTH_CLIENT_ID` と `GOOGLE_OAUTH_CLIENT_SECRET` は Cloudflare secrets と `.dev.vars`（gitignore 済み）にだけ置き、リポジトリには入れません。ID が空のとき `/auth/google` は 503 を返します。
+- Google から受け取る表示名（`displayName`）とメールアドレスは、公開しません。公開局の表示名と自動で作る URL の slug は、本人が決めたラジオネームだけから作ります（未設定なら乱数の `radio-xxxx`）。表示名は本人の画面（ヘッダとマイページ）にだけ出ます。
+- セッション cookie はリスナー id の決定的な HMAC なので、サインインで Google アカウントに紐づけても回しません。有効な cookie が無いままコールバックに来ると、孤児の匿名リスナー行ができます。別の Google アカウントに紐づいたリスナーへは上書きせず、失敗にします。`google_sub` には UNIQUE 制約があります。
+- ログイン後の戻り先 `next` は、`PUBLIC_ORIGIN` と同じオリジンのパスだけを受け付けます。制御文字（タブ・改行）を含むもの、`//` で始まるものは既定のパスに落とします。
+- サインインの門: `/start`、`/auth/spotify`、`POST /letters`（`kind=letter`）、`POST /put/register`、`/me` は、サインイン済みでなければ通りません。ブラウザの移動はサインインへ 303、スクリプトからの要求は 401 です。「私も」と「一言」は匿名のままです。
+- レート制限の許可リスト: 規則は `src/worker/security/rate-limit.ts` の `isRateLimited` にある、書き込み系のパスの許可リストです。リストに無いパスは制限されません。書き込みの `POST` を足したら、必ずこのリストにも足してください。
+- 翻訳の健全性検査: お便りの翻訳は、URL・メール・電話・住所・郵便番号を含むか、原文の 2 倍（短い原文は 400 字）を超えるとき、翻訳だけを捨てて原文を出します。お便り自体は、翻訳の不備では拒みません。
 
 ### 既知の制限
 

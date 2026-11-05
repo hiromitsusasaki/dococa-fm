@@ -6,7 +6,12 @@ Built with Claude: Japan 2026 への応募作です。
 
 ## 何をするか
 
-好きな曲・本・映画を登録すると、AI の DJ があなたの番組を作って語ります。番組の間には、世界のどこかの誰かが同じ作品に書いた一行の「お便り」が、原文のまま読まれます。聴くだけでよく、返事は義務ではありません。ホームの「あなたのラジオをつける」から始めます。スマホのブラウザでも聴けます。
+ホームの「ラジオをつける」を押すと、世界のどこかの誰かの好きなものが流れ続けます。AI の DJ が作品を紹介し、その作品に誰かが書いた一行の「お便り」が、原文のまま読まれます。聴くだけでよく、返事は義務ではありません。スマホのブラウザでも聴けます。
+
+- **サインインなしでできること。** ラジオを聴く、お便りに「私も」を押す、「一言を送る」。
+- **Google でサインインするとできること。** 好きなものの登録、Spotify の取り込み、「お便りを送る」、「あなたのラジオ」の公開、マイページ（届いた反応、聴いたお便りのふり返り）。公開すると「〇〇さんのラジオ」として他の人が聴けます。公開に出るのはラジオネームだけで、Google の名前とメールアドレスは出ません。
+- **言語。** 画面は日本語と英語を選べます。日本語圏以外のお便りは、選んだ言語の訳を読み、原文を切り替えて確かめられます。
+- **土地。** 設定の「土地」は、国と都道府県・州から選びます。
 
 ### 三枠とダイヤル
 
@@ -98,14 +103,14 @@ pnpm typecheck
 
 ### デプロイ
 
-Cloudflare Workers に載せます（D1 と R2 を使います）。本番の URL はまだ決まっていません。
+Cloudflare Workers に載せます（D1 と R2 を使います）。本番の URL は https://dococafm.app です。
 
 ```bash
 pnpm wrangler login
 pnpm wrangler d1 create dococa            # 出力の database_id を wrangler.jsonc の d1_databases に書く
 pnpm wrangler r2 bucket create dococa-audio
-pnpm wrangler secret put ANTHROPIC_API_KEY   # .dev.vars.example の鍵を 1 つずつ（ADMIN_TOKEN、SESSION_SECRET、SPOTIFY_CLIENT_ID、GOOGLE_TTS_SA_JSON、TMDB_API_KEY、YOUTUBE_API_KEY、任意で GOOGLE_BOOKS_API_KEY）
-pnpm db:migrate
+pnpm wrangler secret put ANTHROPIC_API_KEY   # .dev.vars.example の鍵を 1 つずつ（ADMIN_TOKEN、SESSION_SECRET、SPOTIFY_CLIENT_ID、GOOGLE_TTS_SA_JSON、GOOGLE_OAUTH_CLIENT_ID、GOOGLE_OAUTH_CLIENT_SECRET、TMDB_API_KEY、YOUTUBE_API_KEY、任意で GOOGLE_BOOKS_API_KEY）
+pnpm db:migrate   # migrations/0001〜0007 を順に当てる
 # wrangler.jsonc の routes にカスタムドメイン、vars.PUBLIC_ORIGIN にその origin（例 https://dococafm.app）を書いてから
 pnpm run deploy   # pnpm deploy は pnpm 組み込みの別コマンドなので、run を付ける
 ```
@@ -114,13 +119,17 @@ pnpm run deploy   # pnpm deploy は pnpm 組み込みの別コマンドなので
 
 `DEV_SKIP_CLAUDE=1` は開発専用です。`ANTHROPIC_API_KEY` が空のときに、お便りの判定と翻訳を素通しにします。本番の `vars` や secrets には入れません（入れなければ、鍵が空のときお便りの投稿は 503 で止まります）。
 
+### Google サインインについて
+
+Google Cloud の OAuth クライアント（ウェブ アプリケーション）を作り、承認済みのリダイレクト URI に `https://dococafm.app/auth/google/callback`（開発は `http://127.0.0.1:5173/auth/google/callback`）を登録します。同意画面は「本番」に公開します（テスト中のままだと、登録したテストユーザーしか入れません）。`GOOGLE_OAUTH_CLIENT_ID` が空のあいだ、`/auth/google` は 503 を返します。
+
 ### Spotify 連携について
 
-Spotify 連携は開発モードのため、許可リストに入っているアカウントだけ使えます（本人と知人）。それ以外の方は、URL の貼り付けか「好きなもの 3 つ」から始められます。
+Spotify 連携は開発モードのため、許可リストに入っているアカウントだけ使えます（本人と知人）。Spotify を使わない方は、サインインのうえ、作品の URL の貼り付けや検索で好きなものを登録できます。
 
 ### 守りと制限
 
-書き込みの `POST` は同一オリジンのみ、`/admin/*` は `ADMIN_TOKEN` 必須、レート制限は IP とリスナーごとに 1 分 20 回です。詳しくは [SECURITY.md](SECURITY.md) にあります。レート制限のカウンタは Worker の isolate ごとのメモリにあるため、isolate をまたぐ厳密な上限ではありません。番組の作成は D1 を数える 1 日の上限（`EPISODE_DAILY_LIMIT`、`EPISODE_GLOBAL_DAILY_LIMIT`、`CLOUD_TTS_GLOBAL_DAILY_LIMIT`。`0` は停止）が最後の歯止めです。ただし判定は原子的ではなく同時実行で数回超えることがあり、cookie を捨てる 1 人に全体の上限を使い切られうることも、[SECURITY.md](SECURITY.md) の既知の制限に書いています。
+書き込みの `POST` は同一オリジンのみ、好きなものの登録・お便り・マイページはサインイン必須、`/admin/*` は `ADMIN_TOKEN` 必須、レート制限は IP とリスナーごとに 1 分 20 回です。詳しくは [SECURITY.md](SECURITY.md) にあります。レート制限のカウンタは Worker の isolate ごとのメモリにあるため、isolate をまたぐ厳密な上限ではありません。番組の作成は D1 を数える 1 日の上限（`EPISODE_DAILY_LIMIT`、`EPISODE_GLOBAL_DAILY_LIMIT`、`CLOUD_TTS_GLOBAL_DAILY_LIMIT`。`0` は停止）が最後の歯止めです。ただし判定は原子的ではなく同時実行で数回超えることがあり、cookie を捨てる 1 人に全体の上限を使い切られうることも、[SECURITY.md](SECURITY.md) の既知の制限に書いています。
 
 ### public 化前チェックリスト（本人）
 
