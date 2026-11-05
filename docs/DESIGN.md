@@ -102,7 +102,7 @@ CSS 変数は `:root` にライト、`@media (prefers-color-scheme: dark)` と `
 
 ## 7. 素材
 
-- キービジュアル: `public/kv.jpg`（1280 幅）、`public/kv-mobile.jpg`（800 幅）。alt は「机でレトロなラジオを聴く人と、世界の誰かの好きなもの」。元 PNG は private workspace `outputs/2026-11-05-kv-source.png`。差し替えるときは同じ構図（机の人、ラジオの電波の弧、地球に顔のない人影 3 人、線は無し）。
+- キービジュアル: `public/kv.jpg`（1280 幅）、`public/kv-mobile.jpg`（800 幅）。alt は「机でレトロなラジオを聴く人と、世界の誰かの好きなもの」。元 PNG は private workspace `outputs/2026-11-05-kv-source.png`。差し替えるときは同じ構図（机に頬杖をついてラジオを聴く人。ヘッドホンは無し。ラジオの電波の弧、夜景の上の無人の地球。人影や線は入れない。本人確定 2026-11-05 第 3 版）。
 - 模型: `docs/design/station-mock.html`。ブラウザで開くと ライト / ダーク、PC 幅 / スマホ幅 を切り替えて確かめられる。
 - アイコン / manifest の `theme-color` はダークの `--paper` `#121a2e`。
 
