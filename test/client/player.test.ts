@@ -287,7 +287,7 @@ describe("player", () => {
     autoEnd = false;
     const translated: PlayerEpisode = {
       ...one,
-      originals: { L1: { body: "Cried a little, alone at midnight.", lang: "en" } },
+      originals: { L1: { main: "夜中にひとりで少し泣いた。", original: "Cried a little, alone at midnight." } },
       segments: [{ ...one.segments[0]!, lines: [letter("L1", "夜中にひとりで少し泣いた。")] }],
     };
     mountPlayer(root, translated, opts({ strings: { ...strings, "player.original": "原文" } }));
@@ -295,10 +295,23 @@ describe("player", () => {
     await vi.waitFor(() => expect(spoken).toEqual(["夜中にひとりで少し泣いた。"]));
     const quote = root.querySelector(".player-letter")!;
     expect(quote.textContent).toContain("夜中にひとりで少し泣いた。");
-    const original = quote.querySelector(".player-original")!;
-    expect(original.textContent).toContain("原文");
+    const original = quote.querySelector("details.player-original")!;
+    expect(original.querySelector("summary")!.textContent).toBe("原文");
     expect(original.textContent).toContain("Cried a little, alone at midnight.");
-    expect(original.getAttribute("lang")).toBe("en");
+  });
+
+  it("shows the listener's-language text as the letter, keeping the spoken line unchanged", async () => {
+    autoEnd = false;
+    const translated: PlayerEpisode = {
+      ...one,
+      originals: { L1: { main: "Cried a little, alone at midnight.", original: "夜中にひとりで少し泣いた。" } },
+      segments: [{ ...one.segments[0]!, lines: [letter("L1", "夜中にひとりで少し泣いた。")] }],
+    };
+    mountPlayer(root, translated, opts());
+    await tap("toggle");
+    await vi.waitFor(() => expect(spoken).toEqual(["夜中にひとりで少し泣いた。"]));
+    expect(root.querySelector(".player-letter > p")!.textContent).toBe("Cried a little, alone at midnight.");
+    expect(root.querySelector(".player-original")!.textContent).toContain("夜中にひとりで少し泣いた。");
   });
 
   it("shows no original line for a letter written in Japanese", async () => {

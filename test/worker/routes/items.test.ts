@@ -2,12 +2,15 @@ import { env } from "cloudflare:workers";
 import { beforeEach, describe, expect, it } from "vitest";
 import { insertItem } from "../../../src/worker/db/items";
 import { insertLetter } from "../../../src/worker/db/letters";
+import { updateListener } from "../../../src/worker/db/listeners";
 import { t } from "../../../src/worker/i18n/t";
 import { resetDb } from "../../helpers/db";
 import { itemDraft, letterDraft } from "../db/helpers";
 import { get, newSession } from "./helpers";
 
 beforeEach(() => resetDb(env.DB));
+
+const idOf = (cookie: string): string => cookie.slice(cookie.indexOf("=") + 1).split(".")[0]!;
 
 describe("GET /items/:id", () => {
   it("404 for a missing item", async () => {
@@ -43,7 +46,32 @@ describe("GET /items/:id", () => {
     const html = await (await get(`/items/${item.id}`, await newSession())).text();
     expect(html).toContain("15 歳のときに大好きだった");
     expect(html).toContain("I loved this at 15");
-    expect(html).toMatch(/<details class="letter-original" open(="")?>/);
+    expect(html).toContain(`<summary>${t("letter.showOriginal")}</summary>`);
+    expect(html).toMatch(/<details class="letter-original">/);
+  });
+
+  it("shows an english listener the original as the main text, with no toggle", async () => {
+    const item = await insertItem(env.DB, itemDraft());
+    await insertLetter(env.DB, letterDraft(item.id, { body: "I loved this at 15", bodyJa: "15 歳のときに大好きだった", bodyEn: "I loved this at 15", lang: "en" }));
+    const cookie = await newSession();
+    await updateListener(env.DB, idOf(cookie), { lang: "en" });
+    const html = await (await get(`/items/${item.id}`, cookie)).text();
+    expect(html).toContain('<html lang="en">');
+    expect(html).toContain("I loved this at 15");
+    expect(html).not.toContain("15 歳のときに大好きだった");
+    expect(html).not.toContain("letter-original");
+    expect(html).toContain(t("item.putLetter", undefined, "en"));
+  });
+
+  it("gives an english listener the translation first and the japanese original behind the toggle", async () => {
+    const item = await insertItem(env.DB, itemDraft());
+    await insertLetter(env.DB, letterDraft(item.id, { body: "中学の頃、毎日聴いていた", bodyJa: "中学の頃、毎日聴いていた", bodyEn: "I listened every day in junior high" }));
+    const cookie = await newSession();
+    await updateListener(env.DB, idOf(cookie), { lang: "en" });
+    const html = await (await get(`/items/${item.id}`, cookie)).text();
+    expect(html).toContain('<p class="letter-body">I listened every day in junior high</p>');
+    expect(html).toContain(`<summary>${t("letter.showOriginal", undefined, "en")}</summary>`);
+    expect(html).toContain("中学の頃、毎日聴いていた");
   });
 
   it("shows found letters under their own heading with the source link and takedown link", async () => {

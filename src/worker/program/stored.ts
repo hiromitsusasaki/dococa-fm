@@ -1,8 +1,10 @@
 import { getLettersByIds } from "../db/letters";
+import type { Lang } from "../i18n/t";
+import { displayText } from "../letters/display";
 import type { Episode, Letter, ScriptLine, Segment } from "../types";
 
-/** The untouched original of a letter that was not written in Japanese, keyed by letter id. */
-export type Originals = Record<string, { body: string; lang: string }>;
+/** Each public letter as the listener reads it, keyed by letter id: the text in their language, and the untouched original when that is a translation. */
+export type Originals = Record<string, { main: string; original: string | null }>;
 
 export const letterIdsOf = (episode: Pick<Episode, "segments">): string[] =>
   episode.segments.flatMap((s) => s.lines.flatMap((l) => (l.type === "letter" ? [l.letterId] : [])));
@@ -11,10 +13,10 @@ export const letterIdsOf = (episode: Pick<Episode, "segments">): string[] =>
 export const lettersOf = (db: D1Database, episode: Pick<Episode, "segments">): Promise<Map<string, Letter>> =>
   getLettersByIds(db, letterIdsOf(episode));
 
-/** Originals shown beside the translation that is read aloud; the script itself carries only the translation. */
-export function originalsOf(letters: ReadonlyMap<string, Letter>): Originals {
+/** What the screen shows for each letter; the script itself carries only the Japanese text the DJ reads aloud. */
+export function originalsOf(letters: ReadonlyMap<string, Letter>, lang: Lang): Originals {
   const out: Originals = {};
-  for (const l of letters.values()) if (l.status === "public" && l.lang !== "ja") out[l.id] = { body: l.body, lang: l.lang };
+  for (const l of letters.values()) if (l.status === "public") out[l.id] = displayText(l, lang);
   return out;
 }
 
@@ -64,7 +66,7 @@ export function publicView(segments: Segment[], letters: ReadonlyMap<string, Let
 }
 
 /** Loads the letters an episode reads and returns what may still air of it, plus the originals to show. */
-export async function loadPublicEpisode(db: D1Database, episode: Episode): Promise<PublicView & { letters: Map<string, Letter>; originals: Originals }> {
+export async function loadPublicEpisode(db: D1Database, episode: Episode, lang: Lang = "ja"): Promise<PublicView & { letters: Map<string, Letter>; originals: Originals }> {
   const letters = await lettersOf(db, episode);
-  return { ...publicView(episode.segments, letters), letters, originals: originalsOf(letters) };
+  return { ...publicView(episode.segments, letters), letters, originals: originalsOf(letters, lang) };
 }

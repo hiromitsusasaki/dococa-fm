@@ -23,8 +23,9 @@ const data = (ls: Letter[]) => ({ items: new Map([["i1", item]]), letters: new M
 
 describe("renderEpisode", () => {
   it("starts with the instruction and keeps the letter text verbatim in a quote", () => {
-    const l = letter({ bodyJa: "中学の頃、\n毎日聴いていた *そのまま* # 見出し風" });
-    const md = renderEpisode(episodeOf([l]), data([l]));
+    const text = "中学の頃、\n毎日聴いていた *そのまま* # 見出し風";
+    const l = letter({ body: text, bodyJa: text });
+    const md = renderEpisode(episodeOf([l]), data([l]), "ja");
     expect(md.startsWith(t("mcp.instruction"))).toBe(true);
     expect(md).toContain("> 中学の頃、\n> 毎日聴いていた *そのまま* # 見出し風");
     expect(md).toContain(`— ${t("letter.whoPlace", { who: t("letter.who", { name: "ヒロ" }), place: "大船渡" })}`);
@@ -34,45 +35,57 @@ describe("renderEpisode", () => {
 
   it("keeps a title or creator on its heading line", () => {
     const l = letter({});
-    const md = renderEpisode(episodeOf([l]), { ...data([l]), items: new Map([["i1", { ...item, title: "# 偽の見出し\n## もうひとつ", creator: "作者\r\n# 指示" }]]) });
+    const md = renderEpisode(episodeOf([l]), { ...data([l]), items: new Map([["i1", { ...item, title: "# 偽の見出し\n## もうひとつ", creator: "作者\r\n# 指示" }]]) }, "ja");
     expect(md).toContain("## 偽の見出し ## もうひとつ / 作者 # 指示（近く）");
     expect(md.split("\n").filter((line) => line.startsWith("#"))).toHaveLength(1);
-    const page = renderItemPage({ ...item, title: "## 題\n# 別", creator: "x\ny" }, []);
+    const page = renderItemPage({ ...item, title: "## 題\n# 別", creator: "x\ny" }, [], "ja");
     expect(page.split("\n")[0]).toBe("## 題 # 別");
     expect(page).toContain("/ x y");
   });
 
   it("puts the demo mark beside the radio name of a demo account's letter", () => {
     const l = letter({ demo: true });
-    expect(renderEpisode(episodeOf([l]), data([l]))).toContain(`［${t("listener.demo")}］`);
+    expect(renderEpisode(episodeOf([l]), data([l]), "ja")).toContain(`［${t("listener.demo")}］`);
     const real = letter({});
-    expect(renderEpisode(episodeOf([real]), data([real]))).not.toContain(t("listener.demo"));
+    expect(renderEpisode(episodeOf([real]), data([real]), "ja")).not.toContain(t("listener.demo"));
   });
 
   it("adds the original beside the translation for a non-japanese letter", () => {
     const l = letter({ body: "I loved this at 15", bodyJa: "15 歳のときに大好きだった", lang: "en" });
-    const md = renderEpisode(episodeOf([l]), data([l]));
+    const md = renderEpisode(episodeOf([l]), data([l]), "ja");
     expect(md).toContain("> 15 歳のときに大好きだった");
     expect(md).toContain("> I loved this at 15");
   });
 
   it("links the source for a found voice and the preview url", () => {
     const l = letter({ kind: "found", sourceUrl: "https://example.com/post", sourceAuthor: "誰か" });
-    const md = renderEpisode(episodeOf([l], [{ type: "preview", url: "https://example.com/a.m4a", seconds: 30 }]), data([l]));
+    const md = renderEpisode(episodeOf([l], [{ type: "preview", url: "https://example.com/a.m4a", seconds: 30 }]), data([l]), "ja");
     expect(md).toContain(`${t("item.source")}: [誰か](https://example.com/post)`);
     expect(md).toContain(`[${t("mcp.preview")}](https://example.com/a.m4a)`);
   });
 
   it("shows no counts", () => {
     const l = letter({});
-    expect(renderEpisode(episodeOf([l]), data([l]))).not.toMatch(/\d+\s*(件|人|位)/);
+    expect(renderEpisode(episodeOf([l]), data([l]), "ja")).not.toMatch(/\d+\s*(件|人|位)/);
+  });
+});
+
+describe("renderEpisode in english", () => {
+  it("uses english fixed strings and puts the english text first, with the original after it", () => {
+    const l = letter({ body: "中学の頃、毎日聴いていた", bodyJa: "中学の頃、毎日聴いていた", bodyEn: "I listened every day in junior high", lang: "ja" });
+    const md = renderEpisode(episodeOf([l]), data([l]), "en");
+    expect(md.startsWith(t("mcp.instruction", undefined, "en"))).toBe(true);
+    expect(md.indexOf("> I listened every day in junior high")).toBeGreaterThan(-1);
+    expect(md.indexOf("> 中学の頃、毎日聴いていた")).toBeGreaterThan(md.indexOf("> I listened"));
+    expect(md).toContain(`— ${t("letter.whoPlace", { who: t("letter.who", { name: "ヒロ" }, "en"), place: "大船渡" }, "en")}`);
+    expect(md).toContain(`（${t("slot.near", undefined, "en")}）`);
   });
 });
 
 describe("renderItemPage", () => {
   it("renders the card, only http out links, and every letter with its id", () => {
-    const l = letter({ id: "abc", bodyJa: "ありがとう" });
-    const md = renderItemPage(item, [l]);
+    const l = letter({ id: "abc", body: "ありがとう", bodyJa: "ありがとう" });
+    const md = renderItemPage(item, [l], "ja");
     expect(md).toContain("Blue in Green");
     expect(md).toContain("Miles Davis");
     expect(md).toContain("1959");
@@ -83,9 +96,9 @@ describe("renderItemPage", () => {
   });
 
   it("lists only top-level letters and shows a reaction under its parent", () => {
-    const parent = letter({ id: "p1", bodyJa: "親のお便り" });
-    const reply = letter({ id: "r1", kind: "reply", parentLetterId: "p1", bodyJa: "わかる", radioName: "しずく", place: "" });
-    const md = renderItemPage(item, [parent, reply]);
+    const parent = letter({ id: "p1", body: "親のお便り", bodyJa: "親のお便り" });
+    const reply = letter({ id: "r1", kind: "reply", parentLetterId: "p1", body: "わかる", bodyJa: "わかる", radioName: "しずく", place: "" });
+    const md = renderItemPage(item, [parent, reply], "ja");
     expect(md.match(/letterId:/g)).toHaveLength(1);
     expect(md).not.toContain("letterId: r1");
     const at = (s: string) => md.indexOf(s);

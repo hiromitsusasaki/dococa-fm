@@ -5,7 +5,7 @@ import { insertItem } from "../../../src/worker/db/items";
 import { insertLetter, listLettersForItem } from "../../../src/worker/db/letters";
 import { t } from "../../../src/worker/i18n/t";
 import { resetDb } from "../../helpers/db";
-import { stubAnthropic } from "../../helpers/anthropic";
+import { okReply, stubAnthropic } from "../../helpers/anthropic";
 import { itemDraft, letterDraft } from "../db/helpers";
 import { get, newSession, postForm } from "./helpers";
 
@@ -18,7 +18,7 @@ beforeEach(async () => {
   await resetDb(env.DB);
   (env as { ANTHROPIC_API_KEY: string }).ANTHROPIC_API_KEY = "sk-test";
   create = stubAnthropic();
-  create.mockResolvedValue(verdict({ ok: true }));
+  create.mockImplementation(okReply);
 });
 afterEach(() => {
   vi.restoreAllMocks();
@@ -39,14 +39,14 @@ describe("POST /letters", () => {
     expect(res.headers.get("location")).toBe(`/items/${item.id}`);
     const [l] = await listLettersForItem(env.DB, item.id);
     expect(l).toMatchObject({ kind: "letter", body: "中学の頃、毎日聴いていた", bodyJa: "中学の頃、毎日聴いていた", lang: "ja", radioName: "ヒロ", place: "大船渡", status: "public" });
-    expect(create).toHaveBeenCalledTimes(1); // moderation only; ja is not translated
+    expect(create).toHaveBeenCalledTimes(2); // moderation, then the english translation; ja is not translated to ja
+    expect(l!.bodyEn).toBe("[en] translated");
   });
 
   it("judges the work's title and creator in the same moderation call", async () => {
     const item = await insertItem(env.DB, itemDraft({ title: "宣伝<タイトル>", creator: "誰かのチャンネル" }));
     const res = await postForm("/letters", await newSession(), { itemId: item.id, body: "いい曲" });
     expect(res.status).toBe(303);
-    expect(create).toHaveBeenCalledTimes(1);
     const req = create.mock.calls[0]![0];
     const user = String(req.messages[0].content);
     expect(user).toContain("<work>");
@@ -63,6 +63,33 @@ describe("POST /letters", () => {
     expect(res.status).toBe(303);
     const [l] = await listLettersForItem(env.DB, item.id);
     expect(l).toMatchObject({ body: "I loved this at 15", bodyJa: "15 歳のときに大好きだった", lang: "en" });
+  });
+
+  it("stores the english original as bodyEn and asks for the japanese translation only", async () => {
+    const item = await seedItem();
+    const res = await postForm("/letters", await newSession(), { itemId: item.id, body: "I loved this at 15" });
+    expect(res.status).toBe(303);
+    const [l] = await listLettersForItem(env.DB, item.id);
+    expect(l).toMatchObject({ body: "I loved this at 15", bodyJa: "[ja] translated", bodyEn: "I loved this at 15", lang: "en" });
+    expect(create).toHaveBeenCalledTimes(2); // moderation + ja
+  });
+
+  it("translates a japanese letter into english for bodyEn", async () => {
+    const item = await seedItem();
+    await postForm("/letters", await newSession(), { itemId: item.id, body: "中学の頃、毎日聴いていた" });
+    const [l] = await listLettersForItem(env.DB, item.id);
+    expect(l).toMatchObject({ bodyJa: "中学の頃、毎日聴いていた", bodyEn: "[en] translated" });
+    const req = create.mock.calls[1]![0];
+    expect(req.tools[0].input_schema.required).toEqual(["en"]);
+    expect(String(req.system)).toContain("English");
+  });
+
+  it("translates a letter in a third language into both japanese and english", async () => {
+    const item = await seedItem();
+    await postForm("/letters", await newSession(), { itemId: item.id, body: "Me encantó esta canción, ¡gracias!" });
+    const [l] = await listLettersForItem(env.DB, item.id);
+    expect(l).toMatchObject({ lang: "other", bodyJa: "[ja] translated", bodyEn: "[en] translated" });
+    expect(create).toHaveBeenCalledTimes(3);
   });
 
   it("letter_body_over_200_chars_rejected", async () => {

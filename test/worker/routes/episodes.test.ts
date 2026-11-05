@@ -290,16 +290,18 @@ describe("GET /episodes/:id", () => {
     await env.DB.prepare("UPDATE letters SET lang = 'en', body = 'A letter from far away.' WHERE id = ?").bind(letterId).run();
     const html = await (await get(`/episodes/${id}`, cookie)).text();
     const embedded = JSON.parse(html.match(/id="episode-json">([\s\S]*?)<\/script>/)![1]!);
-    expect(embedded.originals).toEqual({ [letterId]: { body: "A letter from far away.", lang: "en" } });
+    // A Japanese listener reads the stored translation as the main text, with the original behind a toggle.
+    const stored = (await env.DB.prepare("SELECT body_ja FROM letters WHERE id = ?").bind(letterId).first<{ body_ja: string }>())!;
+    expect(embedded.originals[letterId]).toEqual({ main: stored.body_ja, original: "A letter from far away." });
     expect(JSON.parse(html.match(/id="player-i18n">([\s\S]*?)<\/script>/)![1]!)["player.original"]).toBe("原文");
     const json = (await (await get(`/episodes/${id}.json`, cookie)).json()) as { originals: Record<string, unknown> };
-    expect(json.originals).toEqual({ [letterId]: { body: "A letter from far away.", lang: "en" } });
+    expect(json.originals[letterId]).toEqual({ main: expect.any(String), original: "A letter from far away." });
   });
 
-  it("carries no originals when every letter is Japanese", async () => {
+  it("carries no original to toggle when every letter is Japanese", async () => {
     const { cookie, id } = await make();
-    const json = (await (await get(`/episodes/${id}.json`, cookie)).json()) as { originals: Record<string, unknown> };
-    expect(json.originals).toEqual({});
+    const json = (await (await get(`/episodes/${id}.json`, cookie)).json()) as { originals: Record<string, { original: string | null }> };
+    expect(Object.values(json.originals).every((o) => o.original === null)).toBe(true);
   });
 
   it("leaves a letter rejected since out of the page, the embedded json and the json", async () => {

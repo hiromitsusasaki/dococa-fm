@@ -7,7 +7,7 @@ import { createListener } from "../../../src/worker/db/listeners";
 import { upsertHistory } from "../../../src/worker/db/history";
 import { t } from "../../../src/worker/i18n/t";
 import { resetDb } from "../../helpers/db";
-import { stubAnthropic } from "../../helpers/anthropic";
+import { okReply, stubAnthropic } from "../../helpers/anthropic";
 import { itemDraft, letterDraft } from "../db/helpers";
 
 let create: ReturnType<typeof stubAnthropic>;
@@ -140,7 +140,7 @@ describe("/mcp/:token", () => {
 
   it("post_letter creates a letter for an item, and a duplicate is an error", async () => {
     create = stubAnthropic();
-    create.mockResolvedValue(verdict({ ok: true }));
+    create.mockImplementation(okReply);
     (env as { ANTHROPIC_API_KEY: string }).ANTHROPIC_API_KEY = "sk-test";
     const { me, far } = await seed();
     const r = await call(me.mcpToken, "post_letter", { itemId: far.id, body: "中学の頃、毎日聴いていた" });
@@ -156,7 +156,7 @@ describe("/mcp/:token", () => {
 
   it("react places a watashimo once and a reply", async () => {
     create = stubAnthropic();
-    create.mockResolvedValue(verdict({ ok: true }));
+    create.mockImplementation(okReply);
     (env as { ANTHROPIC_API_KEY: string }).ANTHROPIC_API_KEY = "sk-test";
     const { me, far } = await seed();
     const [parent] = await listLettersForItem(env.DB, far.id);

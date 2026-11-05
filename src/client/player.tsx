@@ -7,8 +7,8 @@ import { loadVoices, pickVoice, speak } from "./speech";
 
 export type PlayerItem = { title: string; creator: string; imageUrl: string | null; outLinks: Record<string, string> };
 /** The slice of an episode the page embeds: no listener id, no verification report. */
-/** Letters not written in Japanese: the line reads the translation, the screen shows this original under it. */
-export type PlayerOriginals = Record<string, { body: string; lang: string }>;
+/** What the screen shows for a letter: the text in the listener's language and, behind a toggle, the original when that is a translation. The DJ reads the script line as it is. */
+export type PlayerOriginals = Record<string, { main: string; original: string | null }>;
 export type PlayerEpisode = {
   id: string;
   segments: Segment[];
@@ -331,11 +331,12 @@ function Screen({ s, view }: { s: State; view: View }) {
         {line?.type === "preview" && <p class="player-dj" aria-hidden="true">♪</p>}
         {letter && (
           <blockquote class={letter.kind === "found" ? "player-letter found" : "player-letter"}>
-            <p>{letter.text}</p>
-            {original && original.body !== letter.text && (
-              <p class="player-original" lang={original.lang}>
-                <span class="player-original-label">{str("player.original")}</span> {original.body}
-              </p>
+            <p>{original?.main ?? letter.text}</p>
+            {original?.original != null && original.original !== original.main && (
+              <details class="player-original">
+                <summary>{str("player.original")}</summary>
+                <p>{original.original}</p>
+              </details>
             )}
             <footer class="letter-who">
               {letter.kind === "found" && isHttpUrl(letter.sourceUrl) ? (

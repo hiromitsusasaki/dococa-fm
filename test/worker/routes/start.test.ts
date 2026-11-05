@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { listHistory } from "../../../src/worker/db/history";
 import { insertLetter, listLettersByListener } from "../../../src/worker/db/letters";
 import { t } from "../../../src/worker/i18n/t";
-import { stubAnthropic } from "../../helpers/anthropic";
+import { okReply, stubAnthropic } from "../../helpers/anthropic";
 import { resetDb } from "../../helpers/db";
 import { json, stubFetch } from "../../helpers/fetch";
 import { letterDraft } from "../db/helpers";
@@ -146,7 +146,7 @@ describe("POST /start", () => {
       return url.startsWith("https://api.anthropic.com") ? anthropicFetch(input, init) : searchFetch.fn(input, init);
     });
     (env as { ANTHROPIC_API_KEY: string }).ANTHROPIC_API_KEY = "sk-test";
-    create.mockResolvedValueOnce(verdict({ ok: true })).mockResolvedValueOnce(verdict({ ok: false, reason: "ad" }));
+    create.mockImplementation((req) => (String(req.messages?.[0]?.content).includes("買ってね") ? verdict({ ok: false, reason: "ad" }) : okReply(req)));
     const cookie = await newSession();
     const res = await postForm("/start", cookie, { fav1: "曲A", note1: "  中学の頃、毎日聴いていた ", fav2: "曲B", note2: "買ってね" });
     expect(res.status).toBe(303);

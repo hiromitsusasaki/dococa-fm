@@ -5,23 +5,25 @@ import type { Variables } from "../auth/session";
 import { getItem } from "../db/items";
 import { listLettersForItem } from "../db/letters";
 import type { Env } from "../env";
-import { t } from "../i18n/t";
+import { tFor } from "../i18n/t";
 
 export const items = new Hono<{ Bindings: Env; Variables: Variables }>();
 
 items.get("/items/:id", async (c) => {
   const item = await getItem(c.env.DB, c.req.param("id"));
   if (!item) return c.notFound();
+  const lang = c.get("listener").lang;
+  const t = tFor(lang);
   const letters = await listLettersForItem(c.env.DB, item.id);
   return c.html(
-    <Layout title={item.title}>
+    <Layout title={item.title} lang={lang}>
       <main class="item-page">
-        <ItemCard item={item} />
-        <OutLinks item={item} />
+        <ItemCard item={item} lang={lang} />
+        <OutLinks item={item} lang={lang} />
         <p>
           <a class="button" href={`/put?itemId=${item.id}`}>{t("item.putLetter")}</a>
         </p>
-        <LetterList itemId={item.id} letters={letters} />
+        <LetterList itemId={item.id} letters={letters} lang={lang} />
       </main>
     </Layout>,
   );

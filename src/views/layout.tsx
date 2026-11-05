@@ -1,11 +1,13 @@
 import type { Child } from "hono/jsx";
-import { t } from "../worker/i18n/t";
+import { type Lang, tFor } from "../worker/i18n/t";
 
-type LayoutProps = { title: string; children?: Child; script?: boolean };
+type LayoutProps = { title: string; children?: Child; script?: boolean; lang?: Lang };
 
-export function Layout({ title, children, script }: LayoutProps) {
+/** `lang` is the listener's; pages outside the session (admin, health) leave it at Japanese. */
+export function Layout({ title, children, script, lang = "ja" }: LayoutProps) {
+  const t = tFor(lang);
   return (
-    <html lang="ja">
+    <html lang={lang}>
       <head>
         <meta charset="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />

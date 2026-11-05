@@ -30,14 +30,14 @@ export function newMcpToken(): string {
   return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
 }
 
-export async function createListener(db: D1Database, init: Partial<Pick<Listener, "radioName" | "place" | "demo">> = {}): Promise<Listener> {
+export async function createListener(db: D1Database, init: Partial<Pick<Listener, "radioName" | "place" | "demo" | "lang">> = {}): Promise<Listener> {
   const listener: Listener = {
     id: crypto.randomUUID(),
     radioName: init.radioName ?? "",
     place: init.place ?? "",
     voice: "",
     dial: 0.3,
-    lang: "ja",
+    lang: init.lang ?? "ja",
     mcpToken: newMcpToken(),
     spotifyRefreshToken: null,
     cloudTtsUsed: false,

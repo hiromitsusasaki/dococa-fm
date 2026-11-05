@@ -6,7 +6,7 @@ import { elicitQuestions } from "../claude/elicit";
 import { isInHistory, listHistory } from "../db/history";
 import { getItem } from "../db/items";
 import type { Env } from "../env";
-import { t } from "../i18n/t";
+import { tFor } from "../i18n/t";
 import { type ItemDraft, resolveUrl } from "../resolve";
 import type { Item, Listener } from "../types";
 
@@ -23,13 +23,15 @@ export type PutPageProps = {
 };
 
 export function PutPage({ listener, card, itemId, url, body, error, history = [], questions = [], imported }: PutPageProps) {
+  const lang = listener.lang;
+  const t = tFor(lang);
   return (
-    <Layout title={t("put.title")}>
+    <Layout title={t("put.title")} lang={lang}>
       <main class="put">
         <h1>{t("put.title")}</h1>
         {error && <p class="form-error" role="alert">{error}</p>}
         {imported && <p class="put-imported" role="status">{t("put.imported")}</p>}
-        {card && <ItemCard item={card} heading="h2" />}
+        {card && <ItemCard item={card} heading="h2" lang={lang} />}
         {!card && url && (
           <p class="muted">
             <a href="/start">{t("put.search")}</a>
@@ -81,7 +83,7 @@ export function PutPage({ listener, card, itemId, url, body, error, history = []
               <small>{t("put.bodyHelp")}</small>
             </label>
             <p class="put-from">
-              {t("put.from")}: {whoOf(listener)} <a href="/settings">{t("put.editSettings")}</a>
+              {t("put.from")}: {whoOf(listener, lang)} <a href="/settings">{t("put.editSettings")}</a>
               <br />
               <small>{t("put.fromHelp")}</small>
             </p>
@@ -101,6 +103,7 @@ export const put = new Hono<{ Bindings: Env; Variables: Variables }>();
 
 put.get("/put", async (c) => {
   const listener = c.get("listener");
+  const t = tFor(listener.lang);
   const itemId = c.req.query("itemId");
   const url = c.req.query("url")?.trim();
   if (itemId) {

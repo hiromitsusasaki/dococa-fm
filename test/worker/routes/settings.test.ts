@@ -44,6 +44,21 @@ describe("session cookie", () => {
     expect(health.headers.get("set-cookie")).toBeNull();
   });
 
+  it("starts a new listener in english when Accept-Language leads with english, otherwise in japanese", async () => {
+    const en = await SELF.fetch(`${BASE}/settings`, { headers: { "accept-language": "en-US,en;q=0.9,ja;q=0.5" } });
+    expect(await en.text()).toContain('<html lang="en">');
+    const ja = await SELF.fetch(`${BASE}/settings`, { headers: { "accept-language": "ja,en;q=0.8" } });
+    expect(await ja.text()).toContain('<html lang="ja">');
+    const { results } = await env.DB.prepare("SELECT lang FROM listeners ORDER BY created_at").all<{ lang: string }>();
+    expect(results.map((r) => r.lang).sort()).toEqual(["en", "ja"]);
+  });
+
+  it("does not switch an existing listener's language on a later request", async () => {
+    const cookie = cookieOf(await SELF.fetch(`${BASE}/settings`, { headers: { "accept-language": "ja" } }));
+    const res = await SELF.fetch(`${BASE}/settings`, { headers: { cookie, "accept-language": "en-US" } });
+    expect(await res.text()).toContain('<html lang="ja">');
+  });
+
   it("reuses the listener when the cookie is sent back", async () => {
     const first = await SELF.fetch(`${BASE}/settings`);
     const cookie = cookieOf(first);

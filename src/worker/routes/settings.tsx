@@ -6,7 +6,7 @@ import type { Variables } from "../auth/session";
 import { newMcpToken, updateListener } from "../db/listeners";
 import { looksLikeContact } from "../program/pii-patterns";
 import type { Env } from "../env";
-import { t } from "../i18n/t";
+import { tFor } from "../i18n/t";
 import type { Listener } from "../types";
 
 /** The DJ says radio names and places aloud, so they may not be an address, a phone number or a url. */
@@ -17,14 +17,16 @@ const schema = z.object({
   place: z.string().trim().max(30).refine(notContact),
   voice: z.string().max(200),
   dial: z.coerce.number().min(0).max(1),
+  lang: z.enum(["ja", "en"]).optional(),
 });
 
-type FormValues = Pick<Listener, "radioName" | "place" | "voice" | "dial">;
+type FormValues = Pick<Listener, "radioName" | "place" | "voice" | "dial" | "lang">;
 
 function SettingsPage(props: { values: FormValues; listenerId: string; mcpUrl: string; spotifyConnected: boolean; spotifyFailed?: boolean; saved?: boolean; invalid?: boolean }) {
   const { values, listenerId, mcpUrl, spotifyConnected, spotifyFailed, saved, invalid } = props;
+  const t = tFor(values.lang);
   return (
-    <Layout title={t("settings.title")}>
+    <Layout title={t("settings.title")} lang={values.lang}>
       <main class="settings">
         <h1>{t("settings.title")}</h1>
         <p class="settings-name">{values.radioName || t("listener.anonymous")}</p>
@@ -32,6 +34,13 @@ function SettingsPage(props: { values: FormValues; listenerId: string; mcpUrl: s
         {invalid && <p class="settings-error" role="alert">{t("settings.invalid")}</p>}
 
         <form method="post" action="/settings" class="settings-form">
+          <label>
+            <span>{t("settings.lang")}</span>
+            <select name="lang">
+              <option value="ja" selected={values.lang === "ja"}>日本語</option>
+              <option value="en" selected={values.lang === "en"}>English</option>
+            </select>
+          </label>
           <label>
             <span>{t("settings.radioName")}</span>
             <input type="text" name="radioName" maxlength={20} value={values.radioName} />

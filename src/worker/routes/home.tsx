@@ -5,16 +5,18 @@ import type { Variables } from "../auth/session";
 import { listRecentItems } from "../db/items";
 import { hasActivity } from "../db/listeners";
 import type { Env } from "../env";
-import { t } from "../i18n/t";
+import { tFor } from "../i18n/t";
 
 export const home = new Hono<{ Bindings: Env; Variables: Variables }>();
 
 home.get("/", async (c) => {
   const listener = c.get("listener");
+  const lang = listener.lang;
+  const t = tFor(lang);
   const [recent, active] = await Promise.all([listRecentItems(c.env.DB, 6), hasActivity(c.env.DB, listener.id)]);
   const isNew = !active;
   return c.html(
-    <Layout title={t("app.name")}>
+    <Layout title={t("app.name")} lang={lang}>
       <main class="home">
         <h1>{t("app.name")}</h1>
         <p>{t("app.tagline")}</p>
@@ -45,7 +47,7 @@ home.get("/", async (c) => {
               {recent.map((item) => (
                 <li>
                   <a href={`/items/${item.id}`}>
-                    <ItemCard item={item} heading="h2" />
+                    <ItemCard item={item} heading="h2" lang={lang} />
                   </a>
                 </li>
               ))}

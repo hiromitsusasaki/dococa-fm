@@ -1,5 +1,5 @@
 import { moderateLetter } from "../claude/moderate";
-import { type Lang, detectLang, translateToJa } from "../claude/translate";
+import { type Lang, detectLang, translateLetter } from "../claude/translate";
 import { getItem } from "../db/items";
 import { countRecentDuplicate, getLetter, hasWatashimo, insertLetter } from "../db/letters";
 import type { Env } from "../env";
@@ -64,12 +64,15 @@ export async function createLetter(
 
   let lang: Lang = "ja";
   let bodyJa = body;
+  let bodyEn: string | null = isWatashimo ? t("reaction.watashimo", undefined, "en") : body;
   if (!isWatashimo) {
     try {
       const verdict = await moderateLetter(env, body, { title: draft.title, creator: draft.creator });
       if (!verdict.ok) return fail(422, "letters.rejected", { reason: verdict.reason, draft });
       lang = detectLang(body);
-      bodyJa = await translateToJa(env, body, lang);
+      // One call per language the letter was not written in; the other column keeps the original.
+      bodyJa = await translateLetter(env, body, lang, "ja");
+      bodyEn = await translateLetter(env, body, lang, "en");
     } catch (e) {
       console.error("[dococa] letter judgement failed", e);
       return fail(503, "letters.unavailable", { draft });
@@ -82,7 +85,7 @@ export async function createLetter(
     kind,
     body,
     bodyJa,
-    bodyEn: null,
+    bodyEn,
     lang,
     radioName: listener.radioName,
     place: listener.place,

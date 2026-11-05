@@ -47,8 +47,9 @@ describe("publicView", () => {
 });
 
 describe("originalsOf", () => {
-  it("lists public letters not written in Japanese only", () => {
-    const letters = byId([letter({ id: "e", lang: "en", body: "Hi" }), letter({ id: "j" }), letter({ id: "x", lang: "en", body: "No", status: "rejected" })]);
-    expect(originalsOf(letters)).toEqual({ e: { body: "Hi", lang: "en" } });
+  it("gives each public letter in the listener's language, with the original only for a translation", () => {
+    const letters = byId([letter({ id: "e", lang: "en", body: "Hi", bodyJa: "やあ" }), letter({ id: "j" }), letter({ id: "x", lang: "en", body: "No", status: "rejected" })]);
+    expect(originalsOf(letters, "ja")).toEqual({ e: { main: "やあ", original: "Hi" }, j: { main: expect.any(String), original: null } });
+    expect(originalsOf(letters, "en").e).toEqual({ main: "Hi", original: null });
   });
 });

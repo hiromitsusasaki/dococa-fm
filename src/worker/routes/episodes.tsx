@@ -7,7 +7,7 @@ import { getVerifiedEpisode, listArchive } from "../db/episodes";
 import { getItemsByIds } from "../db/items";
 import type { Env } from "../env";
 import { ja } from "../i18n/ja";
-import { t } from "../i18n/t";
+import { type Lang, tFor } from "../i18n/t";
 import { makeEpisode } from "../program/create";
 import { loadPublicEpisode } from "../program/stored";
 import type { Episode, Listener, ScriptLine } from "../types";
@@ -16,9 +16,10 @@ export const episodes = new Hono<{ Bindings: Env; Variables: Variables }>();
 
 const JST_OFFSET_MS = 9 * 60 * 60 * 1000;
 
-function MessagePage({ message, start }: { message: string; start?: boolean }) {
+function MessagePage({ message, start, lang }: { message: string; start?: boolean; lang: Lang }) {
+  const t = tFor(lang);
   return (
-    <Layout title={t("episode.title")}>
+    <Layout title={t("episode.title")} lang={lang}>
       <main class="episode-page">
         <p role="alert">{message}</p>
         {start && (
@@ -39,30 +40,34 @@ const jsonForScript = (value: unknown): string => JSON.stringify(value).replace(
 
 /** What the client player needs to know: the labels it shows, as `t()` values, since `t()` is server-only. */
 const PLAYER_KEY = /^(player\.|out\.|letter\.who|listener\.(?:anonymous|demo)$)/;
-const playerStrings = (): Record<string, string> =>
-  Object.fromEntries(Object.keys(ja).filter((k) => PLAYER_KEY.test(k)).map((k) => [k, t(k as keyof typeof ja)]));
+const playerStrings = (lang: Lang): Record<string, string> =>
+  Object.fromEntries(Object.keys(ja).filter((k) => PLAYER_KEY.test(k)).map((k) => [k, tFor(lang)(k as keyof typeof ja)]));
 
-const readerOf = (l: Extract<ScriptLine, { type: "letter" }>): string =>
-  l.kind === "found" ? (l.sourceAuthor ?? "") : whoOf(l);
+const readerOf = (l: Extract<ScriptLine, { type: "letter" }>, lang: Lang): string =>
+  l.kind === "found" ? (l.sourceAuthor ?? "") : whoOf(l, lang);
 
 /** Builds the listener's next episode and answers with the redirect, or the limit / unavailable page. Shared with POST /start. */
 export const startEpisode = async (c: Context<{ Bindings: Env; Variables: Variables }>) => {
+  const lang = c.get("listener").lang;
+  const t = tFor(lang);
   const made = await makeEpisode(c.env, c.get("listener"));
   if (made.ok) return c.redirect(`/episodes/${made.id}`, 303);
-  if (made.reason === "empty") return c.html(<MessagePage message={t("episode.empty")} start />, 200);
-  return c.html(<MessagePage message={t(made.reason === "limit" ? "episode.limit" : "episode.unavailable")} />, made.reason === "limit" ? 429 : 503);
+  if (made.reason === "empty") return c.html(<MessagePage message={t("episode.empty")} start lang={lang} />, 200);
+  return c.html(<MessagePage message={t(made.reason === "limit" ? "episode.limit" : "episode.unavailable")} lang={lang} />, made.reason === "limit" ? 429 : 503);
 };
 
 episodes.post("/episodes", startEpisode);
 
 episodes.get("/episodes", async (c) => {
+  const lang = c.get("listener").lang;
+  const t = tFor(lang);
   const rows = (await listArchive(c.env.DB, c.get("listener").id, 50)).map((e) => ({
     id: e.id,
     date: new Date(Date.parse(e.createdAt) + JST_OFFSET_MS).toISOString().slice(0, 10),
     title: e.title ?? t("episode.untitled"),
   }));
   return c.html(
-    <Layout title={t("episode.archive")}>
+    <Layout title={t("episode.archive")} lang={lang}>
       <main class="archive">
         <h1>{t("episode.archive")}</h1>
         {rows.length === 0 ? (
@@ -96,10 +101,12 @@ episodes.get("/episodes/:id", async (c) => {
   // Only the builder stores verified rows; reading verified rows only is a second lock, not the first.
   if (!episode) return c.notFound();
   // Letters rejected or taken down since the episode was made are left out of every exit.
-  const { segments, originals, storedIndex } = await loadPublicEpisode(c.env.DB, episode);
+  const { segments, originals, storedIndex } = await loadPublicEpisode(c.env.DB, episode, c.get("listener").lang);
   if (asJson) return c.json({ ...episode, segments, originals });
 
   const listener = c.get("listener");
+  const lang = listener.lang;
+  const t = tFor(lang);
   const stored = await getItemsByIds(c.env.DB, segments.map((s) => s.itemId));
   const items: Record<string, { title: string; creator: string; imageUrl: string | null; outLinks: Record<string, string> }> = {};
   const rows = segments.flatMap((s) => {
@@ -114,7 +121,7 @@ episodes.get("/episodes/:id", async (c) => {
     return [{ item, slot: s.slot, readers: s.lines.filter((l): l is Extract<ScriptLine, { type: "letter" }> => l.type === "letter") }];
   });
   return c.html(
-    <Layout title={t("episode.title")} script>
+    <Layout title={t("episode.title")} script lang={lang}>
       <main class="episode-page">
         <div id="player" data-episode-id={episode.id} data-voice={listener.voice} data-next-url={`/episodes/${episode.id}/next`} data-tts-url={episode.cloudTts ? "/tts" : ""} data-dial={String(listener.dial)}></div>
         <ol class="program">
@@ -122,10 +129,10 @@ episodes.get("/episodes/:id", async (c) => {
             <li>
               <p class="slot">{t(`slot.${r.slot}`)}</p>
               <a href={`/items/${r.item.id}`}>
-                <ItemCard item={r.item} heading="h2" />
+                <ItemCard item={r.item} heading="h2" lang={lang} />
               </a>
               {r.readers.map((l) => (
-                <p class="letter-who">{readerOf(l)}</p>
+                <p class="letter-who">{readerOf(l, lang)}</p>
               ))}
             </li>
           ))}
@@ -137,7 +144,7 @@ episodes.get("/episodes/:id", async (c) => {
           {raw(jsonForScript({ id: episode.id, segments, items, originals, ttsLines: storedIndex }))}
         </script>
         <script type="application/json" id="player-i18n">
-          {raw(jsonForScript(playerStrings()))}
+          {raw(jsonForScript(playerStrings(lang)))}
         </script>
       </main>
     </Layout>,

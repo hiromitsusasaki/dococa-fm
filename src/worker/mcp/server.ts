@@ -5,7 +5,7 @@ import { getItem, getItemsByIds } from "../db/items";
 import { getLetter, listLettersForItem } from "../db/letters";
 import type { Env } from "../env";
 import type { ja } from "../i18n/ja";
-import { t } from "../i18n/t";
+import { type Lang, tFor } from "../i18n/t";
 import { type LetterFailure, type LetterInput, createLetter } from "../letters/create";
 import { makeEpisode } from "../program/create";
 import { loadPublicEpisode } from "../program/stored";
@@ -17,14 +17,16 @@ type ToolResult = { content: [{ type: "text"; text: string }]; isError?: true };
 const ok = (text: string): ToolResult => ({ content: [{ type: "text", text }] });
 const fail = (text: string): ToolResult => ({ content: [{ type: "text", text }], isError: true });
 
-const failureText = (f: LetterFailure): string =>
-  f.reason ? `${t(f.key)} ${t(`letters.reason.${f.reason}` as keyof typeof ja)}` : t(f.key);
+const failureText = (f: LetterFailure, lang: Lang): string => {
+  const t = tFor(lang);
+  return f.reason ? `${t(f.key)} ${t(`letters.reason.${f.reason}` as keyof typeof ja)}` : t(f.key);
+};
 
 /** Letters rejected since the episode was made are left out, as on the episode page. */
-async function renderStoredEpisode(db: D1Database, episode: Episode): Promise<string> {
-  const { segments, letters } = await loadPublicEpisode(db, episode);
+async function renderStoredEpisode(db: D1Database, episode: Episode, lang: Lang): Promise<string> {
+  const { segments, letters } = await loadPublicEpisode(db, episode, lang);
   const items = await getItemsByIds(db, segments.map((s) => s.itemId));
-  return renderEpisode({ ...episode, segments }, { items, letters });
+  return renderEpisode({ ...episode, segments }, { items, letters }, lang);
 }
 
 /** The verified episode to hand over: a fresh one when asked and allowed, otherwise the latest, otherwise a first one. */
@@ -39,15 +41,17 @@ async function pickEpisode(env: Env, db: D1Database, listener: Listener, wantNew
   return latest();
 }
 
-async function itemPageWithNotice(db: D1Database, itemId: string, notice: string): Promise<ToolResult> {
+async function itemPageWithNotice(db: D1Database, itemId: string, notice: string, lang: Lang): Promise<ToolResult> {
   const item = await getItem(db, itemId);
   if (!item) return ok(notice);
-  return ok(`${notice}\n\n${renderItemPage(item, await listLettersForItem(db, item.id))}`);
+  return ok(`${notice}\n\n${renderItemPage(item, await listLettersForItem(db, item.id), lang)}`);
 }
 
 /** Exactly four tools: the DJ side never gets write access beyond placing a letter or a reaction as the listener. */
 export function createMcpServer(env: Env, db: D1Database, listener: Listener): McpServer {
   const server = new McpServer({ name: "dococa-fm", version: "0.1.0" });
+  const lang = listener.lang;
+  const t = tFor(lang);
 
   server.registerTool(
     "get_episode",
@@ -57,7 +61,7 @@ export function createMcpServer(env: Env, db: D1Database, listener: Listener): M
     },
     async ({ new: wantNew }) => {
       const episode = await pickEpisode(env, db, listener, wantNew === true);
-      return episode ? ok(await renderStoredEpisode(db, episode)) : fail(t("mcp.noEpisode"));
+      return episode ? ok(await renderStoredEpisode(db, episode, lang)) : fail(t("mcp.noEpisode"));
     },
   );
 
@@ -69,13 +73,13 @@ export function createMcpServer(env: Env, db: D1Database, listener: Listener): M
     },
     async ({ itemId }) => {
       const item = await getItem(db, itemId);
-      return item ? ok(renderItemPage(item, await listLettersForItem(db, item.id))) : fail(t("mcp.itemNotFound"));
+      return item ? ok(renderItemPage(item, await listLettersForItem(db, item.id), lang)) : fail(t("mcp.itemNotFound"));
     },
   );
 
   const place = async (input: LetterInput, notice: string): Promise<ToolResult> => {
     const result = await createLetter(env, db, listener, input);
-    return result.ok ? itemPageWithNotice(db, result.itemId, notice) : fail(failureText(result));
+    return result.ok ? itemPageWithNotice(db, result.itemId, notice, lang) : fail(failureText(result, lang));
   };
 
   server.registerTool(

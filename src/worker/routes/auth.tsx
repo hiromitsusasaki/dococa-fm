@@ -6,15 +6,16 @@ import { authorizeUrl, createPkce, exchangeCode, importSpotifyHistory } from "..
 import { encryptSecret } from "../auth/crypto";
 import { updateListener } from "../db/listeners";
 import type { Env } from "../env";
-import { t } from "../i18n/t";
+import { type Lang, tFor } from "../i18n/t";
 
 const PKCE_COOKIE = "dfm_pkce";
 const PKCE_PATH = "/auth/spotify";
 const PKCE_MAX_AGE = 600;
 
-function Notice({ message }: { message: string }) {
+function Notice({ message, lang }: { message: string; lang: Lang }) {
+  const t = tFor(lang);
   return (
-    <Layout title={t("settings.spotify")}>
+    <Layout title={t("settings.spotify")} lang={lang}>
       <main class="settings">
         <h1>{t("settings.spotify")}</h1>
         <p role="status">{message}</p>
@@ -29,7 +30,9 @@ function Notice({ message }: { message: string }) {
 export const auth = new Hono<{ Bindings: Env; Variables: Variables }>();
 
 auth.get("/auth/spotify", async (c) => {
-  if (!c.env.SPOTIFY_CLIENT_ID) return c.html(<Notice message={t("spotify.notConfigured")} />);
+  const lang = c.get("listener").lang;
+  const t = tFor(lang);
+  if (!c.env.SPOTIFY_CLIENT_ID) return c.html(<Notice message={t("spotify.notConfigured")} lang={lang} />);
   const pkce = await createPkce();
   setCookie(c, PKCE_COOKIE, `${pkce.state}.${pkce.verifier}`, {
     httpOnly: true,
@@ -42,16 +45,18 @@ auth.get("/auth/spotify", async (c) => {
 });
 
 auth.get("/auth/spotify/callback", async (c) => {
-  if (!c.env.SPOTIFY_CLIENT_ID) return c.html(<Notice message={t("spotify.notConfigured")} />);
+  const lang = c.get("listener").lang;
+  const t = tFor(lang);
+  if (!c.env.SPOTIFY_CLIENT_ID) return c.html(<Notice message={t("spotify.notConfigured")} lang={lang} />);
   const [state, verifier] = (getCookie(c, PKCE_COOKIE) ?? "").split(".");
   deleteCookie(c, PKCE_COOKIE, { path: PKCE_PATH });
   if (c.req.query("error")) return c.redirect("/settings", 303);
   const code = c.req.query("code");
   if (!state || !verifier || !code || c.req.query("state") !== state) {
-    return c.html(<Notice message={t("spotify.badState")} />, 400);
+    return c.html(<Notice message={t("spotify.badState")} lang={lang} />, 400);
   }
   const tokens = await exchangeCode(c.env, code, verifier);
-  if (!tokens) return c.html(<Notice message={t("spotify.failed")} />, 502);
+  if (!tokens) return c.html(<Notice message={t("spotify.failed")} lang={lang} />, 502);
 
   const listener = c.get("listener");
   const saved = await updateListener(c.env.DB, listener.id, {

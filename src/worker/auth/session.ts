@@ -3,6 +3,7 @@ import { getCookie, setCookie } from "hono/cookie";
 import { createListener, getListener } from "../db/listeners";
 import type { Env } from "../env";
 import type { Listener } from "../types";
+import { langFromAcceptLanguage } from "../i18n/t";
 import { toBase64Url } from "./crypto";
 
 export type Variables = { listener: Listener };
@@ -50,7 +51,7 @@ export const sessionMiddleware: MiddlewareHandler<{ Bindings: Env; Variables: Va
   const id = await verifySession(getCookie(c, SESSION_COOKIE), c.env.SESSION_SECRET);
   let listener = id ? await getListener(c.env.DB, id) : null;
   if (!listener) {
-    listener = await createListener(c.env.DB);
+    listener = await createListener(c.env.DB, { lang: langFromAcceptLanguage(c.req.header("accept-language")) });
     setCookie(c, SESSION_COOKIE, await signSession(listener.id, c.env.SESSION_SECRET), {
       httpOnly: true,
       sameSite: "Lax",

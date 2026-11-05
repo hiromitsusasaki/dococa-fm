@@ -4,6 +4,7 @@ export const ja = {
   "listener.anonymous": "名無しのリスナー",
   "listener.demo": "デモ用",
   "settings.title": "設定",
+  "settings.lang": "言語",
   "settings.radioName": "ラジオネーム",
   "settings.place": "土地",
   "settings.voice": "DJ の声",

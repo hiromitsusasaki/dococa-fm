@@ -44,3 +44,16 @@ export function expectInstructedTool(req: any, name: string) {
   expect(req.system).toContain(`必ず ${name} ツールを 1 回だけ呼んで答える`);
   expect(req).not.toHaveProperty("temperature");
 }
+
+/**
+ * A default answer for the letter pipeline: moderation passes, and a translation into either language comes
+ * back as a marked stand-in (`[en] translated`), so tests that do not care about it still get a stored translation.
+ */
+export function okReply(req: any) {
+  const tool = req.tools?.[0];
+  if (tool?.name === "translate") {
+    const target = Object.keys(tool.input_schema.properties)[0]!;
+    return toolUse("translate", { [target]: `[${target}] translated` });
+  }
+  return toolUse("judge_letter", { ok: true });
+}

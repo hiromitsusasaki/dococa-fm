@@ -1,10 +1,12 @@
 import type { Item, Letter } from "../worker/types";
-import { t } from "../worker/i18n/t";
+import { displayText } from "../worker/letters/display";
+import { type Lang, tFor } from "../worker/i18n/t";
 import { ja } from "../worker/i18n/ja";
 
 type CardItem = Pick<Item, "kind" | "title" | "creator" | "year" | "imageUrl">;
 
-export function ItemCard({ item, heading: Heading = "h1" }: { item: CardItem; heading?: "h1" | "h2" }) {
+export function ItemCard({ item, heading: Heading = "h1", lang }: { item: CardItem; heading?: "h1" | "h2"; lang: Lang }) {
+  const t = tFor(lang);
   return (
     <section class="item-card">
       {item.imageUrl && <img src={item.imageUrl} alt="" width="120" height="120" loading="lazy" />}
@@ -20,13 +22,14 @@ export function ItemCard({ item, heading: Heading = "h1" }: { item: CardItem; he
   );
 }
 
-const outLabel = (key: string): string | null => (`out.${key}` in ja ? t(`out.${key}` as keyof typeof ja) : null);
+const outLabel = (key: string, lang: Lang): string | null => (`out.${key}` in ja ? tFor(lang)(`out.${key}` as keyof typeof ja) : null);
 
 /** Links the item has, then plain searches for the services it has none for. */
-export function OutLinks({ item }: { item: Pick<Item, "kind" | "title" | "creator" | "outLinks"> }) {
+export function OutLinks({ item, lang }: { item: Pick<Item, "kind" | "title" | "creator" | "outLinks">; lang: Lang }) {
+  const t = tFor(lang);
   const q = encodeURIComponent(`${item.title} ${item.creator}`.trim());
   const own = Object.entries(item.outLinks).flatMap(([key, href]) => {
-    const label = outLabel(key);
+    const label = outLabel(key, lang);
     return label && isHttpUrl(href) ? [{ label, href }] : [];
   });
   const fallbacks = [
@@ -52,13 +55,15 @@ export function isHttpUrl(s: string | null): s is string {
 }
 
 /** The radio-name line; a demo account carries the 「デモ用」 mark at the end so nobody mistakes its letters for a real listener's. */
-export const whoOf = (l: Pick<Letter, "radioName" | "place"> & { demo?: boolean }): string => {
+export const whoOf = (l: Pick<Letter, "radioName" | "place"> & { demo?: boolean }, lang: Lang): string => {
+  const t = tFor(lang);
   const who = l.radioName ? t("letter.who", { name: l.radioName }) : t("listener.anonymous");
   const named = l.place ? t("letter.whoPlace", { who, place: l.place }) : who;
   return l.demo ? t("letter.whoDemo", { who: named, demo: t("listener.demo") }) : named;
 };
 
-export function ReportForm({ letterId }: { letterId: string }) {
+export function ReportForm({ letterId, lang }: { letterId: string; lang: Lang }) {
+  const t = tFor(lang);
   return (
     <form method="post" action={`/letters/${letterId}/report`}>
       <button type="submit" class="quiet">{t("report.button")}</button>
@@ -66,44 +71,48 @@ export function ReportForm({ letterId }: { letterId: string }) {
   );
 }
 
-/** The translation first, with the untouched original open beside it when the letter was not written in Japanese. */
-export function LetterText({ letter }: { letter: Pick<Letter, "body" | "bodyJa" | "lang"> }) {
+/** The text in the listener's language first, with the untouched original behind a toggle when that is a translation. */
+export function LetterText({ letter, lang }: { letter: Pick<Letter, "body" | "bodyJa" | "bodyEn" | "lang">; lang: Lang }) {
+  const t = tFor(lang);
+  const { main, original } = displayText(letter, lang);
   return (
     <>
-      <p class="letter-body">{letter.bodyJa}</p>
-      {letter.lang !== "ja" && (
-        <details class="letter-original" open>
-          <summary>{t("item.originalBody")}</summary>
-          <p>{letter.body}</p>
+      <p class="letter-body">{main}</p>
+      {original !== null && (
+        <details class="letter-original">
+          <summary>{t("letter.showOriginal")}</summary>
+          <p>{original}</p>
         </details>
       )}
     </>
   );
 }
 
-function Reaction({ r }: { r: Letter }) {
+function Reaction({ r, lang }: { r: Letter; lang: Lang }) {
+  const t = tFor(lang);
   if (r.kind === "watashimo") {
     return (
       <li class="reaction">
-        {t("reaction.from", { who: whoOf(r), body: r.bodyJa })}
-        <ReportForm letterId={r.id} />
+        {t("reaction.from", { who: whoOf(r, lang), body: displayText(r, lang).main })}
+        <ReportForm letterId={r.id} lang={lang} />
       </li>
     );
   }
   return (
     <li class="reaction reply">
-      <LetterText letter={r} />
-      <p class="letter-who">{whoOf(r)}</p>
-      <ReportForm letterId={r.id} />
+      <LetterText letter={r} lang={lang} />
+      <p class="letter-who">{whoOf(r, lang)}</p>
+      <ReportForm letterId={r.id} lang={lang} />
     </li>
   );
 }
 
-function LetterCard({ letter, reactions, itemId }: { letter: Letter; reactions: Letter[]; itemId: string }) {
+function LetterCard({ letter, reactions, itemId, lang }: { letter: Letter; reactions: Letter[]; itemId: string; lang: Lang }) {
+  const t = tFor(lang);
   return (
     <li class="letter" id={`letter-${letter.id}`}>
-      <LetterText letter={letter} />
-      {letter.kind !== "found" && <p class="letter-who">{whoOf(letter)}</p>}
+      <LetterText letter={letter} lang={lang} />
+      {letter.kind !== "found" && <p class="letter-who">{whoOf(letter, lang)}</p>}
       {letter.kind === "found" && (
         <p class="letter-source">
           {t("item.source")}: {letter.sourceAuthor ?? ""}
@@ -118,7 +127,7 @@ function LetterCard({ letter, reactions, itemId }: { letter: Letter; reactions: 
           <a href={`/takedown?letterId=${letter.id}`}>{t("item.takedown")}</a>
         </p>
       )}
-      {reactions.length > 0 && <ul class="reactions">{reactions.map((r) => <Reaction r={r} />)}</ul>}
+      {reactions.length > 0 && <ul class="reactions">{reactions.map((r) => <Reaction r={r} lang={lang} />)}</ul>}
       <div class="letter-actions">
         <form method="post" action="/letters">
           <input type="hidden" name="itemId" value={itemId} />
@@ -134,19 +143,20 @@ function LetterCard({ letter, reactions, itemId }: { letter: Letter; reactions: 
           <input type="text" name="body" maxlength={200} placeholder={t("reaction.replyPlaceholder")} aria-label={t("reaction.reply")} />
           <button type="submit">{t("reaction.replySubmit")}</button>
         </form>
-        <ReportForm letterId={letter.id} />
+        <ReportForm letterId={letter.id} lang={lang} />
       </div>
     </li>
   );
 }
 
 /** Letters oldest first, found voices in their own section, reactions under their parent. No counts anywhere. */
-export function LetterList({ itemId, letters }: { itemId: string; letters: Letter[] }) {
+export function LetterList({ itemId, letters, lang }: { itemId: string; letters: Letter[]; lang: Lang }) {
+  const t = tFor(lang);
   const reactionsOf = (id: string) => letters.filter((l) => l.parentLetterId === id);
   const top = letters.filter((l) => l.parentLetterId === null);
   const mine = top.filter((l) => l.kind !== "found");
   const found = top.filter((l) => l.kind === "found");
-  const render = (l: Letter) => <LetterCard letter={l} reactions={reactionsOf(l.id)} itemId={itemId} />;
+  const render = (l: Letter) => <LetterCard letter={l} reactions={reactionsOf(l.id)} itemId={itemId} lang={lang} />;
   return (
     <>
       <section class="letters">
