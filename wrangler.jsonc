@@ -5,11 +5,11 @@
   "compatibility_date": "2026-11-01",
   "compatibility_flags": ["nodejs_compat"],
   "d1_databases": [
-    { "binding": "DB", "database_name": "dococa", "migrations_dir": "migrations" }
+    { "binding": "DB", "database_name": "dococa", "database_id": "9f0f6a94-2634-4da3-9d7f-c93212f55639", "migrations_dir": "migrations" }
   ],
   "r2_buckets": [{ "binding": "BUCKET", "bucket_name": "dococa-audio" }],
   "assets": { "binding": "ASSETS", "not_found_handling": "none", "run_worker_first": true },
   // Set to the deployed origin (e.g. https://dococa.example.workers.dev) before `pnpm run deploy`. Empty refuses
   // every request with 500. Local dev sets it in .dev.vars.
-  "vars": { "PUBLIC_ORIGIN": "" }
+  "vars": { "PUBLIC_ORIGIN": "https://dococa-fm.promitsu.workers.dev" }
 }

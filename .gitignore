@@ -8,3 +8,5 @@ dist/
 .superpowers/
 .DS_Store
 .found/
+.env
+.env.*
