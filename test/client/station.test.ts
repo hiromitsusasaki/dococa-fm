@@ -90,6 +90,7 @@ let autoEnd: boolean;
 let calls: string[];
 let nextReplies: Array<() => Promise<Response>>;
 let resumeReply: () => Promise<Response>;
+let resumeByIdReply: (url: string) => Promise<Response>;
 let root: HTMLElement;
 
 const json = (status: number, body: unknown) => () => Promise.resolve(new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } }));
@@ -108,6 +109,7 @@ beforeEach(() => {
   calls = [];
   nextReplies = [];
   resumeReply = none;
+  resumeByIdReply = none;
   vi.stubGlobal("Audio", FakeAudio);
   vi.stubGlobal("SpeechSynthesisUtterance", FakeUtterance);
   vi.stubGlobal("speechSynthesis", {
@@ -130,6 +132,7 @@ beforeEach(() => {
       const method = init?.method ?? "GET";
       calls.push(`${method} ${url}`);
       if (url === "/stations/world.json") return resumeReply();
+      if (url.startsWith("/stations/world.json?id=")) return resumeByIdReply(url);
       if (url === "/stations/world/next") return (nextReplies.shift() ?? json(503, { error: "unavailable" }))();
       return json(200, {})();
     }),
@@ -202,6 +205,77 @@ describe("station: playing", () => {
     expect(calls[0]).toBe("GET /stations/world.json");
     expect(s.state().current?.id).toBe("epB");
     await vi.waitFor(() => expect(spoken).toContain("x1"));
+  });
+
+  describe("where you left off", () => {
+    const store = (episodeId: string, seg: number, line: number) => localStorage.setItem("dfm.pos:world", JSON.stringify({ episodeId, seg, line }));
+
+    it("keeps the position of the episode being played, per station", async () => {
+      nextReplies = [ok(epA()), ok(epB())];
+      autoEnd = false;
+      mountStation(root, opts());
+      await power();
+      await vi.waitFor(() => expect(spoken).toEqual(["a1"]));
+      held[0]!.onend?.();
+      await vi.waitFor(() => expect(spoken).toEqual(["a1", "l1"]));
+      expect(JSON.parse(localStorage.getItem("dfm.pos:world")!)).toEqual({ episodeId: "epA", seg: 0, line: 1 });
+      expect(localStorage.getItem("dfm.pos:mine")).toBeNull();
+    });
+
+    it("asks for the stored episode by id and picks up at its segment and line, not at the latest", async () => {
+      store("epA", 1, 0);
+      resumeByIdReply = ok(epA());
+      resumeReply = ok(epB());
+      const s = mountStation(root, opts());
+      await power();
+      expect(calls[0]).toBe("GET /stations/world.json?id=epA");
+      expect(calls).not.toContain("GET /stations/world.json");
+      expect(s.state().current?.id).toBe("epA");
+      await vi.waitFor(() => expect(spoken[0]).toBe("b1"));
+      expect(spoken).not.toContain("a1");
+    });
+
+    it("falls back to the latest episode when the stored one is not found", async () => {
+      store("gone", 1, 0);
+      resumeByIdReply = none;
+      resumeReply = ok(epB());
+      const s = mountStation(root, opts());
+      await power();
+      expect(calls.slice(0, 2)).toEqual(["GET /stations/world.json?id=gone", "GET /stations/world.json"]);
+      expect(s.state().current?.id).toBe("epB");
+      await vi.waitFor(() => expect(spoken).toContain("x1"));
+    });
+
+    it("starts the line again when the stored position is out of range", async () => {
+      store("epA", 0, 9);
+      resumeByIdReply = ok(epA());
+      mountStation(root, opts());
+      await power();
+      await vi.waitFor(() => expect(spoken[0]).toBe("a1"));
+    });
+
+    it("does not replay an episode that was played to its end: it takes a later one, or makes a new one", async () => {
+      store("epB", 1, 1);
+      resumeByIdReply = ok(epB());
+      resumeReply = ok(epB());
+      nextReplies = [ok(epA())];
+      autoEnd = false;
+      const s = mountStation(root, opts());
+      await power();
+      expect(s.state().current?.id).toBe("epA");
+      expect(posts()).toBe(1);
+      await vi.waitFor(() => expect(spoken).toEqual(["a1"]));
+    });
+
+    it("takes the episode that was made ahead when the stored one was played to its end", async () => {
+      store("epA", 2, 1);
+      resumeByIdReply = ok(epA());
+      resumeReply = ok(epB());
+      const s = mountStation(root, opts());
+      await power();
+      expect(s.state().current?.id).toBe("epB");
+      expect(calls).toContain("GET /stations/world.json");
+    });
   });
 
   it("makes an episode with POST when there is nothing to resume, then reads it and shows ON AIR", async () => {

@@ -35,6 +35,7 @@ type State = StationState & { reason: Reason | null; loading: boolean; replyOpen
 type Fetched = { ok: true; view: PlayerEpisode } | { ok: false; reason: Reason };
 
 const VOLUME_KEY = "dfm.volume";
+const POS_KEY = "dfm.pos:";
 const DEFAULT_VOLUME = 0.8;
 
 function loadVolume(): number {
@@ -44,6 +45,23 @@ function loadVolume(): number {
   } catch {}
   return DEFAULT_VOLUME;
 }
+
+/** Where this browser left off on a station: the episode being played, and its segment and line. */
+type Position = { episodeId: string; seg: number; line: number };
+
+const loadPosition = (stationKey: string): Position | null => {
+  try {
+    const p = JSON.parse(localStorage.getItem(POS_KEY + stationKey) ?? "null") as Partial<Position> | null;
+    if (p && typeof p.episodeId === "string" && p.episodeId !== "" && Number.isInteger(p.seg) && Number.isInteger(p.line) && p.seg! >= 0 && p.line! >= 0) return p as Position;
+  } catch {}
+  return null;
+};
+
+const savePosition = (stationKey: string, p: Position) => {
+  try {
+    localStorage.setItem(POS_KEY + stationKey, JSON.stringify(p));
+  } catch {}
+};
 
 const playable = (v: unknown): v is PlayerEpisode => {
   const e = v as Partial<PlayerEpisode> | null;
@@ -75,6 +93,7 @@ export function mountStation(root: HTMLElement, opts: StationOptions) {
     const was = state;
     state = { ...state, ...patch };
     flushSync(() => reactRoot.render(<StationScreen {...screenProps()} />));
+    if (state.current && (was.current !== state.current || was.seg !== state.seg || was.line !== state.line)) savePosition(opts.stationKey, { episodeId: state.current.id, seg: state.seg, line: state.line });
     if (was.current !== state.current || was.seg !== state.seg || was.power !== state.power) syncMediaSession(itemOf(state.current, state.seg), state.power === "on");
   }
 
@@ -85,16 +104,37 @@ export function mountStation(root: HTMLElement, opts: StationOptions) {
     return playable(episode) ? { ok: true, view: episode } : { ok: false, reason: "failed" };
   }
 
-  /** The listener's latest episode on this station, read from its beginning; null when there is none or it cannot be read. */
-  async function requestResume(): Promise<PlayerEpisode | null> {
-    try {
-      const res = await fetch(opts.resumeUrl);
-      if (res.status !== 200) return null;
-      const body = (await res.json()) as { episode?: unknown };
-      return playable(body.episode) ? body.episode : null;
-    } catch {
-      return null;
+  /**
+   * The episode this browser was playing, or else the listener's latest on this station (from its beginning); null when there is none,
+   * or it cannot be read; also null when the stored one was played to its end and no later one is made.
+   */
+  async function requestResume(): Promise<{ view: PlayerEpisode; seg: number; line: number } | null> {
+    const stored = loadPosition(opts.stationKey);
+    const read = async (url: string): Promise<PlayerEpisode | null> => {
+      try {
+        const res = await fetch(url);
+        if (res.status !== 200) return null;
+        const body = (await res.json()) as { episode?: unknown };
+        return playable(body.episode) ? body.episode : null;
+      } catch {
+        return null;
+      }
+    };
+    if (stored) {
+      const view = await read(`${opts.resumeUrl}?id=${encodeURIComponent(stored.episodeId)}`);
+      if (view) {
+        const last = view.segments.length - 1;
+        if (stored.seg > last || (stored.seg === last && stored.line >= view.segments[last]!.lines.length)) {
+          // Played to its end: the next one may already be made (a prefetch); if it is not, a new one is.
+          const latest = await read(opts.resumeUrl);
+          return latest && latest.id !== view.id ? { view: latest, seg: 0, line: 0 } : null;
+        }
+        const inRange = stored.line < view.segments[stored.seg]!.lines.length;
+        return { view, seg: stored.seg, line: inRange ? stored.line : 0 };
+      }
     }
+    const view = await read(opts.resumeUrl);
+    return view ? { view, seg: 0, line: 0 } : null;
   }
 
   /** Makes the next episode in the background so it is ready when this one ends. One at a time, one deep. */
@@ -153,10 +193,12 @@ export function mountStation(root: HTMLElement, opts: StationOptions) {
   async function begin() {
     starting = true;
     let view: PlayerEpisode | null = null;
+    let [seg, line] = [0, 0];
     let reason: Reason | null = null;
     if (!resumeTried) {
       resumeTried = true;
-      view = await requestResume();
+      const resumed = await requestResume();
+      if (resumed) ({ view, seg, line } = resumed);
     }
     if (!view) {
       const r = await requestNext();
@@ -169,7 +211,7 @@ export function mountStation(root: HTMLElement, opts: StationOptions) {
       return;
     }
     // Kept even if the switch went off meanwhile: the episode is made, and turning on again plays it.
-    setState({ current: view, seg: 0, line: 0 });
+    setState({ current: view, seg, line });
     if (state.power === "off") return;
     setState({ power: "on" });
     void run(abort.signal);

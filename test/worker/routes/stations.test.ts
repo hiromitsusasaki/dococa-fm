@@ -136,6 +136,34 @@ describe("GET /stations/:key.json", () => {
     expect(((await (await resume("world")).json()) as Body).episode.id).toBe(world.episode.id);
   });
 
+  it("with ?id= returns that episode, not the latest, when it is the listener's own on this station", async () => {
+    await seedWorld();
+    const cookie = await newSession();
+    const first = (await (await postNext("world", cookie)).json()) as Body;
+    const second = (await (await postNext("world", cookie)).json()) as Body;
+    const latest = await app.request("/stations/world.json", { headers: { cookie } }, env);
+    expect(((await latest.json()) as Body).episode.id).toBe(second.episode.id);
+    const res = await app.request(`/stations/world.json?id=${first.episode.id}`, { headers: { cookie } }, env);
+    expect(res.status).toBe(200);
+    expect(((await res.json()) as Body).episode.id).toBe(first.episode.id);
+  });
+
+  it("with ?id= answers 204 for another listener's episode, an episode of another station, or an unknown id", async () => {
+    await seedWorld();
+    const cookie = await newSession();
+    const listenerId = (await env.DB.prepare("SELECT id FROM listeners ORDER BY created_at DESC LIMIT 1").first<{ id: string }>())!.id;
+    const it = await insertItem(env.DB, itemDraft({ title: "mine-1" }));
+    await upsertHistory(env.DB, [{ listenerId, itemId: it.id, source: "manual", occurredAt: null, rank: 1 }]);
+    const world = (await (await postNext("world", cookie)).json()) as Body;
+    const mine = (await (await postNext("mine", cookie)).json()) as Body;
+    const get = (key: string, id: string, ck = cookie) => app.request(`/stations/${key}.json?id=${id}`, { headers: { cookie: ck } }, env);
+    expect((await get("world", world.episode.id)).status).toBe(200);
+    expect((await get("world", mine.episode.id)).status).toBe(204);
+    expect((await get("mine", world.episode.id)).status).toBe(204);
+    expect((await get("world", "nope")).status).toBe(204);
+    expect((await get("world", world.episode.id, await newSession())).status).toBe(204);
+  });
+
   it("does not show another listener's episode, and 404s a bad key", async () => {
     await seedWorld();
     await postNext("world", await newSession());

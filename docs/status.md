@@ -55,7 +55,7 @@ Phase 2（ラジオ中心の体験への作り替え）の実装は、すべて 
 | Task 2b | 言語設定 | 完了 |
 | Task 3 | 局ごとの枠決め | 完了 |
 | Task 4 | 局の API | 完了（`/stations/:key.json` は局ごとの直近の検証済み回を返す。`episodes.station` を 0006 で追加） |
-| Task 5 | 局プレイヤー | 完了（`/stations/:key` のページと `station.js`。行の再生は `playback.ts` に共通化。ON で直近の回に復帰か新規作成、残り 2 セグメントで次の回を先読み） |
+| Task 5 | 局プレイヤー | 完了（`/stations/:key` のページと `station.js`。行の再生は `playback.ts` に共通化。ON で、このブラウザが聴いていた回を `?id=` で呼んでその位置（`localStorage` の `dfm.pos:<局>`）から続ける。無ければ直近の回、それも無ければ新規作成。残り 2 セグメントで次の回を先読み） |
 | Task 6 | ホームを局に | 完了。局パネルの見た目（左寄せ、DOCOCA FM と ON AIR の間隔）は Task 11 で整える |
 | Task 7 | Google サインイン | 完了（OIDC を Worker 内で。`/auth/google`、`/auth/google/callback`、`POST /auth/signout`。実キーでの実機確認は本人作業の後） |
 | Task 8 | 保護とマイページ | 完了（`requireSignin` で `/start`・`/auth/spotify`・`POST /letters`（`kind=letter`）・`/me` を保護。`GET /put` は閲覧可で、匿名にはフォームの代わりにサインイン案内。ヘッダ `.site-header` と `/me`。`POST /put` は存在しないので対象外） |

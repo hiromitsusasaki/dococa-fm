@@ -111,8 +111,14 @@ stations.get("/stations/:key", async (c) => {
     return c.html(<StationPage stationKey={raw} label={label} lang={listener.lang} listener={listener} path={currentPath(c)} voice={listener.voice} dial={listener.dial} grow={grow} og={station.url ? { title: label, description: tFor(listener.lang)("app.tagline"), url: station.url } : undefined} />);
   }
 
-  // Resume after a reload: the listener's latest verified episode made on this station.
-  const latest = await latestVerifiedEpisodeOn(c.env.DB, listener.id, stationColumn(station.key));
+  // Resume after a reload. With `?id=` it is that very episode, if it is this listener's and was made on this station
+  // (the player stores the one it was playing, which is not always the newest: the next one may already be made).
+  // Without it, or when that one is not found, the player asks for the latest verified episode on this station.
+  const wanted = c.req.query("id");
+  const column = stationColumn(station.key);
+  const picked = wanted ? await getVerifiedEpisode(c.env.DB, wanted) : null;
+  if (wanted && !(picked && picked.listenerId === listener.id && picked.station === column)) return c.body(null, 204);
+  const latest = picked ?? (await latestVerifiedEpisodeOn(c.env.DB, listener.id, column));
   if (!latest) return c.body(null, 204);
   return c.json({
     episode: await playerView(c.env.DB, latest, listener.lang),
