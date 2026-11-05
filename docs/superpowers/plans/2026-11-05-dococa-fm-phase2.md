@@ -17,7 +17,7 @@
 - 匿名で「聴く・私も・一言」はできる。サインインが要るのは「好きなものの登録（/start、/put の投稿、取り込み）」「公開局」「マイページ」だけ。
 - 新しい秘密は `GOOGLE_OAUTH_CLIENT_ID` と `GOOGLE_OAUTH_CLIENT_SECRET` の 2 つ。`.dev.vars.example`、`vitest.config.ts` の bindings、`test/scripts/config.test.ts`（Env の全キーが bindings と example にあること）に必ず足す。
 - 新しい依存を足さない。Google Fonts の `<link>` は可（CSP は無い）。
-- 文言は `src/worker/i18n/ja.ts` にだけ置く。画面の日本語をコードに直書きしない。
+- 文言は `src/worker/i18n/ja.ts` と `en.ts` にだけ置く。画面の日本語をコードに直書きしない。見た目と文言の正本は `docs/DESIGN.md`。
 - commit は `feat:` `fix:` `docs:` `test:` `chore:` + 英語の要約。各 Task の最後に `docs/status.md` の Phase 2 の表を更新して同じ commit に含める。
 - `git push` は本人の指示があるときだけ。
 - テストは `pnpm test`（49 ファイル / 711 件が緑の状態から始める）。`vi.mock` は workers pool で効かないので fetch 層のスタブで書く。env の上書きは `app.request(path, init, { ...env, KEY: value })`。
@@ -267,7 +267,7 @@
 - Test: `test/worker/views/layout.test.ts`（新規。ヘッダとフォントの link があること）
 
 **Interfaces:**
-- 正本は本人確定の模型 `docs/design/station-mock.html`（2026-11-05）。トークン名と値はそこから写す:
+- 正本は `docs/DESIGN.md` と本人確定の模型 `docs/design/station-mock.html`（2026-11-05）。トークン名と値はそこから写す（下は抜粋）:
   - ライト: `--paper #e9f1f8`、`--ink #141b31`、`--ink-2 #44506b`、`--line rgba(20,27,49,.16)`、`--line-strong #c9d2df`、`--haze rgba(20,27,49,.06)`、`--panel #ffffff`、`--aqua #1fb3a7`、`--sky #3f9fff`、`--coral #ff6f7a`、`--magenta #e0409a`、`--lemon #ffd24d`、`--hero #ffffff`。
   - ダーク（`prefers-color-scheme: dark` と `html[data-theme="dark"]`）: `--paper #121a2e`、`--ink #eef4f8`、`--ink-2 #a9b7cc`、`--line rgba(238,244,248,.14)`、`--line-strong #4b5878`、`--haze rgba(238,244,248,.07)`、`--panel #1a2440`、`--aqua #4fd1c5`、`--sky #7cc4ff`、`--coral #ff8a95`、`--magenta #f06cb6`、`--lemon #ffe08a`、`--hero linear-gradient(160deg,#1c2a52 0%,#2a4a7a 40%,#a04a8a 74%,#ff7a8a 100%)`。
   - 書体: ロゴ（`Dococa FM` の wordmark）だけ `"Righteous"`、日本語・英語の見出しと本文は `"Zen Kaku Gothic New"`（Google Fonts、`display=swap`）。
