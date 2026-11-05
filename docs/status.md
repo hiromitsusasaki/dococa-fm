@@ -2,12 +2,27 @@
 
 > 新しいセッションはまずここを読む。更新はタスクの区切りごと（最新を上に）。
 
+## 2026-11-05 本番デプロイ 完了。次は Gemini-TTS の有効化・Spotify の本番 redirect・デモ投入・public 化
+
+- 本番 URL: **https://dococa-fm.promitsu.workers.dev**（Cloudflare account `promitsu.jp`、Worker `dococa-fm`、D1 `dococa`（APAC、`database_id` は wrangler.jsonc に記入済み）、R2 `dococa-audio`。migrations 0001〜0004 適用済み、secret 7 件投入済み）。認証は ops-mac の `.env` の `CLOUDFLARE_API_TOKEN`（gitignore 済み）。再デプロイは `pnpm run deploy`。
+- 本番で確かめたこと（2026-11-05、ops-mac から curl）: 全ページ 200、セキュリティヘッダ想定どおり。`POST /start` → 303 → 番組生成が実 API で通る（TMDB の映画、Spotify の曲、YouTube の動画、Claude の台本。12〜15 秒）。別リスナーのお便りは原文のまま `letter` 行で読まれる。D1 のクエリは問題なし（CPU 81 ms）。
+- 見つけた不具合と対処:
+  - お便りが 1 通も無いセグメント（自分のお便りしか無い最初の回）で DJ が「お便りを読み上げ役にお願いします」と予告してしまう → プロンプトに「このセグメントにお便りは無い」を明示し、検証に `announce:` を追加（修正コミットは `git log` 参照）。
+  - Spotify は `/track/` の URL だけ対応（設計どおり）。アルバム URL は作品に解決されず、その枠は黙って落ちる。
+- **本人作業（残り）**
+  - [ ] Google Cloud でプロジェクト `468281117040` の **Vertex AI API（aiplatform.googleapis.com）を有効化**し、API キー `dococa-tts` の API restrictions に Vertex AI API も加える。Gemini-TTS は Text-to-Speech API 経由でも裏で Vertex AI を使うため、無いと `GET /tts` が 403 → 502。有効化後に `curl -s -b <cookie> 'https://dococa-fm.promitsu.workers.dev/tts?episode=<id>&line=0'` で音声が返るのを確認（エージェントに頼めば再確認する）。
+  - [ ] Spotify Developer Dashboard の Redirect URIs に `https://dococa-fm.promitsu.workers.dev/auth/spotify/callback` を追加し、Website に本番 URL を入れる。その後 `/settings` から Spotify 連携を実機で確かめる。
+  - [ ] デモ投入: `pnpm seed --items <作品 URL の一覧> --personas 3 --dry-run` → 内容を見て `--dry-run` を外す（本番は `--origin https://dococa-fm.promitsu.workers.dev --token "$ADMIN_TOKEN"`）。
+  - [ ] eval 20 回: `pnpm eval --origin https://dococa-fm.promitsu.workers.dev --token "$ADMIN_TOKEN" --listener <id> --runs 20 --out docs/eval/<日付>.md`（`EPISODE_DAILY_LIMIT` を 25 以上に）。
+  - [ ] `/settings` の `/mcp/<token>` を Claude のカスタムコネクタに登録して `get_episode` を確認。
+  - [ ] 下の「public 化前チェックリスト」の残り（GitHub 設定、gitleaks、public 化）。
+
 ## 2026-11-04 最終修正 完了。次は本人作業（push・鍵・デプロイ・public 化）
 
 - 設計書・計画は本人承認済み。実行方式は **Subagent-driven**（`superpowers:subagent-driven-development`）。
 - 全体レビュー（Claude と Codex）の指摘を 9 コミットで閉じた。主なもの: 定型文が引用検査に当たって 503 になる件、プレイヤーに原文を出す、時事語・作品数・住所・郵便番号の検査、未検証の回と非公開にしたお便りを全出口で出さない、作品の題名と作者の判定、審査員の 3 作品を「近く」に入れる、D1 のクエリ数（`POST /start` 57 → 25、`POST /episodes` 45 → 13）、空の回を作らない、`PUBLIC_ORIGIN` の既定値を空に、開発時の判定の素通しは `DEV_SKIP_CLAUDE=1` だけ、TTS の single-flight と上限、本文の上限、MCP の照会前の IP 制限。詳細は `.superpowers/sdd/2026-11-03-dococa-fm/final-fix-report.md`（gitignore 済み）。
 - Cloudflare のプランは **Workers Paid**（本人確認 2026-11-04）。D1 のクエリ上限は 1 回の実行あたり 1000。主な経路はテストで 50 未満（`test/worker/query-budget.test.ts`）なので余裕がある。
-- 次の一手: 本人が push（main-mac / ops-mac）→ 鍵を入れる → デプロイ → 下のチェックリストを済ませて public 化・提出。
+- 次の一手（当時）: 本人が push → 鍵を入れる → デプロイ → チェックリストを済ませて public 化・提出。push とデプロイは 2026-11-05 に完了（上の節）。
 - Task 16 でできたこと: CI（SHA 固定、secret なし）、Dependabot、SECURITY.md、同一オリジン検査、`secureHeaders()`、レート制限（IP とリスナー、1 分 20 回。カウンタは isolate ごと）、番組作成の全体上限（`EPISODE_GLOBAL_DAILY_LIMIT` 既定 300、`CLOUD_TTS_GLOBAL_DAILY_LIMIT` 既定 50、上限値 `0` は停止）、`SESSION_SECRET` 空のときの 500、未検証の番組は 404。
 - **public 化前チェックリスト（本人）**
   - [x] ローカルの commit を push する（2026-11-04 ops-mac から push。初回 CI 緑）。
@@ -20,8 +35,8 @@
   - [ ] 手元で `gitleaks detect --source .` を実行して検出 0 を確かめる（実装側で 2026-11-04 に実行済み: 50 commits、検出 0。public 化の直前にもう一度）。
   - [ ] CI が main で緑になっていることを確かめる（GitHub Actions は push するまで走らない）。
   - [ ] 上が済んでから private → public に切り替えて提出する。
-- Task 15 の保留（鍵と `wrangler login` 待ち）: 20 回の eval 実走と `docs/eval/<日付>.md`、デプロイ、本番 URL での MCP connector 確認。eval スクリプトは `pnpm eval`（管理 API の模擬サーバーで動作確認済み）、README の eval 欄は「鍵投入後に 20 回回して記入」のまま。走らせ方は `docs/eval/README.md`。
-- デプロイの手順（本人。`wrangler login` 後）:
+- Task 15 の保留（デプロイは 2026-11-05 に完了。残りは eval 20 回と MCP connector 確認）:eval スクリプトは `pnpm eval`（管理 API の模擬サーバーで動作確認済み）、README の eval 欄は「鍵投入後に 20 回回して記入」のまま。走らせ方は `docs/eval/README.md`。
+- デプロイの手順（2026-11-05 に実施済み。再デプロイは `pnpm run deploy` だけ）:
   ```bash
   pnpm wrangler d1 create dococa                 # 出た database_id を wrangler.jsonc の d1_databases に書く
   pnpm wrangler r2 bucket create dococa-audio
@@ -35,9 +50,9 @@
   そのあと本番 URL で `/start` → 番組を聴く → `/settings` の `/mcp/<token>` を Claude のカスタムコネクタに登録して `get_episode` を呼ぶ。eval は `EPISODE_DAILY_LIMIT` を 25 などに上げて `pnpm eval --origin https://<URL> --token "$ADMIN_TOKEN" --listener <id> --runs 20 --out docs/eval/<日付>.md`。
 - Demo seeding real run held: no key（`ANTHROPIC_API_KEY` が空。入れたら `pnpm seed --items <作品 URL の一覧> --personas 3 --dry-run` で確かめ、`--dry-run` を外して投入。`docs/demo/personas.json` はこのときできる）。デモ用リスナーは `listeners.demo = 1` で、画面・MCP・番組に「デモ用」の印が出る。
 - YouTube collection real run held: no key（`YOUTUBE_API_KEY` と `ANTHROPIC_API_KEY` を入れたら `pnpm collect --item <url>` を 1 作品で流す。既定は dry-run で `.found/<itemId>.json` に書くだけ。中身を読んで不要な行を消し、`pnpm collect --post .found/<itemId>.json` で投入して、`/items/:id` の「ネットで見つけた声」を確かめる）。`/admin/found` はお便りと同じモデレーションを通り、reject 済みの出典 URL は再投入されない。管理 API は `ADMIN_TOKEN`（Bearer）。デモ回は `POST /admin/episodes`（`listenerId` は `/settings` の MCP の欄に出る）。
-- Gemini-TTS real check held: no key (API-key vs service-account unverified)。`GET /tts` は鍵が空なら 503。鍵が入ったら Task 11 Step 5（Charon / Kore の聴き比べと `DJ_STYLE_PROMPT` の調整）をする。クラウド TTS は各リスナーの最初の回（`claimCloudTts`）と、`makeEpisode(env, listener, { cloudTts: true })`（Task 13 のデモ回）だけ。
-- Real-API episode held: no key（`ANTHROPIC_API_KEY` が空。`docs/examples/episode-1.json` は鍵が入ってから作る）。
-- Spotify real check held: no client id（`SPOTIFY_CLIENT_ID` を入れたら Step 5 の実機確認をする）。
+- Gemini-TTS real check: 鍵は API キーで通る形だが、本番で 403（Vertex AI API が未有効化）。上の本人作業を参照。`GET /tts` は鍵が空なら 503。鍵が入ったら Task 11 Step 5（Charon / Kore の聴き比べと `DJ_STYLE_PROMPT` の調整）をする。クラウド TTS は各リスナーの最初の回（`claimCloudTts`）と、`makeEpisode(env, listener, { cloudTts: true })`（Task 13 のデモ回）だけ。
+- Real-API episode: 2026-11-05 に本番で 2 回生成して確認。`docs/examples/episode-1.json` は未作成（デモ投入後の回で作るとよい）。
+- Spotify real check: 曲 URL の解決は本番で確認。OAuth 連携（Step 5）は本番 redirect URI の登録待ち（上の本人作業）。
 - リポは private。main-mac と ops-mac の両方に clone 済み（`~/src/github.com/hiromitsusasaki/dococa-fm`）。
 
 ## タスクの進み

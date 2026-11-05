@@ -4,8 +4,10 @@ import { describe, expect, it } from "vitest";
 const read = (path: string) => readFileSync(new URL(`../../${path}`, import.meta.url), "utf8");
 
 describe("committed config", () => {
-  it("ships an empty PUBLIC_ORIGIN, so a deploy that forgets it fails loudly instead of using a dev origin", () => {
-    expect(read("wrangler.jsonc")).toMatch(/"PUBLIC_ORIGIN":\s*""/);
+  it("ships the production PUBLIC_ORIGIN over https, never a dev or loopback origin", () => {
+    const m = /"PUBLIC_ORIGIN":\s*"([^"]*)"/.exec(read("wrangler.jsonc"));
+    expect(m?.[1]).toMatch(/^https:\/\/[a-z0-9.-]+$/);
+    expect(m?.[1]).not.toMatch(/localhost|127\.0\.0\.1/);
   });
 
   it("fixes every Env key in the test bindings, so .dev.vars cannot change test paths", () => {
