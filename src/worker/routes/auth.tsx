@@ -37,7 +37,8 @@ auth.get("/auth/spotify", requireSignin, async (c) => {
   const t = tFor(lang);
   if (!c.env.SPOTIFY_CLIENT_ID) return c.html(<Notice message={t("spotify.notConfigured")} listener={c.get("listener")} path={currentPath(c)} />);
   const pkce = await createPkce();
-  setCookie(c, PKCE_COOKIE, `${pkce.state}.${pkce.verifier}`, {
+  // The listener who started the flow is part of the transaction: the callback saves the token only to the same one.
+  setCookie(c, PKCE_COOKIE, `${pkce.state}.${pkce.verifier}.${c.get("listener").id}`, {
     httpOnly: true,
     sameSite: "Lax",
     path: PKCE_PATH,
@@ -51,11 +52,11 @@ auth.get("/auth/spotify/callback", requireSignin, async (c) => {
   const lang = c.get("listener").lang;
   const t = tFor(lang);
   if (!c.env.SPOTIFY_CLIENT_ID) return c.html(<Notice message={t("spotify.notConfigured")} listener={c.get("listener")} path={currentPath(c)} />);
-  const [state, verifier] = (getCookie(c, PKCE_COOKIE) ?? "").split(".");
+  const [state, verifier, starter] = (getCookie(c, PKCE_COOKIE) ?? "").split(".");
   deleteCookie(c, PKCE_COOKIE, { path: PKCE_PATH });
   if (c.req.query("error")) return c.redirect("/settings", 303);
   const code = c.req.query("code");
-  if (!state || !verifier || !code || c.req.query("state") !== state) {
+  if (!state || !verifier || !code || c.req.query("state") !== state || starter !== c.get("listener").id) {
     return c.html(<Notice message={t("spotify.badState")} listener={c.get("listener")} path={currentPath(c)} />, 400);
   }
   const tokens = await exchangeCode(c.env, code, verifier);

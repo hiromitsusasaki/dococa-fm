@@ -226,7 +226,7 @@ describe("spotify routes", () => {
     const res = await SELF.fetch(`${BASE}/auth/spotify`, { redirect: "manual", headers: { cookie: await signedInSession() } });
     expect(res.status).toBe(302);
     const cookie = res.headers.get("set-cookie") ?? "";
-    expect(cookie).toMatch(/dfm_pkce=[\w-]+\.[\w-]{43,128}/);
+    expect(cookie).toMatch(/dfm_pkce=[\w-]+\.[\w-]{43,128}\.[0-9a-f-]{36}/);
     expect(cookie).toMatch(/HttpOnly/i);
     expect(cookie).toMatch(/SameSite=Lax/i);
     expect(cookie).toContain("Path=/auth/spotify");
@@ -256,6 +256,22 @@ describe("spotify routes", () => {
     const res = await callback(`code=abc&state=${state}`, `${anonymous}; ${pkce}`);
     expect(res.status).toBe(303);
     expect(res.headers.get("location")).toMatch(/^\/auth\/google\?next=/);
+  });
+
+  it("does not save the token to a listener other than the one who started the flow", async () => {
+    const world = stubWorld({ newRefresh: "rt-from-spotify" });
+    const { pkce, state } = await begin();
+    const other = await signedInSession("Other");
+    const res = await callback(`code=the-code&state=${state}`, `${other}; ${pkce}`);
+    expect(res.status).toBe(400);
+    expect(world.tokenBodies).toHaveLength(0);
+    expect((await env.DB.prepare("SELECT COUNT(*) AS n FROM listeners WHERE spotify_refresh_token IS NOT NULL").first<{ n: number }>())!.n).toBe(0);
+  });
+
+  it("rejects a pkce cookie from before the listener was part of it", async () => {
+    const { session, pkce, state } = await begin();
+    const old = pkce.split(".").slice(0, 2).join(".");
+    expect((await callback(`code=abc&state=${state}`, `${session}; ${old}`)).status).toBe(400);
   });
 
   it("rejects a callback whose state does not match", async () => {
