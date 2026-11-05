@@ -1,4 +1,4 @@
-/** Line playback shared by the episode player and the station player: clips, Web Speech, the bed, Media Session. */
+/** Line playback shared by the episode player and the station player: cloud and Web Speech talk, the bed, Media Session. */
 import { siteLabel, whoLine } from "../worker/letters/label";
 import type { ScriptLine, Segment } from "../worker/types";
 import { createBed, createClipPlayer } from "./audio";
@@ -37,12 +37,9 @@ const globalIndex = (episode: PlayerEpisode, seg: number, line: number) => {
   return episode.ttsLines?.[shown] ?? shown;
 };
 
-/** The next line after (seg, line) that is spoken (dj or letter), skipping previews. */
+/** The line after (seg, line), or null at the end of the episode. */
 function nextSpoken(segments: Segment[], seg: number, line: number): [number, number] | null {
-  for (let i = seg, j = line + 1; i < segments.length; i++, j = 0) {
-    const lines = segments[i]!.lines;
-    for (; j < lines.length; j++) if (lines[j]!.type !== "preview") return [i, j];
-  }
+  for (let i = seg, j = line + 1; i < segments.length; i++, j = 0) if (j < segments[i]!.lines.length) return [i, j];
   return null;
 }
 
@@ -98,12 +95,8 @@ export function createLinePlayer(opts: { voiceURI: string; ttsUrl: string | null
     stopBed: () => bed.stop(),
     async play(episode, seg, index, signal) {
       const line = episode.segments[seg]?.lines[index];
-      if (!line) return;
-      if (line.type === "preview") {
-        bed.stop();
-        await clips.play(line.url, signal, line.seconds);
-        return;
-      }
+      // Only talk airs; the server no longer sends a preview clip, and one that slips through is not played.
+      if (!line || line.type === "preview") return;
       bed.start();
       if (cloudOn(episode)) {
         warmNext(episode, seg, index);

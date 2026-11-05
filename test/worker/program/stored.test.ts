@@ -29,6 +29,13 @@ describe("publicView", () => {
     expect(view.storedIndex).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
   });
 
+  it("drops a preview clip an older episode carries, and keeps the stored indices of the lines after it", () => {
+    const old: Segment[] = [{ itemId: "i1", slot: "near", lines: [dj("before"), read("a"), { type: "preview", url: "https://example.com/a.m4a", seconds: 30 }, dj("after")] }];
+    const view = publicView(old, byId([letter({ id: "a" })]));
+    expect(view.segments[0]!.lines.map((l) => l.type)).toEqual(["dj", "letter", "dj"]);
+    expect(view.storedIndex).toEqual([0, 1, 3]);
+  });
+
   it("drops a rejected found voice or reply with the fixed line that introduced it, and nothing else", () => {
     const letters = byId([letter({ id: "a" }), letter({ id: "f", status: "rejected" }), letter({ id: "r", status: "rejected" }), letter({ id: "b" })]);
     const view = publicView(segments, letters);

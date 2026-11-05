@@ -42,7 +42,7 @@ export const renderLetter = (l: Letter, lang: Lang): string => {
 
 function renderLine(line: ScriptLine, data: EpisodeData, lang: Lang): string {
   if (line.type === "dj") return line.text;
-  if (line.type === "preview") return isHttpUrl(line.url) ? `[${tFor(lang)("mcp.preview")}](${line.url})` : "";
+  if (line.type === "preview") return "";
   const stored = data.letters.get((line as LetterLine).letterId);
   const shown = stored ? displayText(stored, lang) : { main: line.text, original: null };
   return letterBlock(shown.main, shown.original, { ...line, demo: stored?.demo ?? line.demo === true }, lang);

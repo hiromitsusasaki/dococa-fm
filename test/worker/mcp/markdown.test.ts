@@ -57,11 +57,11 @@ describe("renderEpisode", () => {
     expect(md).toContain("> I loved this at 15");
   });
 
-  it("links the source for a found voice and the preview url", () => {
+  it("links the source for a found voice, and leaves a legacy preview line out", () => {
     const l = letter({ kind: "found", sourceUrl: "https://example.com/post", sourceAuthor: "誰か" });
     const md = renderEpisode(episodeOf([l], [{ type: "preview", url: "https://example.com/a.m4a", seconds: 30 }]), data([l]), "ja");
     expect(md).toContain(`${t("item.source")}: [誰か](https://example.com/post)`);
-    expect(md).toContain(`[${t("mcp.preview")}](https://example.com/a.m4a)`);
+    expect(md).not.toContain("a.m4a");
   });
 
   it("shows no counts", () => {

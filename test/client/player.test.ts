@@ -51,7 +51,6 @@ const one: PlayerEpisode = {
       lines: [
         { type: "dj", text: "d1" },
         letter("L1", "l1"),
-        { type: "preview", url: "https://p/a.mp3", seconds: 30 },
         { type: "dj", text: "d2" },
       ],
     },
@@ -196,12 +195,9 @@ describe("player", () => {
     expect(root.textContent).toContain("作者A");
   });
 
-  it("speaks dj and letter lines in order with the chosen voice, then previews, then the next dj", async () => {
+  it("speaks dj and letter lines in order with the chosen voice", async () => {
     mountPlayer(root, one, opts());
     await tap("toggle");
-    await vi.waitFor(() => expect(audios.some((a) => a.src === "https://p/a.mp3")).toBe(true));
-    expect(spoken).toEqual(["d1", "l1"]);
-    audios.find((a) => a.src === "https://p/a.mp3")!.fire("ended");
     await vi.waitFor(() => expect(spoken).toEqual(["d1", "l1", "d2"]));
     expect(utterances.every((u) => u.lang === "ja-JP")).toBe(true);
     expect(utterances.every((u) => (u.voice as { voiceURI: string }).voiceURI === "mine")).toBe(true);
@@ -216,24 +212,23 @@ describe("player", () => {
     expect(audios.find((a) => a.src === "/bed.mp3")!.play).toHaveBeenCalled();
   });
 
-  it("unlocks the bed inside the tap even when the first line is a preview", () => {
-    const previewFirst: PlayerEpisode = { ...one, segments: [{ ...one.segments[0]!, lines: [{ type: "preview", url: "https://p/a.mp3", seconds: 30 }] }] };
-    mountPlayer(root, previewFirst, opts());
-    btn("toggle").click();
-    const bed = audios.find((a) => a.src === "/bed.mp3")!;
-    expect(bed.play).toHaveBeenCalledTimes(1);
-    expect(bed.pause).toHaveBeenCalled();
-    expect(bed.paused).toBe(true);
+  it("does not play a preview clip that an older episode still carries", async () => {
+    const legacy: PlayerEpisode = { ...one, segments: [{ ...one.segments[0]!, lines: [{ type: "dj", text: "d1" }, { type: "preview", url: "https://p/a.mp3", seconds: 30 }, { type: "dj", text: "d2" }] }] };
+    mountPlayer(root, legacy, opts());
+    await tap("toggle");
+    await vi.waitFor(() => expect(spoken).toEqual(["d1", "d2"]));
+    expect(audios.some((a) => a.src === "https://p/a.mp3")).toBe(false);
+    expect(log).not.toContain("play:https://p/a.mp3");
   });
 
-  it("reuses one clip element for every preview and tts clip", async () => {
+  it("reuses one clip element for every tts clip", async () => {
     mountPlayer(root, one, opts({ ttsUrl: "/tts" }));
     await tap("toggle");
-    for (const src of ["/tts?episode=ep1&line=0", "/tts?episode=ep1&line=1", "https://p/a.mp3"]) {
+    for (const src of ["/tts?episode=ep1&line=0", "/tts?episode=ep1&line=1"]) {
       await vi.waitFor(() => expect(audios.some((a) => a.src === src)).toBe(true));
       audios.find((a) => a.src === src)!.fire("ended");
     }
-    await vi.waitFor(() => expect(audios.some((a) => a.src === "/tts?episode=ep1&line=3")).toBe(true));
+    await vi.waitFor(() => expect(audios.some((a) => a.src === "/tts?episode=ep1&line=2")).toBe(true));
     // one element for clips, one for the bed
     expect(audioCtor).toBe(2);
   });
@@ -248,15 +243,14 @@ describe("player", () => {
     await vi.waitFor(() => expect(audios.some((a) => a.src === "/tts?episode=ep3&line=7")).toBe(true));
   });
 
-  it("asks for the next spoken line's clip while the current one plays, skipping previews, once each", async () => {
+  it("asks for the next line's clip while the current one plays, once each", async () => {
     mountPlayer(root, one, opts({ ttsUrl: "/tts" }));
     await tap("toggle");
     await vi.waitFor(() => expect(audios.some((a) => a.src === "/tts?episode=ep1&line=0")).toBe(true));
     expect(fetchMock).toHaveBeenCalledWith("/tts?episode=ep1&line=1");
     audios.find((a) => a.src === "/tts?episode=ep1&line=0")!.fire("ended");
     await vi.waitFor(() => expect(audios.some((a) => a.src === "/tts?episode=ep1&line=1")).toBe(true));
-    // Line 2 is a preview: the next spoken line is 3.
-    expect(fetchMock).toHaveBeenCalledWith("/tts?episode=ep1&line=3");
+    expect(fetchMock).toHaveBeenCalledWith("/tts?episode=ep1&line=2");
     expect(fetchMock.mock.calls.filter((c) => c[0] === "/tts?episode=ep1&line=1")).toHaveLength(1);
   });
 
@@ -361,31 +355,14 @@ describe("player", () => {
     expect(root.querySelector(".player-letter.found")!.textContent).not.toContain("（");
   });
 
-  it("plays a preview with Audio and stops the bed for it; the bed plays only under dj and letter lines", async () => {
+  it("plays the bed under dj and letter lines", async () => {
     mountPlayer(root, one, opts());
     await tap("toggle");
-    await vi.waitFor(() => expect(log).toContain("play:https://p/a.mp3"));
+    await vi.waitFor(() => expect(spoken).toEqual(["d1", "l1", "d2"]));
     const bed = audios.find((a) => a.src === "/bed.mp3")!;
     expect(bed.loop).toBe(true);
     expect(bed.volume).toBe(0.15);
-    expect(log.indexOf("play:/bed.mp3")).toBeLessThan(log.indexOf("pause:/bed.mp3"));
-    expect(log.indexOf("pause:/bed.mp3")).toBeLessThan(log.indexOf("play:https://p/a.mp3"));
-    audios.find((a) => a.src === "https://p/a.mp3")!.fire("ended");
-    await vi.waitFor(() => expect(log.lastIndexOf("play:/bed.mp3")).toBeGreaterThan(log.indexOf("play:https://p/a.mp3")));
-  });
-
-  it("ends a preview after its seconds even when the file keeps going", async () => {
-    vi.useFakeTimers();
-    mountPlayer(root, one, opts());
-    await tap("toggle");
-    await vi.advanceTimersByTimeAsync(0);
-    const preview = audios.find((a) => a.src === "https://p/a.mp3")!;
-    expect(preview.paused).toBe(false);
-    await vi.advanceTimersByTimeAsync(29_000);
-    expect(spoken).toEqual(["d1", "l1"]);
-    await vi.advanceTimersByTimeAsync(1_500);
-    expect(preview.paused).toBe(true);
-    expect(spoken).toEqual(["d1", "l1", "d2"]);
+    expect(log).toContain("play:/bed.mp3");
   });
 
   it("player_waits_for_voices: waits for voiceschanged when no voices are loaded yet", async () => {
@@ -415,8 +392,6 @@ describe("player", () => {
   it("after the last line, posts to nextUrl once and goes to the new episode", async () => {
     mountPlayer(root, one, opts());
     await tap("toggle");
-    await vi.waitFor(() => expect(log).toContain("play:https://p/a.mp3"));
-    audios.find((a) => a.src === "https://p/a.mp3")!.fire("ended");
     await vi.waitFor(() => expect(navigate).toHaveBeenCalledWith("/episodes/next-ep"));
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(fetchMock).toHaveBeenCalledWith("/episodes/ep/next", { method: "POST" });
@@ -462,9 +437,7 @@ describe("player", () => {
     audios.find((a) => a.src === "/tts?episode=ep1&line=0")!.fire("ended");
     await vi.waitFor(() => expect(audios.some((a) => a.src === "/tts?episode=ep1&line=1")).toBe(true));
     audios.find((a) => a.src === "/tts?episode=ep1&line=1")!.fire("ended");
-    await vi.waitFor(() => expect(log).toContain("play:https://p/a.mp3"));
-    audios.find((a) => a.src === "https://p/a.mp3")!.fire("ended");
-    await vi.waitFor(() => expect(audios.some((a) => a.src === "/tts?episode=ep1&line=3")).toBe(true));
+    await vi.waitFor(() => expect(audios.some((a) => a.src === "/tts?episode=ep1&line=2")).toBe(true));
     expect(spoken).toEqual([]);
     // The engine is unlocked in the tap too, in case a cloud clip fails and the browser voice takes over.
     expect(unlockSpeaks).toBe(1);

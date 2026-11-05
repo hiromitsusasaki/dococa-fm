@@ -33,6 +33,7 @@ const isFixed = (l: ScriptLine | undefined): boolean => l?.type === "dj" && l.fi
  * taken down, gone) is dropped with the fixed line that introduced it (a found voice's source line, a
  * reply's 「一言が届いています」). A segment left with none of the letters it read (replies aside) is dropped
  * whole, since its DJ talk answered them. 私も reactions carry no letter id in the script and stay.
+ * Only talk airs: a preview clip left in an older episode is dropped too (its stored index is skipped, not renumbered).
  */
 export function publicView(segments: Segment[], letters: ReadonlyMap<string, Letter>): PublicView {
   const out: Segment[] = [];
@@ -54,7 +55,7 @@ export function publicView(segments: Segment[], letters: ReadonlyMap<string, Let
     if (!(had > 0 && gone === had)) {
       const lines: ScriptLine[] = [];
       seg.lines.forEach((line, i) => {
-        if (!keep[i]) return;
+        if (!keep[i] || line.type === "preview") return;
         lines.push(line);
         storedIndex.push(base + i);
       });

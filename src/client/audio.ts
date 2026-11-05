@@ -1,4 +1,4 @@
-/** Audio helpers: clips (previews, cloud TTS) and the bed under the DJ. */
+/** Audio helpers: clips (cloud TTS) and the bed under the DJ. */
 
 /** A short silent clip: playing it inside a tap is what lets the element play later without one (iOS Safari). */
 const SILENT_WAV = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=";
@@ -12,7 +12,7 @@ export type ClipPlayer = {
   setVolume(volume: number): void;
 };
 
-/** One reusable element for every preview and TTS clip: a fresh `new Audio` per clip would lose the tap's permission. */
+/** One reusable element for every TTS clip: a fresh `new Audio` per clip would lose the tap's permission. */
 export function createClipPlayer(): ClipPlayer {
   let audio: HTMLAudioElement | null = null;
   let volume = 1;

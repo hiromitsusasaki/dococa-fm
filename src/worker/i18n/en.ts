@@ -159,7 +159,6 @@ export const en: Record<keyof typeof ja, string> = {
   "mcp.instruction": "Read each letter word for word. Do not read aloud the lines of the form `<!-- ... -->`.",
   "mcp.noEpisode": "We couldn't prepare a show right now. Please wait a moment and try again.",
   "mcp.itemNotFound": "We couldn't find that work.",
-  "mcp.preview": "Preview",
   "mcp.posted": "Your letter has been sent.",
   "mcp.reacted": "Your reaction has been sent.",
   "mcp.nothing": "No letters yet.",

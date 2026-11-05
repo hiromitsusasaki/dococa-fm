@@ -23,7 +23,7 @@ const letters = byId([plain, found, w("w1", "あおい"), w("w2", "いつき"), 
 const items = byId([item({ id: "i1" }), item({ id: "i2", previewUrl: null })]);
 
 describe("composeEpisode", () => {
-  it("lays out dj, letters, the spoken found-voice source, preview, reactions and the closing dj line", () => {
+  it("lays out dj, letters, the spoken found-voice source, reactions and the closing dj line", () => {
     const [seg] = composeEpisode(
       [{ itemId: "i1", slot: "near", letterIds: ["a", "f"], reactionIds: ["w1", "r"] }],
       [{ sayBefore: "はじめ", sayAfter: "おわり" }],
@@ -36,7 +36,6 @@ describe("composeEpisode", () => {
       { type: "letter", letterId: "a", text: plain.bodyJa, radioName: "みなと", place: "函館", kind: "letter", sourceUrl: null, sourceAuthor: null },
       { type: "dj", text: "ネットで見つけた声です。@jazzcatさん、YouTubeのコメントから。", fixed: true },
       { type: "letter", letterId: "f", text: "故郷を思い出す。", radioName: "", place: "", kind: "found", sourceUrl: "https://www.youtube.com/watch?v=x", sourceAuthor: "@jazzcat" },
-      { type: "preview", url: "https://example.com/a.m4a", seconds: 30 },
       { type: "dj", text: "あおいさん（那覇）から『私も』が届いています", fixed: true },
       { type: "dj", text: "そらさん（熊本）から一言が届いています", fixed: true },
       { type: "letter", letterId: "r", text: "わかります", radioName: "そら", place: "熊本", kind: "reply", sourceUrl: null, sourceAuthor: null },
@@ -44,9 +43,17 @@ describe("composeEpisode", () => {
     ]);
   });
 
-  it("has no preview line when previewUrl is null", () => {
-    const [seg] = composeEpisode([{ itemId: "i2", slot: "far", letterIds: ["a"], reactionIds: [] }], [{ sayBefore: "は", sayAfter: "お" }], letters, items);
-    expect(seg!.lines.some((l) => l.type === "preview")).toBe(false);
+  it("never adds a preview clip, even for a work that has a preview url: only talk plays", () => {
+    expect(items.get("i1")!.previewUrl).not.toBeNull();
+    const segs = composeEpisode(
+      [{ itemId: "i1", slot: "near", letterIds: ["a", "f"], reactionIds: ["w1"] }, { itemId: "i1", slot: "far", letterIds: [], reactionIds: [] }],
+      [{ sayBefore: "は", sayAfter: "お" }, { sayBefore: "は", sayAfter: "お" }],
+      letters,
+      items,
+    );
+    expect(segs.flatMap((s) => s.lines).every((l) => l.type === "dj" || l.type === "letter")).toBe(true);
+    const fallback = composeEpisode([{ itemId: "i1", slot: "near", letterIds: ["a"], reactionIds: [] }], null, letters, items);
+    expect(fallback.flatMap((s) => s.lines).every((l) => l.type === "dj" || l.type === "letter")).toBe(true);
   });
 
   it("reads at most three reactions", () => {

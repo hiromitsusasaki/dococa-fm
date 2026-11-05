@@ -214,7 +214,6 @@ function Screen({ s, view }: { s: State; view: View }) {
       <div class="player-line" aria-live="polite">
         {s.loading && <p class="muted">{str("player.loading")}</p>}
         {line?.type === "dj" && <p class="player-dj">{line.text}</p>}
-        {line?.type === "preview" && <p class="player-dj" aria-hidden="true">♪</p>}
         {letter && (
           <LetterQuote letter={letter} original={original} str={str} toggleKey="letter.showOriginal" />
         )}

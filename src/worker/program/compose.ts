@@ -72,7 +72,6 @@ export function composeEpisode(
       }
       lines.push(read(l));
     }
-    if (item.previewUrl) lines.push({ type: "preview", url: item.previewUrl, seconds: 30 });
     for (const id of p.reactionIds.slice(0, MAX_REACTIONS)) {
       const l = letters.get(id);
       if (l) lines.push(...reaction(l));
