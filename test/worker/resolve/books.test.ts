@@ -47,15 +47,17 @@ describe("searchBooks", () => {
     ]);
   });
 
-  it("adds key= to the request only when a key is given", async () => {
-    const { calls } = stubFetch([["https://www.googleapis.com/books/v1/volumes", () => json({ items: [] })]]);
+  it("sends the key as an X-Goog-Api-Key header only when given, never in the URL", async () => {
+    const { fn } = stubFetch([["https://www.googleapis.com/books/v1/volumes", () => json({ items: [] })]]);
     await searchBooks("t", "K123");
     await searchBooks("t");
     await searchBooks("t", "");
-    const [withKey = "", without = "", empty = ""] = calls();
-    expect(new URL(withKey).searchParams.get("key")).toBe("K123");
-    expect(without).not.toContain("key=");
-    expect(empty).not.toContain("key=");
+    const sent = fn.mock.calls.map(([u, init]) => ({
+      url: String(u),
+      key: new Headers((init as RequestInit | undefined)?.headers).get("X-Goog-Api-Key"),
+    }));
+    expect(sent.map((c) => c.key)).toEqual(["K123", null, null]);
+    for (const c of sent) expect(c.url).not.toContain("key=");
   });
 
   it("handles sparse volumes and missing items", async () => {

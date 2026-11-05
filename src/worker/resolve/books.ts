@@ -36,8 +36,10 @@ function toDraft(v: Volume): ItemDraft | null {
 export async function searchBooks(text: string, key?: string): Promise<ItemDraft[]> {
   const compact = text.replace(/[-\s]/g, "");
   const q = ISBN_PATTERN.test(compact) ? `isbn:${compact}` : text;
-  const params = new URLSearchParams({ q, maxResults: "5" });
-  if (key) params.set("key", key);
-  const body = await fetchJson<{ items?: Volume[] }>(`https://www.googleapis.com/books/v1/volumes?${params}`);
+  // Header, not `?key=`: a query string can end up in error messages and logs.
+  const body = await fetchJson<{ items?: Volume[] }>(
+    `https://www.googleapis.com/books/v1/volumes?${new URLSearchParams({ q, maxResults: "5" })}`,
+    key ? { "X-Goog-Api-Key": key } : undefined,
+  );
   return (body?.items ?? []).flatMap((v) => toDraft(v) ?? []);
 }
