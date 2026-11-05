@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { raw as rawHtml } from "hono/html";
 import { Layout } from "../../views/layout";
 import type { Variables } from "../auth/session";
-import { getVerifiedEpisode, listVerifiedEpisodes } from "../db/episodes";
+import { getVerifiedEpisode, latestVerifiedEpisodeOn } from "../db/episodes";
 import { listHistory } from "../db/history";
 import { getListenerBySlug } from "../db/listeners";
 import type { Env } from "../env";
@@ -10,7 +10,7 @@ import { ja } from "../i18n/ja";
 import { type Lang, tFor } from "../i18n/t";
 import { makeEpisode } from "../program/create";
 import { playerView } from "../program/player-view";
-import { type StationKey, parseStationKey, stationLabel } from "../program/station";
+import { type StationKey, parseStationKey, stationColumn, stationLabel } from "../program/station";
 import { jsonForScript } from "./episodes";
 
 export const stations = new Hono<{ Bindings: Env; Variables: Variables }>();
@@ -94,9 +94,8 @@ stations.get("/stations/:key", async (c) => {
     return c.html(<StationPage stationKey={raw} label={label} lang={listener.lang} voice={listener.voice} dial={listener.dial} grow={grow} />);
   }
 
-  // Resume after a reload: the listener's latest verified episode. Episodes carry no station column, so this is
-  // the latest one whatever station it was made on; the station named in the url only supplies the label.
-  const [latest] = await listVerifiedEpisodes(c.env.DB, listener.id, 1);
+  // Resume after a reload: the listener's latest verified episode made on this station.
+  const latest = await latestVerifiedEpisodeOn(c.env.DB, listener.id, stationColumn(station.key));
   if (!latest) return c.body(null, 204);
   return c.json({
     episode: await playerView(c.env.DB, latest, listener.lang),

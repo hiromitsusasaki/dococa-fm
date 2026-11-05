@@ -171,6 +171,7 @@ export const ja = {
   "station.failed": "電波が届きませんでした。少し待ってもう一度",
   "station.empty": "まだお便りがありません",
   "station.grow": "あなたのラジオ",
+  "station.growStart": "好きなものを 3 つ送る",
   "station.growHelp": "好きなものを 3 つ送ると、あなた向けのラジオが始まります",
   "home.tuneIn": "ラジオをつける",
   "letter.showOriginal": "原文を見る",

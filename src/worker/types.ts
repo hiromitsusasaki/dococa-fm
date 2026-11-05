@@ -105,5 +105,7 @@ export type Episode = {
   report: VerifyReport;
   /** dj and letter lines of this episode may be read by the cloud voice (`GET /tts`). */
   cloudTts: boolean;
+  /** `world`, `mine` or `public:<ownerId>`: the station it was made on, which resume looks at. */
+  station: string;
   createdAt: string;
 };

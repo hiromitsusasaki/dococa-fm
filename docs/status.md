@@ -34,7 +34,7 @@
 | Task 2 | スキーマ | 完了 |
 | Task 2b | 言語設定 | 完了 |
 | Task 3 | 局ごとの枠決め | 完了 |
-| Task 4 | 局の API | 完了（エピソードに局の列が無いため `/stations/:key.json` は局を問わず直近の検証済み回を返す（v1）） |
+| Task 4 | 局の API | 完了（`/stations/:key.json` は局ごとの直近の検証済み回を返す。`episodes.station` を 0006 で追加） |
 | Task 5 | 局プレイヤー | 完了（`/stations/:key` のページと `station.js`。行の再生は `playback.ts` に共通化。ON で直近の回に復帰か新規作成、残り 2 セグメントで次の回を先読み） |
 | Task 6 | ホームを局に | 未着手 |
 | Task 7 | Google サインイン | 未着手 |

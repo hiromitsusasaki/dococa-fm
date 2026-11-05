@@ -3,6 +3,9 @@ import { mountStation, type StationOptions } from "../../src/client/station";
 
 const strings: Record<string, string> = {
   "station.onOff": "ラジオをつける / 止める",
+  "station.on": "ラジオをつける",
+  "station.off": "止める",
+  "station.growStart": "好きなものを 3 つ送る",
   "station.onAir": "ON AIR",
   "station.volume": "音量",
   "station.dial": "セレンディピティ",
@@ -164,7 +167,8 @@ describe("station: screen", () => {
     expect(s.state().power).toBe("off");
     expect(el("power").tagName).toBe("BUTTON");
     expect(el("power").getAttribute("aria-pressed")).toBe("false");
-    expect(root.textContent).toContain("ラジオをつける / 止める");
+    expect(root.textContent).toContain("ラジオをつける");
+    expect(el("power").getAttribute("aria-label")).toBe("ラジオをつける / 止める");
     expect(root.textContent).toContain("DOCOCA FM");
     expect(root.querySelector(".live")).toBeNull();
     expect(root.querySelector('input[type=range][data-action="volume"]')).not.toBeNull();
@@ -184,6 +188,7 @@ describe("station: screen", () => {
     mountStation(root, opts({ stationKey: "mine", grow: true }));
     await flush();
     expect(root.querySelector(".grow a")!.getAttribute("href")).toBe("/start");
+    expect(root.querySelector(".grow a")!.textContent).toBe("好きなものを 3 つ送る");
     expect(root.querySelector(".grow")!.textContent).toContain("好きなものを 3 つ送ると始まります");
     expect((el("power") as HTMLButtonElement).disabled).toBe(true);
   });
@@ -209,6 +214,7 @@ describe("station: playing", () => {
     expect(s.state().current?.id).toBe("epA");
     await vi.waitFor(() => expect(spoken).toEqual(["a1"]));
     expect(el("power").getAttribute("aria-pressed")).toBe("true");
+    expect(root.textContent).toContain("止める");
     expect(root.querySelector(".live")?.textContent).toBe("ON AIR");
     expect(root.querySelector(".now")!.textContent).toContain("曲A");
     expect(root.querySelector(".now")!.textContent).toContain("作者A");
@@ -291,6 +297,37 @@ describe("station: playing", () => {
     expect(s.state().power).toBe("on");
     expect(posts()).toBe(1);
     await vi.waitFor(() => expect(spoken).toEqual(["a1", "a1"]));
+  });
+});
+
+describe("station: switching during the hand-over", () => {
+  it("OFF while the next episode is awaited, then ON, does not read the last line again", async () => {
+    let release!: () => void;
+    const slow = () => new Promise<Response>((r) => (release = () => r(new Response(JSON.stringify({ episode: epB() }), { status: 200 }))));
+    const one = view("epOne", [["a", [dj("only")]]]);
+    nextReplies = [ok(one), slow];
+    const s = mountStation(root, opts());
+    await power();
+    await vi.waitFor(() => expect(s.state().loading ?? true).toBeTruthy());
+    await vi.waitFor(() => expect(spoken).toEqual(["only"]));
+    await vi.waitFor(() => expect(typeof release).toBe("function"));
+    await flush();
+    await power();
+    expect(s.state().power).toBe("off");
+    release();
+    await flush();
+    await power();
+    await vi.waitFor(() => expect(spoken).toContain("x1"));
+    expect(spoken.filter((t) => t === "only")).toHaveLength(1);
+  });
+
+  it("shows no exit block for a work without links", async () => {
+    nextReplies = [ok(view("epN", [["b", [dj("n1")]]]))];
+    autoEnd = false;
+    mountStation(root, opts());
+    await power();
+    await vi.waitFor(() => expect(spoken).toEqual(["n1"]));
+    expect(root.querySelector('[data-action="again"]')).toBeNull();
   });
 });
 

@@ -149,6 +149,8 @@ export function mountStation(root: HTMLElement, opts: StationOptions) {
         }
       }
       if (signal.aborted) return;
+      // The episode is done: if the switch goes off while the next one is awaited, turning on must not read the last line again.
+      setState({ line: ep.segments[state.seg]!.lines.length });
       if (!(await advance(signal))) return;
     }
   }

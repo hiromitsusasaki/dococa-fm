@@ -18,6 +18,12 @@ export function parseStationKey(raw: string): ParsedStationKey | null {
   return null;
 }
 
+/** The value stored in `episodes.station`; `mine` is also what an episode made outside any station gets. */
+export function stationColumn(key: StationKey | undefined): string {
+  if (!key || key.kind === "mine") return "mine";
+  return key.kind === "world" ? "world" : `public:${key.ownerId}`;
+}
+
 export function stationLabel(key: StationKey, ownerName: string, lang: Lang): string {
   if (key.kind === "world") return t("station.world", undefined, lang);
   if (key.kind === "mine") return t("station.mine", undefined, lang);

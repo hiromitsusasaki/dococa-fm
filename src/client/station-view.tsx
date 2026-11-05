@@ -55,9 +55,9 @@ export function StationScreen(p: StationScreenProps) {
         <div class="scale" aria-hidden="true"></div>
         <div class="controls">
           <div class="control">
-            <button type="button" class="switch" data-action="power" aria-pressed={String(lit)} aria-labelledby="station-switch-label" disabled={p.grow} onClick={p.on.power}></button>
+            <button type="button" class="switch" data-action="power" aria-pressed={String(lit)} aria-label={str("station.onOff")} disabled={p.grow} onClick={p.on.power}></button>
             <span id="station-switch-label" class="control-label">
-              {str("station.onOff")}
+              {str(lit ? "station.off" : "station.on")}
             </span>
           </div>
           <label class="knob knob-volume">
@@ -115,18 +115,20 @@ export function StationScreen(p: StationScreenProps) {
               )}
             </div>
           )}
-          <div class="again" data-action="again">
-            <p class="muted">{str("player.again")}</p>
-            <ul class="out-links">
-              {links.map((l) => (
-                <li>
-                  <a class="pill" href={l.href} target="_blank" rel="noopener noreferrer">
-                    {l.label}
-                  </a>
-                </li>
-              ))}
-            </ul>
-          </div>
+          {links.length > 0 && (
+            <div class="again" data-action="again">
+              <p class="muted">{str("player.again")}</p>
+              <ul class="out-links">
+                {links.map((l) => (
+                  <li>
+                    <a class="pill" href={l.href} target="_blank" rel="noopener noreferrer">
+                      {l.label}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </section>
       )}
 
@@ -146,7 +148,7 @@ export function StationScreen(p: StationScreenProps) {
             <h2>{str("station.grow")}</h2>
             <p>{str("station.growHelp")}</p>
             <a class="pill hot" href="/start">
-              {str("station.grow")}
+              {str("station.growStart")}
             </a>
           </div>
         )}

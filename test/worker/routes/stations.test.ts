@@ -121,6 +121,21 @@ describe("GET /stations/:key.json", () => {
     expect(body.station.key).toBe("world");
   });
 
+  it("resumes per station: world does not return a mine episode, and the reverse", async () => {
+    await seedWorld();
+    const cookie = await newSession();
+    const listenerId = (await env.DB.prepare("SELECT id FROM listeners ORDER BY created_at DESC LIMIT 1").first<{ id: string }>())!.id;
+    const it = await insertItem(env.DB, itemDraft({ title: "mine-1" }));
+    await upsertHistory(env.DB, [{ listenerId, itemId: it.id, source: "manual", occurredAt: null, rank: 1 }]);
+    const resume = (key: string) => app.request(`/stations/${key}.json`, { headers: { cookie } }, env);
+    const world = (await (await postNext("world", cookie)).json()) as Body;
+    expect((await resume("mine")).status).toBe(204);
+    expect(((await (await resume("world")).json()) as Body).episode.id).toBe(world.episode.id);
+    const mine = (await (await postNext("mine", cookie)).json()) as Body;
+    expect(((await (await resume("mine")).json()) as Body).episode.id).toBe(mine.episode.id);
+    expect(((await (await resume("world")).json()) as Body).episode.id).toBe(world.episode.id);
+  });
+
   it("does not show another listener's episode, and 404s a bad key", async () => {
     await seedWorld();
     await postNext("world", await newSession());

@@ -3,7 +3,7 @@ import { claimCloudTts, releaseCloudTts } from "../db/listeners";
 import type { Env } from "../env";
 import type { Listener } from "../types";
 import { buildEpisode } from "./build";
-import type { StationKey } from "./station";
+import { type StationKey, stationColumn } from "./station";
 
 const DEFAULT_DAILY_LIMIT = 10;
 const DEFAULT_GLOBAL_DAILY_LIMIT = 300;
@@ -39,7 +39,7 @@ export async function makeEpisode(env: Env, listener: Listener, opts: { cloudTts
     const cloudAllowed = hasKey && !demo && (await countCloudTtsToday(env.DB)) < limitFrom(env.CLOUD_TTS_GLOBAL_DAILY_LIMIT, DEFAULT_CLOUD_TTS_GLOBAL_DAILY_LIMIT);
     const claimed = cloudAllowed && (await claimCloudTts(env.DB, listener.id));
     try {
-      const episode = await insertEpisode(env.DB, { ...built, cloudTts: demo || claimed });
+      const episode = await insertEpisode(env.DB, { ...built, cloudTts: demo || claimed, station: stationColumn(opts.station) });
       return { ok: true, id: episode.id };
     } catch (e) {
       if (claimed) await releaseCloudTts(env.DB, listener.id);

@@ -89,7 +89,7 @@ export async function buildEpisode(
   const finish = (segments: Episode["segments"]): Episode => {
     const report = verifyEpisode(segments, letters, listener, items);
     const verified = report.verbatim && report.sources && report.topical && report.pii;
-    return { id: crypto.randomUUID(), listenerId: listener.id, segments, verified, report, cloudTts: false, createdAt: new Date().toISOString() };
+    return { id: crypto.randomUUID(), listenerId: listener.id, segments, verified, report, cloudTts: false, station: "mine", createdAt: new Date().toISOString() };
   };
 
   if (plan.length > 0 && hasClaude(env)) {

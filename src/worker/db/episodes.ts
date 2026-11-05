@@ -13,6 +13,7 @@ function rowToEpisode(r: Row): Episode {
     verified: r.verified === 1,
     report: JSON.parse(r.report as string),
     cloudTts: r.cloud_tts === 1,
+    station: r.station as string,
     createdAt: r.created_at as string,
   };
 }
@@ -25,11 +26,11 @@ export function jstDayStartIso(now: Date): string {
 
 export async function insertEpisode(
   db: D1Database,
-  e: Omit<Episode, "id" | "createdAt" | "cloudTts"> & { id?: string; createdAt?: string; cloudTts?: boolean },
+  e: Omit<Episode, "id" | "createdAt" | "cloudTts" | "station"> & { id?: string; createdAt?: string; cloudTts?: boolean; station?: string },
 ): Promise<Episode> {
-  const episode: Episode = { ...e, cloudTts: e.cloudTts ?? false, id: e.id ?? crypto.randomUUID(), createdAt: e.createdAt ?? new Date().toISOString() };
+  const episode: Episode = { ...e, cloudTts: e.cloudTts ?? false, station: e.station ?? "mine", id: e.id ?? crypto.randomUUID(), createdAt: e.createdAt ?? new Date().toISOString() };
   await db
-    .prepare("INSERT INTO episodes (id, listener_id, segments, verified, report, cloud_tts, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)")
+    .prepare("INSERT INTO episodes (id, listener_id, segments, verified, report, cloud_tts, station, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
     .bind(
       episode.id,
       episode.listenerId,
@@ -37,6 +38,7 @@ export async function insertEpisode(
       episode.verified ? 1 : 0,
       JSON.stringify(episode.report),
       episode.cloudTts ? 1 : 0,
+      episode.station,
       episode.createdAt,
     )
     .run();
@@ -68,6 +70,15 @@ export async function listVerifiedEpisodes(db: D1Database, listenerId: string, l
     .bind(listenerId, limit)
     .all<Row>();
   return results.map(rowToEpisode);
+}
+
+/** The listener's latest verified episode made on one station (see `stationColumn`). */
+export async function latestVerifiedEpisodeOn(db: D1Database, listenerId: string, station: string): Promise<Episode | null> {
+  const row = await db
+    .prepare("SELECT * FROM episodes WHERE listener_id = ? AND station = ? AND verified = 1 ORDER BY created_at DESC, id DESC LIMIT 1")
+    .bind(listenerId, station)
+    .first<Row>();
+  return row ? rowToEpisode(row) : null;
 }
 
 /** The archive rows in one query: each verified episode with the title of its first work. */
