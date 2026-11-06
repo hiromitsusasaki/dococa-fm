@@ -76,6 +76,28 @@ describe("writeUnitLines", () => {
     expect(create).toHaveBeenCalledTimes(3);
   });
 
+  it.each([
+    ["ja", "intro", ""],
+    ["ja", "intro", "   "],
+    ["ja", "after", ""],
+    ["ja", "after", "   "],
+    ["en", "intro", ""],
+    ["en", "intro", "   "],
+    ["en", "after", ""],
+    ["en", "after", "   "],
+  ] as const)("treats a blank line as out of shape (%s %s %j), and throws after three", async (lang, part, blank) => {
+    const reply = part === "intro" ? lines(blank, "感想") : lines("紹介", blank);
+    create.mockResolvedValue(reply);
+    await expect(writeUnitLines(keyed, { item: item(), letter: letter(), lang })).rejects.toThrow("dj unit invalid");
+    expect(create).toHaveBeenCalledTimes(3);
+  });
+
+  it("asks again after a blank line and takes the next reply in shape", async () => {
+    create.mockResolvedValueOnce(lines("", "感想")).mockResolvedValueOnce(lines("紹介", "感想"));
+    expect(await writeUnitLines(keyed, { item: item(), letter: letter(), lang: "ja" })).toEqual({ intro: "紹介", after: "感想" });
+    expect(create).toHaveBeenCalledTimes(2);
+  });
+
   it("accepts lines exactly at the limits, counted in code points", async () => {
     create.mockResolvedValue(lines("𠮷".repeat(160), "𠮷".repeat(120)));
     expect((await writeUnitLines(keyed, { item: item(), letter: letter(), lang: "ja" })).intro).toHaveLength(320);

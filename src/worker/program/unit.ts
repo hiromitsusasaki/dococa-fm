@@ -90,7 +90,8 @@ function userMessage(input: { item: Item; letter: Letter; lang: Unit["lang"]; re
   return [...head, ...retry, "", segment].join("\n");
 }
 
-const within = (v: unknown, max: number): v is string => typeof v === "string" && Array.from(v).length <= max;
+/** A line in shape: a string, not blank, at most `max` code points. A blank line is asked for again like a missing one. */
+const within = (v: unknown, max: number): v is string => typeof v === "string" && v.trim() !== "" && Array.from(v).length <= max;
 
 /** The tool's input as unit lines, or null when it is missing or out of shape. */
 function parse(content: { type: string; name?: string; input?: unknown }[]): UnitLines | null {
