@@ -67,7 +67,7 @@ Phase 2（ラジオ中心の体験への作り替え）の実装は、すべて 
 |---|---|---|
 | Task 1 | お便りの無い作品を枠から外す | 完了（FALLBACK プール・公開局の例外・`script.workOnly`・`NO_LETTER_NOTE`・`announce` 規則を撤去。出典なしの見つけた声だけの枠は build で落とす） |
 | Task 2 | 行の本文を鍵にした音声キャッシュ。クラウドの声を全員に | 完了（`tts/v2/<lang>/<voice>/<sha256>.mp3` で全員が共有、合成ごとに `tts_audio` へ記録して 1 日の行数を上限に、`ensureAudio` が上限確認→claim→合成。全エピソードが鍵があれば `cloudTts`、初回限定の claim は撤去） |
-| Task 3 | つなぎの定型 | 未着手 |
+| Task 3 | つなぎの定型 | 完了（`program/bridge.ts` の 6 本の定型。回の頭に open、2 作品目以降は slot ごと、同じ作品の 2 通目の前に sameWork、最後に close。いずれも `fixed`。`composeEpisode` に `lang` を追加） |
 | Task 4 | 単位（お便りごとの DJ の語り） | 未着手 |
 | Task 5 | 事前生成（投稿後・15 分ごと・手動） | 未着手 |
 | Task 6 | 聴いた記録 | 未着手 |

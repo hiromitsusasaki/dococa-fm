@@ -1,6 +1,8 @@
 import { t } from "../i18n/t";
+import type { Lang } from "../i18n/t";
 import { siteLabel } from "../letters/label";
 import type { Item, Letter, ScriptLine, Segment } from "../types";
+import { BRIDGE_KEYS, bridgeBefore, bridgeLine } from "./bridge";
 import type { DjLines } from "./script";
 import type { Selection } from "./select";
 
@@ -14,7 +16,7 @@ const dj = (text: string): ScriptLine => ({ type: "dj", text });
 const fixed = (text: string): ScriptLine => ({ type: "dj", text, fixed: true });
 
 /** Every template a `fixed` line is made from; the quote check reads only what was filled into them. */
-export const FIXED_TEMPLATES = ["script.readingOnly", "script.letterFrom", "script.foundVoice", "script.reaction", "script.replyReaction"] as const;
+export const FIXED_TEMPLATES = ["script.readingOnly", "script.letterFrom", "script.foundVoice", "script.reaction", "script.replyReaction", ...BRIDGE_KEYS] as const;
 
 /** Where a found voice was found, said aloud; the same label the screens show. */
 export const siteName = (sourceUrl: string | null): string => siteLabel(sourceUrl) || t("script.web");
@@ -52,18 +54,21 @@ export function composeEpisode(
   djLines: DjLines[] | null,
   letters: Map<string, Letter>,
   items: Map<string, Item>,
+  lang: Lang = "ja",
 ): Segment[] {
   if (djLines !== null && djLines.length !== plan.length) throw new Error("dj lines do not match the segments");
-  return plan.map((p, i) => {
+  const segments = plan.map((p, i) => {
     const item = items.get(p.itemId);
     if (!item) throw new Error(`item missing: ${p.itemId}`);
     if (p.letterIds.length === 0 && p.reactionIds.length === 0) throw new Error("segment without letters");
     const said = djLines?.[i];
-    const lines: ScriptLine[] = [];
+    const lines: ScriptLine[] = [bridgeLine(bridgeBefore(i, p.slot), lang)];
+    let readLetters = 0;
     if (said && said.sayBefore !== "") lines.push(dj(said.sayBefore));
     for (const id of p.letterIds) {
       const l = letters.get(id);
       if (!l) continue;
+      if (readLetters++ > 0) lines.push(bridgeLine("bridge.sameWork", lang));
       if (!said && l.kind !== "found") {
         lines.push(fixed(l.radioName === "" ? t("script.readingOnly") : t("script.letterFrom", { who: who(l) })));
       }
@@ -79,4 +84,6 @@ export function composeEpisode(
     if (said && said.sayAfter !== "") lines.push(dj(said.sayAfter));
     return { itemId: p.itemId, slot: p.slot, lines };
   });
+  segments.at(-1)?.lines.push(bridgeLine("bridge.close", lang));
+  return segments;
 }

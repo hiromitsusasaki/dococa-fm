@@ -86,7 +86,7 @@ describe("buildEpisode", () => {
     const second = String(create.mock.calls[1]![0].messages[0].content);
     expect(first).not.toContain("前回の台本");
     expect(second).toContain("前回の台本で次の語が規則に触れました。言い換えてください");
-    expect(second).toContain("topical: segment 1 line 1: 今年");
+    expect(second).toContain("topical: segment 1 line 2: 今年");
     expect(second).not.toContain("今年の一曲です。");
   });
 
@@ -110,7 +110,7 @@ describe("buildEpisode", () => {
     vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ type: "error", error: { type: "authentication_error", message: "bad key" } }), { status: 401, headers: { "content-type": "application/json" } })));
     const ep = await buildEpisode(keyed, env.DB, f.a, { size: 2, seed: "s" });
     expect(ep.verified).toBe(true);
-    expect(ep.segments[0]!.lines[0]).toEqual({ type: "dj", text: expect.stringMatching(/からのお便りです。$/), fixed: true });
+    expect(ep.segments[0]!.lines[1]).toEqual({ type: "dj", text: expect.stringMatching(/からのお便りです。$/), fixed: true });
     expect(warn.mock.calls.some((c) => c.includes("status 401"))).toBe(true);
   });
 
@@ -119,7 +119,7 @@ describe("buildEpisode", () => {
     const ep = await buildEpisode(keyless, env.DB, f.a, { size: 2, seed: "s" });
     expect(create).not.toHaveBeenCalled();
     expect(ep.verified).toBe(true);
-    for (const seg of ep.segments) expect(seg.lines[0]).toEqual({ type: "dj", text: expect.stringMatching(/からのお便りです。$/), fixed: true });
+    for (const seg of ep.segments) expect(seg.lines[1]).toEqual({ type: "dj", text: expect.stringMatching(/からのお便りです。$/), fixed: true });
   });
 
   it("falls back to readings only when Claude keeps returning a broken script", async () => {
@@ -127,7 +127,7 @@ describe("buildEpisode", () => {
     create.mockResolvedValue({ content: [{ type: "text", text: "はい" }] });
     const ep = await buildEpisode(keyed, env.DB, f.a, { size: 2, seed: "s" });
     expect(ep.verified).toBe(true);
-    for (const seg of ep.segments) expect(seg.lines[0]).toEqual({ type: "dj", text: expect.stringMatching(/からのお便りです。$/), fixed: true });
+    for (const seg of ep.segments) expect(seg.lines[1]).toEqual({ type: "dj", text: expect.stringMatching(/からのお便りです。$/), fixed: true });
   });
 
   it("drops a found voice without a source and still verifies", async () => {

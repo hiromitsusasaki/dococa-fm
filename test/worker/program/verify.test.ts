@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { t } from "../../../src/worker/i18n/t";
 import { verifyEpisode } from "../../../src/worker/program/verify";
 import type { ScriptLine, Segment } from "../../../src/worker/types";
 import { byId, item, letter, listener } from "./fixtures";
@@ -351,5 +352,21 @@ describe("verifyEpisode", () => {
   it("does not treat a short letter as a quote", () => {
     const short = letter({ id: "s", body: "私も", bodyJa: "私も" });
     expect(verifyEpisode(episode(dj("あおいさんから『私も』が届いています")), byId([short]), me).pii).toBe(true);
+  });
+});
+
+describe("verifyEpisode bridge lines", () => {
+  it("does not fail the open bridge because a letter contains its exact sentence", () => {
+    const open = t("bridge.open");
+    const echo = letter({ id: "echo", body: open, bodyJa: open });
+    const r = verifyEpisode(episode(fixedDj(open), read(echo)), byId([echo]), me);
+    expect(r).toMatchObject({ pii: true, topical: true });
+    expect(r.details).toEqual([]);
+  });
+
+  it("still fails a non-fixed dj line that quotes the same sentence", () => {
+    const open = t("bridge.open");
+    const echo = letter({ id: "echo", body: open, bodyJa: open });
+    expect(verifyEpisode(episode(dj(open), read(echo)), byId([echo]), me).pii).toBe(false);
   });
 });
