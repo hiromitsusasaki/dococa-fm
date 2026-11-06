@@ -113,10 +113,9 @@ export function mountStation(root: HTMLElement, opts: StationOptions) {
     if (was.current !== state.current || was.seg !== state.seg || was.power !== state.power) syncMediaSession(itemOf(state.current, state.seg), state.power === "on");
   }
 
+  /** Asks for the next episode. The asked letter rides every ask until one is answered and used (see `begin`, `ensureAhead`). */
   async function requestNext(): Promise<Fetched> {
-    const asked = letterId;
-    letterId = undefined;
-    const r = await fetchNext(opts.nextUrl, { dial, first: !heard, ...(asked ? { letterId: asked } : {}) });
+    const r = await fetchNext(opts.nextUrl, { dial, first: !heard, ...(letterId ? { letterId } : {}) });
     if (!r.ok) return r;
     const episode = r.body.episode;
     return playable(episode) ? { ok: true, view: episode } : { ok: false, reason: "failed" };
@@ -161,8 +160,10 @@ export function mountStation(root: HTMLElement, opts: StationOptions) {
     const p = requestNext().then((r) => {
       if (asked !== generation) return;
       ahead = null;
-      if (r.ok) setState({ queue: [...state.queue, r.view] });
-      else aheadFail = r.reason;
+      if (r.ok) {
+        letterId = undefined;
+        setState({ queue: [...state.queue, r.view] });
+      } else aheadFail = r.reason;
     });
     ahead = p;
     return p;
@@ -235,15 +236,18 @@ export function mountStation(root: HTMLElement, opts: StationOptions) {
     let view: PlayerEpisode | null = null;
     let [seg, line] = [0, 0];
     let reason: Reason | null = null;
+    // A letter link plays the asked letter first: the last visit is not resumed.
     if (!resumeTried) {
       resumeTried = true;
-      const resumed = await requestResume();
+      const resumed = letterId ? null : await requestResume();
       if (resumed) ({ view, seg, line } = resumed);
     }
     if (!view) {
       const r = await requestNext();
-      if (r.ok) view = r.view;
-      else reason = r.reason;
+      if (r.ok) {
+        view = r.view;
+        letterId = undefined;
+      } else reason = r.reason;
     }
     if (view) heard = true;
     starting = false;

@@ -774,6 +774,31 @@ describe("station: the dial and the first ask", () => {
     expect(bodies[1]).not.toHaveProperty("letterId");
   });
 
+  it("keeps the letter asked for until an ask carrying it is answered", async () => {
+    nextReplies = [json(503, { error: "unavailable" }), ok(one("e1")), ok(one("e2"))];
+    autoEnd = false;
+    const s = mountStation(root, opts({ stationKey: "mine", letterId: "L9" }));
+    await power();
+    expect(s.state().power).toBe("failed");
+    await power();
+    await vi.waitFor(() => expect(s.state().queue).toHaveLength(1));
+    expect(bodies.map((b) => b.letterId)).toEqual(["L9", "L9", undefined]);
+    expect(bodies[1]!.first).toBe(true);
+  });
+
+  it("plays the letter asked for first instead of resuming the last visit", async () => {
+    localStorage.setItem("dfm.pos:mine", JSON.stringify({ episodeId: "old", seg: 0, line: 0 }));
+    resumeReply = ok(one("r1"));
+    resumeByIdReply = ok(one("old"));
+    nextReplies = [ok(one("asked"))];
+    autoEnd = false;
+    const s = mountStation(root, opts({ stationKey: "mine", letterId: "L9" }));
+    await power();
+    expect(calls.some((c) => c.startsWith("GET /stations/world.json"))).toBe(false);
+    expect(s.state().current?.id).toBe("asked");
+    expect(bodies[0]).toEqual({ dial: 0.3, first: true, letterId: "L9" });
+  });
+
   it("shows no dial on a public station", async () => {
     mountStation(root, opts({ stationKey: "s:hiro", dial: 0.5 }));
     await flush();

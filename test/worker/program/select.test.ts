@@ -359,17 +359,40 @@ describe("selectProgram with one seat", () => {
     expect(p.map((s) => s.slot)).toEqual(["far"]);
   });
 
-  it("gives the seat to the echo whatever the dial says", async () => {
-    const f = await buildFixture();
+  /** An own work of A's that got a 私も after A's last episode: the echo. */
+  async function withEcho(f: Fixture) {
     const x = await insertItem(env.DB, itemDraft({ title: "echo" }));
     const mine = await insertLetter(env.DB, letterDraft(x.id, { listenerId: f.a.id, body: "A on echo" }));
     await insertEpisode(env.DB, { listenerId: f.a.id, segments: [], verified: true, report: { verbatim: true, sources: true, topical: true, pii: true, details: [] }, createdAt: new Date(Date.now() - 60_000).toISOString() });
     await insertLetter(env.DB, letterDraft(x.id, { kind: "watashimo", listenerId: f.b.id, parentLetterId: mine.id }));
+    return x;
+  }
+
+  it("gives the seat to the echo when the dial is short of the far end", async () => {
+    const f = await buildFixture();
+    const x = await withEcho(f);
     for (const seed of seeds) {
-      const p = await selectProgram(env.DB, f.a, { size: 1, seed, dial: 1 });
+      const p = await selectProgram(env.DB, f.a, { size: 1, seed, dial: 0.5 });
       expect(p).toHaveLength(1);
       expect(p[0]?.slot).toBe("near");
       expect([x.id, f.items[0]]).toContain(p[0]?.itemId);
+    }
+  });
+
+  it("draws no echo with the dial at the far end", async () => {
+    const f = await buildFixture();
+    await withEcho(f);
+    for (const seed of seeds) expect((await selectProgram(env.DB, f.a, { size: 1, seed, dial: 1 })).map((s) => s.slot)).toEqual(["far"]);
+  });
+
+  it("draws no echo when a letter the listener asked for takes the seat, even with room for more", async () => {
+    const f = await buildFixture();
+    const x = await withEcho(f);
+    const asked = await insertLetter(env.DB, letterDraft(f.items[9]!, { listenerId: f.c.id, body: "C again on 9" }));
+    for (const seed of seeds) {
+      const p = await selectProgram(env.DB, f.a, { size: 3, seed, dial: 0, letterId: asked.id });
+      expect(p[0]?.itemId).toBe(f.items[9]);
+      expect(p.map((s) => s.itemId)).not.toContain(x.id);
     }
   });
 

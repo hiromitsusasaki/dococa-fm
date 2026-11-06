@@ -4,7 +4,7 @@ import { getEpisode, insertEpisode } from "../../../src/worker/db/episodes";
 import { upsertHistory } from "../../../src/worker/db/history";
 import { insertItem } from "../../../src/worker/db/items";
 import { insertLetter } from "../../../src/worker/db/letters";
-import { createListener } from "../../../src/worker/db/listeners";
+import { createListener, getListener, updateListener } from "../../../src/worker/db/listeners";
 import { makeEpisode } from "../../../src/worker/program/create";
 import { resetDb } from "../../helpers/db";
 import { itemDraft, letterDraft } from "../db/helpers";
@@ -73,5 +73,40 @@ describe("makeEpisode limits", () => {
     const me = await seed();
     const made = await makeEpisode({ ...env, GOOGLE_TTS_SA_JSON: "" }, me, { first: true });
     expect((await getEpisode(env.DB, (made as { id: string }).id))!.segments).toHaveLength(1);
+  });
+});
+
+describe("makeEpisode and the stored dial", () => {
+  /** The statements run against D1, so a test can see which writes happened. */
+  const recording = () => {
+    const sqls: string[] = [];
+    const db = new Proxy(env.DB, {
+      get(target, prop, receiver) {
+        if (prop === "prepare") return (sql: string) => (sqls.push(sql), target.prepare(sql));
+        const v = Reflect.get(target, prop, receiver);
+        return typeof v === "function" ? v.bind(target) : v;
+      },
+    });
+    return { e: { ...env, DB: db, GOOGLE_TTS_SA_JSON: "" }, dialWrites: () => sqls.filter((q) => /UPDATE listeners SET dial/.test(q)).length };
+  };
+
+  it("writes a signed-in listener's dial only when the request's differs, in one statement", async () => {
+    const seeded = await seed();
+    await updateListener(env.DB, seeded.id, { googleSub: "g-1" });
+    const me = (await getListener(env.DB, seeded.id))!;
+    const same = recording();
+    await makeEpisode(same.e, me, { dial: me.dial });
+    expect(same.dialWrites()).toBe(0);
+    const changed = recording();
+    await makeEpisode(changed.e, me, { dial: 0.9 });
+    expect(changed.dialWrites()).toBe(1);
+    expect((await getListener(env.DB, me.id))!.dial).toBe(0.9);
+  });
+
+  it("never writes an anonymous listener's dial", async () => {
+    const me = await seed();
+    const r = recording();
+    await makeEpisode(r.e, me, { dial: 0.9 });
+    expect(r.dialWrites()).toBe(0);
   });
 });

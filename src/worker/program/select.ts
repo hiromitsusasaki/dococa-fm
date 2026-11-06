@@ -125,8 +125,9 @@ export async function selectProgram(
   const nearQuota = Math.round((remaining * 2) / 3);
   const neighborQuota = remaining - nearQuota;
 
-  // With one seat the echo takes it whatever the dial says.
-  const echo = room === 1 || nearQuota > 0 ? await echoItem(db, listener, rng) : null;
+  // With one seat the echo takes it unless the dial is at the far end; a letter the listener asked for leaves no room for it.
+  const echoRoom = asked ? false : room === 1 ? dial < 2 / 3 : nearQuota > 0;
+  const echo = echoRoom ? await echoItem(db, listener, rng) : null;
   const taken = new Set<string>([...(echo ? [echo] : []), ...(asked ? [asked.itemId] : [])]);
   const raw: Record<Slot, string[]> = {
     near: await ids(db, NEAR_SQL, listener.id),

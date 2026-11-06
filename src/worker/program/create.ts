@@ -1,4 +1,3 @@
-import { z } from "zod";
 import { countAllEpisodesToday, countEpisodesToday, insertEpisode } from "../db/episodes";
 import { setListenerDial } from "../db/listeners";
 import type { Env } from "../env";
@@ -22,30 +21,6 @@ export type MakeOptions = {
   /** Segments in the episode; 1 for every listener. Only the operator's eval asks for more, to measure a whole programme. */
   size?: number;
 };
-
-const nextBody = z.object({
-  dial: z.number().min(0).max(1).optional(),
-  first: z.boolean().optional(),
-  letterId: z.string().min(1).max(100).optional(),
-});
-export type NextBody = z.infer<typeof nextBody>;
-
-/**
- * The body of a "next" request (`{ dial?, first?, letterId? }`, JSON). No body, or one that is not JSON (a form post),
- * is `{}`; JSON of the wrong shape is null, which the route answers with 400.
- */
-export async function readNextBody(req: Request): Promise<NextBody | null> {
-  let raw: unknown;
-  try {
-    const text = await req.text();
-    raw = text.trim() === "" ? null : JSON.parse(text);
-  } catch {
-    return {};
-  }
-  if (raw === null) return {};
-  const parsed = nextBody.safeParse(raw);
-  return parsed.success ? parsed.data : null;
-}
 
 export type Made = { ok: true; id: string } | { ok: false; reason: "limit" | "unavailable" | "empty" };
 
