@@ -428,6 +428,14 @@ describe("verifyEpisode intro names the sender", () => {
     expect(run([intro(text, tokyo.id), read(tokyo, lang === "en" ? "x" : tokyo.bodyJa)], lang, tokyo).details).toContain("intro: segment 1 line 1: names the sender");
   });
 
+  it("masks the work's title and creator first: 東京事変 passes for a Tokyo sender, 東京の夜 still fails", () => {
+    const tokyo = letter({ id: "t", radioName: "", place: "東京", placeCountry: "JP", placeRegion: "13" });
+    const works = new Map([["i1", item({ title: "群青日和", creator: "東京事変" })]]);
+    const check = (text: string) => verifyEpisode([{ itemId: "i1", slot: "near", lines: [intro(text, tokyo.id), read(tokyo)] }], byId([tokyo]), me, works, "ja").details.filter((d) => d.startsWith("intro:"));
+    expect(check("東京事変の群青日和です。")).toEqual([]);
+    expect(check("東京の夜に似合う東京事変の一曲です。")).toEqual(["intro: segment 1 line 1: names the sender"]);
+  });
+
   it("ignores a one-character radio name", () => {
     const short = letter({ id: "s", radioName: "海", place: "" });
     expect(run([intro("海の見える部屋で聴きたい一曲です。", short.id), read(short)], "ja", short).details).toEqual([]);

@@ -95,7 +95,8 @@ function readable(l: Letter, lang: Lang, forQuotes: boolean): string[] {
  * What an intro must not say about its letter, normalised and lower-cased: the sender's radio name (2+ code
  * points) and the sender's region (prefecture or state, in Japanese and English). A country alone is never
  * checked: a work's intro names countries naturally (「日本のジャズ」), and the hand-over says it anyway. A
- * letter without codes has its `place` checked unless that is itself a country name.
+ * letter without codes has its `place` checked unless that is itself a country name. Checked on the masked
+ * talk, so a work's title or creator (「東京事変」) never counts as the place.
  */
 function senderTerms(l: Letter): string[] {
   const name = norm(l.radioName).trim().toLowerCase();
@@ -184,7 +185,7 @@ export function verifyEpisode(
           details.push(`measure: ${at}: ${count[0]}`);
         }
         const own = line.unit?.part === "intro" ? letters.get(line.unit.letterId) : undefined;
-        if (own && senderTerms(own).some((term) => text.toLowerCase().includes(term))) {
+        if (own && senderTerms(own).some((term) => mask(text).includes(term))) {
           topical = false;
           // Never the name itself: details reach the logs.
           details.push(`intro: ${at}: names the sender`);
