@@ -19,7 +19,7 @@
 
 - `/admin/*` は `ADMIN_TOKEN`（Bearer）が必須です。
 - 書き込みの `POST` は同一オリジンのみです。`Origin` があれば `PUBLIC_ORIGIN` と一致が必要で、無いときは `Sec-Fetch-Site` が `same-origin` か `none` のときだけ通します（curl などブラウザ以外は通ります。Cookie を持たないため）。
-- レート制限: `POST /letters`、`/settings`、`/auth/signout`、`/episodes`、`/episodes/:id/next`、`/stations/:key/next`、`/start`、`/put/register`、`/takedown`、お便りの通報、`GET /auth/google`、`GET /put?itemId=|url=`、`/api/*` は、IP（`CF-Connecting-IP`）とリスナーのそれぞれで 1 分 20 回までです。`GET /tts` はリスナーごとに 1 分 60 回、IP ごとに 120 回です。`POST /listens`（プレイヤーがお便りの行を読み始めるたびに送る）は、ほかと別の枠で、リスナーごとに 1 分 120 回、IP ごとに 240 回です（会場の Wi-Fi で何人も聴いても、`next` やお便りの枠を使い切らないため）。超えると 429 を返します。
+- レート制限: `POST /letters`、`/settings`、`/auth/signout`、`/episodes`、`/episodes/:id/next`、`/stations/:key/next`、`/start`、`/put/register`、`/takedown`、お便りの通報、`GET /auth/google`、`GET /put?itemId=|url=` は、IP（`CF-Connecting-IP`）とリスナーのそれぞれで 1 分 20 回までです。`GET /tts` はリスナーごとに 1 分 60 回、IP ごとに 120 回です。`POST /listens`（プレイヤーがお便りの行を読み始めるたびに送る）は、ほかと別の枠で、リスナーごとに 1 分 120 回、IP ごとに 240 回です（会場の Wi-Fi で何人も聴いても、`next` やお便りの枠を使い切らないため）。題名検索 `GET /put?q=` は外部の検索 API を最大 4 つ同時に呼ぶので、ほかと別の枠で、サインイン済みのリスナーごとに 1 分 20 回です（匿名の訪問者は検索しないので数えません）。超えると 429 を返します。
 - リクエストの本文は、`/admin/*` 以外 64 KB まで、`/admin/*` は 1 MB までです（超えると 413）。
 - クラウドの声は、行の本文・言語・声から決まる鍵（`tts/v3/…/<本文の SHA-256>.mp3`）で R2 に 1 回だけ作り、全リスナーで共有します。同じ行への同時の要求でも合成は 1 回です（D1 の `tts_claims` で取り合い、負けた要求は R2 に音声ができるのを待ちます）。
 - `PUBLIC_ORIGIN` が空のときは、`/healthz` 以外すべて 500 を返します。鍵が空のときにお便りの判定と翻訳を素通しにするのは、`DEV_SKIP_CLAUDE=1` を明示した開発環境だけです。
@@ -32,7 +32,7 @@
 - Google から受け取る表示名（`displayName`）とメールアドレスは、公開しません。公開局の表示名と自動で作る URL の slug は、本人が決めたラジオネームだけから作ります（未設定なら乱数の `radio-xxxx`）。表示名は本人の画面（ヘッダとマイページ）にだけ出ます。
 - セッション cookie はリスナー id の決定的な HMAC なので、サインインで Google アカウントに紐づけても回しません。有効な cookie が無いままコールバックに来ると、孤児の匿名リスナー行ができます。別の Google アカウントに紐づいたリスナーへは上書きせず、失敗にします。`google_sub` には UNIQUE 制約があります。
 - ログイン後の戻り先 `next` は、`PUBLIC_ORIGIN` と同じオリジンのパスだけを受け付けます。制御文字（タブ・改行）を含むもの、`//` で始まるものは既定のパスに落とします。
-- サインインの門: `/start`、`/auth/spotify`、`/auth/spotify/callback`、`POST /letters`（`kind=letter`）、`POST /put/register`、`/me` は、サインイン済みでなければ通りません。ブラウザの移動はサインインへ 303、スクリプトからの要求は 401 です。「私も」と「一言」は匿名のままです。
+- サインインの門: `/start`、`/auth/spotify`、`/auth/spotify/callback`、`POST /letters`（`kind=letter`）、`POST /put/register`、`/me` は、サインイン済みでなければ通りません。ブラウザの移動はサインインへ 303、スクリプトからの要求は 401 です。「私も」と「一言」は匿名のままです。題名検索（`GET /put?q=`）は、匿名の訪問者にはサインインの案内だけを返し、外部の API を呼びません。検索語はログに残しません。YouTube の鍵は URL ではなく `X-Goog-Api-Key` ヘッダで渡します（Google Books と同じ）。
 - Spotify の認可は、開始したリスナーと同じリスナーでしか完了しません。`dfm_pkce` cookie（state、verifier、開始時のリスナー id）を、コールバックで現在のリスナーと突き合わせ、違えばトークンを保存せず 400 を返します。
 - レート制限の許可リスト: 規則は `src/worker/security/rate-limit.ts` の `isRateLimited` にある、書き込み系のパスの許可リストです。リストに無いパスは制限されません。書き込みの `POST` を足したら、必ずこのリストにも足してください。独自の枠を持つ `POST /listens` だけは例外で、テスト（`test/worker/security.test.ts`）の例外表に理由と一緒に載っています。
 - 翻訳の健全性検査: お便りの翻訳は、URL・メール・電話・住所・郵便番号を含むか、原文の 2 倍（短い原文は 400 字）を超えるとき、翻訳だけを捨てて原文を出します。お便り自体は、翻訳の不備では拒みません。

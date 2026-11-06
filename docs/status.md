@@ -11,7 +11,7 @@
 | Task 3 | ラジオ面のダイヤル（要求ごとに 1 目盛り） | 完了（`next` は毎回 1 枠。本文 `{dial, first, letterId}` を zod で検査し、形が違えば 400。ダイヤルは `localStorage["dfm.dial"]` に置き、回すと 300 ms 待って作り置きを捨てて頼み直す。`/settings` のダイヤルと `POST /settings/dial` を外した。サインイン済みなら `listeners.dial` を値が変わったときだけ 1 回の UPDATE で書く。`/stations/mine?letter=` は最初の `next` に `letterId` を載せる。上限の既定は 60 枠と 1800 枠） |
 | Task 4 | 遠さ（埋め込みと距離の帯） | 完了（作品の公開情報だけを Workers AI `@cf/baai/bge-m3` でベクトルにし、Int8 で `items.vec`（0017）に置く。作品を作る経路（`/start`・`POST /letters`・Spotify 取り込み・`/admin/items`・`/admin/letters`）は応答のあとで作り、Cron と `/admin/prepare` が残りを埋める（20 作品で 1 件分の枠、`remaining.vectors`）。自分のラジオの 1 枠は、好みのベクトル（お気に入り 50、無ければ最近聴いた 20 作品の平均）からの遠さの百分位で、ダイヤル ±0.2 の帯から無作為に選ぶ。7 日以内に聴いた作品と直近 30 回の作品を外し、尽きたら前者から戻す。好みかベクトルが無ければ従来の枠の順。反響は「最後に聴いたお便り」より新しい反応に変え、直前の回の作品は外す） |
 | Task 5 | ホームに今届いているお便り | 完了（`listRecentPublicLetters` が最新の公開のお便り 6 通（通常のお便りと出典つきの見つけた声）を作品つきで 1 クエリで返し、`LetterCard` が `/stations/mine?letter=<id>` へのカードにする。`listRecentItems` は撤去） |
-| Task 6 | 送る画面（並び・お気に入りから選ぶ・検索・ブックマークレット） | 未着手 |
+| Task 6 | 送る画面（並び・お気に入りから選ぶ・検索・ブックマークレット） | 完了（`/put` を 3 枚のパネル（作品を決める・お便りを書く・ブックマークレット）にした。好きなものは `?pick=` でサーバー側でしぼる。`?q=` の題名検索はサインイン済みだけで、`searchByText` が iTunes・Google Books・TMDB と鍵があるときの YouTube を交互に 10 件まで並べ、`searchRateLimit`（リスナーごと 1 分 20 回）で守る。検索結果のリンク先で別の種類に化けないよう、TMDB と Google Books の URL は ID で引き直す。`/api/resolve`・`/api/search` は撤去。スクリーンショットは `docs/screenshots/2026-11-06-put-*.png`） |
 | Task 7 | マイページの並び | 未着手 |
 | Task 8 | モデレーションの理由と再判定 | 未着手 |
 | Task 9 | 単位のフィードバックの輪（管理画面・良い例・採点スクリプト） | 未着手 |
@@ -23,6 +23,8 @@
 決定: 遠さは選ぶためだけに使い、応答・画面・ログ・DJ の言葉には出さない（Task 4。`next` の JSON にベクトルや遠さのキーが無いことをテストで確かめる）。
 決定: 反響の基準は「このラジオで最後にお便りを聴いた時刻」（Task 4。作り置きの回が捨てられても反響は消えない。作り置きが同じ反響を繰り返さないよう、直前の回の作品は反響にしない）。
 決定: ホームは『いま届いているお便り』（最新 6 通のカード。本文は 120 字で切り、全文は作品ページ）。
+決定: 送るページは URL・好きなもの・題名検索の 3 本（検索はサインイン済みだけ、YouTube は鍵があるとき）。
+決定: Spotify をつなぐのは設定だけ。
 決定: 上限は枠の数（Task 3。`EPISODE_DAILY_LIMIT` 既定 60、`EPISODE_GLOBAL_DAILY_LIMIT` 既定 1800。数えるのは従来どおり回の行で、1 回が 1 枠）。
 
 ## 2026-11-06 Phase 3 完了（最終レビュー済み・ローカル）。次は本人作業 → デプロイ → public 化
@@ -46,6 +48,7 @@ Phase 2（ラジオ中心の体験への作り替え）と Phase 3（単位・�
 - [ ] デプロイ後、`POST /admin/prepare`（`Authorization: Bearer $ADMIN_TOKEN`）で、デモデータの日本語と英語の単位と音声を先に作っておく。1 回の実行は単位と音声を合わせて最大 `limit` 件なので、`remaining` が 0 になるか `failed` が変わらなくなるまで繰り返す。音声の上限（既定 3000 行/日）に当たったら翌日（JST）に続く（Cron は 15 分ごとに 20 件ずつ埋める）。
 - [ ] 本番のデモデータは土地コードなしでシードしてある（`/admin/listeners` がコードを受け取るのは最終修正から）。英語の画面と英語の DJ では、コードの無いペルソナのお便りに日本語の土地（`place`）が出る。直すにはペルソナを作り直して再シードする（`pnpm seed --reuse` はペルソナの国名からコードを付けて送る）。するかどうかは本人が決める。
 - [ ] シードの量に注意: お便り 1 通で音声はおよそ 8 行（日本語と英語の intro・手渡し・お便り・after）、ほかにつなぎの定型が 14 行（7 本 × 2 言語）を一度だけ使う。単位はお便り 1 通・1 言語で Claude を 2〜4 回呼ぶ。大量に入れるなら、デモの前日にシードするか、その日だけ `CLOUD_TTS_GLOBAL_DAILY_LIMIT` を上げる（`UNIT_DAILY_LIMIT` と `LETTER_GLOBAL_DAILY_LIMIT` も同じ）。
+- [ ] 題名検索の YouTube は `search.list` で 1 回 100 ユニットを使う（既定の枠は 1 日 10,000 ユニット、つまり 1 日およそ 100 回。見つけた声の収集バッチと同じ鍵なら枠も共有）。足りなければ Google Cloud で枠の引き上げを申請するか、`YOUTUBE_API_KEY` を外して YouTube なしで探す。
 - [ ] 本番で確かめる: ホームの「ラジオをつける」、Google サインイン、`/me`、公開局 `/stations/s:<slug>`、日本語と英語の切り替え。
 - [ ] Spotify Developer Dashboard の Redirect URI を `https://dococafm.app/auth/spotify/callback`、Website を `https://dococafm.app` に。TMDB の Application URL も同じく（済んでいなければ。新ドメインに揃える）。
 - [ ] eval 20 回: `printf '30' | pnpm wrangler secret put EPISODE_DAILY_LIMIT` のあと、`pnpm eval --origin https://dococafm.app --token "$ADMIN_TOKEN" --listener <id> --runs 20 --out docs/eval/<日付>.md`。結果を README の eval 表に書く。

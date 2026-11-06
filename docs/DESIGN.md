@@ -66,6 +66,7 @@ CSS 変数は `:root` にライト、`@media (prefers-color-scheme: dark)` と `
 | お便り `blockquote` | 左線 3px `--lemon`、`--haze` の地、丸角 `0 12px 12px 0` | 主文 → 原文トグル（`<details>`）→ 送り主（`〇〇さん（お住まい、国）［デモ用］`） |
 | `.pill` | 枠線 1px coral、丸、13px | 主ボタン `.pill.hot` は magenta 塗り・白文字・700 |
 | このあと流れるもの | 種別ラベル（magenta、11px）と作品名・作者の行。上罫 1px `--line` | 数字（順番）を付けない |
+| お便りを送るページ（`/put`） | `.panel` を縦に 3 枚。「作品を決める」（URL を貼る / 好きなものから選ぶ / 題名で探す を細い上罫で区切る。選んだ作品はパネルの頭にカード）→「お便りを書く」（作品を選んだときだけ）→「ブックマークレット」（ドラッグできる `a.button` と、ブックマークに追加の 3 行）。検索結果は 64px の絵つきのカードを枠線 1px `--line`、丸角 12px のリンクにする | 題名で探すはサインイン済みだけ。匿名にはサインインの案内。結果に順位や件数を付けない |
 | ヘッダ `.site-header` | 右上に お便りを送る / マイページ / サインイン（サインイン済みは名前とサインアウト） | |
 
 タップ領域は 44px 以上。フォーカスは `outline: 2px solid var(--sky); outline-offset: 2px`。
@@ -95,6 +96,8 @@ CSS 変数は `:root` にライト、`@media (prefers-color-scheme: dark)` と `
 | 人の局 | 〇〇さんのラジオ | 〇〇's radio |
 | お便り | お便りを送る / 送る | Send a letter / Send |
 | 送り主の場所 | お住まい | Where you live |
+| 送る画面 | 作品を決める / URL を貼る / 好きなものから選ぶ / 題名で探す / お便りを書く | Choose a work / Paste a link / Pick from things you love / Search by title / Write your letter |
+| ブックマークレット | ブックマークに追加（上のボタンをブックマークバーへドラッグします。/ 好きな作品のページで、そのブックマークを押します。/ この画面が、その作品を選んだ状態で開きます。） | Add to your bookmarks |
 | 反応 | 私も / 一言を送る | Me too / Reply |
 | 出口 | この作品を聴く・観る | Listen or watch |
 | 原文 | 原文を見る（`<details>` で原文を開く。閉じる文言は持たない） | Show original |
