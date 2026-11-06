@@ -1,4 +1,4 @@
-import { placeLabel } from "../geo/place-label";
+import { isCountryName, regionLabels } from "../geo/place-label";
 import { t, type Lang } from "../i18n/t";
 import type { Item, Letter, Listener, Segment, VerifyReport } from "../types";
 import { FIXED_TEMPLATES } from "./compose";
@@ -92,13 +92,16 @@ function readable(l: Letter, lang: Lang, forQuotes: boolean): string[] {
 }
 
 /**
- * What an intro must not say about its letter: the sender's radio name (2+ code points) and the place in the
- * episode's language, normalised and lower-cased. The fixed hand-over names them; the intro introduces the work.
+ * What an intro must not say about its letter, normalised and lower-cased: the sender's radio name (2+ code
+ * points) and the sender's region (prefecture or state, in Japanese and English). A country alone is never
+ * checked: a work's intro names countries naturally (「日本のジャズ」), and the hand-over says it anyway. A
+ * letter without codes has its `place` checked unless that is itself a country name.
  */
-function senderTerms(l: Letter, lang: Lang): string[] {
+function senderTerms(l: Letter): string[] {
   const name = norm(l.radioName).trim().toLowerCase();
-  const place = norm(l.placeCountry ? placeLabel(l.placeCountry, l.placeRegion, lang) || l.place : l.place).trim().toLowerCase();
-  return [...(Array.from(name).length >= 2 ? [name] : []), ...(place !== "" ? [place] : [])];
+  const place = norm(l.place).trim().toLowerCase();
+  const places = l.placeCountry ? regionLabels(l.placeCountry, l.placeRegion).map((r) => norm(r).toLowerCase()) : place !== "" && !isCountryName(place) ? [place] : [];
+  return [...(Array.from(name).length >= 2 ? [name] : []), ...places];
 }
 
 /**
@@ -181,7 +184,7 @@ export function verifyEpisode(
           details.push(`measure: ${at}: ${count[0]}`);
         }
         const own = line.unit?.part === "intro" ? letters.get(line.unit.letterId) : undefined;
-        if (own && senderTerms(own, lang).some((term) => text.toLowerCase().includes(term))) {
+        if (own && senderTerms(own).some((term) => text.toLowerCase().includes(term))) {
           topical = false;
           // Never the name itself: details reach the logs.
           details.push(`intro: ${at}: names the sender`);

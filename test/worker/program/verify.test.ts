@@ -406,6 +406,28 @@ describe("verifyEpisode intro names the sender", () => {
     expect(run([intro("Blue in Green, by Miles Davis.", placed.id), read(placed, placed.bodyEn!)], "en", placed).details).toEqual([]);
   });
 
+  it.each([
+    ["ja", "日本のジャズの名盤です。", letter({ id: "c1", radioName: "", place: "日本" })],
+    ["ja", "日本のジャズの名盤です。", letter({ id: "c2", radioName: "", place: "日本", placeCountry: "JP", placeRegion: null })],
+    ["ja", "日本のジャズの名盤です。", letter({ id: "c3", radioName: "", place: "東京", placeCountry: "JP", placeRegion: "13" })],
+    ["en", "A classic of Japanese jazz.", letter({ id: "c4", radioName: "", place: "Japan", bodyEn: "x" })],
+    ["en", "A classic of Japanese jazz.", letter({ id: "c5", radioName: "", place: "東京", placeCountry: "JP", placeRegion: "13", bodyEn: "x" })],
+    ["en", "A song from Scotland.", letter({ id: "c6", radioName: "", place: "スコットランド", bodyEn: "x" })],
+    ["en", "A song from Scotland.", letter({ id: "c7", radioName: "", place: "Scotland", bodyEn: "x" })],
+    ["ja", "ポルトガルのファドです。", letter({ id: "c8", radioName: "", place: "ポルトガル", placeCountry: "PT" })],
+  ] as const)("lets a %s intro name a country: %s (%s)", (lang, text, l) => {
+    expect(run([intro(text, l.id), read(l, lang === "en" ? (l.bodyEn ?? l.body) : l.bodyJa)], lang, l).details.filter((d) => d.startsWith("intro:"))).toEqual([]);
+  });
+
+  it.each([
+    ["ja", "東京の夜に似合う一曲です。"],
+    ["ja", "東京都の夜に似合う一曲です。"],
+    ["en", "A song for a night in Tokyo."],
+  ] as const)("fails a %s intro that names the sender's region: %s", (lang, text) => {
+    const tokyo = letter({ id: "t", radioName: "", place: "東京", placeCountry: "JP", placeRegion: "13", bodyEn: "x" });
+    expect(run([intro(text, tokyo.id), read(tokyo, lang === "en" ? "x" : tokyo.bodyJa)], lang, tokyo).details).toContain("intro: segment 1 line 1: names the sender");
+  });
+
   it("ignores a one-character radio name", () => {
     const short = letter({ id: "s", radioName: "海", place: "" });
     expect(run([intro("海の見える部屋で聴きたい一曲です。", short.id), read(short)], "ja", short).details).toEqual([]);
