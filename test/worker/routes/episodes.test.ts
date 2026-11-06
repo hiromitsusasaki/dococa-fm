@@ -6,6 +6,7 @@ import { upsertHistory } from "../../../src/worker/db/history";
 import { insertItem } from "../../../src/worker/db/items";
 import { insertLetter, setLetterStatus } from "../../../src/worker/db/letters";
 import { createListener } from "../../../src/worker/db/listeners";
+import { recordListen } from "../../../src/worker/db/listens";
 import type { Episode } from "../../../src/worker/types";
 import { resetDb } from "../../helpers/db";
 import { itemDraft, letterDraft } from "../db/helpers";
@@ -391,8 +392,9 @@ describe("POST /episodes/:id/next", () => {
 describe("GET /episodes", () => {
   it("lists the listener's episodes by JST date and first item title, without counts", async () => {
     const cookie = await newSession();
-    await seed(cookie);
+    const { mine } = await seed(cookie);
     const id = locationId(await postForm("/episodes", cookie, {}));
+    await recordListen(env.DB, { listenerId: idOf(cookie), episodeId: id, letterId: mine.id, segmentIndex: 0 });
     const html = await (await get("/episodes", cookie)).text();
     expect(html).toContain(`href="/episodes/${id}"`);
     expect(html).toMatch(/\d{4}-\d{2}-\d{2}/);
@@ -403,14 +405,34 @@ describe("GET /episodes", () => {
 
   it("titles each row with its first work in one query, and leaves unverified rows out", async () => {
     const cookie = await newSession();
-    const { near } = await seed(cookie);
+    const { near, mine } = await seed(cookie);
     const listenerId = idOf(cookie);
     const seg = (itemId: string) => [{ itemId, slot: "near" as const, lines: [] }];
     const shown = await insertEpisode(env.DB, { listenerId, segments: seg(near.id), verified: true, report: {} as Episode["report"] });
     const hidden = await insertEpisode(env.DB, { listenerId, segments: seg(near.id), verified: false, report: {} as Episode["report"] });
+    await recordListen(env.DB, { listenerId, episodeId: shown.id, letterId: mine.id, segmentIndex: 0 });
     const html = await (await get("/episodes", cookie)).text();
     expect(html).toMatch(new RegExp(`href="/episodes/${shown.id}">\\s*<time>[^<]+</time> 手元の曲`));
     expect(html).not.toContain(hidden.id);
+  });
+
+  it("lists only the episodes something was heard in: a prefetch never played is left out", async () => {
+    const cookie = await newSession();
+    const { near, mine } = await seed(cookie);
+    const listenerId = idOf(cookie);
+    const seg = [{ itemId: near.id, slot: "near" as const, lines: [] }];
+    const heard = await insertEpisode(env.DB, { listenerId, segments: seg, verified: true, report: {} as Episode["report"], createdAt: "2026-11-01T00:00:00.000Z" });
+    const unheard = await insertEpisode(env.DB, { listenerId, segments: seg, verified: true, report: {} as Episode["report"], createdAt: "2026-11-02T00:00:00.000Z" });
+    const later = await insertEpisode(env.DB, { listenerId, segments: seg, verified: true, report: {} as Episode["report"], createdAt: "2026-11-03T00:00:00.000Z" });
+    await recordListen(env.DB, { listenerId, episodeId: heard.id, letterId: mine.id, segmentIndex: 0 });
+    // One listen per letter: the later episode's is another letter.
+    const another = await insertLetter(env.DB, letterDraft(near.id, { body: "もう一通", bodyJa: "もう一通" }));
+    await recordListen(env.DB, { listenerId, episodeId: later.id, letterId: another.id, segmentIndex: 0 });
+    const html = await (await get("/episodes", cookie)).text();
+    expect(html).not.toContain(unheard.id);
+    // Newest first.
+    expect(html.indexOf(later.id)).toBeGreaterThan(-1);
+    expect(html.indexOf(later.id)).toBeLessThan(html.indexOf(heard.id));
   });
 });
 

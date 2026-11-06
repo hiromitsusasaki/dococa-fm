@@ -90,13 +90,16 @@ export async function latestVerifiedEpisodeOn(db: D1Database, listenerId: string
   return row ? rowToEpisode(row) : null;
 }
 
-/** The archive rows in one query: each verified episode with the title of its first work. */
+/**
+ * The archive rows in one query: each verified episode the listener heard something in (a `listens` row; an episode
+ * fetched ahead and never played is left out), newest first, with the title of its first work.
+ */
 export async function listArchive(db: D1Database, listenerId: string, limit: number): Promise<Array<{ id: string; createdAt: string; title: string | null }>> {
   const { results } = await db
     .prepare(
       `SELECT e.id, e.created_at, i.title FROM episodes e
        LEFT JOIN items i ON i.id = json_extract(e.segments, '$[0].itemId')
-       WHERE e.listener_id = ? AND e.verified = 1
+       WHERE e.listener_id = ? AND e.verified = 1 AND EXISTS (SELECT 1 FROM listens WHERE listener_id = e.listener_id AND episode_id = e.id)
        ORDER BY e.created_at DESC, e.id DESC LIMIT ?`,
     )
     .bind(listenerId, limit)
