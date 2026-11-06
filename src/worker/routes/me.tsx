@@ -37,25 +37,25 @@ me.get("/me", requireSignin, async (c) => {
             {t("me.radioNameHint")} <a href="/settings">{t("settings.title")}</a>
           </p>
         )}
-        <section class="me-favorites">
+        <section class="panel me-favorites">
           <h2>{t("me.favorites")}</h2>
-          <ul>
+          <ul class="me-cards">
             {favorites.map(({ item }) => (
               <li>
-                <a href={`/items/${item.id}`}>
-                  <ItemCard item={item} heading="h3" lang={lang} />
+                <a class="me-card-link" href={`/items/${item.id}`}>
+                  <ItemCard item={item} heading="h3" lang={lang} art />
                 </a>
-                <a href={`/put?itemId=${item.id}`}>{t("put.title")}</a>
+                <a class="me-card-put" href={`/put?itemId=${item.id}`}>{t("put.title")}</a>
               </li>
             ))}
           </ul>
         </section>
-        <section class="me-heard">
+        <section class="panel me-heard">
           <h2>{t("me.heard")}</h2>
           {heard.length === 0 ? (
             <p class="muted">{t("me.heardNone")}</p>
           ) : (
-            <ul>
+            <ul class="me-list">
               {heard.map((h) => (
                 <li>
                   <a href={`/items/${h.item.id}`}>
@@ -75,12 +75,12 @@ me.get("/me", requireSignin, async (c) => {
             </ul>
           )}
         </section>
-        <section class="me-reactions">
+        <section class="panel me-reactions">
           <h2>{t("me.reactions")}</h2>
           {reactions.length === 0 ? (
             <p class="muted">{t("me.nobody")}</p>
           ) : (
-            <ul>
+            <ul class="me-list">
               {reactions.map((r) => (
                 <li>
                   <p class="letter-who">{whoOf(r, lang)}</p>
@@ -94,7 +94,7 @@ me.get("/me", requireSignin, async (c) => {
             </ul>
           )}
         </section>
-        <section class="me-station">
+        <section class="panel me-station">
           <h2>{t("me.station")}</h2>
           {publicUrl ? (
             <p>
@@ -106,9 +106,6 @@ me.get("/me", requireSignin, async (c) => {
             </p>
           )}
         </section>
-        <form method="post" action="/auth/signout">
-          <button type="submit">{t("signin.out")}</button>
-        </form>
       </main>
     </Layout>,
   );

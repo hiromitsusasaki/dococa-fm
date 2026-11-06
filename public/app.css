@@ -959,8 +959,25 @@ button:disabled,
   object-fit: cover;
 }
 
+.item-card-box {
+  flex: none;
+  width: 96px;
+  height: 96px;
+  border-radius: 12px;
+  background: var(--haze);
+  overflow: hidden;
+}
+
+.item-card-art img {
+  display: block;
+  width: 96px;
+  height: 96px;
+  border-radius: 0;
+}
+
 .item-card h1,
-.item-card h2 {
+.item-card h2,
+.item-card h3 {
   margin: 0;
   font-size: 18px;
 }
@@ -1071,6 +1088,84 @@ button:disabled,
   color: var(--ink-2);
   font-size: var(--fs-14);
   font-weight: 400;
+}
+
+/* My page: four panels. Favourites are small cards, the other lists are divided by hairlines. */
+.me {
+  display: grid;
+  gap: var(--sp-4);
+}
+
+.me h1,
+.me > .muted {
+  margin: 0;
+}
+
+.me .panel h2 {
+  margin: 0 0 var(--sp-3);
+  font-size: var(--fs-20);
+}
+
+.me-cards {
+  display: grid;
+  gap: var(--sp-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+@media (min-width: 761px) {
+  .me-cards {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.me-cards li {
+  display: grid;
+  gap: var(--sp-2);
+  align-content: start;
+  padding: var(--sp-3);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel);
+  box-shadow: var(--shadow);
+}
+
+.me-card-link {
+  color: inherit;
+  text-decoration: none;
+}
+
+.me-card-put {
+  font-size: 13px;
+}
+
+.me-list {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.me-list li {
+  display: grid;
+  gap: var(--sp-2);
+  padding: var(--sp-4) 0;
+  border-top: 1px solid var(--line);
+}
+
+.me-list li:first-child {
+  padding-top: 0;
+  border-top: 0;
+}
+
+.me-list li:last-child {
+  padding-bottom: 0;
+}
+
+.me-list p,
+.me-station p {
+  margin: 0;
 }
 
 /* One way to choose per block, divided by a hairline. */

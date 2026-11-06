@@ -6,11 +6,13 @@ import { whoLine } from "../worker/letters/label";
 
 type CardItem = Pick<Item, "kind" | "title" | "creator" | "year" | "imageUrl">;
 
-export function ItemCard({ item, heading: Heading = "h1", lang }: { item: CardItem; heading?: "h1" | "h2" | "h3" | "h4"; lang: Lang }) {
+/** `art` is the small card for lists: a fixed 96px art box that stays when the item has no image. */
+export function ItemCard({ item, heading: Heading = "h1", lang, art = false }: { item: CardItem; heading?: "h1" | "h2" | "h3" | "h4"; lang: Lang; art?: boolean }) {
   const t = tFor(lang);
+  const image = (size: number) => item.imageUrl && <img src={item.imageUrl} alt="" width={size} height={size} loading="lazy" />;
   return (
-    <section class="item-card">
-      {item.imageUrl && <img src={item.imageUrl} alt="" width="120" height="120" loading="lazy" />}
+    <section class={art ? "item-card item-card-art" : "item-card"}>
+      {art ? <span class="item-card-box">{image(96)}</span> : image(120)}
       <div>
         <p class="item-kind">{t(`kind.${item.kind}`)}</p>
         <Heading>{item.title}</Heading>

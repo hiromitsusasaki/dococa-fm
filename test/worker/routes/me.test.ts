@@ -42,6 +42,25 @@ describe("GET /me", () => {
     expect(html).not.toMatch(/\d+ ?件/);
   });
 
+  it("lays the page out as four panels, with an image on a favourite and no sign-out form", async () => {
+    const cookie = await signedInSession();
+    const me = idOf(cookie);
+    const withArt = await insertItem(env.DB, itemDraft({ title: "With art", imageUrl: "https://example.com/a.jpg", externalIds: { itunes: "11" } }));
+    const noArt = await insertItem(env.DB, itemDraft({ title: "No art", imageUrl: null, externalIds: { itunes: "12" } }));
+    await upsertHistory(env.DB, [
+      { listenerId: me, itemId: withArt.id, source: "manual", occurredAt: null, rank: 1 },
+      { listenerId: me, itemId: noArt.id, source: "manual", occurredAt: null, rank: 2 },
+    ]);
+    const html = await (await get("/me", cookie)).text();
+    const main = html.slice(html.indexOf('<main class="me"'));
+    const panels = [...main.matchAll(/<section class="panel (me-[a-z]+)"/g)].map((m) => m[1]);
+    expect(panels).toEqual(["me-favorites", "me-heard", "me-reactions", "me-station"]);
+    expect(main).not.toContain('action="/auth/signout"');
+    expect(main).toMatch(/<img src="https:\/\/example\.com\/a\.jpg"[^>]*width="96"[^>]*height="96"/);
+    expect(main.match(/<img /g)).toHaveLength(1);
+    expect(main).toContain(`href="/put?itemId=${noArt.id}"`);
+  });
+
   it("lists reactions newest first and shows no counts in English either", async () => {
     const cookie = await signedInSession();
     const me = idOf(cookie);
