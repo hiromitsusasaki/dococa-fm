@@ -1,5 +1,4 @@
 /** Pure parts of `pnpm eval`: argument parsing and the aggregation of episodes read from the admin API. */
-import { ja } from "../../src/worker/i18n/ja.ts";
 import type { Episode, Item } from "../../src/worker/types.ts";
 
 export type EvalItem = Pick<Item, "title" | "creator">;
@@ -81,15 +80,15 @@ export type Aggregate = {
   far: number;
   /** Runs the Worker could not build a verified episode for (it answers 503 and stores nothing). They count as misses on every item. */
   unbuilt: number;
-  /** Episodes with no model-written dj line: the fixed-phrase fallback the builder uses when two attempts fail. */
+  /** Episodes with no dj line carrying `unit`: the DJ said only fixed phrases (bridges, hand-overs), because no unit was usable. */
   fallback: number;
   sourced: SourcedStats;
   failures: string[];
 };
 
-/** The builder's fixed-phrase episode says 「お便りを読みます。」 in every segment; a model reply that was merely empty does not. */
+/** 「お便りを読みます。」 now airs as a hand-over in every episode, so it cannot tell a fixed-phrase episode: a unit's line can. */
 function isFallback(e: EvalEpisode): boolean {
-  return e.segments.length > 0 && e.segments.every((s) => s.lines.some((l) => l.type === "dj" && l.fixed === true && l.text === ja["script.readingOnly"]));
+  return e.segments.length > 0 && !e.segments.some((s) => s.lines.some((l) => l.type === "dj" && l.unit !== undefined));
 }
 
 export function aggregate(episodes: EvalEpisode[], items: Record<string, EvalItem>, unbuilt = 0): Aggregate {
@@ -123,7 +122,7 @@ export function renderMarkdown(a: Aggregate, date: string): string {
     row("時事・数字なし（topical）", a.pass.topical, a.runs),
     row("個人情報・お便りの引用なし（pii）", a.pass.pii, a.runs),
     row("far 枠が 1 つ以上ある回", a.far, a.runs),
-    row("定型文だけの回（お便りを読みます。）", a.fallback, a.runs),
+    row("定型文だけの回（DJ の語りが 1 行も無い）", a.fallback, a.runs),
     row("名前を挙げた DJ 行のうち、作品かお便りに出所がある行", a.sourced.sourced, a.sourced.checked),
   ];
   if (a.failures.length > 0) lines.push("", "## 検証に落ちた箇所", "", ...a.failures.map((f) => `- ${f}`));

@@ -167,6 +167,18 @@ pnpm seed --items items.txt --personas 30 --dry-run   # 書かせるだけ。投
 pnpm seed --items items.txt --personas 30             # 投入して、作品ページに原文が出ることを確かめる
 ```
 
+### 事前生成（運用）
+
+お便りが保存されると（`POST /letters`、MCP の `post_letter`、`/admin/letters`、`/admin/found`）、Worker が応答のあとで、そのお便りの DJ の語り（単位）と音声を作っておきます。15 分ごとの Cron（`wrangler.jsonc` の `triggers`）が、単位の無いお便りと音声の揃っていない単位を 1 回 20 件まで埋めます。シードで大量に投入した直後は、手で回します。
+
+```bash
+# 1 回 20 件（limit は 1〜50）。remaining が 0 になるまで繰り返す
+curl -s -X POST "$DOCOCA_ORIGIN/admin/prepare" -H "authorization: Bearer $ADMIN_TOKEN" -H 'content-type: application/json' -d '{"limit":20}'
+# => {"units":..,"audio":..,"failed":..,"remaining":{"units":..,"audio":..}}
+```
+
+`GOOGLE_TTS_SA_JSON` が空のあいだは単位だけ作り、音声は `remaining.audio` に残ります。クラウドの声の 1 日の上限（`CLOUD_TTS_GLOBAL_DAILY_LIMIT`）に当たると音声はそこで止まり、翌日の Cron が続きを作ります。
+
 ## 後で
 
 Gemini-TTS はサービスアカウントの JWT で認証するように切り替え済みです（鍵は secret `GOOGLE_TTS_SA_JSON`）。`GOOGLE_TTS_API_KEY` はもう読みません。

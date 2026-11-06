@@ -26,7 +26,7 @@ const letter = (over: Record<string, unknown> = {}) => ({
 const episode = (over: Partial<EvalEpisode> = {}): EvalEpisode => ({
   id: "e1",
   segments: [
-    { itemId: "i1", slot: "near", lines: [{ type: "dj", text: "続いては「Blue in Green」。" }, letter()] },
+    { itemId: "i1", slot: "near", lines: [{ type: "dj", text: "続いては「Blue in Green」。", unit: { letterId: "l1", part: "intro" } }, letter()] },
     { itemId: "i2", slot: "far", lines: [{ type: "dj", text: "遠い国から、新海誠の一本です。" }] },
   ],
   report: { verbatim: true, sources: true, topical: true, pii: true, details: [] },
@@ -92,7 +92,7 @@ describe("aggregate", () => {
 
   it("counts unbuilt runs as misses on every item and detects the fixed-phrase fallback", () => {
     const fixedOnly = episode({ id: "e2" });
-    fixedOnly.segments = [{ itemId: "i1", slot: "far", lines: [{ type: "dj", text: "お便りを読みます。", fixed: true }] }];
+    fixedOnly.segments = [{ itemId: "i1", slot: "far", lines: [{ type: "dj", text: "お便りを読みます。", fixed: true }, letter()] }];
     const a = aggregate([episode(), fixedOnly], items, 2);
     expect(a.runs).toBe(4);
     expect(a.pass.verbatim).toBe(2);
@@ -102,10 +102,24 @@ describe("aggregate", () => {
     expect(renderMarkdown(a, "2026-11-05")).toContain("| 原文のまま（verbatim） | 2 / 4 | 50% |");
   });
 
-  it("does not call an episode with an empty model reply a fallback", () => {
-    const emptyReply = episode({ id: "e3" });
-    emptyReply.segments = [{ itemId: "i1", slot: "far", lines: [{ type: "dj", text: "声の主は、どこかの誰か。", fixed: true }, letter()] }];
-    expect(aggregate([emptyReply], items).fallback).toBe(0);
+  it("does not call an episode with a unit line a fallback, even if it also says the hand-over", () => {
+    const withUnit = episode({ id: "e3" });
+    withUnit.segments = [
+      {
+        itemId: "i1",
+        slot: "far",
+        lines: [
+          { type: "dj", text: "静かな一曲です。", unit: { letterId: "l1", part: "intro" } },
+          { type: "dj", text: "お便りを読みます。", fixed: true },
+          letter(),
+        ],
+      },
+    ];
+    expect(aggregate([withUnit], items).fallback).toBe(0);
+  });
+
+  it("calls an episode with no segment at all no fallback", () => {
+    expect(aggregate([episode({ id: "e4", segments: [] })], items).fallback).toBe(0);
   });
 
   it("handles zero runs without dividing by zero", () => {

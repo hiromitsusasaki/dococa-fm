@@ -36,8 +36,8 @@ export async function countSynthesizedToday(db: D1Database, now: Date = new Date
 export type Ensured = { ok: true; key: string; made: boolean } | { ok: false; reason: "limit" | "busy" | "failed" | "unavailable" };
 
 /**
- * R2 hit → ok (made false). Miss → cap check → claimTts(key) → synthesize → BUCKET.put → INSERT tts_audio → release.
- * A lost claim waits up to 5 s for the winner's clip (busy after that). The cap is counted before the paid call;
+ * R2 hit → ok (made false). Miss → cap check → claimTts(key) → synthesize → INSERT tts_audio → BUCKET.put → release.
+ * The row is inserted before the put, so the cap counts a clip even when the put fails. A lost claim waits up to 5 s for the winner's clip (busy after that). The cap is counted before the paid call;
  * the claim keeps two requests for the same key to one call.
  */
 export async function ensureAudio(

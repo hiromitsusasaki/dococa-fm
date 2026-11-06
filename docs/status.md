@@ -8,6 +8,7 @@ Phase 2（ラジオ中心の体験への作り替え）の実装は、すべて 
 
 ### 本人作業
 
+- [ ] デプロイ後、`POST /admin/prepare`（`Authorization: Bearer $ADMIN_TOKEN`）を `remaining` の `units` と `audio` が 0 になるまで繰り返し呼ぶ（デモデータの単位と音声を先に作っておく。Cron は 15 分ごとに 20 件ずつ埋める）。
 - [ ] GCP で OAuth クライアント（種類: ウェブ アプリケーション）を作る。承認済みのリダイレクト URI は `https://dococafm.app/auth/google/callback` と `http://127.0.0.1:5173/auth/google/callback`。
 - [ ] `pnpm wrangler secret put GOOGLE_OAUTH_CLIENT_ID` と `pnpm wrangler secret put GOOGLE_OAUTH_CLIENT_SECRET` を実行し、`.dev.vars` にも同じ値を写す。
 - [ ] OAuth の同意画面を「本番」に公開する（テスト中のままだと、登録したテストユーザーしか入れない）。
@@ -69,7 +70,7 @@ Phase 2（ラジオ中心の体験への作り替え）の実装は、すべて 
 | Task 2 | 行の本文を鍵にした音声キャッシュ。クラウドの声を全員に | 完了（`tts/v2/<lang>/<voice>/<sha256>.mp3` で全員が共有、合成ごとに `tts_audio` へ記録して 1 日の行数を上限に、`ensureAudio` が上限確認→claim→合成。全エピソードが鍵があれば `cloudTts`、初回限定の claim は撤去） |
 | Task 3 | つなぎの定型 | 完了（`program/bridge.ts` の 6 本の定型。回の頭に open、2 作品目以降は slot ごと、同じ作品の 2 通目の前に sameWork、最後に close。いずれも `fixed`。`composeEpisode` に `lang` を追加） |
 | Task 4 | 単位（お便りごとの DJ の語り） | 完了（`units (letter_id, lang)` を 0009 で追加。`makeUnit` が `write_unit` で intro/after を書き 1 枠で検証、通らなければ規則を伝えて 1 回だけ書き直し、`verified` 0/1 で保存。`buildEpisode` は単位を並べるだけで、無い単位だけ作る（同時 3）。番組の検証で落ちた枠は単位を外して再検証、それでも駄目なら定型だけ。`writeDjLines` と回ごとの台本は撤去） |
-| Task 5 | 事前生成（投稿後・15 分ごと・手動） | 未着手 |
+| Task 5 | 事前生成（投稿後・15 分ごと・手動） | 完了（`program/prepare.ts` の `prepareLetter` / `prepareBatch`。`POST /letters`・MCP `post_letter`・`/admin/letters`・`/admin/found` が `waitUntil` で呼び、Cron `*/15 * * * *` と `POST /admin/prepare`（`limit` 1〜50）で 20 件ずつ埋める。出典のない見つけた声は対象外。音声は上限か鍵なしで止める） |
 | Task 6 | 聴いた記録 | 未着手 |
 | Task 7 | お便りの土地コード | 未着手 |
 | Task 8 | 英語の DJ | 未着手 |

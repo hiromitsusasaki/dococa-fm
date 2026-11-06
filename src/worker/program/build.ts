@@ -59,8 +59,13 @@ export async function buildEpisode(
   for (const s of selection) {
     const item = stored.get(s.itemId);
     if (!item) continue;
+    // Public 私も and 一言 that others left on this listener's letters about the item, newest first.
+    const reactions = allReactions.filter((r) => r.itemId === item.id).slice(0, MAX_REACTIONS);
+    // A reply that is read as a reaction is not read a second time as a selected letter.
+    const reacted = new Set(reactions.map((r) => r.id));
     const read: Letter[] = [];
     for (const id of s.letterIds) {
+      if (reacted.has(id)) continue;
       const l = candidates.get(id);
       if (l && l.status === "public" && !hasSource(l)) sourceless++;
       else if (l && l.status === "public") {
@@ -68,8 +73,6 @@ export async function buildEpisode(
         read.push(l);
       }
     }
-    // Public 私も and 一言 that others left on this listener's letters about the item, newest first.
-    const reactions = allReactions.filter((r) => r.itemId === item.id).slice(0, MAX_REACTIONS);
     // A segment with nothing left to read does not air: the programme is made of letters and reactions.
     if (read.length === 0 && reactions.length === 0) {
       skippedSegments++;

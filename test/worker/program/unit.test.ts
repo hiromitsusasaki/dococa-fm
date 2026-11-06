@@ -166,6 +166,22 @@ describe("makeUnit", () => {
   });
 });
 
+describe("makeUnit when the unit cannot be stored", () => {
+  it("returns null and logs its own message, name only", async () => {
+    const f = await stored();
+    create.mockResolvedValue(lines());
+    // A D1 error can quote the statement with its values, so the message here carries the intro.
+    const broken = { prepare: () => { throw new Error("D1_ERROR: INSERT INTO units ... 静かな一曲です。"); } } as unknown as D1Database;
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    expect(await makeUnit(keyed, broken, f.letter, f.item, "ja")).toBeNull();
+    const logged = warn.mock.calls.map((c) => c.join(" ")).join("\n");
+    expect(logged).toContain("dj unit could not be stored");
+    expect(logged).not.toContain("dj unit unavailable");
+    expect(logged).not.toContain("静かな一曲です。");
+    expect(logged).not.toContain("D1_ERROR");
+  });
+});
+
 describe("ensureUnits", () => {
   it("returns stored units and makes only the missing ones", async () => {
     const f = await stored();

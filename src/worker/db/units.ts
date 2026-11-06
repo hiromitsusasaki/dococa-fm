@@ -44,12 +44,16 @@ export async function setUnitAudioReady(db: D1Database, letterId: string, lang: 
   await db.prepare("UPDATE units SET audio_ready = ? WHERE letter_id = ? AND lang = ?").bind(ready ? 1 : 0, letterId, lang).run();
 }
 
-/** Public letters of kind letter/found with no unit in `lang`, oldest first. Reactions are fixed lines and have no unit. */
+/** A found voice without a source can never be verified, so it never gets a unit (it would be re-made on every run). */
+const READABLE = `l.status = 'public' AND l.kind IN ('letter', 'found')
+         AND (l.kind <> 'found' OR (TRIM(COALESCE(l.source_url, '')) <> '' AND TRIM(COALESCE(l.source_author, '')) <> ''))`;
+
+/** Public, sourced letters of kind letter/found with no unit in `lang`, oldest first. Reactions are fixed lines and have no unit. */
 export async function listLettersWithoutUnit(db: D1Database, lang: Unit["lang"], limit: number): Promise<string[]> {
   const { results } = await db
     .prepare(
       `SELECT l.id FROM letters l
-       WHERE l.status = 'public' AND l.kind IN ('letter', 'found')
+       WHERE ${READABLE}
          AND NOT EXISTS (SELECT 1 FROM units u WHERE u.letter_id = l.id AND u.lang = ?)
        ORDER BY l.created_at ASC, l.id ASC
        LIMIT ?`,
@@ -76,12 +80,12 @@ export async function listUnitsWithoutAudio(db: D1Database, lang: Unit["lang"], 
   return results.map(rowToUnit);
 }
 
-/** Public letters of kind letter/found with no unit in `lang`. */
+/** Letters `listLettersWithoutUnit` would list, counted. */
 export async function countLettersWithoutUnit(db: D1Database, lang: Unit["lang"]): Promise<number> {
   const row = await db
     .prepare(
       `SELECT COUNT(*) AS n FROM letters l
-       WHERE l.status = 'public' AND l.kind IN ('letter', 'found')
+       WHERE ${READABLE}
          AND NOT EXISTS (SELECT 1 FROM units u WHERE u.letter_id = l.id AND u.lang = ?)`,
     )
     .bind(lang)

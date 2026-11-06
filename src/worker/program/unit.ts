@@ -98,8 +98,10 @@ function verifyUnit(lines: UnitLines, letter: Letter, item: Item, lang: Unit["la
  */
 export async function makeUnit(env: Env, db: D1Database, letter: Letter, item: Item, lang: Unit["lang"]): Promise<Unit | null> {
   if (!hasClaude(env)) return null;
+  let lines: UnitLines;
+  let ok: boolean;
   try {
-    let lines = await writeUnitLines(env, { item, letter, lang });
+    lines = await writeUnitLines(env, { item, letter, lang });
     let check = verifyUnit(lines, letter, item, lang);
     if (!check.ok) {
       console.warn("[dococa] dj unit failed verification", check.details.join("; "));
@@ -110,7 +112,7 @@ export async function makeUnit(env: Env, db: D1Database, letter: Letter, item: I
         if (!check.ok) console.warn("[dococa] dj unit failed verification again", check.details.join("; "));
       }
     }
-    return await upsertUnit(db, { letterId: letter.id, lang, intro: lines.intro, after: lines.after, verified: check.ok, audioReady: false });
+    ok = check.ok;
   } catch (e) {
     const status = (e as { status?: unknown } | null)?.status;
     console.warn(
@@ -118,6 +120,13 @@ export async function makeUnit(env: Env, db: D1Database, letter: Letter, item: I
       typeof status === "number" ? `status ${status}` : "no status",
       e instanceof Error ? e.message : "unknown error",
     );
+    return null;
+  }
+  try {
+    return await upsertUnit(db, { letterId: letter.id, lang, intro: lines.intro, after: lines.after, verified: ok, audioReady: false });
+  } catch (e) {
+    // The name only: a D1 error message can quote the statement and its bound values, which carry the lines.
+    console.warn("[dococa] dj unit could not be stored", e instanceof Error ? e.name : "unknown error");
     return null;
   }
 }

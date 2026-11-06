@@ -131,6 +131,17 @@ describe("prepareBatch", () => {
     expect(google).toHaveBeenCalledTimes(2);
   });
 
+  it("leaves a found voice without a source alone, since it can never be verified", async () => {
+    const { item } = await seed(0);
+    for (const sourceUrl of [null, "", "  "]) await insertLetter(env.DB, letterDraft(item.id, { kind: "found", sourceUrl, sourceAuthor: "@x", radioName: "" }));
+    await insertLetter(env.DB, letterDraft(item.id, { kind: "found", sourceUrl: "https://youtu.be/x", sourceAuthor: " ", radioName: "" }));
+    expect(await prepareBatch(keyed, env.DB, 20)).toEqual({ units: 0, audio: 0, failed: 0, remaining: { units: 0, audio: 0 } });
+    expect(create).not.toHaveBeenCalled();
+    const sourced = await insertLetter(env.DB, letterDraft(item.id, { kind: "found", sourceUrl: "https://youtu.be/y", sourceAuthor: "@jazzcat", radioName: "", body: "雨に合う。", bodyJa: "雨に合う。" }));
+    expect(await prepareBatch(keyed, env.DB, 20)).toMatchObject({ units: 1, failed: 0 });
+    expect(await unitOf(sourced.id)).toBeDefined();
+  });
+
   it("never re-makes a letter that was rejected after its unit was made", async () => {
     const { letters } = await seed(1, { status: "rejected" });
     await upsertUnit(env.DB, { letterId: letters[0]!.id, lang: "ja", intro: "a", after: "b", verified: true, audioReady: false });

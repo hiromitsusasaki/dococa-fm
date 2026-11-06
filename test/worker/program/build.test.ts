@@ -227,6 +227,14 @@ describe("buildEpisode", () => {
     expect(ep.verified).toBe(true);
   });
 
+  it("reads a reply once when it is both a selected letter and a reaction in the same segment", async () => {
+    const f = await fixture();
+    // `mineReply` answers the listener's own letter on i0, so it airs as a reaction; selection must not read it again.
+    const ep = await buildEpisode(keyless, env.DB, f.a, { size: 3, seed: "s" });
+    const reads = ep.segments.flatMap((s) => s.lines).filter((l) => l.type === "letter" && l.letterId === f.mineReply.id);
+    expect(reads).toHaveLength(1);
+  });
+
   it("an echo segment with no readable letter still airs with its reaction lines", async () => {
     const f = await fixture();
     // A work only the listener wrote about, answered by someone else since the last episode.
