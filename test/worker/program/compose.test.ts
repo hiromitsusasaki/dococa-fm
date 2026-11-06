@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { t } from "../../../src/worker/i18n/t";
 import { BRIDGE_KEYS } from "../../../src/worker/program/bridge";
-import { composeEpisode, FIXED_TEMPLATES, siteName } from "../../../src/worker/program/compose";
+import { composeEpisode, FIXED_TEMPLATES, read, siteName } from "../../../src/worker/program/compose";
 import { verifyEpisode } from "../../../src/worker/program/verify";
 import type { Unit } from "../../../src/worker/types";
 import { byId, item, letter, listener } from "./fixtures";
@@ -296,5 +296,16 @@ describe("bridges", () => {
     const aLetter = { type: "letter" as const, letterId: plain.id, text: plain.bodyJa, radioName: plain.radioName, place: plain.place, kind: plain.kind, sourceUrl: null, sourceAuthor: null };
     const r = verifyEpisode([{ itemId: "i1", slot: "near", lines: [{ type: "dj", text: t(key), fixed: true }, aLetter] }], letters, listener());
     expect(r).toMatchObject({ topical: true, pii: true });
+  });
+});
+
+describe("read", () => {
+  it("carries the letter's place codes when it has them, and leaves them out when it does not", () => {
+    expect(read(letter({ placeCountry: "JP", placeRegion: "01" }))).toMatchObject({ type: "letter", place: "函館", placeCountry: "JP", placeRegion: "01" });
+    expect(read(letter({ placeCountry: "PT", placeRegion: null }))).toMatchObject({ placeCountry: "PT" });
+    expect(read(letter({ placeCountry: "PT", placeRegion: null }))).not.toHaveProperty("placeRegion");
+    const bare = read(letter());
+    expect(bare).not.toHaveProperty("placeCountry");
+    expect(bare).not.toHaveProperty("placeRegion");
   });
 });

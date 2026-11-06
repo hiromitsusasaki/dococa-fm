@@ -63,7 +63,7 @@ describe("listHeardLetters", () => {
     const ls = [];
     for (let i = 0; i < 3; i++) ls.push(await insertLetter(env.DB, letterDraft(a.id, { body: `l${i}` })));
     const gone = await insertLetter(env.DB, letterDraft(a.id, { body: "gone" }));
-    ls.forEach((l, i) => recordListen(env.DB, { listenerId: me.id, episodeId: e.id, letterId: l.id, segmentIndex: 0, heardAt: `2026-11-0${i + 1}T00:00:00.000Z` }));
+    for (const [i, l] of ls.entries()) await recordListen(env.DB, { listenerId: me.id, episodeId: e.id, letterId: l.id, segmentIndex: 0, heardAt: `2026-11-0${i + 1}T00:00:00.000Z` });
     await recordListen(env.DB, { listenerId: me.id, episodeId: e.id, letterId: gone.id, segmentIndex: 0, heardAt: "2026-11-09T00:00:00.000Z" });
     await setLetterStatus(env.DB, gone.id, "rejected");
     const rows = await listHeardLetters(env.DB, me.id, 2);

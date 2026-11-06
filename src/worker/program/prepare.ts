@@ -12,7 +12,10 @@ export type Prepared = { units: number; audio: number; failed: number };
 type Run = Prepared & {
   /** The cloud voice is over its cap or has no key: further clips would be refused too. */
   audioHalted: boolean;
-  /** No unit could be made for this letter (malformed replies, an outage or a store failure). */
+  /**
+   * `makeUnit` gave nothing for this letter: Claude failed (an API error or replies out of shape) or the unit
+   * could not be stored. A run that throws counts the same toward the outage stop in `prepareBatch`.
+   */
   unitFailed: boolean;
   /** Today's units are at `UNIT_DAILY_LIMIT`: further units would be refused too. Not a failure. */
   unitHalted: boolean;
@@ -146,6 +149,7 @@ export async function prepareBatch(env: Env, db: D1Database, limit = 20): Promis
     } catch (e) {
       logFailure(e);
       total.failed++;
+      unitMisses++;
     }
   };
   const unitsStopped = () => unitHalted || unitMisses >= OUTAGE_AFTER;

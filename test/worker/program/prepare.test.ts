@@ -227,6 +227,20 @@ describe("prepareBatch", () => {
     expect(many.letters).toHaveLength(5);
   });
 
+  it("counts a letter whose run throws toward the outage stop, like one that gets no unit", async () => {
+    await seed(5);
+    const throwing = {
+      prepare: (sql: string) => {
+        if (sql.startsWith("SELECT * FROM units WHERE lang")) throw new Error("D1_ERROR: down");
+        return env.DB.prepare(sql);
+      },
+      batch: (stmts: D1PreparedStatement[]) => env.DB.batch(stmts),
+    } as unknown as D1Database;
+    const r = await prepareBatch(keylessTts, throwing, 20);
+    expect(r).toMatchObject({ units: 0, failed: 3, remaining: { units: { ja: 5, en: 5 } } });
+    expect(create).not.toHaveBeenCalled();
+  });
+
   it("voices units that still lack audio, once the key exists", async () => {
     const { letters } = await seed(2);
     await prepareBatch(keylessTts, env.DB, 20);
