@@ -59,6 +59,8 @@ export function mountPlayer(root: HTMLElement, episode: PlayerEpisode, opts: Pla
   let prefetch: Promise<Next> | null = null;
   /** Bumped when the dial turns: the next episode asked for before that is dropped, and its answer ignored. */
   let generation = 0;
+  /** The last line is done and the next episode is awaited. */
+  let waiting = false;
   const lineOf = (seg: number, line: number): ScriptLine | undefined => segments[seg]?.lines[line];
   const itemOf = (seg: number): PlayerItem | undefined => {
     const id = segments[seg]?.itemId;
@@ -82,8 +84,9 @@ export function mountPlayer(root: HTMLElement, episode: PlayerEpisode, opts: Pla
         if (!r.ok) return { ok: false, reason: r.reason === "limit" ? "limit" : "failed" };
         return typeof r.body.id === "string" && r.body.id !== "" ? { ok: true, id: r.body.id } : { ok: false, reason: "failed" };
       })
-      // Made with a dial that has since turned: whoever waits gets the episode asked for with the new one.
-      .then((next) => (asked === generation ? next : ensureNext()));
+      // Made with a dial that has since turned: whoever waits gets the episode asked for with the new one. Nobody
+      // waiting, nothing is asked yet: an ask spends one of the day's 枠, so it waits until the episode is needed.
+      .then((next) => (asked === generation || !waiting ? next : ensureNext()));
     return prefetch;
   }
 
@@ -100,7 +103,13 @@ export function mountPlayer(root: HTMLElement, episode: PlayerEpisode, opts: Pla
   async function finish(signal: AbortSignal) {
     player.stopBed();
     setState({ loading: true });
-    const next = await ensureNext();
+    waiting = true;
+    let next: Next;
+    try {
+      next = await ensureNext();
+    } finally {
+      waiting = false;
+    }
     if (signal.aborted) return;
     if (next.ok) return navigate(`/episodes/${encodeURIComponent(next.id)}`);
     setState({ status: "ended", loading: false, message: str(next.reason === "limit" ? "station.limit" : "station.failed") });

@@ -561,6 +561,26 @@ describe("player", () => {
     expect(JSON.parse(String(fetchMock.mock.calls[1]![1].body))).toEqual({ dial: 0.9, first: false });
   });
 
+  it("a dropped ask that answers late asks again only when someone waits for it", async () => {
+    autoEnd = false;
+    let release!: () => void;
+    fetchMock.mockImplementationOnce(() => new Promise<Response>((r) => (release = () => void respond(200, { id: "old" }).then(r))));
+    fetchMock.mockImplementation(() => respond(200, { id: "new" }));
+    mountPlayer(root, three, opts({ dial: 0.3 }));
+    await tap("toggle");
+    await tap("next");
+    await vi.waitFor(() => expect(spoken).toEqual(["a1", "b1"]));
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const dial = root.querySelector<HTMLInputElement>("input[type=range]")!;
+    dial.value = "0.9";
+    dial.dispatchEvent(new Event("change", { bubbles: true }));
+    release();
+    await flush();
+    // Nobody waits yet (segment b is still playing): no new ask, so no 枠 is spent.
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(navigate).not.toHaveBeenCalled();
+  });
+
   it("keeps the prefetch when the knob comes back to the same value", async () => {
     mountPlayer(root, one, opts({ dial: 0.3 }));
     const dial = root.querySelector<HTMLInputElement>("input[type=range]")!;
