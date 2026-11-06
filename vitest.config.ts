@@ -27,6 +27,7 @@ export default defineConfig(async () => {
                   GOOGLE_TTS_SA_JSON: "",
                   TMDB_API_KEY: "",
                   YOUTUBE_API_KEY: "",
+                  YOUTUBE_SEARCH_DAILY_LIMIT: "",
                   GOOGLE_BOOKS_API_KEY: "",
                   ADMIN_TOKEN: "",
                   EPISODE_DAILY_LIMIT: "",

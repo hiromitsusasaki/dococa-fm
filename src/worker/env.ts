@@ -13,6 +13,8 @@ export type Env = {
   GOOGLE_TTS_SA_JSON: string;
   TMDB_API_KEY: string;
   YOUTUBE_API_KEY: string;
+  /** YouTube searches from the send page per JST day, everyone together (counted in D1); default 80, `0` turns YouTube search off. */
+  YOUTUBE_SEARCH_DAILY_LIMIT?: string;
   /** 任意: Google Books API のキー。無いと共有の無料枠で 429 になりやすい */
   GOOGLE_BOOKS_API_KEY?: string;
   ADMIN_TOKEN: string;

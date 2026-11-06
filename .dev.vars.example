@@ -31,6 +31,8 @@ EPISODE_GLOBAL_DAILY_LIMIT=1800
 CLOUD_TTS_GLOBAL_DAILY_LIMIT=3000
 # 任意: 1 日に作る単位（お便りごとの DJ の語り。1 つで Claude を 1〜数回呼ぶ）の上限（既定 1000。0 で停止）
 UNIT_DAILY_LIMIT=1000
+# 任意: 題名検索（/put）が YouTube を探す回数の 1 日の上限（全員合計。1 回で YouTube の枠を 100 ユニット使う。既定 80。0 で YouTube を探さない）
+YOUTUBE_SEARCH_DAILY_LIMIT=80
 # 任意: 全員合計で 1 日に受け付けるお便りと一言の上限（1 通ごとに判定と翻訳で Claude を呼ぶ。「私も」と見つけた声は数えず、止めない。既定 500。0 で停止）
 LETTER_GLOBAL_DAILY_LIMIT=500
 # 任意: 1 分あたりの書き込みの上限（IP・リスナーごと。既定 20）

@@ -406,6 +406,40 @@ describe("searchByText", () => {
     expect((await searchByText("q", "music", keyed)).map((d) => d.title)).toEqual(["Song 1", "Song 2", "Song 3"]);
   });
 
+  describe("the day's YouTube searches", () => {
+    beforeEach(() => resetDb(env.DB));
+    const youtube: [string, () => Response] = ["https://www.googleapis.com/youtube/", () => json({ items: [{ id: { videoId: "v1" }, snippet: { title: "Video 1" } }] })];
+    const askedYouTube = (calls: string[]) => calls.filter((u) => u.includes("/youtube/")).length;
+
+    it("are counted in D1 for the JST day, and past YOUTUBE_SEARCH_DAILY_LIMIT YouTube is skipped while the others still answer", async () => {
+      const { calls } = stubFetch([youtube, ...routes]);
+      const keyed = { ...testEnv, YOUTUBE_API_KEY: "YT", YOUTUBE_SEARCH_DAILY_LIMIT: "2" } as Env;
+      for (let n = 0; n < 2; n++) expect((await searchByText("q", "any", keyed, { limit: 10, youtube: true })).map((d) => d.title)).toContain("Video 1");
+      const third = await searchByText("q", "any", keyed, { limit: 10, youtube: true });
+      expect(third.map((d) => d.title)).not.toContain("Video 1");
+      expect(third.map((d) => d.title)).toContain("Song 1");
+      expect(askedYouTube(calls())).toBe(2);
+      const row = await env.DB.prepare("SELECT day, n FROM youtube_searches").first<{ day: string; n: number }>();
+      expect(row!.day).toBe(new Date(Date.now() + 9 * 60 * 60 * 1000).toISOString().slice(0, 10));
+      expect(row!.n).toBe(3);
+    });
+
+    it("default to 80 a day, and 0 turns YouTube off without counting", async () => {
+      const { calls } = stubFetch([youtube, ...routes]);
+      const day = new Date(Date.now() + 9 * 60 * 60 * 1000).toISOString().slice(0, 10);
+      await env.DB.prepare("INSERT INTO youtube_searches (day, n) VALUES (?, 79)").bind(day).run();
+      const keyed = { ...testEnv, YOUTUBE_API_KEY: "YT", YOUTUBE_SEARCH_DAILY_LIMIT: "" } as Env;
+      expect((await searchByText("q", "any", keyed, { limit: 10, youtube: true })).map((d) => d.title)).toContain("Video 1");
+      expect((await searchByText("q", "any", keyed, { limit: 10, youtube: true })).map((d) => d.title)).not.toContain("Video 1");
+      expect(askedYouTube(calls())).toBe(1);
+      await resetDb(env.DB);
+      const off = { ...keyed, YOUTUBE_SEARCH_DAILY_LIMIT: "0" } as Env;
+      expect((await searchByText("q", "any", off, { limit: 10, youtube: true })).map((d) => d.title)).not.toContain("Video 1");
+      expect(askedYouTube(calls())).toBe(1);
+      expect(await env.DB.prepare("SELECT COUNT(*) AS n FROM youtube_searches").first<{ n: number }>()).toEqual({ n: 0 });
+    });
+  });
+
   it("film search and any skip tmdb without a key, and a failing provider does not sink the others", async () => {
     const { calls } = stubFetch(routes);
     expect(await searchByText("q", "film", noTmdbEnv)).toEqual([]);

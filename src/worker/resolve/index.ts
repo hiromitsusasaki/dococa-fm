@@ -1,5 +1,6 @@
 import { findItemsByExternalIds, insertItems, newItem } from "../db/items";
 import type { Env } from "../env";
+import { limitFrom } from "../limits";
 import type { Item, ItemKind } from "../types";
 import { lookupBook, searchBooks } from "./books";
 import { lookupItunes, searchItunes } from "./itunes";
@@ -49,16 +50,39 @@ function interleave<T>(lists: T[][]): T[] {
   return out;
 }
 
+/** YouTube searches per JST day when `YOUTUBE_SEARCH_DAILY_LIMIT` is unset: 80 of the key's ~100 a day, the rest left to the found-voice batch. */
+export const DEFAULT_YOUTUBE_SEARCH_DAILY_LIMIT = 80;
+const JST_OFFSET_MS = 9 * 60 * 60 * 1000;
+
+/**
+ * Counts one YouTube search for today (JST) in D1 and says whether it is still within `YOUTUBE_SEARCH_DAILY_LIMIT`
+ * (`0` turns YouTube off and counts nothing). A count that cannot be made skips YouTube: the quota is not spent blind.
+ */
+async function youtubeSearchAllowed(env: Env, now: Date = new Date()): Promise<boolean> {
+  const limit = limitFrom(env.YOUTUBE_SEARCH_DAILY_LIMIT, DEFAULT_YOUTUBE_SEARCH_DAILY_LIMIT);
+  if (limit === 0) return false;
+  const day = new Date(now.getTime() + JST_OFFSET_MS).toISOString().slice(0, 10);
+  try {
+    const row = await env.DB.prepare("INSERT INTO youtube_searches (day, n) VALUES (?, 1) ON CONFLICT (day) DO UPDATE SET n = n + 1 RETURNING n")
+      .bind(day)
+      .first<{ n: number }>();
+    return (row?.n ?? Number.POSITIVE_INFINITY) <= limit;
+  } catch (e) {
+    console.warn("[dococa] youtube search count unavailable", e instanceof Error ? e.name : "unknown error");
+    return false;
+  }
+}
+
 /**
  * `youtube: true` lets "any" also ask YouTube when a key is set. Only the send page's own search passes it: each call
- * costs a hundredth of the day's quota, and it sits behind that page's search limit. The first result is always the
- * best guess of the first provider that has one.
+ * costs a hundredth of the day's quota, so it sits behind that page's search limit and a daily cap counted in D1
+ * (`YOUTUBE_SEARCH_DAILY_LIMIT`). The first result is always the best guess of the first provider that has one.
  */
 export async function searchByText(q: string, kind: ItemKind | "any", env: Env, opts: { limit?: number; youtube?: boolean } = {}): Promise<ItemDraft[]> {
   const limit = opts.limit ?? MAX_RESULTS;
   const by = searchers(q, env);
   if (kind !== "any") return (await orEmpty(by[kind]())).slice(0, limit);
-  const youtube = opts.youtube && env.YOUTUBE_API_KEY ? [() => searchYouTube(q, env.YOUTUBE_API_KEY)] : [];
+  const youtube = opts.youtube && env.YOUTUBE_API_KEY && (await youtubeSearchAllowed(env)) ? [() => searchYouTube(q, env.YOUTUBE_API_KEY)] : [];
   const results = await Promise.all([by.music, by.book, by.film, ...youtube].map((search) => orEmpty(search())));
   return interleave(results).slice(0, limit);
 }
