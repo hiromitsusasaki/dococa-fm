@@ -36,7 +36,7 @@ describe("composeEpisode", () => {
       { type: "dj", text: "Dococa FM。世界のどこかにいる誰かの好きなものを、お届けします。", fixed: true },
       { type: "dj", text: "はじめ" },
       { type: "letter", letterId: "a", text: plain.bodyJa, radioName: "みなと", place: "函館", kind: "letter", sourceUrl: null, sourceAuthor: null },
-      { type: "dj", text: "同じ作品に、もう一通届いています。", fixed: true },
+      { type: "dj", text: "同じ作品に、別の方からもお便りが届いています。", fixed: true },
       { type: "dj", text: "ネットで見つけた声です。@jazzcatさん、YouTubeのコメントから。", fixed: true },
       { type: "letter", letterId: "f", text: "故郷を思い出す。", radioName: "", place: "", kind: "found", sourceUrl: "https://www.youtube.com/watch?v=x", sourceAuthor: "@jazzcat" },
       { type: "dj", text: "あおいさん（那覇）から『私も』が届いています", fixed: true },
@@ -153,7 +153,7 @@ describe("composeEpisode", () => {
 });
 
 describe("fixed templates", () => {
-  it.each(FIXED_TEMPLATES.filter((k) => !k.startsWith("bridge.")))("%s says nothing the dj checks would refuse, so a fixed line never needs them", (key) => {
+  it.each(FIXED_TEMPLATES)("%s says nothing the dj checks would refuse, so a fixed line never needs them", (key) => {
     const text = t(key, { who: "みなとさん（函館）", author: "@jazzcat", site: "YouTube" });
     const aLetter = { type: "letter" as const, letterId: plain.id, text: plain.bodyJa, radioName: plain.radioName, place: plain.place, kind: plain.kind, sourceUrl: null, sourceAuthor: null };
     const r = verifyEpisode([{ itemId: "i1", slot: "near", lines: [{ type: "dj", text }, aLetter] }], letters, listener());
