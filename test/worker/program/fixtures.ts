@@ -24,6 +24,8 @@ export const letter = (over: Partial<Letter> = {}): Letter => ({
   lang: "ja",
   radioName: "みなと",
   place: "函館",
+  placeCountry: null,
+  placeRegion: null,
   year: null,
   listenerId: "someone",
   parentLetterId: null,

@@ -100,6 +100,8 @@ export async function createLetter(
     lang,
     radioName: listener.radioName,
     place: listener.place,
+    placeCountry: listener.placeCountry,
+    placeRegion: listener.placeRegion,
     year: null,
     listenerId: listener.id,
     parentLetterId: parent?.id ?? null,

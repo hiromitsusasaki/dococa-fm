@@ -3,6 +3,7 @@ export const ja = {
   "app.tagline": "世界のどこかにいる誰かの好きなものが聴こえてくるラジオ",
   "listener.anonymous": "名無しのリスナー",
   "listener.demo": "デモ用",
+  "lang.code": "ja",
   "settings.title": "設定",
   "settings.lang": "言語",
   "settings.radioName": "ラジオネーム",

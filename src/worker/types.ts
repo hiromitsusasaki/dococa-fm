@@ -25,7 +25,11 @@ export type Letter = {
   bodyEn: string | null;
   lang: string;
   radioName: string;
+  /** The Japanese label the DJ reads; screens use the codes below when present. */
   place: string;
+  /** The sender's country and region when the letter was sent; null for older letters and found voices. */
+  placeCountry: string | null;
+  placeRegion: string | null;
   year: number | null;
   listenerId: string | null;
   parentLetterId: string | null;
@@ -87,6 +91,9 @@ export type ScriptLine =
       text: string;
       radioName: string;
       place: string;
+      /** Absent on episodes made before the codes existed. */
+      placeCountry?: string;
+      placeRegion?: string;
       kind: LetterKind;
       sourceUrl: string | null;
       sourceAuthor: string | null;

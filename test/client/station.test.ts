@@ -356,6 +356,17 @@ describe("station: playing", () => {
     expect(rows[1]!.querySelector(".sender")).toBeNull();
   });
 
+  it("shows the sender's place from the codes in the page's language", async () => {
+    const en = { ...strings, "lang.code": "en", "letter.who": "{name}", "letter.whoPlace": "{who} ({place})" };
+    const ep = view("epP", [["a", [{ ...letter("L8", "Hello"), placeCountry: "JP", placeRegion: "32" }]]], { L8: { main: "Hello", original: null } });
+    nextReplies = [ok(ep)];
+    autoEnd = false;
+    mountStation(root, opts({ strings: en }));
+    await power();
+    await vi.waitFor(() => expect(root.querySelector("blockquote.player-letter")).not.toBeNull());
+    expect(root.querySelector("blockquote.player-letter")!.textContent).toContain("しずく (Shimane, Japan)");
+  });
+
   it("shows the letter being read with its sender and a toggle for the original", async () => {
     const ep = view("epL", [["a", [{ ...letter("L9", "こんにちは") }]]], { L9: { main: "こんにちは", original: "Hello" } });
     nextReplies = [ok(ep)];

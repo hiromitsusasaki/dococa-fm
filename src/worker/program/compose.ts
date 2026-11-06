@@ -28,6 +28,8 @@ export const read = (l: Letter): ScriptLine => ({
   text: l.bodyJa,
   radioName: l.radioName,
   place: l.place,
+  ...(l.placeCountry ? { placeCountry: l.placeCountry } : {}),
+  ...(l.placeRegion ? { placeRegion: l.placeRegion } : {}),
   kind: l.kind,
   sourceUrl: l.sourceUrl,
   sourceAuthor: l.sourceAuthor,

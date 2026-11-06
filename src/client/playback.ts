@@ -144,7 +144,9 @@ export function foundLabel(l: LetterLine, url: string, str: (key: string) => str
 
 export function whoOf(l: LetterLine, str: (key: string) => string): string {
   if (l.kind === "found") return l.sourceAuthor ?? "";
-  return whoLine(l, (key, params) => fmt(str(key), params ?? {}));
+  // The page's language rides in with the strings; a missing or unknown value reads as Japanese.
+  const lang = str("lang.code") === "en" ? "en" : "ja";
+  return whoLine(l, (key, params) => fmt(str(key), params ?? {}), lang);
 }
 
 export type NextReason = "limit" | "empty" | "failed";

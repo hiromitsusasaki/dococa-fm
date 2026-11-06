@@ -41,7 +41,7 @@ describe("POST /letters", () => {
     expect(res.status).toBe(303);
     expect(res.headers.get("location")).toBe(`/items/${item.id}`);
     const [l] = await listLettersForItem(env.DB, item.id);
-    expect(l).toMatchObject({ kind: "letter", body: "中学の頃、毎日聴いていた", bodyJa: "中学の頃、毎日聴いていた", lang: "ja", radioName: "ヒロ", place: "島根", status: "public" });
+    expect(l).toMatchObject({ kind: "letter", body: "中学の頃、毎日聴いていた", bodyJa: "中学の頃、毎日聴いていた", lang: "ja", radioName: "ヒロ", place: "島根", placeCountry: "JP", placeRegion: "32", status: "public" });
     expect(create).toHaveBeenCalledTimes(2); // moderation, then the english translation; ja is not translated to ja
     expect(l!.bodyEn).toBe("[en] translated");
   });

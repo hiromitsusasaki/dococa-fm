@@ -1,11 +1,19 @@
+import type { Lang } from "../i18n/t";
+import { placeLabel } from "../geo/place-label";
+
 /** Pure text rules the server pages, the DJ script and the browser players all share, so the three cannot drift. */
 
 export type SayKey = "letter.who" | "letter.whoPlace" | "letter.whoDemo" | "listener.anonymous" | "listener.demo";
 
-/** The radio-name line: 「{name}さん」, with the place when there is one, and the 「デモ用」 mark for a demo account. `say` is `t()` on the server and the shipped strings in the browser. */
-export function whoLine(l: { radioName: string; place: string; demo?: boolean }, say: (key: SayKey, params?: Record<string, string>) => string): string {
+/** The radio-name line: 「{name}さん」, with the place when there is one (made from the codes in `lang`, else the stored label), and the 「デモ用」 mark for a demo account. `say` is `t()` on the server and the shipped strings in the browser. */
+export function whoLine(
+  l: { radioName: string; place: string; placeCountry?: string | null; placeRegion?: string | null; demo?: boolean },
+  say: (key: SayKey, params?: Record<string, string>) => string,
+  lang: Lang = "ja",
+): string {
   const who = l.radioName ? say("letter.who", { name: l.radioName }) : say("listener.anonymous");
-  const named = l.place ? say("letter.whoPlace", { who, place: l.place }) : who;
+  const place = placeLabel(l.placeCountry ?? null, l.placeRegion ?? null, lang) || l.place;
+  const named = place ? say("letter.whoPlace", { who, place }) : who;
   return l.demo ? say("letter.whoDemo", { who: named, demo: say("listener.demo") }) : named;
 }
 

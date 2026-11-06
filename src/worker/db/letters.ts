@@ -13,6 +13,8 @@ function rowToLetter(r: Row): Letter {
     lang: r.lang as string,
     radioName: r.radio_name as string,
     place: r.place as string,
+    placeCountry: (r.place_country as string | null) ?? null,
+    placeRegion: (r.place_region as string | null) ?? null,
     year: (r.year as number | null) ?? null,
     listenerId: (r.listener_id as string | null) ?? null,
     parentLetterId: (r.parent_letter_id as string | null) ?? null,
@@ -31,9 +33,9 @@ export async function insertLetter(db: D1Database, l: Omit<Letter, "id" | "creat
   const letter = { ...l, id: crypto.randomUUID(), createdAt: new Date().toISOString() };
   await db
     .prepare(
-      `INSERT INTO letters (id, item_id, kind, body, body_ja, body_en, lang, radio_name, place, year,
+      `INSERT INTO letters (id, item_id, kind, body, body_ja, body_en, lang, radio_name, place, place_country, place_region, year,
          listener_id, parent_letter_id, source_url, source_author, status, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .bind(
       letter.id,
@@ -45,6 +47,8 @@ export async function insertLetter(db: D1Database, l: Omit<Letter, "id" | "creat
       letter.lang,
       letter.radioName,
       letter.place,
+      letter.placeCountry,
+      letter.placeRegion,
       letter.year,
       letter.listenerId,
       letter.parentLetterId,

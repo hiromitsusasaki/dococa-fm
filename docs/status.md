@@ -59,7 +59,7 @@ Phase 2（ラジオ中心の体験への作り替え）の実装は、すべて 
   - `compose.ts` の `script.workOnly` と `FIXED_TEMPLATES`、i18n の `script.workOnly`、`script.ts` の `NO_LETTER_NOTE`、`verify.ts` の `announce` 規則と `build.ts` の `RETRYABLE`。
   - `stored.ts` の `publicView`（お便りが全部非公開になった枠を落とす現在の扱いを維持するか決める）。`/me` の聴いた履歴と `?seg=` の再生は `publicView` の添字を共有しているので、両方そこを通す。
   - テスト: `select` / `compose` / `verify` / `build` / `station` の fallback・workOnly の fixture。
-- `letters.place` は日本語のラベルで持つ（DJ が日本語で読むため。英語の画面でも「島根」と出る。設計書 Addendum H に明記。英語表示はコードから引き直す Phase 3）。
+- `letters.place` は日本語のラベルで持つ（DJ が日本語で読むため。設計書 Addendum H）。画面はコードがあれば読み手の言語で引き直す（Phase 3 Task 7）。コードの無い古いお便りと見つけた声は `place` のまま出る。DJ の英語の読みは Task 8。
 
 ## Phase 3 の進み（計画: `docs/superpowers/plans/2026-11-06-dococa-fm-phase3.md`、設計: 追記 K）
 
@@ -71,7 +71,7 @@ Phase 2（ラジオ中心の体験への作り替え）の実装は、すべて 
 | Task 4 | 単位（お便りごとの DJ の語り） | 完了（`units (letter_id, lang)` を 0009 で追加。`makeUnit` が `write_unit` で intro/after を書き 1 枠で検証、通らなければ規則を伝えて 1 回だけ書き直し、`verified` 0/1 で保存。`buildEpisode` は単位を並べるだけで、無い単位だけ作る（同時 3）。番組の検証で落ちた枠は単位を外して再検証、それでも駄目なら定型だけ。`writeDjLines` と回ごとの台本は撤去） |
 | Task 5 | 事前生成（投稿後・15 分ごと・手動） | 完了（`program/prepare.ts` の `prepareLetter` / `prepareBatch`。`POST /letters`・MCP `post_letter`・`/admin/letters`・`/admin/found` が `waitUntil` で呼び、Cron `*/15 * * * *` と `POST /admin/prepare`（`limit` 1〜50）で 20 件ずつ埋める。出典のない見つけた声は対象外。音声は上限か鍵なしで止める） |
 | Task 6 | 聴いた記録 | 完了（`listens`（リスナー × お便り）を 0010 で追加。プレイヤーが読み上げ始めたお便りの行で `POST /listens`（`reply` は送らない）、サーバーは自分の検証済みの回・公開のお便り・公開ビューの枠の添字が合うときだけ 204、他は 404。マイページの聴いたお便りはこの表から出す） |
-| Task 7 | お便りの土地コード | 未着手 |
+| Task 7 | お便りの土地コード | 完了（`letters.place_country` / `place_region` を 0011 で追加。送るときにリスナーの値を写し、見つけた声は null。画面と `whoLine` は言語に合わせてコードから引き、無ければ `place`。番組の台本の手紙行にもコードを載せ、検証で突き合わせる。クライアントは `places.ts` を取り込む（station.js の gzip は約 4 KB）。DJ の読みは日本語の `place` のまま） |
 | Task 8 | 英語の DJ | 未着手 |
 
 ### 決定（Phase 3）

@@ -6,6 +6,7 @@ export const en: Record<keyof typeof ja, string> = {
   "app.tagline": "A radio where you hear what someone, somewhere, loves",
   "listener.anonymous": "Anonymous listener",
   "listener.demo": "Demo",
+  "lang.code": "en",
   "settings.title": "Settings",
   "settings.lang": "Language",
   "settings.radioName": "Radio name",

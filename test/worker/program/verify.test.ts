@@ -90,6 +90,16 @@ describe("verifyEpisode", () => {
     expect(verifyEpisode(episode({ ...(read(plain) as object), radioName: "別人" } as ScriptLine), letters, me).verbatim).toBe(false);
   });
 
+  it("verbatim checks the place codes when the line has them, and accepts older lines without", () => {
+    const placed = letter({ id: "p", placeCountry: "JP", placeRegion: "32" });
+    const all = byId([placed]);
+    const line = { ...(read(placed) as object), placeCountry: "JP", placeRegion: "32" } as ScriptLine;
+    expect(verifyEpisode(episode(line), all, me).verbatim).toBe(true);
+    expect(verifyEpisode(episode(read(placed)), all, me).verbatim).toBe(true);
+    expect(verifyEpisode(episode({ ...line, placeRegion: "13" } as ScriptLine), all, me).verbatim).toBe(false);
+    expect(verifyEpisode(episode({ ...line, placeCountry: "US" } as ScriptLine), all, me).verbatim).toBe(false);
+  });
+
   it("verbatim is false when the demo mark of a demo account's letter is dropped", () => {
     const demo = letter({ id: "d", demo: true });
     const all = byId([demo]);

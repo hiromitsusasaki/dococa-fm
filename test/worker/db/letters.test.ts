@@ -27,6 +27,14 @@ describe("letters", () => {
     expect(await getLetter(env.DB, "nope")).toBeNull();
   });
 
+  it("keeps the place codes, null when there are none", async () => {
+    const item = await insertItem(env.DB, itemDraft());
+    expect((await insertLetter(env.DB, letterDraft(item.id))).placeCountry).toBeNull();
+    const l = await insertLetter(env.DB, letterDraft(item.id, { placeCountry: "JP", placeRegion: "32" }));
+    const got = await getLetter(env.DB, l.id);
+    expect([got?.placeCountry, got?.placeRegion]).toEqual(["JP", "32"]);
+  });
+
   it("bodyEn is null by default and round-trips when given", async () => {
     const item = await insertItem(env.DB, itemDraft());
     expect((await insertLetter(env.DB, letterDraft(item.id))).bodyEn).toBeNull();

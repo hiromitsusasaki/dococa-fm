@@ -120,6 +120,8 @@ admin.post("/admin/found", async (c) => {
       lang,
       radioName: v.author,
       place: "",
+      placeCountry: null,
+      placeRegion: null,
       year: null,
       listenerId: null,
       parentLetterId: null,

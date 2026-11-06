@@ -24,6 +24,8 @@ export const letterDraft = (
   lang: "ja",
   radioName: "ラジオネーム",
   place: "札幌",
+  placeCountry: null,
+  placeRegion: null,
   year: null,
   listenerId: null,
   parentLetterId: null,

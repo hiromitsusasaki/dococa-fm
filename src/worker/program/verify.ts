@@ -114,7 +114,7 @@ export function verifyEpisode(
           verbatim = false;
           details.push(`verbatim: ${at}: differs from letter ${l.id}`);
         }
-        if (line.radioName !== l.radioName || line.place !== l.place || line.kind !== l.kind || (line.demo === true) !== l.demo) {
+        if (line.radioName !== l.radioName || line.place !== l.place || (line.placeCountry !== undefined && line.placeCountry !== l.placeCountry) || (line.placeRegion !== undefined && line.placeRegion !== l.placeRegion) || line.kind !== l.kind || (line.demo === true) !== l.demo) {
           verbatim = false;
           details.push(`verbatim: ${at}: attribution differs from letter ${l.id}`);
         }

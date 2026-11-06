@@ -27,7 +27,7 @@ async function resolve({ DB: db, PUBLIC_ORIGIN }: Pick<Env, "DB" | "PUBLIC_ORIGI
 }
 
 /** What the station player needs to know: the labels it shows, as `t()` values, since `t()` is server-only. */
-const STATION_KEY = /^(station\.|player\.|out\.|kind\.|letter\.(who|whoPlace|whoDemo|showOriginal)|listener\.(?:anonymous|demo)$)/;
+const STATION_KEY = /^(station\.|player\.|out\.|kind\.|letter\.(who|whoPlace|whoDemo|showOriginal)|lang\.code$|listener\.(?:anonymous|demo)$)/;
 const stationStrings = (lang: Lang): Record<string, string> =>
   Object.fromEntries(Object.keys(ja).filter((k) => STATION_KEY.test(k)).map((k) => [k, tFor(lang)(k as keyof typeof ja)]));
 

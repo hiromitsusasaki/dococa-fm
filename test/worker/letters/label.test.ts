@@ -13,6 +13,14 @@ describe("whoLine", () => {
     expect(whoLine(l, say)).toBe(expected);
   });
 
+  it("makes the place from the codes in the reader's language, else the stored label", () => {
+    const l = { radioName: "しずく", place: "島根", placeCountry: "JP", placeRegion: "32" };
+    expect(whoLine(l, say, "en")).toBe("しずくさん（Shimane, Japan）");
+    expect(whoLine(l, say, "ja")).toBe("しずくさん（島根）");
+    expect(whoLine({ ...l, placeCountry: null, placeRegion: null }, say, "en")).toBe("しずくさん（島根）");
+    expect(whoLine({ ...l, placeCountry: "ZZ" }, say, "en")).toBe("しずくさん（島根）");
+  });
+
   it("marks a demo account at the end", () => {
     expect(whoLine({ radioName: "しずく", place: "松本", demo: true }, say)).toContain(ja["listener.demo"]);
   });

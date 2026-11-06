@@ -56,9 +56,9 @@ export function isHttpUrl(s: string | null): s is string {
 }
 
 /** The radio-name line; a demo account carries the 「デモ用」 mark at the end so nobody mistakes its letters for a real listener's. */
-export const whoOf = (l: Pick<Letter, "radioName" | "place"> & { demo?: boolean }, lang: Lang): string => {
+export const whoOf = (l: Pick<Letter, "radioName" | "place"> & Partial<Pick<Letter, "placeCountry" | "placeRegion">> & { demo?: boolean }, lang: Lang): string => {
   const t = tFor(lang);
-  return whoLine(l, (key, params) => t(key, params));
+  return whoLine(l, (key, params) => t(key, params), lang);
 };
 
 export function ReportForm({ letterId, lang }: { letterId: string; lang: Lang }) {
