@@ -15,7 +15,7 @@ export const AFTER_MAX = 120;
 /** Replies out of shape are asked for again, up to this many calls. */
 const ATTEMPTS = 3;
 /** Checks rephrased lines can fix; verbatim and sources failures come from the data. */
-const RETRYABLE = /^(?:topical|measure|pii|announce|playback): /;
+const RETRYABLE = /^(?:topical|measure|pii|announce|playback|intro): /;
 /** Units made at once while a programme waits for them. */
 const CONCURRENCY = 3;
 /** A unit is for everyone, so it is checked against no listener's account. */

@@ -380,3 +380,34 @@ describe("verifyEpisode bridge lines", () => {
     expect(verifyEpisode(episode(dj(open), read(echo)), byId([echo]), me).pii).toBe(false);
   });
 });
+
+describe("verifyEpisode intro names the sender", () => {
+  const intro = (text: string, letterId: string): ScriptLine => ({ type: "dj", text, unit: { letterId, part: "intro" } });
+  const after = (text: string, letterId: string): ScriptLine => ({ type: "dj", text, unit: { letterId, part: "after" } });
+  const placed = letter({ id: "p", radioName: "Minato", place: "北海道", placeCountry: "JP", placeRegion: "01", bodyEn: "I listened alone at midnight." });
+  const run = (lines: ScriptLine[], lang: "ja" | "en", l = plain) => verifyEpisode([{ itemId: "i1", slot: "near", lines }], byId([l]), me, new Map([["i1", item()]]), lang);
+
+  it.each([
+    ["ja", "みなとさんが選んだ一曲です。", plain],
+    ["ja", "函館の夜に似合う一曲です。", plain],
+    ["ja", "北海道の冬に似合う一曲です。", placed],
+    ["en", "minato picked a quiet one.", placed],
+    ["en", "A song for a night in Hokkaido, Japan.", placed],
+    ["en", "A song for nights in 函館.", plain],
+  ] as const)("fails a %s intro that names the sender or the place: %s", (lang, text, l) => {
+    const r = run([intro(text, l.id), read(l, lang === "en" ? (l.bodyEn ?? l.body) : l.bodyJa)], lang, l);
+    expect(r.topical).toBe(false);
+    expect(r.details).toContain("intro: segment 1 line 1: names the sender");
+    expect(r.details.join("\n")).not.toMatch(/みなと|minato|函館|hokkaido|北海道/i);
+  });
+
+  it("lets an intro name the work's title and creator, and lets an after mention the sender", () => {
+    expect(run([intro("Miles Davis の Blue in Green です。", plain.id), read(plain), after("みなとさん、ありがとう。", plain.id)], "ja").details).toEqual([]);
+    expect(run([intro("Blue in Green, by Miles Davis.", placed.id), read(placed, placed.bodyEn!)], "en", placed).details).toEqual([]);
+  });
+
+  it("ignores a one-character radio name", () => {
+    const short = letter({ id: "s", radioName: "海", place: "" });
+    expect(run([intro("海の見える部屋で聴きたい一曲です。", short.id), read(short)], "ja", short).details).toEqual([]);
+  });
+});

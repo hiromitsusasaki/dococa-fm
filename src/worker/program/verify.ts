@@ -1,3 +1,4 @@
+import { placeLabel } from "../geo/place-label";
 import { t, type Lang } from "../i18n/t";
 import type { Item, Letter, Listener, Segment, VerifyReport } from "../types";
 import { FIXED_TEMPLATES } from "./compose";
@@ -90,6 +91,16 @@ function readable(l: Letter, lang: Lang, forQuotes: boolean): string[] {
 }
 
 /**
+ * What an intro must not say about its letter: the sender's radio name (2+ code points) and the place in the
+ * episode's language, normalised and lower-cased. The fixed hand-over names them; the intro introduces the work.
+ */
+function senderTerms(l: Letter, lang: Lang): string[] {
+  const name = norm(l.radioName).trim().toLowerCase();
+  const place = norm(l.placeCountry ? placeLabel(l.placeCountry, l.placeRegion, lang) || l.place : l.place).trim().toLowerCase();
+  return [...(Array.from(name).length >= 2 ? [name] : []), ...(place !== "" ? [place] : [])];
+}
+
+/**
  * Deterministic checks on a composed episode; nothing here asks a model. The mechanical guarantee is that
  * every letter is read verbatim from the database and that no dj line shares 10 consecutive code points
  * with any letter, after work titles and creators collapse to one sentinel each; a paraphrase by the DJ is
@@ -167,6 +178,12 @@ export function verifyEpisode(
         if (count) {
           topical = false;
           details.push(`measure: ${at}: ${count[0]}`);
+        }
+        const own = line.unit?.part === "intro" ? letters.get(line.unit.letterId) : undefined;
+        if (own && senderTerms(own, lang).some((term) => text.toLowerCase().includes(term))) {
+          topical = false;
+          // Never the name itself: details reach the logs.
+          details.push(`intro: ${at}: names the sender`);
         }
       }
       const play = !line.fixed ? mask(text).match(rules.playback) : null;

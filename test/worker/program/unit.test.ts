@@ -193,6 +193,15 @@ describe("makeUnit", () => {
     expect(u).toMatchObject({ intro: "落ち着いた一曲です。", verified: true });
   });
 
+  it("asks once more when the intro names the sender or the place", async () => {
+    const f = await stored();
+    create.mockResolvedValueOnce(lines("松本のしずくさんが選んだ一曲です。")).mockResolvedValueOnce(lines("落ち着いた一曲です。"));
+    const u = await makeUnit(keyed, env.DB, f.letter, f.item, "ja");
+    expect(create).toHaveBeenCalledTimes(2);
+    expect(content(1)).toContain("intro: segment 1 line 1: names the sender");
+    expect(u).toMatchObject({ intro: "落ち着いた一曲です。", verified: true });
+  });
+
   it("stores the unit unverified when the second lines fail too", async () => {
     const f = await stored();
     create.mockResolvedValue(lines("お聴きください。"));
