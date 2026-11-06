@@ -55,9 +55,9 @@ Phase 2（ラジオ中心の体験への作り替え）と Phase 3（単位・�
 - 局ごとに回を分けるため、`episodes.station`（`world` / `mine` / `public:<ownerId>`）を 0006 で足し、`GET /stations/:key.json` は局ごとに絞る。別の局の回には復帰しない。
 - Google アカウントへの紐づけは、現在のリスナーの `google_sub` が空のときだけ行う。別の Google アカウントに紐づいたリスナーへは上書きせず失敗にする。サインイン後の戻り先 `next` は同一オリジンのパスだけを通す。
 - Google アカウントを紐づけても、ラジオネームは Google の名前やメールから埋めない（2026-11-06、本人の規則が計画 Task 7 の文より優先）。空のラジオネームは「名無しのリスナー」で出し、`/settings` と `/me` に「公開されるのはラジオネームだけです」と案内する。Google の名前は `displayName` に持ち、ヘッダと `/me` だけに使う。
-- MCP の `post_letter`（新しいお便り）はサインイン済みのリスナーだけ（2026-11-06 の裁定）。匿名は `signin.needed` で失敗し、`react`（私も・一言）は匿名でも使える。`/settings` の MCP の欄に「聴くことと反応だけできます」と添える。
+- （MCP は Phase 4 で廃止）MCP の `post_letter`（新しいお便り）はサインイン済みのリスナーだけ（2026-11-06 の裁定）。匿名は `signin.needed` で失敗し、`react`（私も・一言）は匿名でも使える。`/settings` の MCP の欄に「聴くことと反応だけできます」と添える。
 - Spotify の再取り込みは、そのリスナーの履歴すべての `rank` を消してから入れる（手で選んだ `manual` の行も含む）。順位は最新の取り込みだけが決め、ほかの経路からは付かない。取り込みが成功して空だったときも消す。上位の 2 リストの読み取りが失敗したときは、何も分からないので消さない。
-- 「語りだけ」を徹底する（追記 I）: 作品の試聴 30 秒（`preview` 行）は新しい回に入れず、保存済みの回に残っていても出口（プレイヤー、`/tts`、MCP、聴いたお便り）では落とす。作品を聴く・観るリンクは残す。
+- 「語りだけ」を徹底する（追記 I）: 作品の試聴 30 秒（`preview` 行）は新しい回に入れず、保存済みの回に残っていても出口（プレイヤー、`/tts`、聴いたお便り。当時は MCP も。Phase 4 で廃止）では落とす。作品を聴く・観るリンクは残す。
 - 局プレイヤーは、このブラウザが聴いていた回の位置を `localStorage["dfm.pos:<局>"]`（回 id、セグメント、行）に持つ。ON で `GET /stations/:key.json?id=<回 id>`（自分のその局の回だけ。違えば 204）を呼び、その位置から続ける。無ければ直近の回、聴き終えた回なら先読み済みの次の回か新規。
 - Spotify の認可は、開始したリスナーの id を `dfm_pkce` cookie に入れ、コールバックで一致を確かめる。コールバックもサインインが要る。Google の紐づけは `google_sub IS NULL` を条件にした 1 回の UPDATE で行い、競合に負けたら再読込して切り替えるか失敗にする。
 - セッション cookie は、紐づけで回さない（リスナー id の決定的な HMAC という既存の設計）。
@@ -181,7 +181,7 @@ Phase 2（ラジオ中心の体験への作り替え）と Phase 3（単位・�
   pnpm run deploy
   ```
   そのあと本番 URL で `/start` → 番組を聴く。eval は `EPISODE_DAILY_LIMIT` を 25 などに上げて `pnpm eval --origin https://<URL> --token "$ADMIN_TOKEN" --listener <id> --runs 20 --out docs/eval/<日付>.md`。
-- Demo seeding real run held: no key（`ANTHROPIC_API_KEY` が空。入れたら `pnpm seed --items <作品 URL の一覧> --personas 3 --dry-run` で確かめ、`--dry-run` を外して投入。`docs/demo/personas.json` はこのときできる）。デモ用リスナーは `listeners.demo = 1` で、画面・MCP・番組に「デモ用」の印が出る。
+- Demo seeding real run held: no key（`ANTHROPIC_API_KEY` が空。入れたら `pnpm seed --items <作品 URL の一覧> --personas 3 --dry-run` で確かめ、`--dry-run` を外して投入。`docs/demo/personas.json` はこのときできる）。デモ用リスナーは `listeners.demo = 1` で、画面・番組に「デモ用」の印が出る。
 - YouTube collection real run held: no key（`YOUTUBE_API_KEY` と `ANTHROPIC_API_KEY` を入れたら `pnpm collect --item <url>` を 1 作品で流す。既定は dry-run で `.found/<itemId>.json` に書くだけ。中身を読んで不要な行を消し、`pnpm collect --post .found/<itemId>.json` で投入して、`/items/:id` の「ネットで見つけた声」を確かめる）。`/admin/found` はお便りと同じモデレーションを通り、reject 済みの出典 URL は再投入されない。管理 API は `ADMIN_TOKEN`（Bearer）。デモ回は `POST /admin/episodes`（`listenerId` は `/settings` の末尾に出る）。
 - Gemini-TTS real check: 鍵は API キーで通る形だが、本番で 403（Vertex AI API が未有効化）。上の本人作業を参照。`GET /tts` は鍵が空なら 503。鍵が入ったら Task 11 Step 5（Charon / Kore の聴き比べと `DJ_STYLE_PROMPT` の調整）をする。クラウド TTS は各リスナーの最初の回（`claimCloudTts`）と、`makeEpisode(env, listener, { cloudTts: true })`（Task 13 のデモ回）だけ。
 - Real-API episode: 2026-11-05 に本番で 2 回生成して確認。`docs/examples/episode-1.json` は未作成（デモ投入後の回で作るとよい）。
