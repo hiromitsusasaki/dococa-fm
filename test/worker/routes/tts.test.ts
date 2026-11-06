@@ -5,10 +5,12 @@ import { insertEpisode } from "../../../src/worker/db/episodes";
 import { insertItem } from "../../../src/worker/db/items";
 import { insertLetter, setLetterStatus } from "../../../src/worker/db/letters";
 import type { Episode } from "../../../src/worker/types";
+import { resetBucket } from "../../helpers/bucket";
 import { resetDb } from "../../helpers/db";
 import { json, stubFetch } from "../../helpers/fetch";
 import { makeServiceAccount, primeToken } from "../../helpers/service-account";
 import { itemDraft, letterDraft } from "../db/helpers";
+import { audioKey } from "../../../src/worker/tts/audio";
 import { newSession } from "./helpers";
 
 const idOf = (cookie: string) => cookie.split("=")[1]!.split(".")[0]!;
@@ -39,6 +41,7 @@ const audio = btoa(String.fromCharCode(1, 2, 3));
 
 beforeEach(async () => {
   await resetDb(env.DB);
+  await resetBucket(env.BUCKET);
   await primeToken(sa.json);
 });
 afterEach(() => vi.unstubAllGlobals());
@@ -61,7 +64,7 @@ describe("GET /tts", () => {
     expect([...new Uint8Array(await first.arrayBuffer())]).toEqual([1, 2, 3]);
     expect(fn).toHaveBeenCalledTimes(1);
     expect(JSON.parse(String(fn.mock.calls[0]![1]?.body)).input.text).toBe("つぎの曲です");
-    expect(await env.BUCKET.get(`tts/${ep.id}/3.mp3`)).not.toBeNull();
+    expect(await env.BUCKET.get(await audioKey("ja", "male", "つぎの曲です"))).not.toBeNull();
 
     const second = await call(`/tts?episode=${ep.id}&line=3`, cookie);
     expect(second.status).toBe(200);
@@ -84,12 +87,12 @@ describe("GET /tts", () => {
     expect(fn).not.toHaveBeenCalled();
   });
 
-  it("answers 404 when the episode did not get cloud tts, or does not exist", async () => {
+  it("answers 404 when the episode does not exist, and voices an episode made without the flag", async () => {
     const { cookie, ep } = await setup(false);
     const { fn } = stubFetch([[GOOGLE, () => json({ audioContent: audio })]]);
-    expect((await call(`/tts?episode=${ep.id}&line=0`, cookie)).status).toBe(404);
     expect((await call("/tts?episode=nope&line=0", cookie)).status).toBe(404);
     expect(fn).not.toHaveBeenCalled();
+    expect((await call(`/tts?episode=${ep.id}&line=0`, cookie)).status).toBe(200);
   });
 
   it("answers 404 for an unverified episode", async () => {
@@ -137,7 +140,7 @@ describe("GET /tts", () => {
     stubFetch([[GOOGLE, () => json({}, 500)]]);
     expect((await call(`/tts?episode=${ep.id}&line=0`, cookie)).status).toBe(502);
     expect(JSON.stringify(errorSpy.mock.calls)).not.toContain("k-test");
-    expect(await env.BUCKET.get(`tts/${ep.id}/0.mp3`)).toBeNull();
+    expect(await env.BUCKET.get(await audioKey("ja", "male", "こんばんは"))).toBeNull();
   });
 
   it("answers 502 without a request or a stored clip when the service-account json is invalid", async () => {
@@ -147,7 +150,7 @@ describe("GET /tts", () => {
     expect(res.status).toBe(502);
     expect(await res.json()).toEqual({ error: "tts failed" });
     expect(fn).not.toHaveBeenCalled();
-    expect(await env.BUCKET.get(`tts/${ep.id}/0.mp3`)).toBeNull();
+    expect(await env.BUCKET.get(await audioKey("ja", "male", "こんばんは"))).toBeNull();
   });
 
   it("answers 502 and never calls the TTS endpoint when the token endpoint fails", async () => {
@@ -161,7 +164,7 @@ describe("GET /tts", () => {
     expect(res.status).toBe(502);
     expect(await res.json()).toEqual({ error: "tts failed" });
     expect(fn.mock.calls.map(([u]) => String(u))).toEqual(["https://oauth2.googleapis.com/token"]);
-    expect(await env.BUCKET.get(`tts/${ep.id}/0.mp3`)).toBeNull();
+    expect(await env.BUCKET.get(await audioKey("ja", "male", "こんばんは"))).toBeNull();
   });
 
   it("never logs the key when fetch itself throws", async () => {
@@ -196,14 +199,14 @@ describe("GET /tts", () => {
 
   it("finds the clip in R2 after winning the claim when the first read missed it", async () => {
     const { cookie, ep } = await setup();
-    const key = `tts/${ep.id}/3.mp3`;
+    const key = await audioKey("ja", "male", "つぎの曲です");
     // A claims, B misses R2, A puts and releases, B claims: the first read misses although the clip lands right after it.
     let reads = 0;
     const bucket = new Proxy(env.BUCKET, {
       get(target, prop) {
-        if (prop !== "get") return Reflect.get(target, prop).bind(target);
+        if (prop !== "head") return Reflect.get(target, prop).bind(target);
         return async (k: string) => {
-          if (reads++ > 0) return target.get(k);
+          if (reads++ > 0) return target.head(k);
           await target.put(k, new Uint8Array([1, 2, 3]));
           return null;
         };
@@ -219,7 +222,7 @@ describe("GET /tts", () => {
 
   it("answers 503 with Retry-After when another request holds the claim and no clip appears", async () => {
     const { cookie, ep } = await setup();
-    await env.DB.prepare("INSERT INTO tts_claims (key, created_at) VALUES (?, ?)").bind(`tts/${ep.id}/3.mp3`, Date.now()).run();
+    await env.DB.prepare("INSERT INTO tts_claims (key, created_at) VALUES (?, ?)").bind(await audioKey("ja", "male", "つぎの曲です"), Date.now()).run();
     const { fn } = stubFetch([[GOOGLE, () => json({ audioContent: audio })]]);
     const res = await call(`/tts?episode=${ep.id}&line=3`, cookie);
     expect(res.status).toBe(503);
@@ -229,7 +232,7 @@ describe("GET /tts", () => {
 
   it("treats a claim older than a minute as free", async () => {
     const { cookie, ep } = await setup();
-    await env.DB.prepare("INSERT INTO tts_claims (key, created_at) VALUES (?, ?)").bind(`tts/${ep.id}/3.mp3`, Date.now() - 61_000).run();
+    await env.DB.prepare("INSERT INTO tts_claims (key, created_at) VALUES (?, ?)").bind(await audioKey("ja", "male", "つぎの曲です"), Date.now() - 61_000).run();
     const { fn } = stubFetch([[GOOGLE, () => json({ audioContent: audio })]]);
     expect((await call(`/tts?episode=${ep.id}&line=3`, cookie)).status).toBe(200);
     expect(fn).toHaveBeenCalledTimes(1);
@@ -244,6 +247,29 @@ describe("GET /tts", () => {
     const { fn } = stubFetch([[GOOGLE, () => json({ audioContent: audio })]]);
     expect((await call(`/tts?episode=${ep.id}&line=3`, cookie)).status).toBe(200);
     expect(fn).toHaveBeenCalledTimes(1);
+  });
+
+  it("synthesizes a letter read by two listeners once, for both", async () => {
+    const a = await setup();
+    const cookieB = await newSession();
+    const epB = await episodeFor(idOf(cookieB), true);
+    const { fn } = stubFetch([[GOOGLE, () => json({ audioContent: audio })]]);
+    expect((await call(`/tts?episode=${a.ep.id}&line=2`, a.cookie)).status).toBe(200);
+    expect((await call(`/tts?episode=${epB.id}&line=2`, cookieB)).status).toBe(200);
+    expect(fn).toHaveBeenCalledTimes(1);
+    expect(await env.DB.prepare("SELECT COUNT(*) AS n FROM tts_audio").first<{ n: number }>()).toEqual({ n: 1 });
+  });
+
+  it("answers 503 tts limit over the daily cap without calling Google, but serves stored clips", async () => {
+    const { cookie, ep } = await setup();
+    const { fn } = stubFetch([[GOOGLE, () => json({ audioContent: audio })]]);
+    const capped = { ...keyed, CLOUD_TTS_GLOBAL_DAILY_LIMIT: "1" };
+    expect((await call(`/tts?episode=${ep.id}&line=0`, cookie, capped)).status).toBe(200);
+    const res = await call(`/tts?episode=${ep.id}&line=3`, cookie, capped);
+    expect(res.status).toBe(503);
+    expect(await res.json()).toEqual({ error: "tts limit" });
+    expect(fn).toHaveBeenCalledTimes(1);
+    expect((await call(`/tts?episode=${ep.id}&line=0`, cookie, capped)).status).toBe(200);
   });
 
   it("limits each listener, then each IP, with a JSON 429", async () => {

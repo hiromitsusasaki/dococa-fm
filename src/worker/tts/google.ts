@@ -1,6 +1,7 @@
 import type { Env } from "../env";
 import { accessToken, parseServiceAccount, type ServiceAccount } from "./google-auth";
-import { DJ_STYLE_PROMPT } from "./style";
+import type { AudioLang, AudioVoice } from "./audio";
+import { DJ_STYLE_PROMPT, DJ_STYLE_PROMPT_EN } from "./style";
 
 const ENDPOINT = "https://texttospeech.googleapis.com/v1/text:synthesize";
 const DEFAULT_MODEL = "gemini-2.5-flash-tts";
@@ -38,14 +39,14 @@ function fromBase64(b64: string): Uint8Array {
   return Uint8Array.from(bin, (c) => c.charCodeAt(0));
 }
 
-async function synthesizeChunk(env: Env, sa: ServiceAccount, text: string, voice: "male" | "female"): Promise<Uint8Array> {
+async function synthesizeChunk(env: Env, sa: ServiceAccount, text: string, voice: AudioVoice, lang: AudioLang): Promise<Uint8Array> {
   const token = await accessToken(sa);
   const res = await fetch(ENDPOINT, {
     method: "POST",
     headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
     body: JSON.stringify({
-      input: { text, prompt: DJ_STYLE_PROMPT },
-      voice: { languageCode: "ja-JP", name: VOICE_NAME[voice], modelName: env.GEMINI_TTS_MODEL || DEFAULT_MODEL },
+      input: { text, prompt: lang === "en" ? DJ_STYLE_PROMPT_EN : DJ_STYLE_PROMPT },
+      voice: { languageCode: lang === "en" ? "en-US" : "ja-JP", name: VOICE_NAME[voice], modelName: env.GEMINI_TTS_MODEL || DEFAULT_MODEL },
       audioConfig: { audioEncoding: "MP3" },
     }),
     signal: AbortSignal.timeout(TIMEOUT_MS),
@@ -58,10 +59,10 @@ async function synthesizeChunk(env: Env, sa: ServiceAccount, text: string, voice
 }
 
 /** Reads `text` aloud as MP3. Long text goes out in pieces and the MP3 frames are joined in order. */
-export async function synthesize(env: Env, text: string, voice: "male" | "female"): Promise<ArrayBuffer> {
+export async function synthesize(env: Env, text: string, voice: AudioVoice, lang: AudioLang): Promise<ArrayBuffer> {
   const sa = parseServiceAccount(env.GOOGLE_TTS_SA_JSON);
   const parts: Uint8Array[] = [];
-  for (const chunk of splitText(text)) parts.push(await synthesizeChunk(env, sa, chunk, voice));
+  for (const chunk of splitText(text)) parts.push(await synthesizeChunk(env, sa, chunk, voice, lang));
   const out = new Uint8Array(parts.reduce((n, p) => n + p.length, 0));
   let at = 0;
   for (const p of parts) {

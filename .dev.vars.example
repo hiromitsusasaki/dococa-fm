@@ -26,8 +26,8 @@ DEV_SKIP_CLAUDE=1
 EPISODE_DAILY_LIMIT=10
 # 任意: 全リスナー合計の 1 日の番組生成の上限（既定 300。0 で停止）
 EPISODE_GLOBAL_DAILY_LIMIT=300
-# 任意: クラウド TTS を使う回の 1 日の上限（既定 50。0 で停止）
-CLOUD_TTS_GLOBAL_DAILY_LIMIT=50
+# 任意: クラウド TTS で 1 日に合成する行数の上限（既定 3000。0 で停止）
+CLOUD_TTS_GLOBAL_DAILY_LIMIT=3000
 # 任意: 1 分あたりの書き込みの上限（IP・リスナーごと。既定 20）
 RATE_LIMIT_PER_MINUTE=20
 # 任意: 台本生成に使う Claude のモデル

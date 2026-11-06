@@ -21,9 +21,9 @@
 - 書き込みの `POST` は同一オリジンのみです。`Origin` があれば `PUBLIC_ORIGIN` と一致が必要で、無いときは `Sec-Fetch-Site` が `same-origin` か `none` のときだけ通します（curl などブラウザ以外は通ります。Cookie を持たないため）。
 - レート制限: `POST /letters`、`/settings`、`/settings/mcp-token`、`/settings/dial`、`/auth/signout`、`/episodes`、`/episodes/:id/next`、`/stations/:key/next`、`/start`、`/put/register`、`/takedown`、お便りの通報、`GET /auth/google`、`GET /put?itemId=|url=`、`/api/*` は、IP（`CF-Connecting-IP`）とリスナーのそれぞれで 1 分 20 回までです。`GET /tts` はリスナーごとに 1 分 60 回、IP ごとに 120 回です。`/mcp/*` は下の規則です。超えると 429 を返します。
 - リクエストの本文は、`/admin/*` 以外 64 KB まで、`/admin/*` は 1 MB までです（超えると 413）。
-- クラウドの声は、同じ行への同時の要求でも合成を 1 回だけ呼びます（D1 の `tts_claims` で取り合い、負けた要求は R2 に音声ができるのを待ちます）。
+- クラウドの声は、行の本文・言語・声から決まる鍵（`tts/v2/…/<本文の SHA-256>.mp3`）で R2 に 1 回だけ作り、全リスナーで共有します。同じ行への同時の要求でも合成は 1 回です（D1 の `tts_claims` で取り合い、負けた要求は R2 に音声ができるのを待ちます）。
 - `PUBLIC_ORIGIN` が空のときは、`/healthz` 以外すべて 500 を返します。鍵が空のときにお便りの判定と翻訳を素通しにするのは、`DEV_SKIP_CLAUDE=1` を明示した開発環境だけです。
-- 番組の作成は、リスナーごとの 1 日の上限（`EPISODE_DAILY_LIMIT`、既定 10）と、全体の 1 日の上限（`EPISODE_GLOBAL_DAILY_LIMIT`、既定 300）があります。クラウドの声（Gemini-TTS）には全体の 1 日の上限（`CLOUD_TTS_GLOBAL_DAILY_LIMIT`、既定 50）があり、超えるとブラウザの音声に切り替わります。どの上限も `0` は停止、日は日本時間で数えます。
+- 番組の作成は、リスナーごとの 1 日の上限（`EPISODE_DAILY_LIMIT`、既定 10）と、全体の 1 日の上限（`EPISODE_GLOBAL_DAILY_LIMIT`、既定 300）があります。クラウドの声（Gemini-TTS）は全員の番組に付きますが、合成する行数に全体の 1 日の上限（`CLOUD_TTS_GLOBAL_DAILY_LIMIT`、既定 3000。合成のたびに D1 の `tts_audio` に 1 行足して数え、有料の呼び出しの前に確かめます）があり、超えた行は `GET /tts` が 503 を返してブラウザの音声に切り替わります。合成済みの行は上限を超えても聞けます。どの上限も `0` は停止、日は日本時間で数えます。
 - `secureHeaders()` で標準のセキュリティヘッダを付けています。CSP は付けていません（プレイヤーが JSON の script ブロックとバンドルを使うため）。
 
 ### Google サインインと秘密

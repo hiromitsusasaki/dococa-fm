@@ -5,8 +5,7 @@ import { getEpisode, insertEpisode, listEpisodes } from "../../../src/worker/db/
 import { upsertHistory } from "../../../src/worker/db/history";
 import { insertItem } from "../../../src/worker/db/items";
 import { insertLetter, setLetterStatus } from "../../../src/worker/db/letters";
-import { makeEpisode } from "../../../src/worker/program/create";
-import { createListener, getListener } from "../../../src/worker/db/listeners";
+import { createListener } from "../../../src/worker/db/listeners";
 import type { Episode } from "../../../src/worker/types";
 import { resetDb } from "../../helpers/db";
 import { itemDraft, letterDraft } from "../db/helpers";
@@ -88,13 +87,11 @@ describe("POST /episodes", () => {
 });
 
 describe("global daily caps", () => {
-  const keyed = { ...env, GOOGLE_TTS_SA_JSON: "sa-test" };
-
   /** Episodes made today by other listeners, as if a cookie-reset loop had made them. */
-  async function othersMade(n: number, cloudTts = false) {
+  async function othersMade(n: number) {
     for (let i = 0; i < n; i++) {
       const other = await createListener(env.DB);
-      await insertEpisode(env.DB, { listenerId: other.id, segments: [], verified: true, report: {} as Episode["report"], cloudTts });
+      await insertEpisode(env.DB, { listenerId: other.id, segments: [], verified: true, report: {} as Episode["report"] });
     }
   }
 
@@ -115,24 +112,6 @@ describe("global daily caps", () => {
     await seed(cookie);
     expect((await post("/episodes", cookie, { ...env, EPISODE_GLOBAL_DAILY_LIMIT: "0" })).status).toBe(429);
     expect((await post("/episodes", cookie, { ...env, EPISODE_GLOBAL_DAILY_LIMIT: "many" })).status).toBe(303);
-  });
-
-  it("keeps making episodes past the cloud voice cap, without the voice and without using up the first-episode allowance", async () => {
-    const cookie = await newSession();
-    await seed(cookie);
-    await othersMade(1, true);
-    const id = locationId(await post("/episodes", cookie, { ...keyed, CLOUD_TTS_GLOBAL_DAILY_LIMIT: "1" }));
-    expect((await getEpisode(env.DB, id))!.cloudTts).toBe(false);
-    expect((await getListener(env.DB, idOf(cookie)))!.cloudTtsUsed).toBe(false);
-    const later = locationId(await post("/episodes", cookie, { ...keyed, CLOUD_TTS_GLOBAL_DAILY_LIMIT: "2" }));
-    expect((await getEpisode(env.DB, later))!.cloudTts).toBe(true);
-  });
-
-  it("treats a cloud voice cap of 0 as paused", async () => {
-    const cookie = await newSession();
-    await seed(cookie);
-    const id = locationId(await post("/episodes", cookie, { ...keyed, CLOUD_TTS_GLOBAL_DAILY_LIMIT: "0" }));
-    expect((await getEpisode(env.DB, id))!.cloudTts).toBe(false);
   });
 });
 
@@ -160,79 +139,6 @@ describe("unverified episodes", () => {
     expect((await get(`/episodes/${row.id}.json`, cookie)).status).toBe(404);
     const ok = await insertEpisode(env.DB, { listenerId: idOf(cookie), segments: [], verified: true, report: {} as Episode["report"] });
     expect((await get(`/episodes/${ok.id}`, cookie)).status).toBe(200);
-  });
-});
-
-describe("cloud tts rule", () => {
-  const keyed = { ...env, GOOGLE_TTS_SA_JSON: "sa-test" };
-  const flag = async (id: string) => (await env.DB.prepare("SELECT cloud_tts_used AS u FROM listeners WHERE id = ?").bind(id).first<{ u: number }>())!.u;
-
-  it("gives the first episode of a listener the cloud voice, and only that one", async () => {
-    const cookie = await newSession();
-    await seed(cookie);
-    const firstId = locationId(await post("/episodes", cookie, keyed));
-    expect((await getEpisode(env.DB, firstId))!.cloudTts).toBe(true);
-    expect(await (await get(`/episodes/${firstId}`, cookie)).text()).toContain('data-tts-url="/tts"');
-    expect(await flag(idOf(cookie))).toBe(1);
-
-    const secondId = ((await (await post(`/episodes/${firstId}/next`, cookie, keyed)).json()) as { id: string }).id;
-    expect((await getEpisode(env.DB, secondId))!.cloudTts).toBe(false);
-    expect(await (await get(`/episodes/${secondId}`, cookie)).text()).toContain('data-tts-url=""');
-  });
-
-  it("without a TTS key the first episode has no cloud voice and the allowance is kept", async () => {
-    const cookie = await newSession();
-    await seed(cookie);
-    const noKey = { ...env, GOOGLE_TTS_SA_JSON: "" };
-    const id = locationId(await post("/episodes", cookie, noKey));
-    expect((await getEpisode(env.DB, id))!.cloudTts).toBe(false);
-    expect(await (await get(`/episodes/${id}`, cookie)).text()).toContain('data-tts-url=""');
-    expect(await flag(idOf(cookie))).toBe(0);
-    // Once a key exists, the next episode is the first with the voice.
-    const later = locationId(await post("/episodes", cookie, keyed));
-    expect((await getEpisode(env.DB, later))!.cloudTts).toBe(true);
-  });
-
-  it("does not use up the first-episode voice when a build fails", async () => {
-    const cookie = await newSession();
-    const { me, near, mine } = await seed(cookie);
-    await insertLetter(env.DB, letterDraft(near.id, { kind: "watashimo", listenerId: null, radioName: me, place: "", parentLetterId: mine.id, body: "私も", bodyJa: "私も" }));
-    expect((await post("/episodes", cookie, keyed)).status).toBe(503);
-    expect(await flag(me)).toBe(0);
-  });
-
-  it("gives the claim back when the insert fails after it", async () => {
-    const cookie = await newSession();
-    await seed(cookie);
-    const listener = (await getListener(env.DB, idOf(cookie)))!;
-    const db = new Proxy(env.DB, {
-      get(target, prop) {
-        if (prop === "prepare") return (sql: string) => (sql.startsWith("INSERT INTO episodes") ? (() => { throw new Error("boom"); })() : target.prepare(sql));
-        const v = Reflect.get(target, prop) as unknown;
-        return typeof v === "function" ? v.bind(target) : v;
-      },
-    });
-    const made = await makeEpisode({ ...keyed, DB: db }, listener);
-    expect(made).toEqual({ ok: false, reason: "unavailable" });
-    expect(await flag(listener.id)).toBe(0);
-  });
-
-  it("lets a demo episode (cloudTts option) have the voice without using up the listener's first", async () => {
-    const cookie = await newSession();
-    await seed(cookie);
-    const listener = (await getListener(env.DB, idOf(cookie)))!;
-    const made = await makeEpisode(keyed, listener, { cloudTts: true });
-    expect(made.ok).toBe(true);
-    expect((await getEpisode(env.DB, (made as { id: string }).id))!.cloudTts).toBe(true);
-    expect((await getListener(env.DB, listener.id))!.cloudTtsUsed).toBe(false);
-  });
-
-  it("a demo episode without a key falls back to the browser voice", async () => {
-    const cookie = await newSession();
-    await seed(cookie);
-    const listener = (await getListener(env.DB, idOf(cookie)))!;
-    const made = await makeEpisode({ ...env, GOOGLE_TTS_SA_JSON: "" }, listener, { cloudTts: true });
-    expect((await getEpisode(env.DB, (made as { id: string }).id))!.cloudTts).toBe(false);
   });
 });
 

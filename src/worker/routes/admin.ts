@@ -147,13 +147,13 @@ admin.get("/admin/items/:id", async (c) => {
 
 const episodeSchema = z.object({ listenerId: z.string().min(1) });
 
-/** The operator's own demo episode: made for the given listener with the cloud voice, which does not use up their first-episode voice. */
+/** The operator's own demo episode, made for the given listener. */
 admin.post("/admin/episodes", async (c) => {
   const parsed = episodeSchema.safeParse(await readJson(c));
   if (!parsed.success) return invalid(c, parsed.error);
   const listener = await getListener(c.env.DB, parsed.data.listenerId);
   if (!listener) return c.json({ error: "listener not found" }, 404);
-  const made = await makeEpisode(c.env, listener, { cloudTts: true });
+  const made = await makeEpisode(c.env, listener);
   if (!made.ok) return c.json({ error: made.reason }, made.reason === "limit" ? 429 : made.reason === "empty" ? 409 : 503);
   const episode = await getEpisode(c.env.DB, made.id);
   return c.json({ id: made.id, cloudTts: episode?.cloudTts === true });

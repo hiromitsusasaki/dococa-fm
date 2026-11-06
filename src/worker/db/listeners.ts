@@ -73,17 +73,6 @@ export async function createListener(db: D1Database, init: Partial<Pick<Listener
   return listener;
 }
 
-/** Atomically takes the listener's one cloud-voice episode: true for the single caller that flips the flag. */
-export async function claimCloudTts(db: D1Database, id: string): Promise<boolean> {
-  const res = await db.prepare("UPDATE listeners SET cloud_tts_used = 1 WHERE id = ? AND cloud_tts_used = 0").bind(id).run();
-  return res.meta.changes > 0;
-}
-
-/** Gives the one cloud-voice episode back, after a failed insert. */
-export async function releaseCloudTts(db: D1Database, id: string): Promise<void> {
-  await db.prepare("UPDATE listeners SET cloud_tts_used = 0 WHERE id = ?").bind(id).run();
-}
-
 export async function getListener(db: D1Database, id: string): Promise<Listener | null> {
   const row = await db.prepare("SELECT * FROM listeners WHERE id = ?").bind(id).first<Row>();
   return row ? rowToListener(row) : null;
