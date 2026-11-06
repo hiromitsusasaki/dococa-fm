@@ -32,13 +32,13 @@ export function newMcpToken(): string {
   return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
 }
 
-export async function createListener(db: D1Database, init: Partial<Pick<Listener, "radioName" | "place" | "demo" | "lang">> = {}): Promise<Listener> {
+export async function createListener(db: D1Database, init: Partial<Pick<Listener, "radioName" | "place" | "placeCountry" | "placeRegion" | "demo" | "lang">> = {}): Promise<Listener> {
   const listener: Listener = {
     id: crypto.randomUUID(),
     radioName: init.radioName ?? "",
     place: init.place ?? "",
-    placeCountry: null,
-    placeRegion: null,
+    placeCountry: init.placeCountry ?? null,
+    placeRegion: init.placeRegion ?? null,
     voice: "",
     dial: 0.3,
     lang: init.lang ?? "ja",
@@ -54,13 +54,15 @@ export async function createListener(db: D1Database, init: Partial<Pick<Listener
   };
   await db
     .prepare(
-      `INSERT INTO listeners (id, radio_name, place, voice, dial, lang, mcp_token, spotify_refresh_token, demo, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO listeners (id, radio_name, place, place_country, place_region, voice, dial, lang, mcp_token, spotify_refresh_token, demo, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .bind(
       listener.id,
       listener.radioName,
       listener.place,
+      listener.placeCountry,
+      listener.placeRegion,
       listener.voice,
       listener.dial,
       listener.lang,

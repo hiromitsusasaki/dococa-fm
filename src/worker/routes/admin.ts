@@ -9,6 +9,8 @@ import { getLetter, insertLetter, listFoundSources, setLetterStatus } from "../d
 import { createListener, getListener } from "../db/listeners";
 import type { Env } from "../env";
 import { defer } from "../defer";
+import { isValidRegion, placeLabel } from "../geo/place-label";
+import { COUNTRIES } from "../geo/places";
 import { createLetter } from "../letters/create";
 import { makeEpisode } from "../program/create";
 import { prepareBatch, prepareLetter } from "../program/prepare";
@@ -185,18 +187,28 @@ const MAX_NAME = 20;
 const MAX_PLACE = 30;
 
 const noContact = (s: string) => !looksLikeContact(s);
-const listenerSchema = z.object({
-  radioName: z.string().trim().min(1).max(MAX_NAME).refine(noContact, "radioName must not look like contact details"),
-  place: z.string().trim().max(MAX_PLACE).refine(noContact, "place must not look like contact details"),
-  // Only demo accounts can be made here, so this route cannot mint a listener that passes for a real one.
-  demo: z.literal(true),
-});
+const listenerSchema = z
+  .object({
+    radioName: z.string().trim().min(1).max(MAX_NAME).refine(noContact, "radioName must not look like contact details"),
+    place: z.string().trim().max(MAX_PLACE).refine(noContact, "place must not look like contact details"),
+    // ISO 3166-1 alpha-2 from the settings list, and a region of that country (JP prefectures, US states).
+    placeCountry: z.string().refine((v) => COUNTRIES.some((p) => p.code === v), "placeCountry must be a listed country code").optional(),
+    placeRegion: z.string().min(1).optional(),
+    // Only demo accounts can be made here, so this route cannot mint a listener that passes for a real one.
+    demo: z.literal(true),
+  })
+  .refine((v) => v.placeRegion === undefined || (v.placeCountry !== undefined && isValidRegion(v.placeCountry, v.placeRegion)), "placeRegion must be a region of placeCountry");
 
-/** A demo account: an AI-made persona for seeding, marked `demo` so every surface says so. */
+/**
+ * A demo account: an AI-made persona for seeding, marked `demo` so every surface says so. With place codes,
+ * `place` is the Japanese label made from them, as the settings screen stores it.
+ */
 admin.post("/admin/listeners", async (c) => {
   const parsed = listenerSchema.safeParse(await readJson(c));
   if (!parsed.success) return invalid(c, parsed.error);
-  const listener = await createListener(c.env.DB, parsed.data);
+  const { placeCountry, placeRegion, ...rest } = parsed.data;
+  const coded = placeCountry ? { placeCountry, placeRegion: placeRegion ?? null, place: placeLabel(placeCountry, placeRegion ?? null, "ja") } : {};
+  const listener = await createListener(c.env.DB, { ...rest, ...coded });
   return c.json({ id: listener.id });
 });
 

@@ -17,6 +17,7 @@ Phase 2（ラジオ中心の体験への作り替え）と Phase 3（単位・�
 - [ ] `pnpm db:migrate` で本番に 0005〜0013 を当てる（0005 station、0006 episode_station、0007 place、0008 tts_audio、0009 units、0010 listens、0011 letters_place、0012 episode_lang、0013 tts_audio_synth_count。0013 は最終修正で足した。コマンドは未適用のものを全部当てる）。
 - [ ] `pnpm run deploy`。
 - [ ] デプロイ後、`POST /admin/prepare`（`Authorization: Bearer $ADMIN_TOKEN`）で、デモデータの日本語と英語の単位と音声を先に作っておく。1 回の実行は単位と音声を合わせて最大 `limit` 件なので、`remaining` が 0 になるか `failed` が変わらなくなるまで繰り返す。音声の上限（既定 3000 行/日）に当たったら翌日（JST）に続く（Cron は 15 分ごとに 20 件ずつ埋める）。
+- [ ] 本番のデモデータは土地コードなしでシードしてある（`/admin/listeners` がコードを受け取るのは最終修正から）。英語の画面と英語の DJ では、コードの無いペルソナのお便りに日本語の土地（`place`）が出る。直すにはペルソナを作り直して再シードする（`pnpm seed --reuse` はペルソナの国名からコードを付けて送る）。するかどうかは本人が決める。
 - [ ] シードの量に注意: お便り 1 通で音声はおよそ 8 行（日本語と英語の intro・手渡し・お便り・after）、ほかにつなぎの定型が 14 行（7 本 × 2 言語）を一度だけ使う。単位はお便り 1 通・1 言語で Claude を 2〜4 回呼ぶ。大量に入れるなら、デモの前日にシードするか、その日だけ `CLOUD_TTS_GLOBAL_DAILY_LIMIT` を上げる（`UNIT_DAILY_LIMIT` と `LETTER_GLOBAL_DAILY_LIMIT` も同じ）。
 - [ ] 本番で確かめる: ホームの「ラジオをつける」、Google サインイン、`/me`、公開局 `/stations/s:<slug>`、日本語と英語の切り替え。
 - [ ] Spotify Developer Dashboard の Redirect URI を `https://dococafm.app/auth/spotify/callback`、Website を `https://dococafm.app` に。TMDB の Application URL も同じく（済んでいなければ。新ドメインに揃える）。
@@ -76,7 +77,7 @@ Phase 2（ラジオ中心の体験への作り替え）と Phase 3（単位・�
 | Task 6 | 聴いた記録 | 完了（`listens`（リスナー × お便り）を 0010 で追加。プレイヤーが読み上げ始めたお便りの行で `POST /listens`（`reply` は送らない）、サーバーは自分の検証済みの回・公開のお便り・公開ビューの枠の添字が合うときだけ 204、他は 404。マイページの聴いたお便りはこの表から出す） |
 | Task 7 | お便りの土地コード | 完了（`letters.place_country` / `place_region` を 0011 で追加。送るときにリスナーの値を写し、見つけた声は null。画面と `whoLine` は言語に合わせてコードから引き、無ければ `place`。番組の台本の手紙行にもコードを載せ、検証で突き合わせる。クライアントは `places.ts` を取り込む（一覧は player と station が共有するチャンク `reactions-*.js` に入り、その gzip は Task 7 で 9.1 KB から 15.2 KB に増えた。最終修正の後は 15.3 KB。entry の station.js 自体は gzip 約 3.9 KB）。DJ の読みは日本語の `place` のまま） |
 | Task 8 | 英語の DJ | 完了（`episodes.lang` を 0012 で追加し、番組は聴く人の言語で組む。`lang = en` の単位は `DJ_SYSTEM_EN` と英語の `write_unit` で書き、お便りは `body_en`（無ければ原文）を読み、手渡し・反応・つなぎの定型も英語、土地はコードから英語で言う。検証は英語用の時事・年・数え上げ・再生の誘い・手渡しの語彙と 6 語の引用窓。`/tts` は回の言語で合成（`en-US` と `DJ_STYLE_PROMPT_EN`）。`prepareLetter` と `prepareBatch`（Cron・`/admin/prepare`）は ja → en の順に両方の単位と音声を作る。`remaining` は言語ごと） |
-| 最終修正 | 全体レビュー（opus と Codex）の裁定 | 完了（単位・お便りの 1 日の上限 `UNIT_DAILY_LIMIT` / `LETTER_GLOBAL_DAILY_LIMIT`、合成のたびに数える `synth_count`（0013）、単位はお便り × 言語ごとに 1 人だけが作り、検証済みの単位は上書きしない、batch は `limit` を 1 回の総数として使う、`prepareLetter` は単位を両方作ってから音声、Cron は待つ、公開局のつなぎは「続いてのお便りです。」、つなぎの文言、`/listens` の専用の枠、聴き直しと再開はお便りの id で枠を探す、intro に送り主の名前と土地を言わせない、空の intro/after は形の不備、intro は先頭のお便りのものだけ、検証の語彙の追加） |
+| 最終修正 | 全体レビュー（opus と Codex）の裁定 | 完了（単位・お便りの 1 日の上限 `UNIT_DAILY_LIMIT` / `LETTER_GLOBAL_DAILY_LIMIT`、合成のたびに数える `synth_count`（0013）、単位はお便り × 言語ごとに 1 人だけが作り、検証済みの単位は上書きしない、batch は `limit` を 1 回の総数として使う、`prepareLetter` は単位を両方作ってから音声、Cron は待つ、公開局のつなぎは「続いてのお便りです。」、つなぎの文言、`/listens` の専用の枠、聴き直しと再開はお便りの id で枠を探す、intro に送り主の名前と土地を言わせない、空の intro/after は形の不備、intro は先頭のお便りのものだけ、検証の語彙の追加、デモのペルソナに国コード） |
 
 ### 決定（Phase 3）
 - 聴いたお便りの履歴は、デプロイの時点で空から始まる（最終レビュー M8）。`/me` の「聴いたお便り」は Phase 3 から `listens`（プレイヤーが実際に読み上げ始めたお便り）だけを読み、それより前の回は移さない。作った回に入っていたことと、聴いたことは別のため。

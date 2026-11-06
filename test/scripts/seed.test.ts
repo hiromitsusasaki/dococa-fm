@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
   MAX_LETTER,
@@ -12,6 +13,8 @@ import {
   parseItemUrls,
   letterPrompt,
   placeOf,
+  placeCodesOf,
+  listenerPayload,
   uniqueById,
   pageShows,
   parseLetters,
@@ -224,5 +227,29 @@ describe("uniqueById", () => {
   it("keeps the first of each id", () => {
     const it = (id: string, url: string): SeedItem => ({ id, title: "t", creator: "c", kind: "music", url });
     expect(uniqueById([it("a", "u1"), it("b", "u2"), it("a", "u3")]).map((x) => x.url)).toEqual(["u1", "u2"]);
+  });
+});
+
+describe("place codes for personas", () => {
+  it("maps the country by its Japanese or English name, an alias, and a Japanese prefecture at the start of the place", () => {
+    expect(placeCodesOf({ country: "日本", place: "広島県尾道" })).toEqual({ placeCountry: "JP", placeRegion: "34" });
+    expect(placeCodesOf({ country: "日本", place: "北海道旭川" })).toEqual({ placeCountry: "JP", placeRegion: "01" });
+    expect(placeCodesOf({ country: "日本", place: "尾道" })).toEqual({ placeCountry: "JP" });
+    expect(placeCodesOf({ country: "ポルトガル", place: "ポルト" })).toEqual({ placeCountry: "PT" });
+    expect(placeCodesOf({ country: "Portugal", place: "Porto" })).toEqual({ placeCountry: "PT" });
+    expect(placeCodesOf({ country: "スコットランド", place: "インヴァネス" })).toEqual({ placeCountry: "GB" });
+    expect(placeCodesOf({ country: "アメリカ", place: "ルイジアナ州ラファイエット" })).toEqual({ placeCountry: "US" });
+    expect(placeCodesOf({ country: "どこか", place: "x" })).toBeNull();
+  });
+
+  it("gives every persona in docs/demo/personas.json a country code", () => {
+    const { personas } = parsePersonas(JSON.parse(readFileSync("docs/demo/personas.json", "utf8")));
+    expect(personas.length).toBeGreaterThan(0);
+    for (const p of personas) expect(placeCodesOf(p), p.radioName).not.toBeNull();
+  });
+
+  it("sends the codes with the free-text place, and only the place when the country is unknown", () => {
+    expect(listenerPayload(persona({ country: "日本", place: "島根県松江市" }))).toEqual({ radioName: persona().radioName, place: "島根県松江市、日本", placeCountry: "JP", placeRegion: "32", demo: true });
+    expect(listenerPayload(persona({ country: "どこか", place: "x" }))).toEqual({ radioName: persona().radioName, place: "x、どこか", demo: true });
   });
 });

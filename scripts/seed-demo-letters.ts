@@ -29,7 +29,7 @@ import {
   type SeedItem,
   letterPrompt,
   pageShows,
-  placeOf,
+  listenerPayload,
   uniqueById,
   parseArgs,
   parseItemUrls,
@@ -142,7 +142,7 @@ async function seedPersona(client: Anthropic, persona: Persona, assigned: SeedIt
     return { posted: 0, skipped, mismatched };
   }
 
-  const made = await admin("POST", "/admin/listeners", { radioName: persona.radioName, place: placeOf(persona), demo: true });
+  const made = await admin("POST", "/admin/listeners", listenerPayload(persona));
   if (made.status === 422) {
     console.warn(`  skip ${persona.radioName}: listener refused (${JSON.stringify(made.json).slice(0, 120)})`);
     return { posted, skipped: skipped + letters.length, mismatched };

@@ -1,4 +1,5 @@
 /** The pure parts of the demo seeder: prompts, validation of what the model wrote, and argument handling. */
+import { COUNTRIES, REGIONS } from "../../src/worker/geo/places.ts";
 import { containsTopical } from "../../src/worker/program/topical-words.ts";
 import { looksLikeContact, normalizeText } from "../../src/worker/program/pii-patterns.ts";
 import { stripHtml } from "./found.ts";
@@ -63,6 +64,24 @@ export const MAX_RADIO_NAME = 20;
 export const MAX_PLACE = 30;
 /** The place as posted: town and country together, so it has to fit the 30 characters as a whole. */
 export const placeOf = (p: Pick<Persona, "place" | "country">): string => `${p.place}、${p.country}`;
+
+/** Country names a persona may use that are not on the settings list, by the code they belong to. */
+const COUNTRY_ALIASES: Record<string, string> = { スコットランド: "GB", イングランド: "GB", ウェールズ: "GB", 北アイルランド: "GB", Scotland: "GB", England: "GB", Wales: "GB" };
+
+/**
+ * The settings screen's codes for a persona: the country from its name (Japanese or English, as the settings
+ * list has it, or an alias), and for Japan the prefecture its place begins with. Null when the country is unknown.
+ */
+export function placeCodesOf(p: Pick<Persona, "place" | "country">): { placeCountry: string; placeRegion?: string } | null {
+  const name = p.country.trim();
+  const code = COUNTRY_ALIASES[name] ?? COUNTRIES.find((c) => c.ja === name || c.en.toLowerCase() === name.toLowerCase())?.code;
+  if (!code) return null;
+  const region = code === "JP" ? REGIONS.JP.find((r) => p.place.trim().startsWith(r.ja)) : undefined;
+  return region ? { placeCountry: code, placeRegion: region.code } : { placeCountry: code };
+}
+
+/** What `POST /admin/listeners` is sent for a persona: the free-text place, and its codes when they are known. */
+export const listenerPayload = (p: Persona) => ({ radioName: p.radioName, place: placeOf(p), ...(placeCodesOf(p) ?? {}), demo: true as const });
 const isText = (v: unknown, max = FIELD_MAX): v is string => typeof v === "string" && v.trim() !== "" && codePoints(v) <= max;
 
 export function checkPersona(p: Persona): Check {

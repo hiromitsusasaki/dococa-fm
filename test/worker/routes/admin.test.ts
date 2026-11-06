@@ -341,6 +341,19 @@ describe("POST /admin/listeners", () => {
   it("is behind the admin token", async () => {
     expect((await call("POST", "/admin/listeners", { radioName: "A", place: "x", demo: true }, {})).status).toBe(401);
   });
+
+  it("takes optional place codes and sets the place from their Japanese label", async () => {
+    const make = async (body: Record<string, unknown>) => ((await (await call("POST", "/admin/listeners", { radioName: "A", place: "尾道、日本", demo: true, ...body })).json()) as { id: string }).id;
+    expect(await getListener(env.DB, await make({ placeCountry: "JP", placeRegion: "34" }))).toMatchObject({ place: "広島", placeCountry: "JP", placeRegion: "34", demo: true });
+    expect(await getListener(env.DB, await make({ placeCountry: "PT" }))).toMatchObject({ place: "ポルトガル", placeCountry: "PT", placeRegion: null });
+    expect(await getListener(env.DB, await make({}))).toMatchObject({ place: "尾道、日本", placeCountry: null, placeRegion: null });
+  });
+
+  it("refuses an unknown country, a region of another country, a region without a country, and a region where none is listed", async () => {
+    for (const body of [{ placeCountry: "XX" }, { placeCountry: "jp" }, { placeCountry: "JP", placeRegion: "CA" }, { placeRegion: "34" }, { placeCountry: "PT", placeRegion: "01" }, { placeCountry: "JP", placeRegion: "" }]) {
+      expect((await call("POST", "/admin/listeners", { radioName: "A", place: "x", demo: true, ...body })).status, JSON.stringify(body)).toBe(422);
+    }
+  });
 });
 
 describe("POST /admin/letters", () => {
