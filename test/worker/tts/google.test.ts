@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Env } from "../../../src/worker/env";
 import { DJ_STYLE_PROMPT, DJ_STYLE_PROMPT_EN } from "../../../src/worker/tts/style";
-import { synthesize } from "../../../src/worker/tts/google";
+import { spokeThePrompt, synthesize } from "../../../src/worker/tts/google";
 import { resetTokenCache } from "../../../src/worker/tts/google-auth";
 import { json, stubFetch as stubRoutes } from "../../helpers/fetch";
 import { makeServiceAccount } from "../../helpers/service-account";
@@ -26,7 +26,7 @@ describe("synthesize", () => {
   it("posts the style prompt, model and voice, and decodes audioContent", async () => {
     const { ttsCalls } = stubFetch([[URL_PREFIX, () => json({ audioContent: b64([1, 2, 3]) })]]);
     const out = await synthesize(env, "こんばんは。", "male", "ja");
-    expect(bytesOf(out)).toEqual([1, 2, 3]);
+    expect(bytesOf(out.audio)).toEqual([1, 2, 3]);
     const [url, init] = ttsCalls()[0]!;
     expect(String(url)).toBe(URL_PREFIX);
     expect(init?.method).toBe("POST");
@@ -82,7 +82,7 @@ describe("synthesize", () => {
     expect(ttsCalls()).toHaveLength(2);
     const texts = ttsCalls().map((c) => JSON.parse(String(c[1]?.body)).input.text);
     expect(texts).toEqual([first, second]);
-    expect(bytesOf(out)).toEqual([1, 2]);
+    expect(bytesOf(out.audio)).toEqual([1, 2]);
   });
 
   it("hard-splits by code points when there is no 。 or 、", async () => {
@@ -98,5 +98,40 @@ describe("synthesize", () => {
   it("throws on a non-2xx response without echoing the body", async () => {
     stubFetch([[URL_PREFIX, () => json({ error: { message: "secret detail" } }, 403)]]);
     await expect(synthesize(env, "あ", "male", "ja")).rejects.toThrow("tts 403");
+  });
+});
+
+describe("spokeThePrompt", () => {
+  // 32 kbps: 4,000 bytes per second.
+  it("flags a clip far longer than its text", () => {
+    expect(spokeThePrompt(25 * 4000, "ここで一息。", "ja")).toBe(true); // 25 s for 6 code points
+    expect(spokeThePrompt(22 * 4000, "The next letter.", "en")).toBe(true);
+  });
+  it("accepts a clip within the per-character allowance", () => {
+    expect(spokeThePrompt(3 * 4000, "ここで一息。", "ja")).toBe(false); // 3 s ≤ 4 + 6 × 0.5
+    expect(spokeThePrompt(100 * 4000, "あ".repeat(300), "ja")).toBe(false); // 100 s ≤ 4 + 150
+    expect(spokeThePrompt(6 * 4000, "The next letter.", "en")).toBe(false);
+  });
+});
+
+describe("synthesize when the prompt is spoken", () => {
+  const longClip = () => json({ audioContent: btoa("x".repeat(25 * 4000)) });
+  it("makes the chunk again and counts every call", async () => {
+    let n = 0;
+    const { ttsCalls } = stubFetch([[URL_PREFIX, () => (++n < 3 ? longClip() : json({ audioContent: b64([7]) }))]]);
+    const out = await synthesize(env, "ここで一息。", "male", "ja");
+    expect(bytesOf(out.audio)).toEqual([7]);
+    expect(out.calls).toBe(3);
+    expect(ttsCalls()).toHaveLength(3);
+  });
+  it("gives up after three spoken prompts with a fixed message", async () => {
+    const { ttsCalls } = stubFetch([[URL_PREFIX, longClip]]);
+    await expect(synthesize(env, "ここで一息。", "male", "ja")).rejects.toThrow("tts prompt");
+    expect(ttsCalls()).toHaveLength(3);
+  });
+  it("counts one call for a clip of the expected length", async () => {
+    const { ttsCalls } = stubFetch([[URL_PREFIX, () => json({ audioContent: b64([1]) })]]);
+    expect((await synthesize(env, "ここで一息。", "male", "ja")).calls).toBe(1);
+    expect(ttsCalls()).toHaveLength(1);
   });
 });

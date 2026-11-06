@@ -14,7 +14,7 @@ Phase 2（ラジオ中心の体験への作り替え）と Phase 3（単位・�
 - [ ] `pnpm wrangler secret put GOOGLE_OAUTH_CLIENT_ID` と `pnpm wrangler secret put GOOGLE_OAUTH_CLIENT_SECRET` を実行し、`.dev.vars` にも同じ値を写す。
 - [ ] OAuth の同意画面を「本番」に公開する（テスト中のままだと、登録したテストユーザーしか入れない）。
 - [ ] Google Cloud で Books API を有効化し、キーを `.dev.vars` の `GOOGLE_BOOKS_API_KEY` と `pnpm wrangler secret put GOOGLE_BOOKS_API_KEY` に入れる（YouTube のキーに Books API を足して同じ値でもよい）。入ったら本のデモを追加投入する（`pnpm seed --items <file> --personas 30 --reuse --origin https://dococafm.app`）。
-- [ ] `pnpm db:migrate` で本番に 0005〜0014 を当てる（0005 station、0006 episode_station、0007 place、0008 tts_audio、0009 units、0010 listens、0011 letters_place、0012 episode_lang、0013 tts_audio_synth_count、0014 daily_count_indexes。0013 と 0014 は最終修正で足した。コマンドは未適用のものを全部当てる）。
+- [x] `pnpm db:migrate` で本番に 0005〜0014 を当てた（2026-11-06）。**0015（tts_v3）はまだ**: 音声の鍵を v3 に変え、`tts_audio` を空にして `units.audio_ready` を戻す。当てたら `pnpm run deploy` → `/admin/prepare` をやり直す。R2 の `tts/v2/` は手で消してよい（残っても害はない）。
 - [ ] `pnpm run deploy`。
 - [ ] デプロイ後、`POST /admin/prepare`（`Authorization: Bearer $ADMIN_TOKEN`）で、デモデータの日本語と英語の単位と音声を先に作っておく。1 回の実行は単位と音声を合わせて最大 `limit` 件なので、`remaining` が 0 になるか `failed` が変わらなくなるまで繰り返す。音声の上限（既定 3000 行/日）に当たったら翌日（JST）に続く（Cron は 15 分ごとに 20 件ずつ埋める）。
 - [ ] 本番のデモデータは土地コードなしでシードしてある（`/admin/listeners` がコードを受け取るのは最終修正から）。英語の画面と英語の DJ では、コードの無いペルソナのお便りに日本語の土地（`place`）が出る。直すにはペルソナを作り直して再シードする（`pnpm seed --reuse` はペルソナの国名からコードを付けて送る）。するかどうかは本人が決める。
@@ -80,6 +80,8 @@ Phase 2（ラジオ中心の体験への作り替え）と Phase 3（単位・�
 | 最終修正 | 全体レビュー（opus と Codex）の裁定 | 完了（単位・お便りの 1 日の上限 `UNIT_DAILY_LIMIT` / `LETTER_GLOBAL_DAILY_LIMIT`、合成のたびに数える `synth_count`（0013）、単位はお便り × 言語ごとに 1 人だけが作り、検証済みの単位は上書きしない、batch は `limit` を 1 回の総数として使う、`prepareLetter` は単位を両方作ってから音声、Cron は待つ、公開局のつなぎは「続いてのお便りです。」、つなぎの文言、`/listens` の専用の枠、聴き直しと再開はお便りの id で枠を探す、intro に送り主の名前と土地を言わせない、空の intro/after は形の不備、intro は先頭のお便りのものだけ、検証の語彙の追加、デモのペルソナに国コード） |
 
 ### 決定（Phase 3）
+
+- Gemini-TTS が style prompt を本文の前に読み上げることがある（2026-11-06 に本番で発覚。描写文の日本語 prompt では短い定型行のほぼ全部、命令形でも 6 回に 1 回。英語は描写文で正常、命令形で逆に悪化）。対処は 2 つ: 日本語 prompt を命令形（「次の文を、〜のように読んでください」）にし、合成した MP3 の長さ（32 kbps 固定なので bytes/4000 秒）が「4 秒 + 文字数 × 0.5（英語 0.35）」を超えたら prompt を読んだとみなして捨てて作り直す（3 回まで。全部だめなら `tts prompt` で失敗し、プレイヤーはブラウザの声に落ちる）。再試行の回数も日次上限に数える。v2 の音声は全部作り直し（鍵を `tts/v3/` に、0015 で `tts_audio` を空に）。
 - 聴いたお便りの履歴は、デプロイの時点で空から始まる（最終レビュー M8）。`/me` の「聴いたお便り」は Phase 3 から `listens`（プレイヤーが実際に読み上げ始めたお便り）だけを読み、それより前の回は移さない。作った回に入っていたことと、聴いたことは別のため。
 - 原文どおりの判定（Task 8）: お便りの行は、日本語の回では `body_ja` か原文、英語の回では `body_en` か原文と一字一句同じであること。英語の回で日本語訳を読むのは不可。引用の検査は日本語の回では原文と `body_ja`、英語の回ではそれに `body_en` を加えた全部と突き合わせる。英語の行は偶然の一致が多いので、引用の窓は 10 字ではなく 6 語。
 - 単位の並び（Task 4）: 枠は「つなぎ → intro（1 回だけ）→ 手渡し（定型）→ お便り → after」を通数ぶん、2 通目の前は sameWork、反応のあと最後の枠に close。intro は枠の先頭のお便り自身の検証済みの単位のものだけ（最終修正 C9 で変更。単位の intro はそのお便りを見せて書かせるので、別のお便りの前では言わない。先頭が一言の読み上げや単位の無いお便りなら intro は無し）。dj 行の `unit: { letterId, part }` で、非公開になったお便りの intro/after を `publicView` が落とす。手渡しの定型はお便りの種類を問わず一緒に落とす（以前の回の読み上げのみの手渡しも落ちる）。

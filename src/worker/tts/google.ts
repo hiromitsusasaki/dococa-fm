@@ -39,7 +39,32 @@ function fromBase64(b64: string): Uint8Array {
   return Uint8Array.from(bin, (c) => c.charCodeAt(0));
 }
 
-async function synthesizeChunk(env: Env, sa: ServiceAccount, text: string, voice: AudioVoice, lang: AudioLang): Promise<Uint8Array> {
+/** The API's MP3 is 32 kbps CBR mono, so a clip's length follows from its bytes. */
+const BYTES_PER_SECOND = 4000;
+/** A clip may run this long per code point of its text, plus a fixed allowance for the pauses of a short line. */
+const SECONDS_PER_CHAR = { ja: 0.5, en: 0.35 } as const;
+const SLACK_SECONDS = 4;
+/** Clips that spoke the prompt are made again up to this many paid calls per chunk. */
+const ATTEMPTS = 3;
+
+/**
+ * Gemini-TTS now and then reads the style prompt aloud before the text (20–25 s of voice direction; seen on
+ * 2026-11-06 on every short fixed line with a descriptive prompt and on 1 in 6 with an imperative one). Such a
+ * clip is far longer than its text can account for, which is the one mechanical sign of it.
+ */
+export function spokeThePrompt(bytes: number, text: string, lang: AudioLang): boolean {
+  return bytes / BYTES_PER_SECOND > SLACK_SECONDS + Array.from(text).length * SECONDS_PER_CHAR[lang];
+}
+
+async function synthesizeChunk(env: Env, sa: ServiceAccount, text: string, voice: AudioVoice, lang: AudioLang): Promise<{ audio: Uint8Array; calls: number }> {
+  for (let attempt = 1; attempt <= ATTEMPTS; attempt++) {
+    const audio = await synthesizeOnce(env, sa, text, voice, lang);
+    if (!spokeThePrompt(audio.length, text, lang)) return { audio, calls: attempt };
+  }
+  throw new Error("tts prompt");
+}
+
+async function synthesizeOnce(env: Env, sa: ServiceAccount, text: string, voice: AudioVoice, lang: AudioLang): Promise<Uint8Array> {
   const token = await accessToken(sa);
   const res = await fetch(ENDPOINT, {
     method: "POST",
@@ -58,16 +83,25 @@ async function synthesizeChunk(env: Env, sa: ServiceAccount, text: string, voice
   return fromBase64(audioContent);
 }
 
-/** Reads `text` aloud as MP3. Long text goes out in pieces and the MP3 frames are joined in order. */
-export async function synthesize(env: Env, text: string, voice: AudioVoice, lang: AudioLang): Promise<ArrayBuffer> {
+/**
+ * Reads `text` aloud as MP3. Long text goes out in pieces and the MP3 frames are joined in order. `calls` is
+ * the number of paid calls it took, retries included, for the daily cap. Throws `tts prompt` when a piece
+ * spoke the prompt three times in a row.
+ */
+export async function synthesize(env: Env, text: string, voice: AudioVoice, lang: AudioLang): Promise<{ audio: ArrayBuffer; calls: number }> {
   const sa = parseServiceAccount(env.GOOGLE_TTS_SA_JSON);
   const parts: Uint8Array[] = [];
-  for (const chunk of splitText(text)) parts.push(await synthesizeChunk(env, sa, chunk, voice, lang));
+  let calls = 0;
+  for (const chunk of splitText(text)) {
+    const made = await synthesizeChunk(env, sa, chunk, voice, lang);
+    parts.push(made.audio);
+    calls += made.calls;
+  }
   const out = new Uint8Array(parts.reduce((n, p) => n + p.length, 0));
   let at = 0;
   for (const p of parts) {
     out.set(p, at);
     at += p.length;
   }
-  return out.buffer;
+  return { audio: out.buffer, calls };
 }

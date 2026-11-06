@@ -24,7 +24,8 @@ async function sha256Hex(text: string): Promise<string> {
 
 /** The same text in the same voice is the same clip for every listener. */
 export async function audioKey(lang: AudioLang, voice: AudioVoice, text: string): Promise<string> {
-  return `tts/v2/${lang}/${voice}/${await sha256Hex(text)}.mp3`;
+  // v3: every v2 clip was made before the prompt-reading guard and may carry the voice direction.
+  return `tts/v3/${lang}/${voice}/${await sha256Hex(text)}.mp3`;
 }
 
 /**
@@ -72,20 +73,20 @@ export async function ensureAudio(
   try {
     // The winner of an earlier claim may have stored the clip and released between our R2 miss and this claim.
     if (await env.BUCKET.head(key)) return { ok: true, key, made: false };
-    const audio = await synthesize(env, line.text, line.voice, line.lang);
-    // Counted as soon as the paid call returns, so a failed put still uses up the cap.
+    const { audio, calls } = await synthesize(env, line.text, line.voice, line.lang);
+    // Counted as soon as the paid calls return (retries included), so a failed put still uses up the cap.
     await db
       .prepare(
-        `INSERT INTO tts_audio (key, lang, voice, bytes, created_at) VALUES (?, ?, ?, ?, ?)
-         ON CONFLICT(key) DO UPDATE SET synth_count = synth_count + 1, bytes = excluded.bytes, created_at = excluded.created_at`,
+        `INSERT INTO tts_audio (key, lang, voice, bytes, synth_count, created_at) VALUES (?, ?, ?, ?, ?, ?)
+         ON CONFLICT(key) DO UPDATE SET synth_count = synth_count + excluded.synth_count, bytes = excluded.bytes, created_at = excluded.created_at`,
       )
-      .bind(key, line.lang, line.voice, audio.byteLength, new Date().toISOString())
+      .bind(key, line.lang, line.voice, audio.byteLength, calls, new Date().toISOString())
       .run();
     await env.BUCKET.put(key, audio, { httpMetadata: { contentType: "audio/mpeg" } });
     return { ok: true, key, made: true };
   } catch (e) {
     // Name and our own fixed messages only: a fetch TypeError can quote the request URL, and the body can carry the line.
-    const status = e instanceof Error && /^tts (\d+|empty|token \d+|token empty|sa json invalid)$/.test(e.message) ? ` ${e.message}` : "";
+    const status = e instanceof Error && /^tts (\d+|empty|prompt|token \d+|token empty|sa json invalid)$/.test(e.message) ? ` ${e.message}` : "";
     console.error(`[dococa] tts failed: ${e instanceof Error ? e.name : "unknown"}${status}`);
     return { ok: false, reason: "failed" };
   } finally {

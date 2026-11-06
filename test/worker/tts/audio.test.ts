@@ -23,7 +23,7 @@ afterEach(() => vi.unstubAllGlobals());
 describe("audioKey", () => {
   it("is deterministic and differs by lang, voice and text", async () => {
     const a = await audioKey("ja", "male", "こんばんは");
-    expect(a).toMatch(/^tts\/v2\/ja\/male\/[0-9a-f]{64}\.mp3$/);
+    expect(a).toMatch(/^tts\/v3\/ja\/male\/[0-9a-f]{64}\.mp3$/);
     expect(await audioKey("ja", "male", "こんばんは")).toBe(a);
     expect(await audioKey("en", "male", "こんばんは")).not.toBe(a);
     expect(await audioKey("ja", "female", "こんばんは")).not.toBe(a);
@@ -157,5 +157,16 @@ describe("ensureAudio", () => {
     await ensureAudio(keyed, env.DB, { text: "Good evening", lang: "en", voice: "female" });
     const body = JSON.parse(String(fn.mock.calls[0]![1]?.body));
     expect(body.voice).toMatchObject({ languageCode: "en-US", name: "Kore" });
+  });
+});
+
+describe("ensureAudio when the prompt was spoken", () => {
+  it("counts the retries toward the cap", async () => {
+    let n = 0;
+    const long = btoa("x".repeat(25 * 4000));
+    const { fn } = stubFetch([[GOOGLE, () => json({ audioContent: ++n < 2 ? long : audio })]]);
+    expect(await ensureAudio(keyed, env.DB, line)).toMatchObject({ ok: true, made: true });
+    expect(fn).toHaveBeenCalledTimes(2);
+    expect(await countSynthesizedToday(env.DB)).toBe(2);
   });
 });
