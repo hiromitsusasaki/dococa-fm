@@ -58,6 +58,12 @@ describe("scrubNotes", () => {
     expect(scrubNotes("「とても長い秘密の文章」を言い換えている", unit(1).letterBody)).toBe("（お便りの文面を含むため省略）");
     expect(scrubNotes("作品の一点に\n触れている | 良い", unit(1).letterBody)).toBe("作品の一点に 触れている ／ 良い");
   });
+
+  it("drops a note that carries a whole letter shorter than the quote run", () => {
+    expect(scrubNotes("「大好き！」をなぞっている", "大好き！")).toBe("（お便りの文面を含むため省略）");
+    expect(scrubNotes("作品に触れていない", "大好き！")).toBe("作品に触れていない");
+    expect(scrubNotes("作品に触れていない", "")).toBe("作品に触れていない");
+  });
 });
 
 describe("makeJudge", () => {

@@ -84,6 +84,24 @@ describe("GET /admin/units", () => {
     expect(html).not.toContain('class="nav');
   });
 
+  it("hides the like button on an unverified unit, escapes the texts, and leaves out units of letters no longer public", async () => {
+    const item = await insertItem(env.DB, itemDraft({ title: "<b>x</b>" }));
+    const unverified = await insertLetter(env.DB, letterDraft(item.id));
+    await upsertUnit(env.DB, { letterId: unverified.id, lang: "ja", intro: "<b>紹介</b>", after: "感想", verified: false, audioReady: false });
+    const rejected = await insertLetter(env.DB, letterDraft(item.id, { status: "rejected" }));
+    await upsertUnit(env.DB, { letterId: rejected.id, lang: "ja", intro: "非公開の紹介", after: "感想", verified: true, audioReady: false });
+    const html = await (await getPage("/admin/units?lang=ja", basic())).text();
+    expect(html).toContain("&lt;b&gt;x&lt;/b&gt;");
+    expect(html).toContain("&lt;b&gt;紹介&lt;/b&gt;");
+    expect(html).not.toContain("<b>");
+    expect(html).not.toContain(`/admin/units/${unverified.id}/ja/like`);
+    expect(html).toContain(`/admin/units/${unverified.id}/ja/remake`);
+    expect(html).toContain("検証済み");
+    expect(html).not.toContain("非公開の紹介");
+    const json = (await (await getPage("/admin/units.json?lang=ja", `Bearer ${TOKEN}`)).json()) as { units: { letterId: string }[] };
+    expect(json.units.map((u) => u.letterId)).toEqual([unverified.id]);
+  });
+
   it("serves the same rows as JSON for the script, with the cursor", async () => {
     const letter = await seed();
     const res = await getPage("/admin/units.json?lang=ja&limit=10", `Bearer ${TOKEN}`);
@@ -140,6 +158,19 @@ describe("POST /admin/units/:letterId/:lang/remake", () => {
     expect((await postForm(`/admin/units/${letter.id}/ja/remake`, {}, undefined, { ...e, UNIT_DAILY_LIMIT: "0" })).status).toBe(429);
     expect((await getUnits(env.DB, [letter.id], "ja")).size).toBe(1);
     expect(prepareLetter).not.toHaveBeenCalled();
+  });
+
+  it("counts the remade unit toward UNIT_DAILY_LIMIT, so remakes stop at the cap", async () => {
+    const letter = await seed();
+    // The mocked prepareLetter stores a new unit as the real one would.
+    prepareLetter.mockImplementation(async (_env: unknown, db: D1Database, id: string) => {
+      await upsertUnit(db, { letterId: id, lang: "ja", intro: "新しい紹介", after: "感想", verified: true, audioReady: false });
+      return { units: 1, audio: 0, failed: 0 };
+    });
+    const capped = { ...e, UNIT_DAILY_LIMIT: "2" };
+    expect((await postForm(`/admin/units/${letter.id}/ja/remake`, {}, undefined, capped)).status).toBe(303);
+    expect((await postForm(`/admin/units/${letter.id}/ja/remake`, {}, undefined, capped)).status).toBe(429);
+    expect(prepareLetter).toHaveBeenCalledTimes(1);
   });
 
   it("answers 404 for a letter that does not exist", async () => {

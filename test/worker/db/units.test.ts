@@ -2,7 +2,7 @@ import { env } from "cloudflare:workers";
 import { beforeEach, describe, expect, it } from "vitest";
 import { insertItem } from "../../../src/worker/db/items";
 import { insertLetter } from "../../../src/worker/db/letters";
-import { clearUnit, getUnits, listLettersWithoutUnit, listLikedUnits, listUnits, listUnitsWithoutAudio, setUnitAudioReady, setUnitLiked, upsertUnit } from "../../../src/worker/db/units";
+import { clearUnit, countUnitsToday, getUnits, listLettersWithoutUnit, listLikedUnits, listUnits, listUnitsWithoutAudio, setUnitAudioReady, setUnitLiked, upsertUnit } from "../../../src/worker/db/units";
 import { resetDb } from "../../helpers/db";
 import { itemDraft, letterDraft } from "./helpers";
 
@@ -159,6 +159,31 @@ describe("the units feedback loop", () => {
     expect(liked.map((u) => u.intro)).toEqual(["紹介5", "紹介4", "紹介3", "紹介2", "紹介1"]);
     expect((await listLikedUnits(env.DB, "en", 5)).map((u) => u.intro)).toEqual(["English"]);
     expect((await listUnits(env.DB, { lang: "ja", limit: 50 })).find((u) => u.letterId === ids[1])?.liked).toBe(true);
+  });
+
+  it("lists only units of public letters", async () => {
+    const item = await insertItem(env.DB, itemDraft());
+    const shown = await insertLetter(env.DB, letterDraft(item.id));
+    const hidden = await insertLetter(env.DB, letterDraft(item.id, { status: "rejected" }));
+    await upsertUnit(env.DB, unit(shown.id));
+    await upsertUnit(env.DB, unit(hidden.id));
+    expect((await listUnits(env.DB, { lang: "ja", limit: 50 })).map((u) => u.letterId)).toEqual([shown.id]);
+  });
+
+  it("clearUnit counts a unit made today toward the day's units, so a remake spends the cap", async () => {
+    const item = await insertItem(env.DB, itemDraft());
+    const today = await insertLetter(env.DB, letterDraft(item.id));
+    const old = await insertLetter(env.DB, letterDraft(item.id));
+    await upsertUnit(env.DB, unit(today.id));
+    await upsertUnit(env.DB, unit(old.id, { createdAt: "2026-01-01T00:00:00.000Z" }));
+    expect(await countUnitsToday(env.DB)).toBe(1);
+    await clearUnit(env.DB, today.id, "ja");
+    expect(await countUnitsToday(env.DB)).toBe(1);
+    // A unit from an earlier day was not counted today; its remake is counted when the new unit is stored.
+    await clearUnit(env.DB, old.id, "ja");
+    expect(await countUnitsToday(env.DB)).toBe(1);
+    await upsertUnit(env.DB, unit(today.id));
+    expect(await countUnitsToday(env.DB)).toBe(2);
   });
 
   it("clearUnit deletes the one unit row of the letter and language", async () => {

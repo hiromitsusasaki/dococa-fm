@@ -21,7 +21,7 @@ export const adminUnits = new Hono<AppEnv>();
 
 const L = {
   title: "単位の見直し",
-  lead: "👍 した intro は、DJ の指示文に良い例として入ります（新しい順に 5 件）。👎 は単位を消して、その場で作り直します。",
+  lead: "👍 した intro は、DJ の指示文に良い例として入ります（検証済みのものだけ。新しい順に 5 件）。👎 は単位を消して、その場で作り直します（今日の単位の上限に数えます）。",
   work: "作品",
   letter: "お便り（冒頭）",
   verified: "検証",
@@ -77,10 +77,13 @@ function Row({ u }: { u: UnitRow }) {
       <td>{u.after}</td>
       <td>{u.verified ? "✓" : "✗"}</td>
       <td>
-        <form method="post" action={`/admin/units/${u.letterId}/${u.lang}/like`}>
-          <input type="hidden" name="liked" value={u.liked ? "0" : "1"} />
-          <button type="submit">{u.liked ? L.unlike : L.like}</button>
-        </form>
+        {/* An unverified unit is never an example, so it gets no 👍. */}
+        {u.verified ? (
+          <form method="post" action={`/admin/units/${u.letterId}/${u.lang}/like`}>
+            <input type="hidden" name="liked" value={u.liked ? "0" : "1"} />
+            <button type="submit">{u.liked ? L.unlike : L.like}</button>
+          </form>
+        ) : null}
         <form method="post" action={`/admin/units/${u.letterId}/${u.lang}/remake`} onsubmit={`return confirm(${JSON.stringify(L.confirmRemake)})`}>
           <button type="submit">{L.remake}</button>
         </form>

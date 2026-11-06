@@ -146,12 +146,15 @@ const QUOTE_RUN = 8;
 
 /**
  * The grader's note as the report prints it: on one line, `|` swapped so it cannot break a table, and dropped
- * whole when it carries a run of the letter's text (the report is committed; the letter is not ours to publish).
+ * whole when it carries a run of the letter's text, or the whole letter when it is shorter than the run (the report is
+ * committed; the letter is not ours to publish).
  */
 export function scrubNotes(notes: string, letterBody: string): string {
   const body = Array.from(fold(letterBody));
   const folded = fold(notes);
-  for (let i = 0; i + QUOTE_RUN <= body.length; i++) if (folded.includes(body.slice(i, i + QUOTE_RUN).join(""))) return "（お便りの文面を含むため省略）";
+  // A letter shorter than the run is matched whole.
+  const run = Math.min(QUOTE_RUN, body.length);
+  if (run > 0) for (let i = 0; i + run <= body.length; i++) if (folded.includes(body.slice(i, i + run).join(""))) return "（お便りの文面を含むため省略）";
   return oneCell(notes);
 }
 

@@ -122,22 +122,26 @@ export async function countUnitsWithoutAudio(db: D1Database, lang: Unit["lang"])
   return row?.n ?? 0;
 }
 
-/** Units stored since the JST day began: what `UNIT_DAILY_LIMIT` counts. */
+/** Units stored since the JST day began, plus today's units the owner's remake removed: what `UNIT_DAILY_LIMIT` counts. One statement. */
 export async function countUnitsToday(db: D1Database, now: Date = new Date()): Promise<number> {
-  const row = await db.prepare("SELECT COUNT(*) AS n FROM units WHERE created_at >= ?").bind(jstDayStartIso(now)).first<{ n: number }>();
+  const since = jstDayStartIso(now);
+  const row = await db
+    .prepare("SELECT (SELECT COUNT(*) FROM units WHERE created_at >= ?) + (SELECT COUNT(*) FROM unit_remakes WHERE created_at >= ?) AS n")
+    .bind(since, since)
+    .first<{ n: number }>();
   return row?.n ?? 0;
 }
 
 /** A unit as the owner's admin page shows it: with the work's title, the letter's text and the owner's 👍. */
 export type UnitRow = Unit & { liked: boolean; title: string; letterBody: string };
 
-/** Units of `lang` in letter id order after the `after` cursor, joined with their work and letter, for the owner's review. */
+/** Units of public letters in `lang`, in letter id order after the `after` cursor, joined with their work and letter, for the owner's review. */
 export async function listUnits(db: D1Database, opts: { lang: Unit["lang"]; limit: number; after?: string }): Promise<UnitRow[]> {
   const { results } = await db
     .prepare(
       `SELECT u.*, i.title AS title, l.body AS letter_body FROM units u
        JOIN letters l ON l.id = u.letter_id JOIN items i ON i.id = l.item_id
-       WHERE u.lang = ? AND u.letter_id > ?
+       WHERE u.lang = ? AND u.letter_id > ? AND l.status = 'public'
        ORDER BY u.letter_id ASC
        LIMIT ?`,
     )
@@ -165,7 +169,16 @@ export async function listLikedUnits(db: D1Database, lang: Unit["lang"], limit: 
   return results.map(rowToUnit);
 }
 
-/** Deletes the unit (and with it its `audio_ready`), so the next run makes it again. The clips stay cached by text. */
-export async function clearUnit(db: D1Database, letterId: string, lang: Unit["lang"]): Promise<void> {
-  await db.prepare("DELETE FROM units WHERE letter_id = ? AND lang = ?").bind(letterId, lang).run();
+/**
+ * Deletes the unit (and with it its `audio_ready`), so the next run makes it again. The clips stay cached by text.
+ * A unit made today is first noted in `unit_remakes`, so the call that made it still counts toward today's cap
+ * after its replacement is stored. One batch.
+ */
+export async function clearUnit(db: D1Database, letterId: string, lang: Unit["lang"], now: Date = new Date()): Promise<void> {
+  await db.batch([
+    db
+      .prepare("INSERT INTO unit_remakes (letter_id, lang, created_at) SELECT letter_id, lang, ? FROM units WHERE letter_id = ? AND lang = ? AND created_at >= ?")
+      .bind(now.toISOString(), letterId, lang, jstDayStartIso(now)),
+    db.prepare("DELETE FROM units WHERE letter_id = ? AND lang = ?").bind(letterId, lang),
+  ]);
 }
