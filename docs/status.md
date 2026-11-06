@@ -8,7 +8,7 @@
 |---|---|---|
 | Task 1 | お住まい（画面と手渡しの言い方） | 完了 |
 | Task 2 | MCP の撤去 | 完了（`/mcp`・`/settings/mcp-token`・MCP の依存 2 つ・レート制限と session の例外を外した。`/settings` の末尾にリスナー ID の行を残す） |
-| Task 3 | ラジオ面のダイヤル（要求ごとに 1 目盛り） | 未着手 |
+| Task 3 | ラジオ面のダイヤル（要求ごとに 1 目盛り） | 完了（`next` は毎回 1 枠。本文 `{dial, first, letterId}` を zod で検査し、形が違えば 400。ダイヤルは `localStorage["dfm.dial"]` に置き、回すと 300 ms 待って作り置きを捨てて頼み直す。`/settings` のダイヤルと `POST /settings/dial` を外した。サインイン済みなら `listeners.dial` を値が変わったときだけ 1 回の UPDATE で書く。`/stations/mine?letter=` は最初の `next` に `letterId` を載せる。上限の既定は 60 枠と 1800 枠） |
 | Task 4 | 遠さ（埋め込みと距離の帯） | 未着手 |
 | Task 5 | ホームに今届いているお便り | 未着手 |
 | Task 6 | 送る画面（並び・お気に入りから選ぶ・検索・ブックマークレット） | 未着手 |
@@ -18,6 +18,9 @@
 | Task 10 | 締めのドキュメント | 未着手 |
 
 決定: MCP は Phase 4 で外した（事前生成で役目を終えた）。列 `mcp_token` は残して使わない。
+決定: 回は 1 枠（Task 3。`makeEpisode` は常に `size: 1`。`selectProgram` の `size` は eval・テスト・世界と公開のために残す）。
+決定: 終わりのつなぎは言わない（Task 3。`bridge.close` は出さないが、保存済みの回を描くためにキーと `BRIDGE_KEYS` は残す。`bridge.open` は訪問の最初の回だけ）。
+決定: 上限は枠の数（Task 3。`EPISODE_DAILY_LIMIT` 既定 60、`EPISODE_GLOBAL_DAILY_LIMIT` 既定 1800。数えるのは従来どおり回の行で、1 回が 1 枠）。
 
 ## 2026-11-06 Phase 3 完了（最終レビュー済み・ローカル）。次は本人作業 → デプロイ → public 化
 
@@ -25,6 +28,7 @@ Phase 2（ラジオ中心の体験への作り替え）と Phase 3（単位・�
 
 ### 本人作業
 
+- [ ] 本番の `EPISODE_DAILY_LIMIT` を 30 にしてあれば、Task 3 のデプロイ前に消す（既定 60 枠）か 180 にする。
 - [ ] 任意: 単位（お便りごとの DJ の語り）の 1 日の上限 `UNIT_DAILY_LIMIT`（既定 1000、`0` で停止）を変えるときは `pnpm wrangler secret put UNIT_DAILY_LIMIT`（Cloudflare の secret か var。既定でよければ設定しない）。
 - [ ] 任意: お便りと一言の全体の 1 日の上限 `LETTER_GLOBAL_DAILY_LIMIT`（既定 500、`0` で停止。数えるのはお便りと一言だけで、「私も」と見つけた声は数えず止めない）を変えるときは `pnpm wrangler secret put LETTER_GLOBAL_DAILY_LIMIT`。`/admin/letters` のシードもこの上限に従うので、大量に投入する日は先に上げる。
 - [ ] GCP で OAuth クライアント（種類: ウェブ アプリケーション）を作る。承認済みのリダイレクト URI は `https://dococafm.app/auth/google/callback` と `http://127.0.0.1:5173/auth/google/callback`。
