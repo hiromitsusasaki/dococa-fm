@@ -176,6 +176,18 @@ describe("GET /stations/:key.json", () => {
     expect((await get("world", world.episode.id, await newSession())).status).toBe(204);
   });
 
+  it("does not resume an episode of the other language after the listener switches", async () => {
+    await seedWorld();
+    const cookie = await newSession();
+    const listenerId = (await env.DB.prepare("SELECT id FROM listeners ORDER BY created_at DESC LIMIT 1").first<{ id: string }>())!.id;
+    const ja = (await (await postNext("world", cookie)).json()) as Body;
+    await env.DB.prepare("UPDATE listeners SET lang = 'en' WHERE id = ?").bind(listenerId).run();
+    expect((await app.request("/stations/world.json", { headers: { cookie } }, env)).status).toBe(204);
+    expect((await app.request(`/stations/world.json?id=${ja.episode.id}`, { headers: { cookie } }, env)).status).toBe(204);
+    const en = (await (await postNext("world", cookie)).json()) as Body;
+    expect(((await (await app.request("/stations/world.json", { headers: { cookie } }, env)).json()) as Body).episode.id).toBe(en.episode.id);
+  });
+
   it("does not show another listener's episode, and 404s a bad key", async () => {
     await seedWorld();
     await postNext("world", await newSession());

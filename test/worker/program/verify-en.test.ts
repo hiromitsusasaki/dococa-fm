@@ -30,7 +30,10 @@ describe("english patterns", () => {
   it.each(["Let's play it.", "Here it is.", "Here's the song.", "Have a listen.", "Give it a spin.", "Check it out.", "Enjoy!", "Coming up next, a song.", "Without further ado"])("PLAYBACK_EN refuses %s", (s) => {
     expect(PLAYBACK_EN.test(s)).toBe(true);
   });
-  it.each(["I played it on repeat.", "A song that plays with silence.", "She enjoyed the quiet.", "Listening back, it feels close."])("PLAYBACK_EN passes %s", (s) => {
+  it.each(["Enjoy it.", "Enjoy the song.", "enjoy the film"])("PLAYBACK_EN refuses %s", (s) => {
+    expect(PLAYBACK_EN.test(s)).toBe(true);
+  });
+  it.each(["I played it on repeat.", "A song that plays with silence.", "She enjoyed the quiet.", "Listening back, it feels close.", "For people who enjoy quiet music.", "You might enjoy its patience."])("PLAYBACK_EN passes %s", (s) => {
     expect(PLAYBACK_EN.test(s)).toBe(false);
   });
 
@@ -44,7 +47,10 @@ describe("english patterns", () => {
   it.each(["Perfect for tonight.", "Today, a quiet one.", "This week we have jazz.", "Recently I heard it.", "A Christmas song.", "It's trending.", "Out now.", "In the news."])("TOPICAL_EN refuses %s", (s) => {
     expect(TOPICAL_EN.test(s)).toBe(true);
   });
-  it.each(["A song for the night.", "Someday it will be yours.", "A slow morning song.", "Newly found, long loved."])("TOPICAL_EN passes %s", (s) => {
+  it.each(["Last week it rained.", "Next month, perhaps.", "Next year again.", "This spring.", "This fall it returns.", "This winter.", "A Valentine's song.", "Before the election.", "The Olympics.", "The World Cup final.", "Breaking: a new song.", "I heard it the other day."])("TOPICAL_EN refuses %s", (s) => {
+    expect(TOPICAL_EN.test(s)).toBe(true);
+  });
+  it.each(["A song for the night.", "Someday it will be yours.", "A slow morning song.", "Newly found, long loved.", "The last song of the album.", "A spring of clear water.", "Next to the window.", "A heartbreaking chorus."])("TOPICAL_EN passes %s", (s) => {
     expect(TOPICAL_EN.test(s)).toBe(false);
   });
 });

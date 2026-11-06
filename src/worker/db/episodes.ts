@@ -81,11 +81,11 @@ export async function listVerifiedEpisodes(db: D1Database, listenerId: string, l
   return results.map(rowToEpisode);
 }
 
-/** The listener's latest verified episode made on one station (see `stationColumn`). */
-export async function latestVerifiedEpisodeOn(db: D1Database, listenerId: string, station: string): Promise<Episode | null> {
+/** The listener's latest verified episode made on one station (see `stationColumn`) in one language. */
+export async function latestVerifiedEpisodeOn(db: D1Database, listenerId: string, station: string, lang: Episode["lang"]): Promise<Episode | null> {
   const row = await db
-    .prepare("SELECT * FROM episodes WHERE listener_id = ? AND station = ? AND verified = 1 ORDER BY created_at DESC, id DESC LIMIT 1")
-    .bind(listenerId, station)
+    .prepare("SELECT * FROM episodes WHERE listener_id = ? AND station = ? AND lang = ? AND verified = 1 ORDER BY created_at DESC, id DESC LIMIT 1")
+    .bind(listenerId, station, lang)
     .first<Row>();
   return row ? rowToEpisode(row) : null;
 }

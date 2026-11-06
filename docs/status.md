@@ -59,6 +59,7 @@ Phase 2（ラジオ中心の体験への作り替え）の実装は、すべて 
   - `stored.ts` の `publicView`（お便りが全部非公開になった枠を落とす現在の扱いを維持するか決める）。`/me` の聴いた履歴と `?seg=` の再生は `publicView` の添字を共有しているので、両方そこを通す。
   - テスト: `select` / `compose` / `verify` / `build` / `station` の fallback・workOnly の fixture。
 - `letters.place` は日本語のラベルで持つ（DJ が日本語で読むため。設計書 Addendum H）。画面はコードがあれば読み手の言語で引き直す（Phase 3 Task 7）。コードの無い古いお便りと見つけた声は `place` のまま出る。DJ の英語の読みは Task 8。
+- 英語の回でも、場所コードの無いお便りでは手渡しが日本語の土地（`place`）を言い、訳が作れなかったお便り（`body_en` が null）は日本語の原文を読む。どちらも en-US の声ではうまく読めない。データの欠け（コードと訳）なので、データを埋めれば直る。
 
 ## Phase 3 の進み（計画: `docs/superpowers/plans/2026-11-06-dococa-fm-phase3.md`、設計: 追記 K）
 

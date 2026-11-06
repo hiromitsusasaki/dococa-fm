@@ -1,6 +1,6 @@
 import { env } from "cloudflare:workers";
 import { beforeEach, describe, expect, it } from "vitest";
-import { countEpisodesToday, getEpisode, insertEpisode, jstDayStartIso, listEpisodes } from "../../../src/worker/db/episodes";
+import { countEpisodesToday, getEpisode, insertEpisode, jstDayStartIso, latestVerifiedEpisodeOn, listEpisodes } from "../../../src/worker/db/episodes";
 import { createListener } from "../../../src/worker/db/listeners";
 import { resetDb } from "../../helpers/db";
 import type { Episode } from "../../../src/worker/types";
@@ -40,6 +40,15 @@ describe("episodes", () => {
     const en = await insertEpisode(env.DB, { ...draft(me.id), lang: "en" });
     expect(en.lang).toBe("en");
     expect((await getEpisode(env.DB, en.id))?.lang).toBe("en");
+  });
+
+  it("latestVerifiedEpisodeOn looks only at episodes in the given language", async () => {
+    const me = await createListener(env.DB);
+    const ja = await insertEpisode(env.DB, { ...draft(me.id, "2026-01-01T00:00:00.000Z"), station: "world" });
+    const en = await insertEpisode(env.DB, { ...draft(me.id, "2026-01-02T00:00:00.000Z"), station: "world", lang: "en" });
+    expect((await latestVerifiedEpisodeOn(env.DB, me.id, "world", "ja"))?.id).toBe(ja.id);
+    expect((await latestVerifiedEpisodeOn(env.DB, me.id, "world", "en"))?.id).toBe(en.id);
+    expect(await latestVerifiedEpisodeOn(env.DB, me.id, "mine", "en")).toBeNull();
   });
 
   it("insertEpisode keeps a given id and mints one otherwise", async () => {

@@ -5,7 +5,7 @@
 
 /** Words that tie a line to the day it was said, the season, the news or what is out right now. */
 export const TOPICAL_EN =
-  /\b(today|tonight|this (morning|evening|week|month|year)|yesterday|tomorrow|recently|lately|these days|right now|currently|christmas|new year['’]?s?|halloween|summer vacation|news|trending|viral|out now|now streaming|just released|new release)\b/i;
+  /\b(today|tonight|this (morning|evening|week|month|year|spring|summer|autumn|fall|winter)|(last|next) (week|month|year)|yesterday|tomorrow|the other day|recently|lately|these days|right now|currently|christmas|new year['’]?s?|halloween|valentine['’]?s|summer vacation|news|breaking|trending|viral|out now|now streaming|just released|new release|election|olympics|world cup)\b/i;
 
 /** A year said aloud; the work's and the letters' years are masked first (`maskDataYearsEn`). */
 export const YEAR_EN = /\b(?:1[89]|20)\d{2}\b/;
@@ -19,7 +19,7 @@ export const MEASURE_EN =
 
 /** Nothing is played on this radio: the DJ introduces and reads, never invites the listener to listen or watch. */
 export const PLAYBACK_EN =
-  /\b(let['’]?s (play|listen|hear|watch)|here it is|here['’]?s the (song|track|film|movie|book)|have a listen|take a listen|give it a (listen|watch|spin)|check it out|enjoy(!|\b)|play(ing)? it now|coming up next|without further ado)\b/i;
+  /\b(let['’]?s (play|listen|hear|watch)|here it is|here['’]?s the (song|track|film|movie|book)|have a listen|take a listen|give it a (listen|watch|spin)|check it out|play(ing)? it now|coming up next|without further ado)\b|\benjoy(!|\s+(it|the (song|track|film|movie|book))\b)/i;
 
 /** A non-fixed line that hands over to a letter's reader. */
 export const ANNOUNCE_EN = /\bletter from\b|\bhere['’]?s a letter\b|\breads? (the|a) letter\b/i;
