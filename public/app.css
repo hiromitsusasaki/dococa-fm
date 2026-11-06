@@ -1227,19 +1227,26 @@ button:disabled,
 }
 
 .letter-card {
-  display: flex;
-  gap: var(--sp-3);
+  display: grid;
+  gap: var(--sp-2);
+  align-content: start;
   height: 100%;
   padding: var(--sp-3);
   border: 1px solid var(--line);
   border-radius: 12px;
   background: var(--panel);
   box-shadow: var(--shadow);
+}
+
+.letter-card-main {
+  display: flex;
+  gap: var(--sp-3);
   color: inherit;
   text-decoration: none;
 }
 
-.letter-card:hover .letter-card-play {
+.letter-card-main:hover .letter-card-play,
+.letter-card-meta:hover {
   text-decoration: underline;
 }
 
@@ -1274,6 +1281,12 @@ button:disabled,
   color: var(--ink-2);
   font-size: 13px;
   overflow-wrap: anywhere;
+}
+
+.letter-card-meta {
+  display: block;
+  padding: var(--sp-2) 0;
+  text-decoration: none;
 }
 
 .letter-card-play {

@@ -43,7 +43,7 @@ home.get("/", async (c) => {
             <ul class="letter-cards">
               {recent.map((l) => (
                 <li>
-                  <LetterCard letter={l} item={l.item} lang={lang} />
+                  <LetterCard letter={l} item={l.item} lang={lang} viewerId={listener.id} />
                 </li>
               ))}
             </ul>

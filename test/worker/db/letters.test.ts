@@ -106,6 +106,8 @@ describe("letters", () => {
     await insertLetter(env.DB, letterDraft(a.id, { kind: "reply" }));
     await insertLetter(env.DB, letterDraft(a.id, { status: "rejected" }));
     await insertLetter(env.DB, letterDraft(a.id, { kind: "found", sourceAuthor: null }));
+    await insertLetter(env.DB, letterDraft(a.id, { kind: "found", sourceAuthor: "誰か", sourceUrl: "" }));
+    await insertLetter(env.DB, letterDraft(a.id, { kind: "found", sourceAuthor: "  ", sourceUrl: "https://x.example/p" }));
     await tick();
     const found = await insertLetter(env.DB, letterDraft(b.id, { kind: "found", sourceAuthor: "誰か", sourceUrl: "https://x.example/p" }));
     await tick();

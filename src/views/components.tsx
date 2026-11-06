@@ -150,21 +150,27 @@ export function LetterSource({ letter, lang }: { letter: Pick<Letter, "id" | "so
 
 const CARD_CHARS = 120;
 
-/** A letter on the home page: the work's picture, the text cut at 120 code points (the full text is on the work's page), and who sent it. */
-export function LetterCard({ letter, item, lang }: { letter: Letter; item: Item; lang: Lang }) {
+/**
+ * A letter on the home page: the work's picture, the text cut at 120 code points, and who sent it. The picture and text start the
+ * listener's radio from this letter (or open the work page for the viewer's own letter, which the radio refuses); the muted line opens the work page, where the full text is.
+ */
+export function LetterCard({ letter, item, lang, viewerId }: { letter: Letter; item: Item; lang: Lang; viewerId: string }) {
   const t = tFor(lang);
   const chars = Array.from(displayText(letter, lang).main);
   const text = chars.length > CARD_CHARS ? `${chars.slice(0, CARD_CHARS).join("")}…` : chars.join("");
   const from = letter.kind === "found" ? `${t("item.source")}: ${letter.sourceAuthor ?? ""}` : whoOf(letter, lang);
+  const own = letter.listenerId !== null && letter.listenerId === viewerId;
   return (
-    <a class="letter-card" href={`/stations/mine?letter=${letter.id}`}>
-      <span class="letter-card-art">{item.imageUrl && <img src={item.imageUrl} alt="" width="96" height="96" loading="lazy" />}</span>
-      <span class="letter-card-body">
-        <span class="letter-card-text">{text}</span>
-        <span class="letter-card-meta">{`${item.title} · ${from}`}</span>
-        <span class="letter-card-play">{t("home.playFrom")}</span>
-      </span>
-    </a>
+    <article class="letter-card">
+      <a class="letter-card-main" href={own ? `/items/${item.id}` : `/stations/mine?letter=${letter.id}`}>
+        <span class="letter-card-art">{item.imageUrl && <img src={item.imageUrl} alt="" width="96" height="96" loading="lazy" />}</span>
+        <span class="letter-card-body">
+          <span class="letter-card-text">{text}</span>
+          {!own && <span class="letter-card-play">{t("home.playFrom")}</span>}
+        </span>
+      </a>
+      <a class="letter-card-meta" href={`/items/${item.id}`}>{`${item.title} · ${from}`}</a>
+    </article>
   );
 }
 

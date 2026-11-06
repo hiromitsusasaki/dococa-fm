@@ -61,15 +61,34 @@ describe("GET /", () => {
     expect(html).toContain('<span class="letter-card-art"></span>');
   });
 
+  it("a card has two links: the radio from the letter, and the work page; the viewer's own letter goes to the work page", async () => {
+    const cookie = await newSession();
+    const id = cookie.split("=")[1]!.split(".")[0]!;
+    await get("/", cookie);
+    const it = await insertItem(env.DB, itemDraft({ title: "曲B", externalIds: { itunes: "b" } }));
+    const mine = await insertLetter(env.DB, letterDraft(it.id, { body: "自分の便り", bodyJa: "自分の便り", listenerId: id }));
+    await new Promise((r) => setTimeout(r, 2));
+    const other = await insertLetter(env.DB, letterDraft(it.id, { body: "ひとの便り", bodyJa: "ひとの便り" }));
+    const html = await (await get("/", cookie)).text();
+    expect(html).toContain(`<a class="letter-card-main" href="/stations/mine?letter=${other.id}">`);
+    expect(html).toContain(`<a class="letter-card-main" href="/items/${it.id}">`);
+    expect(html).not.toContain(`letter=${mine.id}`);
+    expect((html.match(new RegExp(`<a class="letter-card-meta" href="/items/${it.id}">曲B`, "g")) ?? []).length).toBe(2);
+    expect((html.match(/このお便りから聴く/g) ?? []).length).toBe(1);
+    expect(html).not.toMatch(/<a\s[^>]*>(?:(?!<\/a>)[\s\S])*<a\s/);
+  });
+
   it("shows a found voice with its source author, and only when it has one", async () => {
     const cookie = await newSession();
     const it = await insertItem(env.DB, itemDraft());
     await insertLetter(env.DB, letterDraft(it.id, { kind: "found", body: "出典つきの声", bodyJa: "出典つきの声", sourceAuthor: "誰かの投稿", sourceUrl: "https://x.example/p", radioName: "", place: "" }));
+    await insertLetter(env.DB, letterDraft(it.id, { kind: "found", body: "URL なしの声", bodyJa: "URL なしの声", sourceAuthor: "誰か", sourceUrl: "" }));
     await insertLetter(env.DB, letterDraft(it.id, { kind: "found", body: "出典なしの声", bodyJa: "出典なしの声", sourceAuthor: null }));
     const html = await (await get("/", cookie)).text();
     expect(html).toContain("出典つきの声");
     expect(html).toContain("出典: 誰かの投稿");
     expect(html).not.toContain("出典なしの声");
+    expect(html).not.toContain("URL なしの声");
   });
 
   it("hints at /start for a listener with no history and no letters, and not otherwise", async () => {

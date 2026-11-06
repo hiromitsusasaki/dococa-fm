@@ -100,7 +100,7 @@ export async function listRecentPublicLetters(db: D1Database, limit = 6): Promis
        JOIN items ON items.id = letters.item_id
        LEFT JOIN listeners ON listeners.id = letters.listener_id
        WHERE letters.status = 'public'
-         AND (letters.kind = 'letter' OR (letters.kind = 'found' AND letters.source_author IS NOT NULL))
+         AND (letters.kind = 'letter' OR (letters.kind = 'found' AND TRIM(COALESCE(letters.source_url, '')) <> '' AND TRIM(COALESCE(letters.source_author, '')) <> ''))
        ORDER BY letters.created_at DESC, letters.id
        LIMIT ?`,
     )
