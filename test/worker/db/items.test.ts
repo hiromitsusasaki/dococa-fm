@@ -1,6 +1,7 @@
 import { env } from "cloudflare:workers";
 import { beforeEach, describe, expect, it } from "vitest";
-import { findItemByExternalId, getItem, insertItem, searchItems } from "../../../src/worker/db/items";
+import { countItemsWithoutVec, findItemByExternalId, getItem, getItemVecs, insertItem, listItemsWithoutVec, searchItems, setItemVec, VEC_DIMS } from "../../../src/worker/db/items";
+import { angled } from "../../helpers/ai";
 import { resetDb } from "../../helpers/db";
 import { itemDraft } from "./helpers";
 
@@ -50,5 +51,36 @@ describe("items", () => {
   it("searchItems caps limit at 20", async () => {
     for (let i = 0; i < 22; i++) await insertItem(env.DB, itemDraft({ title: `Song ${i}`, externalIds: {} }));
     expect(await searchItems(env.DB, "song", 100)).toHaveLength(20);
+  });
+
+  it("stores a vector as 1024 Int8 bytes and reads it back as a unit vector close to the one given", async () => {
+    const a = await insertItem(env.DB, itemDraft({ externalIds: {} }));
+    const b = await insertItem(env.DB, itemDraft({ externalIds: {} }));
+    await setItemVec(env.DB, a.id, angled(0.5).map((x) => x * 3));
+    const row = await env.DB.prepare("SELECT length(vec) AS n FROM items WHERE id = ?").bind(a.id).first<{ n: number }>();
+    expect(row?.n).toBe(VEC_DIMS);
+    const vecs = await getItemVecs(env.DB, [a.id, b.id]);
+    expect([...vecs.keys()]).toEqual([a.id]);
+    const v = vecs.get(a.id)!;
+    expect(v[0]).toBeCloseTo(Math.cos(0.5), 2);
+    expect(v[1]).toBeCloseTo(Math.sin(0.5), 2);
+    expect(Math.hypot(...v)).toBeCloseTo(1, 5);
+  });
+
+  it("an item read back never carries its vector", async () => {
+    const a = await insertItem(env.DB, itemDraft({ externalIds: {} }));
+    await setItemVec(env.DB, a.id, angled(0));
+    expect(Object.keys((await getItem(env.DB, a.id))!)).not.toContain("vec");
+  });
+
+  it("lists and counts the items still without a vector, newest first", async () => {
+    const old = await insertItem(env.DB, itemDraft({ externalIds: {} }));
+    await env.DB.prepare("UPDATE items SET created_at = '2020-01-01T00:00:00Z' WHERE id = ?").bind(old.id).run();
+    const fresh = await insertItem(env.DB, itemDraft({ externalIds: {} }));
+    const done = await insertItem(env.DB, itemDraft({ externalIds: {} }));
+    await setItemVec(env.DB, done.id, angled(0));
+    expect(await listItemsWithoutVec(env.DB, 10)).toEqual([fresh.id, old.id]);
+    expect(await listItemsWithoutVec(env.DB, 1)).toEqual([fresh.id]);
+    expect(await countItemsWithoutVec(env.DB)).toBe(2);
   });
 });

@@ -2,6 +2,8 @@ import { Hono } from "hono";
 import { Layout } from "../../views/layout";
 import type { Variables } from "../auth/session";
 import { requireSignin } from "../auth/require-signin";
+import { embedItems } from "../ai/embed";
+import { defer } from "../defer";
 import { upsertHistory } from "../db/history";
 import type { Env } from "../env";
 import { tFor } from "../i18n/t";
@@ -73,6 +75,7 @@ start.post("/start", requireSignin, async (c) => {
   // One lookup and one insert for all three; two drafts that are the same work resolve to one item.
   const stored = await resolveOrCreateMany(c.env.DB, found.map((f) => f.draft));
   const items = found.map(({ n }, i) => ({ n, item: stored[i]! }));
+  defer(c, embedItems(c.env, c.env.DB, stored.map((i) => i.id)));
   await upsertHistory(c.env.DB, items.map(({ item }) => ({ listenerId: listener.id, itemId: item.id, source: "manual", occurredAt: null, rank: null })));
 
   // Sequential: the letter checks (duplicates, limits) read what the last one wrote.

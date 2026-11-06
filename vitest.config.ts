@@ -11,6 +11,8 @@ export default defineConfig(async () => {
           plugins: [
             cloudflareTest({
               wrangler: { configPath: "./wrangler.jsonc" },
+              // The AI binding is remote-only; tests never reach Cloudflare and hand a fake `AI` where they need one.
+              remoteBindings: false,
               miniflare: {
                 // Every Env key is fixed here so a developer's .dev.vars cannot steer tests onto another path (or a real API).
                 bindings: {

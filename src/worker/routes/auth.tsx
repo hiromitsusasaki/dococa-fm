@@ -5,6 +5,8 @@ import type { Variables } from "../auth/session";
 import { currentPath, requireSignin } from "../auth/require-signin";
 import { authorizeUrl, createPkce, exchangeCode, importSpotifyHistory } from "../auth/spotify";
 import { encryptSecret } from "../auth/crypto";
+import { embedItems } from "../ai/embed";
+import { defer } from "../defer";
 import { updateListener } from "../db/listeners";
 import type { Env } from "../env";
 import type { Listener } from "../types";
@@ -66,7 +68,7 @@ auth.get("/auth/spotify/callback", requireSignin, async (c) => {
   const saved = await updateListener(c.env.DB, listener.id, {
     spotifyRefreshToken: await encryptSecret(tokens.refreshToken, c.env.SESSION_SECRET),
   });
-  const count = saved ? await importSpotifyHistory(c.env, c.env.DB, saved) : 0;
+  const count = saved ? await importSpotifyHistory(c.env, c.env.DB, saved, (ids) => defer(c, embedItems(c.env, c.env.DB, ids))) : 0;
   // The count only decides where to go; it is never shown.
   return c.redirect(count > 0 ? "/put?imported=1" : "/settings?spotify=failed", 303);
 });

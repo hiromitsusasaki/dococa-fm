@@ -2,7 +2,8 @@ import { env } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import app from "../../../src/worker/index";
 import { createListener, getListener } from "../../../src/worker/db/listeners";
-import { insertItem } from "../../../src/worker/db/items";
+import { getItemVecs, insertItem } from "../../../src/worker/db/items";
+import { fakeAi } from "../../helpers/ai";
 import { insertLetter, listLettersForItem } from "../../../src/worker/db/letters";
 import { t } from "../../../src/worker/i18n/t";
 import * as prepare from "../../../src/worker/program/prepare";
@@ -209,7 +210,7 @@ describe("POST /admin/prepare", () => {
     vi.spyOn(console, "warn").mockImplementation(() => {});
     const res = await post({});
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ units: 4, audio: 0, failed: 0, remaining: { units: { ja: 0, en: 0 }, audio: { ja: 2, en: 2 } } });
+    expect(await res.json()).toEqual({ units: 4, audio: 0, failed: 0, remaining: { vectors: 1, units: { ja: 0, en: 0 }, audio: { ja: 2, en: 2 } } });
   });
 
   it("takes a limit of 1 to 50, 20 by default", async () => {
@@ -240,6 +241,19 @@ describe("admin items", () => {
     const got = await call("GET", `/admin/items/${item.id}`);
     expect(got.status).toBe(200);
     expect(await got.json()).toMatchObject({ item: { id: item.id, title: "Some Song" } });
+  });
+
+  it("has the new work's vector made after answering, from its title and creator only", async () => {
+    stubFetch([
+      [OEMBED, () => json({ title: "Some Song", author_name: "Some Channel", thumbnail_url: "https://i.ytimg.com/x.jpg" })],
+      ["https://itunes.apple.com", () => json({ resultCount: 0, results: [] })],
+    ]);
+    const { AI, calls } = fakeAi();
+    const res = await call("POST", "/admin/items", { url: "https://www.youtube.com/watch?v=abcdefghijk" }, undefined, { ...e, AI });
+    const { item } = (await res.json()) as { item: { id: string } };
+    expect(Object.keys(item)).not.toContain("vec");
+    await vi.waitFor(async () => expect((await getItemVecs(env.DB, [item.id])).size).toBe(1));
+    expect(calls).toEqual([{ model: "@cf/baai/bge-m3", text: ["Some Song — Some Channel [music]"] }]);
   });
 
   it("answers 422 for an unresolvable url and 404 for an unknown id", async () => {

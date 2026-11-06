@@ -130,3 +130,94 @@ export async function listRecentItems(db: D1Database, limit: number): Promise<It
     .all<Row>();
   return results.map(rowToItem);
 }
+
+/** Dimensions of a work vector (bge-m3). */
+export const VEC_DIMS = 1024;
+
+/** Scales a vector to unit length; a zero vector stays zero. */
+export function normalise(v: Float32Array): Float32Array {
+  let sum = 0;
+  for (const x of v) sum += x * x;
+  const len = Math.sqrt(sum);
+  if (len === 0) return v;
+  const out = new Float32Array(v.length);
+  for (let i = 0; i < v.length; i++) out[i] = (v[i] as number) / len;
+  return out;
+}
+
+/** A unit vector as Int8 (`round(x × 127)`), one byte a dimension. */
+export function quantise(v: Float32Array): Uint8Array {
+  const q = new Int8Array(v.length);
+  for (let i = 0; i < v.length; i++) q[i] = Math.max(-127, Math.min(127, Math.round((v[i] as number) * 127)));
+  return new Uint8Array(q.buffer);
+}
+
+/** D1 hands a BLOB back as an ArrayBuffer or as an array of byte values; either way it is read as Int8 and scaled back to unit length. */
+export function dequantise(raw: unknown): Float32Array | null {
+  const bytes = raw instanceof ArrayBuffer ? new Uint8Array(raw) : ArrayBuffer.isView(raw) ? new Uint8Array(raw.buffer, raw.byteOffset, raw.byteLength) : Array.isArray(raw) ? Uint8Array.from(raw as number[]) : null;
+  if (!bytes || bytes.length === 0) return null;
+  const q = new Int8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const v = new Float32Array(q.length);
+  for (let i = 0; i < q.length; i++) v[i] = (q[i] as number) / 127;
+  return normalise(v);
+}
+
+/** Dequantised vectors kept per isolate, oldest dropped first past the cap. A vector only changes through `setItemVecs`. */
+const VEC_CACHE_MAX = 2000;
+const vecCache = new Map<string, Float32Array>();
+function cacheVec(id: string, v: Float32Array): void {
+  vecCache.delete(id);
+  vecCache.set(id, v);
+  while (vecCache.size > VEC_CACHE_MAX) vecCache.delete(vecCache.keys().next().value as string);
+}
+
+/** Stores many vectors in one batch. */
+export async function setItemVecs(db: D1Database, entries: Array<[string, Float32Array]>): Promise<void> {
+  if (entries.length === 0) return;
+  const unit = entries.map(([id, v]) => [id, normalise(v)] as const);
+  await db.batch(unit.map(([id, v]) => db.prepare("UPDATE items SET vec = ? WHERE id = ?").bind(quantise(v), id)));
+  // What is cached is what a read would give back: the quantised vector, not the exact one.
+  for (const [id, v] of unit) {
+    const back = dequantise(quantise(v));
+    if (back) cacheVec(id, back);
+  }
+}
+
+export async function setItemVec(db: D1Database, id: string, vec: Float32Array): Promise<void> {
+  await setItemVecs(db, [[id, vec]]);
+}
+
+/** The vectors of the items that have one, dequantised; from the isolate cache first, the rest in one statement per 90 ids. */
+export async function getItemVecs(db: D1Database, ids: Iterable<string>): Promise<Map<string, Float32Array>> {
+  const out = new Map<string, Float32Array>();
+  const missing: string[] = [];
+  for (const id of new Set(ids)) {
+    const hit = vecCache.get(id);
+    if (hit) out.set(id, hit);
+    else missing.push(id);
+  }
+  for (let i = 0; i < missing.length; i += IN_CHUNK) {
+    const chunk = missing.slice(i, i + IN_CHUNK);
+    const { results } = await db
+      .prepare(`SELECT id, vec FROM items WHERE vec IS NOT NULL AND id IN (${chunk.map(() => "?").join(", ")})`)
+      .bind(...chunk)
+      .all<{ id: string; vec: unknown }>();
+    for (const r of results) {
+      const v = dequantise(r.vec);
+      if (!v) continue;
+      out.set(r.id, v);
+      cacheVec(r.id, v);
+    }
+  }
+  return out;
+}
+
+/** Ids of items still without a vector, newest first. */
+export async function listItemsWithoutVec(db: D1Database, limit: number): Promise<string[]> {
+  const { results } = await db.prepare("SELECT id FROM items WHERE vec IS NULL ORDER BY created_at DESC, id LIMIT ?").bind(Math.max(0, limit)).all<{ id: string }>();
+  return results.map((r) => r.id);
+}
+
+export async function countItemsWithoutVec(db: D1Database): Promise<number> {
+  return (await db.prepare("SELECT COUNT(*) AS n FROM items WHERE vec IS NULL").first<{ n: number }>())?.n ?? 0;
+}

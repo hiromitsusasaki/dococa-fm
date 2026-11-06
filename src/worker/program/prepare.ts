@@ -1,3 +1,4 @@
+import { EMBED_BATCH, ensureItemVectors } from "../ai/embed";
 import { getItem } from "../db/items";
 import { getLetter } from "../db/letters";
 import { countLettersWithoutUnit, countUnitsWithoutAudio, getUnits, listLettersWithoutUnit, listUnitsWithoutAudio, setUnitAudioReady } from "../db/units";
@@ -116,11 +117,12 @@ export async function prepareLetter(env: Env, db: D1Database, letterId: string, 
 /** Letters in a row whose unit could not be made before the unit phase is taken for an outage and stops. */
 const OUTAGE_AFTER = 3;
 
-export type Remaining = { units: Record<Unit["lang"], number>; audio: Record<Unit["lang"], number> };
+/** `vectors`: works still without an embedding (all of them while Workers AI is not bound). */
+export type Remaining = { vectors: number; units: Record<Unit["lang"], number>; audio: Record<Unit["lang"], number> };
 
 /**
- * `limit` is the whole run's budget of letter-language jobs, spent in order on ja units, en units, ja audio,
- * en audio: each letter run consumes one, and every listing asks for the remaining budget only. Stops making
+ * `limit` is the whole run's budget, spent in order on work vectors (one per 20 works embedded), then letter-language
+ * jobs: ja units, en units, ja audio, en audio, each letter run consuming one, and every listing asks for the remaining budget only. Stops making
  * audio at the first `limit`/`unavailable` answer, units at `UNIT_DAILY_LIMIT` (a halt, not a failure), and
  * units after 3 letters in a row that cannot get one, in either language (a single bad letter is counted as
  * failed and skipped, so newer letters are still reached).
@@ -132,7 +134,9 @@ export async function prepareBatch(env: Env, db: D1Database, limit = 20): Promis
     total.audio += r.audio;
     total.failed += r.failed;
   };
-  let budget = limit;
+  // Vectors first: they are cheap, and the next pick by distance needs them.
+  const vectors = await ensureItemVectors(env, db, limit);
+  let budget = limit - Math.ceil(vectors.made / EMBED_BATCH);
   let audioHalted = false;
   let unitHalted = false;
   let unitMisses = 0;
@@ -169,7 +173,7 @@ export async function prepareBatch(env: Env, db: D1Database, limit = 20): Promis
       if (!done.has(`${lang}:${u.letterId}`)) await one(u.letterId, lang);
     }
   }
-  const remaining: Remaining = { units: { ja: 0, en: 0 }, audio: { ja: 0, en: 0 } };
+  const remaining: Remaining = { vectors: vectors.remaining, units: { ja: 0, en: 0 }, audio: { ja: 0, en: 0 } };
   for (const lang of LANGS) {
     remaining.units[lang] = await countLettersWithoutUnit(db, lang);
     remaining.audio[lang] = await countUnitsWithoutAudio(db, lang);

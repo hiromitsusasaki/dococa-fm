@@ -1,6 +1,7 @@
 import { type Context, Hono, type MiddlewareHandler } from "hono";
 import { z } from "zod";
 import type { Variables } from "../auth/session";
+import { embedItems } from "../ai/embed";
 import { moderateLetter } from "../claude/moderate";
 import { type Lang, detectLang, translateToJa } from "../claude/translate";
 import { getEpisode } from "../db/episodes";
@@ -147,7 +148,9 @@ admin.post("/admin/items", async (c) => {
   if (!parsed.success) return invalid(c, parsed.error);
   const draft = await resolveUrl(parsed.data.url, c.env);
   if (!draft) return c.json({ error: "unresolvable" }, 422);
-  return c.json({ item: await resolveOrCreate(c.env.DB, draft) });
+  const item = await resolveOrCreate(c.env.DB, draft);
+  defer(c, embedItems(c.env, c.env.DB, [item.id]));
+  return c.json({ item });
 });
 
 admin.get("/admin/items/:id", async (c) => {
@@ -236,6 +239,7 @@ admin.post("/admin/letters", async (c) => {
   const made = await createLetter(c.env, c.env.DB, listener, { itemId, url, body });
   if (!made.ok) return c.json({ error: made.key, ...(made.reason ? { reason: made.reason } : {}) }, made.status);
   defer(c, prepareLetter(c.env, c.env.DB, made.letter.id));
+  defer(c, embedItems(c.env, c.env.DB, [made.itemId]));
   return c.json({ letterId: made.letter.id, itemId: made.itemId });
 });
 

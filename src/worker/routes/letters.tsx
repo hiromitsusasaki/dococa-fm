@@ -5,6 +5,7 @@ import { LetterText, ReportForm, whoOf } from "../../views/components";
 import { Layout } from "../../views/layout";
 import { currentPath, requireSignin } from "../auth/require-signin";
 import type { Variables } from "../auth/session";
+import { embedItems } from "../ai/embed";
 import { getItem } from "../db/items";
 import { displayText } from "../letters/display";
 import { getLetter, insertReport, insertTakedown, listReactionsForLetter } from "../db/letters";
@@ -55,6 +56,8 @@ letters.post(
     const t = tFor(c.get("listener").lang);
     const result = await createLetter(c.env, c.env.DB, c.get("listener"), form);
     if (result.ok) {
+      // The work may be new: its vector is made after the answer (a no-op when it has one).
+      defer(c, embedItems(c.env, c.env.DB, [result.itemId]));
       // Reactions are fixed phrases and have no unit to make.
       if (result.letter.kind === "letter") defer(c, prepareLetter(c.env, c.env.DB, result.letter.id));
       return c.redirect(`/items/${result.itemId}`, 303);

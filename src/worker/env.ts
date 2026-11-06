@@ -2,6 +2,8 @@ export type Env = {
   DB: D1Database;
   BUCKET: R2Bucket;
   ASSETS: Fetcher;
+  /** Workers AI (work embeddings for the dial's distance). Optional: without it the pick falls back to the pools. */
+  AI?: Ai;
   ANTHROPIC_API_KEY: string;
   SPOTIFY_CLIENT_ID: string;
   /** Google サインイン（OIDC）の OAuth クライアント。ID が空ならサインインは 503 */
