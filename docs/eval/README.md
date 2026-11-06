@@ -8,7 +8,7 @@
 
 1. Worker を起こす（`pnpm dev`、またはデプロイ先）。`ADMIN_TOKEN` と `ANTHROPIC_API_KEY` を入れておく。
 2. 1 日の上限（1 リスナー 10 回）に当たるので、eval のあいだだけ `EPISODE_DAILY_LIMIT=25` のように上げる（ローカルは `.dev.vars`、本番は `wrangler secret put EPISODE_DAILY_LIMIT`）。終わったら戻す。
-3. 本人のリスナー ID を `/settings` の MCP の欄で確かめる。
+3. 本人のリスナー ID を `/settings` の末尾の「リスナー ID」の行で確かめる。
 
 ```bash
 pnpm eval --origin http://127.0.0.1:5173 --token "$ADMIN_TOKEN" --listener <listenerId> --runs 20 --out docs/eval/2026-11-0X.md

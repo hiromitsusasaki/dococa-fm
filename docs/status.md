@@ -7,7 +7,7 @@
 | Task | 内容 | 状態 |
 |---|---|---|
 | Task 1 | お住まい（画面と手渡しの言い方） | 完了 |
-| Task 2 | MCP の撤去 | 未着手 |
+| Task 2 | MCP の撤去 | 完了（`/mcp`・`/settings/mcp-token`・MCP の依存 2 つ・レート制限と session の例外を外した。`/settings` の末尾にリスナー ID の行を残す） |
 | Task 3 | ラジオ面のダイヤル（要求ごとに 1 目盛り） | 未着手 |
 | Task 4 | 遠さ（埋め込みと距離の帯） | 未着手 |
 | Task 5 | ホームに今届いているお便り | 未着手 |
@@ -16,6 +16,8 @@
 | Task 8 | モデレーションの理由と再判定 | 未着手 |
 | Task 9 | 単位のフィードバックの輪（管理画面・良い例・採点スクリプト） | 未着手 |
 | Task 10 | 締めのドキュメント | 未着手 |
+
+決定: MCP は Phase 4 で外した（事前生成で役目を終えた）。列 `mcp_token` は残して使わない。
 
 ## 2026-11-06 Phase 3 完了（最終レビュー済み・ローカル）。次は本人作業 → デプロイ → public 化
 
@@ -36,7 +38,6 @@ Phase 2（ラジオ中心の体験への作り替え）と Phase 3（単位・�
 - [ ] シードの量に注意: お便り 1 通で音声はおよそ 8 行（日本語と英語の intro・手渡し・お便り・after）、ほかにつなぎの定型が 14 行（7 本 × 2 言語）を一度だけ使う。単位はお便り 1 通・1 言語で Claude を 2〜4 回呼ぶ。大量に入れるなら、デモの前日にシードするか、その日だけ `CLOUD_TTS_GLOBAL_DAILY_LIMIT` を上げる（`UNIT_DAILY_LIMIT` と `LETTER_GLOBAL_DAILY_LIMIT` も同じ）。
 - [ ] 本番で確かめる: ホームの「ラジオをつける」、Google サインイン、`/me`、公開局 `/stations/s:<slug>`、日本語と英語の切り替え。
 - [ ] Spotify Developer Dashboard の Redirect URI を `https://dococafm.app/auth/spotify/callback`、Website を `https://dococafm.app` に。TMDB の Application URL も同じく（済んでいなければ。新ドメインに揃える）。
-- [ ] `/settings` の `/mcp/<token>` を Claude のカスタムコネクタに登録する。
 - [ ] eval 20 回: `printf '30' | pnpm wrangler secret put EPISODE_DAILY_LIMIT` のあと、`pnpm eval --origin https://dococafm.app --token "$ADMIN_TOKEN" --listener <id> --runs 20 --out docs/eval/<日付>.md`。結果を README の eval 表に書く。
 - [ ] 声の聴き比べ（Phase 1 の Task 11 Step 5）が済んでいなければ、本番で自分の最初の回を聴く。
 - [ ] public 化後の GitHub 設定（fork PR の承認など）と、public 化前チェックリストの残り（下の 2026-11-04 の節）。gitleaks は public 化の直前にもう一度。
@@ -147,7 +148,6 @@ Phase 2（ラジオ中心の体験への作り替え）と Phase 3（単位・�
   - [ ] `printf '30' | pnpm wrangler secret put EPISODE_DAILY_LIMIT`（eval 20 回のため。エージェントの権限では secret の書き込みが拒まれる）。
   - [x] デモ投入（上記）。
   - [ ] eval 20 回: `pnpm eval --origin https://dococafm.app --token "$ADMIN_TOKEN" --listener <id> --runs 20 --out docs/eval/<日付>.md`（`EPISODE_DAILY_LIMIT` を 25 以上に）。
-  - [ ] `/settings` の `/mcp/<token>` を Claude のカスタムコネクタに登録（サーバー側は確認済み）。
   - [ ] 下の「public 化前チェックリスト」の残り（GitHub 設定、gitleaks、public 化）。
 
 ## 2026-11-04 最終修正 完了。次は本人作業（push・鍵・デプロイ・public 化）
@@ -168,7 +168,7 @@ Phase 2（ラジオ中心の体験への作り替え）と Phase 3（単位・�
   - [ ] 手元で `gitleaks detect --source .` を実行して検出 0 を確かめる（実装側で 2026-11-04 に実行済み: 50 commits、検出 0。public 化の直前にもう一度）。
   - [ ] CI が main で緑になっていることを確かめる（GitHub Actions は push するまで走らない）。
   - [ ] 上が済んでから private → public に切り替えて提出する。
-- Task 15 の保留（デプロイは 2026-11-05 に完了。残りは eval 20 回と MCP connector 確認）:eval スクリプトは `pnpm eval`（管理 API の模擬サーバーで動作確認済み）、README の eval 欄は「鍵投入後に 20 回回して記入」のまま。走らせ方は `docs/eval/README.md`。
+- Task 15 の保留（デプロイは 2026-11-05 に完了。残りは eval 20 回）:eval スクリプトは `pnpm eval`（管理 API の模擬サーバーで動作確認済み）、README の eval 欄は「鍵投入後に 20 回回して記入」のまま。走らせ方は `docs/eval/README.md`。
 - デプロイの手順（2026-11-05 に実施済み。再デプロイは `pnpm run deploy` だけ）:
   ```bash
   pnpm wrangler d1 create dococa                 # 出た database_id を wrangler.jsonc の d1_databases に書く
@@ -180,9 +180,9 @@ Phase 2（ラジオ中心の体験への作り替え）と Phase 3（単位・�
   pnpm db:migrate                                # 0004_tts_claims.sql まで当たる
   pnpm run deploy
   ```
-  そのあと本番 URL で `/start` → 番組を聴く → `/settings` の `/mcp/<token>` を Claude のカスタムコネクタに登録して `get_episode` を呼ぶ。eval は `EPISODE_DAILY_LIMIT` を 25 などに上げて `pnpm eval --origin https://<URL> --token "$ADMIN_TOKEN" --listener <id> --runs 20 --out docs/eval/<日付>.md`。
+  そのあと本番 URL で `/start` → 番組を聴く。eval は `EPISODE_DAILY_LIMIT` を 25 などに上げて `pnpm eval --origin https://<URL> --token "$ADMIN_TOKEN" --listener <id> --runs 20 --out docs/eval/<日付>.md`。
 - Demo seeding real run held: no key（`ANTHROPIC_API_KEY` が空。入れたら `pnpm seed --items <作品 URL の一覧> --personas 3 --dry-run` で確かめ、`--dry-run` を外して投入。`docs/demo/personas.json` はこのときできる）。デモ用リスナーは `listeners.demo = 1` で、画面・MCP・番組に「デモ用」の印が出る。
-- YouTube collection real run held: no key（`YOUTUBE_API_KEY` と `ANTHROPIC_API_KEY` を入れたら `pnpm collect --item <url>` を 1 作品で流す。既定は dry-run で `.found/<itemId>.json` に書くだけ。中身を読んで不要な行を消し、`pnpm collect --post .found/<itemId>.json` で投入して、`/items/:id` の「ネットで見つけた声」を確かめる）。`/admin/found` はお便りと同じモデレーションを通り、reject 済みの出典 URL は再投入されない。管理 API は `ADMIN_TOKEN`（Bearer）。デモ回は `POST /admin/episodes`（`listenerId` は `/settings` の MCP の欄に出る）。
+- YouTube collection real run held: no key（`YOUTUBE_API_KEY` と `ANTHROPIC_API_KEY` を入れたら `pnpm collect --item <url>` を 1 作品で流す。既定は dry-run で `.found/<itemId>.json` に書くだけ。中身を読んで不要な行を消し、`pnpm collect --post .found/<itemId>.json` で投入して、`/items/:id` の「ネットで見つけた声」を確かめる）。`/admin/found` はお便りと同じモデレーションを通り、reject 済みの出典 URL は再投入されない。管理 API は `ADMIN_TOKEN`（Bearer）。デモ回は `POST /admin/episodes`（`listenerId` は `/settings` の末尾に出る）。
 - Gemini-TTS real check: 鍵は API キーで通る形だが、本番で 403（Vertex AI API が未有効化）。上の本人作業を参照。`GET /tts` は鍵が空なら 503。鍵が入ったら Task 11 Step 5（Charon / Kore の聴き比べと `DJ_STYLE_PROMPT` の調整）をする。クラウド TTS は各リスナーの最初の回（`claimCloudTts`）と、`makeEpisode(env, listener, { cloudTts: true })`（Task 13 のデモ回）だけ。
 - Real-API episode: 2026-11-05 に本番で 2 回生成して確認。`docs/examples/episode-1.json` は未作成（デモ投入後の回で作るとよい）。
 - Spotify real check: 曲 URL の解決は本番で確認。OAuth 連携（Step 5）は本番 redirect URI の登録待ち（上の本人作業）。
@@ -207,7 +207,7 @@ Phase 2（ラジオ中心の体験への作り替え）と Phase 3（単位・�
 | 13 | 見つけた声（収集バッチと管理 API） | 完了（実データ収集は YouTube 鍵待ち） |
 | 13b | デモ用シード（AI ペルソナのお便りと「デモ用」の印） | 完了（実 API での 3 ペルソナ投入は ANTHROPIC_API_KEY 待ち） |
 | 14 | はじめの一歩（好きなもの 3 つ、ブックマークレット、ホーム） | 完了 |
-| 15 | eval、デプロイ、README | 完了（20 回の eval 実走・デプロイ・MCP connector 確認は鍵と wrangler login 待ち） |
+| 15 | eval、デプロイ、README | 完了（20 回の eval 実走・デプロイは鍵と wrangler login 待ち） |
 | 16 | 公開前の整備（CI、secret scanning、レート制限）→ public 化 | 完了（gitleaks と GitHub 側の設定は本人） |
 
 ## 決定の記録（設計書に反映済み）
