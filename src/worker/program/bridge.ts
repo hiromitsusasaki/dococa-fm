@@ -14,4 +14,4 @@ export function bridgeBefore(index: number, slot: Slot): BridgeKey {
 }
 
 /** A transition made from a template alone, never from the model. */
-export const bridgeLine = (key: BridgeKey, lang: Lang): ScriptLine => ({ type: "dj", text: t(key, undefined, lang), fixed: true });
+export const bridgeLine = (key: BridgeKey, lang: Lang): ScriptLine => ({ type: "dj", text: t(key, undefined, lang), fixed: true, bridge: key });

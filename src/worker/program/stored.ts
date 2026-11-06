@@ -52,6 +52,23 @@ export function publicView(segments: Segment[], letters: ReadonlyMap<string, Let
       keep[i] = false;
       if ((line.kind === "found" || line.kind === "reply") && isFixed(seg.lines[i - 1])) keep[i - 1] = false;
     });
+    // A "another letter" bridge needs a read letter before it and one after it; otherwise it points at nothing.
+    const isRead = (j: number): boolean => {
+      const l = seg.lines[j];
+      return keep[j]! && l?.type === "letter" && l.kind !== "reply";
+    };
+    seg.lines.forEach((line, i) => {
+      if (!keep[i] || line.type !== "dj" || line.bridge !== "bridge.sameWork") return;
+      let before = false;
+      for (let j = 0; j < i && !before; j++) before = isRead(j);
+      let after = false;
+      for (let j = i + 1; j < seg.lines.length && !after; j++) {
+        const l = seg.lines[j];
+        if (l?.type === "dj" && l.bridge === "bridge.sameWork") break;
+        after = isRead(j);
+      }
+      if (!before || !after) keep[i] = false;
+    });
     if (!(had > 0 && gone === had)) {
       const lines: ScriptLine[] = [];
       seg.lines.forEach((line, i) => {

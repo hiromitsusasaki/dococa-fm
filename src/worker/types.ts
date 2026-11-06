@@ -74,7 +74,7 @@ export type HistoryRow = {
 
 export type ScriptLine =
   /** `fixed` marks a line built from a template and data (names, places), never written by the model. */
-  | { type: "dj"; text: string; fixed?: true }
+  | { type: "dj"; text: string; fixed?: true; bridge?: string }
   | {
       type: "letter";
       letterId: string;
