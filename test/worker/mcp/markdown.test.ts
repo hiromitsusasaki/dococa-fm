@@ -15,7 +15,7 @@ const lines = {
   letter: (l: Letter) => ({ type: "letter" as const, letterId: l.id, text: l.bodyJa, radioName: l.radioName, place: l.place, kind: l.kind, sourceUrl: l.sourceUrl, sourceAuthor: l.sourceAuthor }),
 };
 const episodeOf = (ls: Letter[], extra: Episode["segments"][number]["lines"] = []): Episode => ({
-  id: "e1", listenerId: "x", verified: true, cloudTts: false, station: "mine", createdAt: "2026-11-04T00:00:00Z",
+  id: "e1", listenerId: "x", verified: true, cloudTts: false, station: "mine", lang: "ja", createdAt: "2026-11-04T00:00:00Z",
   report: { verbatim: true, sources: true, topical: true, pii: true, details: [] },
   segments: [{ itemId: "i1", slot: "near", lines: [{ type: "dj", text: "次の一曲です。" }, ...ls.map(lines.letter), ...extra] }],
 });

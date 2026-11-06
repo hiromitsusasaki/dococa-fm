@@ -37,6 +37,14 @@ describe("makeEpisode cloud voice", () => {
     expect(await cloud((second as { id: string }).id)).toBe(true);
   });
 
+  it("stores the listener's language on the episode", async () => {
+    const me = await seed();
+    const made = await makeEpisode({ ...env, GOOGLE_TTS_SA_JSON: "" }, { ...me, lang: "en" });
+    expect((await getEpisode(env.DB, (made as { id: string }).id))!.lang).toBe("en");
+    const ja = await makeEpisode({ ...env, GOOGLE_TTS_SA_JSON: "" }, me);
+    expect((await getEpisode(env.DB, (ja as { id: string }).id))!.lang).toBe("ja");
+  });
+
   it("leaves the voice off without a key", async () => {
     const me = await seed();
     const made = await makeEpisode({ ...env, GOOGLE_TTS_SA_JSON: "" }, me);

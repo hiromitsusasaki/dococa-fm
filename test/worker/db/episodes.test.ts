@@ -34,6 +34,14 @@ describe("episodes", () => {
     expect((await getEpisode(env.DB, on.id))?.cloudTts).toBe(true);
   });
 
+  it("insertEpisode stores the episode's language (default ja)", async () => {
+    const me = await createListener(env.DB);
+    expect((await getEpisode(env.DB, (await insertEpisode(env.DB, draft(me.id))).id))?.lang).toBe("ja");
+    const en = await insertEpisode(env.DB, { ...draft(me.id), lang: "en" });
+    expect(en.lang).toBe("en");
+    expect((await getEpisode(env.DB, en.id))?.lang).toBe("en");
+  });
+
   it("insertEpisode keeps a given id and mints one otherwise", async () => {
     const me = await createListener(env.DB);
     const given = await insertEpisode(env.DB, { ...draft(me.id), id: "11111111-1111-1111-1111-111111111111" });

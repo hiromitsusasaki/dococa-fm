@@ -125,5 +125,7 @@ export type Episode = {
   cloudTts: boolean;
   /** `world`, `mine` or `public:<ownerId>`: the station it was made on, which resume looks at. */
   station: string;
+  /** The language the DJ speaks, the letters are read in and the voice synthesizes. */
+  lang: "ja" | "en";
   createdAt: string;
 };

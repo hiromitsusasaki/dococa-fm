@@ -90,7 +90,7 @@ export async function buildEpisode(
   const finish = (segments: Episode["segments"]): Episode => {
     const report = verifyEpisode(segments, letters, listener, items);
     const verified = report.verbatim && report.sources && report.topical && report.pii;
-    return { id: crypto.randomUUID(), listenerId: listener.id, segments, verified, report, cloudTts: false, station: "mine", createdAt: new Date().toISOString() };
+    return { id: crypto.randomUUID(), listenerId: listener.id, segments, verified, report, cloudTts: false, station: "mine", lang: listener.lang, createdAt: new Date().toISOString() };
   };
 
   const readLetters = plan.flatMap((p) => p.letterIds.map((id) => letters.get(id)!));
