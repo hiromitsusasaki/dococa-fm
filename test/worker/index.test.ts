@@ -19,7 +19,7 @@ describe("worker", () => {
   });
 
   it("scheduled hands prepareBatch to waitUntil", async () => {
-    const batch = vi.spyOn(prepare, "prepareBatch").mockResolvedValue({ units: 0, audio: 0, failed: 0, remaining: { units: 0, audio: 0 } });
+    const batch = vi.spyOn(prepare, "prepareBatch").mockResolvedValue({ units: 0, audio: 0, failed: 0, remaining: { units: { ja: 0, en: 0 }, audio: { ja: 0, en: 0 } } });
     const waited: Promise<unknown>[] = [];
     await worker.scheduled({ scheduledTime: Date.now(), cron: "*/15 * * * *", noRetry() {} } as ScheduledController, env, { waitUntil: (p: Promise<unknown>) => void waited.push(p), passThroughOnException() {} } as ExecutionContext);
     expect(batch).toHaveBeenCalledWith(env, env.DB);

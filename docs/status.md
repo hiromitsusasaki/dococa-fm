@@ -8,7 +8,7 @@ Phase 2（ラジオ中心の体験への作り替え）の実装は、すべて 
 
 ### 本人作業
 
-- [ ] デプロイ後、`POST /admin/prepare`（`Authorization: Bearer $ADMIN_TOKEN`）を `remaining` の `units` と `audio` が 0 になるまで繰り返し呼ぶ（デモデータの単位と音声を先に作っておく。Cron は 15 分ごとに 20 件ずつ埋める）。
+- [ ] デプロイ後、`POST /admin/prepare`（`Authorization: Bearer $ADMIN_TOKEN`）を `remaining` の `units.ja`・`units.en`・`audio.ja`・`audio.en` がすべて 0 になるまで繰り返し呼ぶ（デモデータの日本語と英語の単位と音声を先に作っておく。Cron は 15 分ごとに言語ごと 20 件ずつ埋める）。
 - [ ] GCP で OAuth クライアント（種類: ウェブ アプリケーション）を作る。承認済みのリダイレクト URI は `https://dococafm.app/auth/google/callback` と `http://127.0.0.1:5173/auth/google/callback`。
 - [ ] `pnpm wrangler secret put GOOGLE_OAUTH_CLIENT_ID` と `pnpm wrangler secret put GOOGLE_OAUTH_CLIENT_SECRET` を実行し、`.dev.vars` にも同じ値を写す。
 - [ ] OAuth の同意画面を「本番」に公開する（テスト中のままだと、登録したテストユーザーしか入れない）。
@@ -71,7 +71,7 @@ Phase 2（ラジオ中心の体験への作り替え）の実装は、すべて 
 | Task 5 | 事前生成（投稿後・15 分ごと・手動） | 完了（`program/prepare.ts` の `prepareLetter` / `prepareBatch`。`POST /letters`・MCP `post_letter`・`/admin/letters`・`/admin/found` が `waitUntil` で呼び、Cron `*/15 * * * *` と `POST /admin/prepare`（`limit` 1〜50）で 20 件ずつ埋める。出典のない見つけた声は対象外。音声は上限か鍵なしで止める） |
 | Task 6 | 聴いた記録 | 完了（`listens`（リスナー × お便り）を 0010 で追加。プレイヤーが読み上げ始めたお便りの行で `POST /listens`（`reply` は送らない）、サーバーは自分の検証済みの回・公開のお便り・公開ビューの枠の添字が合うときだけ 204、他は 404。マイページの聴いたお便りはこの表から出す） |
 | Task 7 | お便りの土地コード | 完了（`letters.place_country` / `place_region` を 0011 で追加。送るときにリスナーの値を写し、見つけた声は null。画面と `whoLine` は言語に合わせてコードから引き、無ければ `place`。番組の台本の手紙行にもコードを載せ、検証で突き合わせる。クライアントは `places.ts` を取り込む（station.js の gzip は約 4 KB）。DJ の読みは日本語の `place` のまま） |
-| Task 8 | 英語の DJ | 完了（`episodes.lang` を 0012 で追加し、番組は聴く人の言語で組む。`lang = en` の単位は `DJ_SYSTEM_EN` と英語の `write_unit` で書き、お便りは `body_en`（無ければ原文）を読み、手渡し・反応・つなぎの定型も英語、土地はコードから英語で言う。検証は英語用の時事・年・数え上げ・再生の誘い・手渡しの語彙と 6 語の引用窓。`/tts` は回の言語で合成（`en-US` と `DJ_STYLE_PROMPT_EN`）。`prepareLetter` は ja と en の単位と音声を作る。`prepareBatch`（Cron）は ja のみ） |
+| Task 8 | 英語の DJ | 完了（`episodes.lang` を 0012 で追加し、番組は聴く人の言語で組む。`lang = en` の単位は `DJ_SYSTEM_EN` と英語の `write_unit` で書き、お便りは `body_en`（無ければ原文）を読み、手渡し・反応・つなぎの定型も英語、土地はコードから英語で言う。検証は英語用の時事・年・数え上げ・再生の誘い・手渡しの語彙と 6 語の引用窓。`/tts` は回の言語で合成（`en-US` と `DJ_STYLE_PROMPT_EN`）。`prepareLetter` と `prepareBatch`（Cron・`/admin/prepare`）は ja → en の順に両方の単位と音声を作る。`remaining` は言語ごと） |
 
 ### 決定（Phase 3）
 - 原文どおりの判定（Task 8）: お便りの行は、日本語の回では `body_ja` か原文、英語の回では `body_en` か原文と一字一句同じであること。英語の回で日本語訳を読むのは不可。引用の検査は日本語の回では原文と `body_ja`、英語の回ではそれに `body_en` を加えた全部と突き合わせる。英語の行は偶然の一致が多いので、引用の窓は 10 字ではなく 6 語。

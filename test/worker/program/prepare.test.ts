@@ -144,11 +144,18 @@ describe("prepareLetter", () => {
 });
 
 describe("prepareBatch", () => {
-  it("makes at most `limit` units and reports what remains", async () => {
-    await seed(3);
+  it("makes at most `limit` units per language, ja first then en, and reports what remains of each", async () => {
+    const { letters } = await seed(3);
+    const order: string[] = [];
+    create.mockImplementation((req: { system: string; messages: { content: string }[] }) => {
+      const lang = req.system.startsWith("You are") ? "en" : "ja";
+      order.push(`${lang}:${letters.findIndex((l) => req.messages[0]!.content.includes(l.body))}`);
+      return toolUse("write_unit", { intro: "静かな一曲です。", after: "いいお便りでした。" });
+    });
     const r = await prepareBatch(keylessTts, env.DB, 2);
-    expect(r).toEqual({ units: 2, audio: 0, failed: 0, remaining: { units: 1, audio: 2 } });
-    expect(create).toHaveBeenCalledTimes(2);
+    expect(r).toEqual({ units: 4, audio: 0, failed: 0, remaining: { units: { ja: 1, en: 1 }, audio: { ja: 2, en: 2 } } });
+    expect(order).toEqual(["ja:0", "ja:1", "en:0", "en:1"]);
+    expect((await getUnits(env.DB, letters.map((l) => l.id), "en")).size).toBe(2);
   });
 
   it("goes on to newer letters when the oldest one cannot get a unit, and stops only after three misses in a row", async () => {
@@ -157,7 +164,7 @@ describe("prepareBatch", () => {
     const bad = letters[0]!.bodyJa;
     create.mockImplementation((req: any) => (String(req.messages[0].content).includes(bad) ? toolUse("write_unit", { intro: 1 }) : toolUse("write_unit", { intro: "静かな一曲です。", after: "いいお便りでした。" })));
     const r = await prepareBatch(keylessTts, env.DB, 20);
-    expect(r).toMatchObject({ units: 1, failed: 1, remaining: { units: 1, audio: 1 } });
+    expect(r).toMatchObject({ units: 2, failed: 2, remaining: { units: { ja: 1, en: 1 }, audio: { ja: 1, en: 1 } } });
     expect(await unitOf(letters[1]!.id)).toBeDefined();
     expect(await unitOf(letters[0]!.id)).toBeUndefined();
 
@@ -165,7 +172,8 @@ describe("prepareBatch", () => {
     const many = await seed(5);
     create.mockRejectedValue(new Error("down"));
     const out = await prepareBatch(keylessTts, env.DB, 20);
-    expect(out).toMatchObject({ units: 0, failed: 3, remaining: { units: 5 } });
+    // The outage counter is shared: after three misses in ja, en is not tried either.
+    expect(out).toMatchObject({ units: 0, failed: 3, remaining: { units: { ja: 5, en: 5 } } });
     expect(many.letters).toHaveLength(5);
   });
 
@@ -174,15 +182,22 @@ describe("prepareBatch", () => {
     await prepareBatch(keylessTts, env.DB, 20);
     const r = await prepareBatch(keyed, env.DB, 20);
     // The stubbed intro and after are the same text for both letters, so their clips are shared.
-    expect(r).toEqual({ units: 0, audio: 6, failed: 0, remaining: { units: 0, audio: 0 } });
-    expect(create).toHaveBeenCalledTimes(2);
+    expect(r).toEqual({ units: 0, audio: 12, failed: 0, remaining: { units: { ja: 0, en: 0 }, audio: { ja: 0, en: 0 } } });
+    expect(create).toHaveBeenCalledTimes(4);
     expect(await unitOf(letters[1]!.id)).toMatchObject({ audioReady: true });
+  });
+
+  it("voices at most `limit` units per language", async () => {
+    await seed(3);
+    await prepareBatch(keylessTts, env.DB, 20);
+    const r = await prepareBatch(keyed, env.DB, 1);
+    expect(r).toMatchObject({ units: 0, failed: 0, remaining: { units: { ja: 0, en: 0 }, audio: { ja: 2, en: 2 } } });
   });
 
   it("stops making audio at the first limit answer, while units are still made", async () => {
     await seed(2);
     const r = await prepareBatch({ ...keyed, CLOUD_TTS_GLOBAL_DAILY_LIMIT: "2" } as Env, env.DB, 20);
-    expect(r).toMatchObject({ units: 2, audio: 2, failed: 0, remaining: { units: 0, audio: 2 } });
+    expect(r).toMatchObject({ units: 4, audio: 2, failed: 0, remaining: { units: { ja: 0, en: 0 }, audio: { ja: 2, en: 2 } } });
     expect(google).toHaveBeenCalledTimes(2);
   });
 
@@ -190,10 +205,10 @@ describe("prepareBatch", () => {
     const { item } = await seed(0);
     for (const sourceUrl of [null, "", "  "]) await insertLetter(env.DB, letterDraft(item.id, { kind: "found", sourceUrl, sourceAuthor: "@x", radioName: "" }));
     await insertLetter(env.DB, letterDraft(item.id, { kind: "found", sourceUrl: "https://youtu.be/x", sourceAuthor: " ", radioName: "" }));
-    expect(await prepareBatch(keyed, env.DB, 20)).toEqual({ units: 0, audio: 0, failed: 0, remaining: { units: 0, audio: 0 } });
+    expect(await prepareBatch(keyed, env.DB, 20)).toEqual({ units: 0, audio: 0, failed: 0, remaining: { units: { ja: 0, en: 0 }, audio: { ja: 0, en: 0 } } });
     expect(create).not.toHaveBeenCalled();
     const sourced = await insertLetter(env.DB, letterDraft(item.id, { kind: "found", sourceUrl: "https://youtu.be/y", sourceAuthor: "@jazzcat", radioName: "", body: "雨に合う。", bodyJa: "雨に合う。" }));
-    expect(await prepareBatch(keyed, env.DB, 20)).toMatchObject({ units: 1, failed: 0 });
+    expect(await prepareBatch(keyed, env.DB, 20)).toMatchObject({ units: 2, failed: 0 });
     expect(await unitOf(sourced.id)).toBeDefined();
   });
 
@@ -201,7 +216,7 @@ describe("prepareBatch", () => {
     const { letters } = await seed(1, { status: "rejected" });
     await upsertUnit(env.DB, { letterId: letters[0]!.id, lang: "ja", intro: "a", after: "b", verified: true, audioReady: false });
     const r = await prepareBatch(keyed, env.DB, 20);
-    expect(r).toEqual({ units: 0, audio: 0, failed: 0, remaining: { units: 0, audio: 0 } });
+    expect(r).toEqual({ units: 0, audio: 0, failed: 0, remaining: { units: { ja: 0, en: 0 }, audio: { ja: 0, en: 0 } } });
     expect(create).not.toHaveBeenCalled();
     expect(google).not.toHaveBeenCalled();
   });

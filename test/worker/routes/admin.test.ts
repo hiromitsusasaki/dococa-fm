@@ -209,7 +209,7 @@ describe("POST /admin/prepare", () => {
     vi.spyOn(console, "warn").mockImplementation(() => {});
     const res = await post({});
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ units: 2, audio: 0, failed: 0, remaining: { units: 0, audio: 2 } });
+    expect(await res.json()).toEqual({ units: 4, audio: 0, failed: 0, remaining: { units: { ja: 0, en: 0 }, audio: { ja: 2, en: 2 } } });
   });
 
   it("takes a limit of 1 to 50, 20 by default", async () => {
@@ -218,8 +218,8 @@ describe("POST /admin/prepare", () => {
     const create = stubAnthropic();
     create.mockResolvedValue(toolUse("write_unit", { intro: "静かな一曲です。", after: "いいお便りでした。" }));
     vi.spyOn(console, "warn").mockImplementation(() => {});
-    expect(await (await post({ limit: 1 })).json()).toMatchObject({ units: 1, remaining: { units: 2 } });
-    expect(await (await post()).json()).toMatchObject({ units: 2, remaining: { units: 0 } });
+    expect(await (await post({ limit: 1 })).json()).toMatchObject({ units: 2, remaining: { units: { ja: 2, en: 2 } } });
+    expect(await (await post()).json()).toMatchObject({ units: 4, remaining: { units: { ja: 0, en: 0 } } });
     for (const limit of [0, 51, 1.5, "5"]) expect((await post({ limit })).status).toBe(422);
   });
 });
