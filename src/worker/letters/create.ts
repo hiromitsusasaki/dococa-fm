@@ -1,8 +1,9 @@
 import { moderateLetter } from "../claude/moderate";
 import { type Lang, detectLang, translateLetter } from "../claude/translate";
 import { getItem } from "../db/items";
-import { countRecentDuplicate, getLetter, hasWatashimo, insertLetter } from "../db/letters";
+import { countLettersToday, countRecentDuplicate, getLetter, hasWatashimo, insertLetter } from "../db/letters";
 import type { Env } from "../env";
+import { limitFrom } from "../limits";
 import { saneTranslation } from "./display";
 import type { ja } from "../i18n/ja";
 import { t } from "../i18n/t";
@@ -11,6 +12,8 @@ import type { Item, Letter, LetterKind, Listener } from "../types";
 
 export const MAX_BODY = 200;
 const DUPLICATE_WINDOW_MINUTES = 10;
+/** Letters stored per JST day, everyone together, when `LETTER_GLOBAL_DAILY_LIMIT` is unset. */
+export const DEFAULT_LETTER_GLOBAL_DAILY_LIMIT = 500;
 
 export type LetterInput = {
   url?: string;
@@ -67,6 +70,8 @@ export async function createLetter(
   let bodyJa = body;
   let bodyEn: string | null = isWatashimo ? t("reaction.watashimo", undefined, "en") : body;
   if (!isWatashimo) {
+    // Moderation and translation are paid calls; the cheap 私も is not capped.
+    if ((await countLettersToday(db)) >= limitFrom(env.LETTER_GLOBAL_DAILY_LIMIT, DEFAULT_LETTER_GLOBAL_DAILY_LIMIT)) return fail(429, "letters.dailyLimit", { draft });
     try {
       const verdict = await moderateLetter(env, body, { title: draft.title, creator: draft.creator });
       if (!verdict.ok) return fail(422, "letters.rejected", { reason: verdict.reason, draft });

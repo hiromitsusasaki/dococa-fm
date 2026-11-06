@@ -113,6 +113,7 @@ export const ja = {
   "letters.empty": "お便りを書いてください。",
   "letters.tooLong": "お便りは 200 字までです。",
   "letters.duplicate": "同じお便りがすでに届いています。",
+  "letters.dailyLimit": "今日のお便りの受付は、ここまでです。明日またどうぞ。",
   "letters.rejected": "このお便りは送れませんでした。",
   "letters.unavailable": "いま判定の係が休んでいます。少ししてからもう一度お試しください。",
   "letters.reason.abuse": "誰かを傷つける内容が含まれています。",

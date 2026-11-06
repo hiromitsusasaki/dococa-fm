@@ -1,4 +1,5 @@
 import type { Letter, LetterKind } from "../types";
+import { jstDayStartIso } from "./episodes";
 
 type Row = Record<string, unknown>;
 
@@ -152,6 +153,12 @@ export async function listReactionsForLetter(db: D1Database, letterId: string): 
     .bind(letterId)
     .all<Row>();
   return results.map(rowToLetter);
+}
+
+/** Letters of every kind stored since the JST day began: what `LETTER_GLOBAL_DAILY_LIMIT` counts. */
+export async function countLettersToday(db: D1Database, now: Date = new Date()): Promise<number> {
+  const row = await db.prepare("SELECT COUNT(*) AS n FROM letters WHERE created_at >= ?").bind(jstDayStartIso(now)).first<{ n: number }>();
+  return row?.n ?? 0;
 }
 
 export async function countRecentDuplicate(

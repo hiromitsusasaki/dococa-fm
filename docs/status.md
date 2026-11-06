@@ -9,6 +9,7 @@ Phase 2（ラジオ中心の体験への作り替え）の実装は、すべて 
 ### 本人作業
 
 - [ ] 任意: 単位（お便りごとの DJ の語り）の 1 日の上限 `UNIT_DAILY_LIMIT`（既定 1000、`0` で停止）を変えるときは `pnpm wrangler secret put UNIT_DAILY_LIMIT`（Cloudflare の secret か var。既定でよければ設定しない）。
+- [ ] 任意: お便りと一言の全体の 1 日の上限 `LETTER_GLOBAL_DAILY_LIMIT`（既定 500、`0` で停止。「私も」は止めない）を変えるときは `pnpm wrangler secret put LETTER_GLOBAL_DAILY_LIMIT`。`/admin/letters` のシードもこの上限に従うので、大量に投入する日は先に上げる。
 - [ ] デプロイ後、`POST /admin/prepare`（`Authorization: Bearer $ADMIN_TOKEN`）を `remaining` の `units.ja`・`units.en`・`audio.ja`・`audio.en` がすべて 0 になるまで繰り返し呼ぶ（デモデータの日本語と英語の単位と音声を先に作っておく。Cron は 15 分ごとに言語ごと 20 件ずつ埋める）。
 - [ ] GCP で OAuth クライアント（種類: ウェブ アプリケーション）を作る。承認済みのリダイレクト URI は `https://dococafm.app/auth/google/callback` と `http://127.0.0.1:5173/auth/google/callback`。
 - [ ] `pnpm wrangler secret put GOOGLE_OAUTH_CLIENT_ID` と `pnpm wrangler secret put GOOGLE_OAUTH_CLIENT_SECRET` を実行し、`.dev.vars` にも同じ値を写す。

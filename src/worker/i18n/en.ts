@@ -116,6 +116,7 @@ export const en: Record<keyof typeof ja, string> = {
   "letters.empty": "Write your letter first.",
   "letters.tooLong": "Letters can be up to 200 characters.",
   "letters.duplicate": "That same letter has already arrived.",
+  "letters.dailyLimit": "That is all the letters for today. Please come back tomorrow.",
   "letters.rejected": "We couldn't send this letter.",
   "letters.unavailable": "The reviewer is taking a break. Please try again in a moment.",
   "letters.reason.abuse": "It may hurt someone.",

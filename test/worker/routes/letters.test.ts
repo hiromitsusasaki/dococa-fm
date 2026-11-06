@@ -176,6 +176,44 @@ describe("POST /letters", () => {
     expect(await again.text()).toContain(t("letters.duplicate"));
   });
 
+  it("returns 429 with the daily-limit message and asks Claude nothing once today's letters are at LETTER_GLOBAL_DAILY_LIMIT", async () => {
+    const item = await seedItem();
+    const parent = await insertLetter(env.DB, letterDraft(item.id, { body: "先の一通", bodyJa: "先の一通" }));
+    const cookie = await signedInSession();
+    const capped = env as { LETTER_GLOBAL_DAILY_LIMIT?: string };
+    capped.LETTER_GLOBAL_DAILY_LIMIT = "1";
+    try {
+      const res = await postForm("/letters", cookie, { itemId: item.id, body: "上限の後の一通" });
+      expect(res.status).toBe(429);
+      expect(await res.text()).toContain(t("letters.dailyLimit"));
+      const reply = await postForm("/letters", cookie, { itemId: item.id, body: "わかります", kind: "reply", parentLetterId: parent.id });
+      expect(reply.status).toBe(429);
+      expect(create).not.toHaveBeenCalled();
+      // 私も costs no Claude call and is not capped.
+      expect((await postForm("/letters", cookie, { itemId: item.id, kind: "watashimo", parentLetterId: parent.id, body: "x" })).status).toBe(303);
+      expect(await listLettersForItem(env.DB, item.id)).toHaveLength(2);
+    } finally {
+      delete capped.LETTER_GLOBAL_DAILY_LIMIT;
+    }
+  });
+
+  it("pauses letters with LETTER_GLOBAL_DAILY_LIMIT=0, and does not count letters from before today's JST midnight", async () => {
+    const item = await seedItem();
+    const old = await insertLetter(env.DB, letterDraft(item.id, { body: "昨日の一通", bodyJa: "昨日の一通" }));
+    await env.DB.prepare("UPDATE letters SET created_at = '2020-01-01T00:00:00.000Z' WHERE id = ?").bind(old.id).run();
+    const cookie = await signedInSession();
+    const capped = env as { LETTER_GLOBAL_DAILY_LIMIT?: string };
+    try {
+      capped.LETTER_GLOBAL_DAILY_LIMIT = "0";
+      expect((await postForm("/letters", cookie, { itemId: item.id, body: "止まっている日" })).status).toBe(429);
+      expect(create).not.toHaveBeenCalled();
+      capped.LETTER_GLOBAL_DAILY_LIMIT = "1";
+      expect((await postForm("/letters", cookie, { itemId: item.id, body: "今日の一通" })).status).toBe(303);
+    } finally {
+      delete capped.LETTER_GLOBAL_DAILY_LIMIT;
+    }
+  });
+
   it("returns 503 when Claude fails", async () => {
     const item = await seedItem();
     vi.spyOn(console, "error").mockImplementation(() => {});
