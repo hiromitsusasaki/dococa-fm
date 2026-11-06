@@ -55,6 +55,36 @@ describe("english patterns", () => {
   });
 });
 
+describe("english gaps", () => {
+  it.each([
+    "At the moment, a quiet one.", "As of now, it is a classic.", "Nowadays it plays everywhere.", "A song for this weekend.", "Perfect for this season.",
+    "A song for the holidays.", "An Easter song.", "For Thanksgiving dinner.", "Now in theaters.", "In theaters soon.", "Now showing downtown.", "On sale now.",
+    "Their latest album.", "The latest film by her.", "The latest movie.", "Her latest book.", "The latest single.", "The latest release.",
+  ])("TOPICAL_EN refuses %s", (s) => {
+    expect(s.match(TOPICAL_EN)).not.toBeNull();
+  });
+
+  it.each(["Two letters arrived.", "Three messages came in.", "Twelve letters about it.", "Dozens of letters.", "Dozens of messages.", "Dozens of people wrote.", "Dozens of listeners.", "The second letter.", "The fifth letter is short.", "The 3rd letter.", "The 21st letter."])("MEASURE_EN refuses %s", (s) => {
+    expect(s.match(MEASURE_EN)).not.toBeNull();
+  });
+
+  it.each(["Two people falling in love.", "A letter from far away.", "The second verse.", "One letter, quietly."])("MEASURE_EN passes %s", (s) => {
+    expect(s.match(MEASURE_EN)).toBeNull();
+  });
+
+  it.each(["Hit play.", "Press play and wait.", "Put it on loud.", "Tune in.", "Listen to it once.", "Listen to this.", "Watch it alone.", "Watch this one."])("PLAYBACK_EN refuses %s", (s) => {
+    expect(s.match(PLAYBACK_EN)).not.toBeNull();
+  });
+
+  it.each(["I listened to it twice.", "She watched it alone.", "Listening to it feels close.", "A song to listen for.", "A press of the hand."])("PLAYBACK_EN passes %s", (s) => {
+    expect(s.match(PLAYBACK_EN)).toBeNull();
+  });
+
+  it.each(["The east wind.", "A holiday of one.", "A theater kid's song."])("TOPICAL_EN passes %s", (s) => {
+    expect(s.match(TOPICAL_EN)).toBeNull();
+  });
+});
+
 describe("verifyEpisode in english", () => {
   it("passes an english episode that reads bodyEn and the original of an english letter", () => {
     const r = verifyEpisode(episode(dj("A quiet piece from 1959."), read(ja, ja.bodyEn!), read(english, english.body)), letters, me, byId([item()]), "en");
