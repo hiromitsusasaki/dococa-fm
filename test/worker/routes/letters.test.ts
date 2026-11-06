@@ -197,6 +197,23 @@ describe("POST /letters", () => {
     }
   });
 
+  it("counts only today's letters and replies toward LETTER_GLOBAL_DAILY_LIMIT, not 私も or found voices", async () => {
+    const item = await seedItem();
+    const old = await insertLetter(env.DB, letterDraft(item.id, { body: "昨日の一通", bodyJa: "昨日の一通" }));
+    await env.DB.prepare("UPDATE letters SET created_at = '2020-01-01T00:00:00.000Z' WHERE id = ?").bind(old.id).run();
+    await insertLetter(env.DB, letterDraft(item.id, { kind: "watashimo", parentLetterId: old.id, body: "私も", bodyJa: "私も" }));
+    await insertLetter(env.DB, letterDraft(item.id, { kind: "found", sourceUrl: "https://youtu.be/x", sourceAuthor: "@a", body: "見つけた声", bodyJa: "見つけた声" }));
+    const cookie = await signedInSession();
+    const capped = env as { LETTER_GLOBAL_DAILY_LIMIT?: string };
+    try {
+      capped.LETTER_GLOBAL_DAILY_LIMIT = "1";
+      expect((await postForm("/letters", cookie, { itemId: item.id, body: "今日の最初の一通" })).status).toBe(303);
+      expect((await postForm("/letters", cookie, { itemId: item.id, body: "今日の二通目" })).status).toBe(429);
+    } finally {
+      delete capped.LETTER_GLOBAL_DAILY_LIMIT;
+    }
+  });
+
   it("pauses letters with LETTER_GLOBAL_DAILY_LIMIT=0, and does not count letters from before today's JST midnight", async () => {
     const item = await seedItem();
     const old = await insertLetter(env.DB, letterDraft(item.id, { body: "昨日の一通", bodyJa: "昨日の一通" }));

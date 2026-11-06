@@ -9,12 +9,12 @@ Phase 2（ラジオ中心の体験への作り替え）と Phase 3（単位・�
 ### 本人作業
 
 - [ ] 任意: 単位（お便りごとの DJ の語り）の 1 日の上限 `UNIT_DAILY_LIMIT`（既定 1000、`0` で停止）を変えるときは `pnpm wrangler secret put UNIT_DAILY_LIMIT`（Cloudflare の secret か var。既定でよければ設定しない）。
-- [ ] 任意: お便りと一言の全体の 1 日の上限 `LETTER_GLOBAL_DAILY_LIMIT`（既定 500、`0` で停止。「私も」は止めない）を変えるときは `pnpm wrangler secret put LETTER_GLOBAL_DAILY_LIMIT`。`/admin/letters` のシードもこの上限に従うので、大量に投入する日は先に上げる。
+- [ ] 任意: お便りと一言の全体の 1 日の上限 `LETTER_GLOBAL_DAILY_LIMIT`（既定 500、`0` で停止。数えるのはお便りと一言だけで、「私も」と見つけた声は数えず止めない）を変えるときは `pnpm wrangler secret put LETTER_GLOBAL_DAILY_LIMIT`。`/admin/letters` のシードもこの上限に従うので、大量に投入する日は先に上げる。
 - [ ] GCP で OAuth クライアント（種類: ウェブ アプリケーション）を作る。承認済みのリダイレクト URI は `https://dococafm.app/auth/google/callback` と `http://127.0.0.1:5173/auth/google/callback`。
 - [ ] `pnpm wrangler secret put GOOGLE_OAUTH_CLIENT_ID` と `pnpm wrangler secret put GOOGLE_OAUTH_CLIENT_SECRET` を実行し、`.dev.vars` にも同じ値を写す。
 - [ ] OAuth の同意画面を「本番」に公開する（テスト中のままだと、登録したテストユーザーしか入れない）。
 - [ ] Google Cloud で Books API を有効化し、キーを `.dev.vars` の `GOOGLE_BOOKS_API_KEY` と `pnpm wrangler secret put GOOGLE_BOOKS_API_KEY` に入れる（YouTube のキーに Books API を足して同じ値でもよい）。入ったら本のデモを追加投入する（`pnpm seed --items <file> --personas 30 --reuse --origin https://dococafm.app`）。
-- [ ] `pnpm db:migrate` で本番に 0005〜0013 を当てる（0005 station、0006 episode_station、0007 place、0008 tts_audio、0009 units、0010 listens、0011 letters_place、0012 episode_lang、0013 tts_audio_synth_count。0013 は最終修正で足した。コマンドは未適用のものを全部当てる）。
+- [ ] `pnpm db:migrate` で本番に 0005〜0014 を当てる（0005 station、0006 episode_station、0007 place、0008 tts_audio、0009 units、0010 listens、0011 letters_place、0012 episode_lang、0013 tts_audio_synth_count、0014 daily_count_indexes。0013 と 0014 は最終修正で足した。コマンドは未適用のものを全部当てる）。
 - [ ] `pnpm run deploy`。
 - [ ] デプロイ後、`POST /admin/prepare`（`Authorization: Bearer $ADMIN_TOKEN`）で、デモデータの日本語と英語の単位と音声を先に作っておく。1 回の実行は単位と音声を合わせて最大 `limit` 件なので、`remaining` が 0 になるか `failed` が変わらなくなるまで繰り返す。音声の上限（既定 3000 行/日）に当たったら翌日（JST）に続く（Cron は 15 分ごとに 20 件ずつ埋める）。
 - [ ] 本番のデモデータは土地コードなしでシードしてある（`/admin/listeners` がコードを受け取るのは最終修正から）。英語の画面と英語の DJ では、コードの無いペルソナのお便りに日本語の土地（`place`）が出る。直すにはペルソナを作り直して再シードする（`pnpm seed --reuse` はペルソナの国名からコードを付けて送る）。するかどうかは本人が決める。

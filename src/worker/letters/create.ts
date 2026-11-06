@@ -12,7 +12,7 @@ import type { Item, Letter, LetterKind, Listener } from "../types";
 
 export const MAX_BODY = 200;
 const DUPLICATE_WINDOW_MINUTES = 10;
-/** Letters stored per JST day, everyone together, when `LETTER_GLOBAL_DAILY_LIMIT` is unset. */
+/** Letters and replies stored per JST day, everyone together, when `LETTER_GLOBAL_DAILY_LIMIT` is unset. */
 export const DEFAULT_LETTER_GLOBAL_DAILY_LIMIT = 500;
 
 export type LetterInput = {
