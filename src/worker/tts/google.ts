@@ -56,12 +56,29 @@ export function spokeThePrompt(bytes: number, text: string, lang: AudioLang): bo
   return bytes / BYTES_PER_SECOND > SLACK_SECONDS + Array.from(text).length * SECONDS_PER_CHAR[lang];
 }
 
+/** A failure that carries the paid calls made before it, so the caller can count them toward the cap. */
+export class SynthesisError extends Error {
+  constructor(
+    message: string,
+    public readonly calls: number,
+  ) {
+    super(message);
+    this.name = "SynthesisError";
+  }
+}
+
 async function synthesizeChunk(env: Env, sa: ServiceAccount, text: string, voice: AudioVoice, lang: AudioLang): Promise<{ audio: Uint8Array; calls: number }> {
   for (let attempt = 1; attempt <= ATTEMPTS; attempt++) {
-    const audio = await synthesizeOnce(env, sa, text, voice, lang);
+    let audio: Uint8Array;
+    try {
+      audio = await synthesizeOnce(env, sa, text, voice, lang);
+    } catch (e) {
+      // Only successful calls are billed: the earlier attempts of this chunk returned audio and count, this one does not.
+      throw new SynthesisError(e instanceof Error ? e.message : "tts failed", attempt - 1);
+    }
     if (!spokeThePrompt(audio.length, text, lang)) return { audio, calls: attempt };
   }
-  throw new Error("tts prompt");
+  throw new SynthesisError("tts prompt", ATTEMPTS);
 }
 
 async function synthesizeOnce(env: Env, sa: ServiceAccount, text: string, voice: AudioVoice, lang: AudioLang): Promise<Uint8Array> {
@@ -93,9 +110,13 @@ export async function synthesize(env: Env, text: string, voice: AudioVoice, lang
   const parts: Uint8Array[] = [];
   let calls = 0;
   for (const chunk of splitText(text)) {
-    const made = await synthesizeChunk(env, sa, chunk, voice, lang);
-    parts.push(made.audio);
-    calls += made.calls;
+    try {
+      const made = await synthesizeChunk(env, sa, chunk, voice, lang);
+      parts.push(made.audio);
+      calls += made.calls;
+    } catch (e) {
+      throw e instanceof SynthesisError ? new SynthesisError(e.message, calls + e.calls) : e;
+    }
   }
   const out = new Uint8Array(parts.reduce((n, p) => n + p.length, 0));
   let at = 0;

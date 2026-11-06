@@ -2,7 +2,7 @@ import { jstDayStartIso } from "../db/episodes";
 import type { Env } from "../env";
 import { limitFrom } from "../limits";
 import { claimTts, releaseTts } from "./claim";
-import { synthesize } from "./google";
+import { SynthesisError, synthesize } from "./google";
 import type { AudioLang, AudioVoice } from "./types";
 
 export type { AudioLang, AudioVoice } from "./types";
@@ -40,7 +40,18 @@ export async function countSynthesizedToday(db: D1Database, now: Date = new Date
   return row?.n ?? 0;
 }
 
-export type Ensured = { ok: true; key: string; made: boolean } | { ok: false; reason: "limit" | "busy" | "failed" | "unavailable" };
+/** Adds `calls` paid syntheses of `key` to today's count; a row with no clip in R2 is fine (R2 is what is checked for a hit). */
+async function countSynthesis(db: D1Database, key: string, line: { lang: AudioLang; voice: AudioVoice }, bytes: number, calls: number): Promise<void> {
+  await db
+    .prepare(
+      `INSERT INTO tts_audio (key, lang, voice, bytes, synth_count, created_at) VALUES (?, ?, ?, ?, ?, ?)
+       ON CONFLICT(key) DO UPDATE SET synth_count = synth_count + excluded.synth_count, bytes = excluded.bytes, created_at = excluded.created_at`,
+    )
+    .bind(key, line.lang, line.voice, bytes, calls, new Date().toISOString())
+    .run();
+}
+
+export type Ensured ={ ok: true; key: string; made: boolean } | { ok: false; reason: "limit" | "busy" | "failed" | "unavailable" };
 
 /**
  * R2 hit → ok (made false). Miss → cap check → claimTts(key) → synthesize → upsert tts_audio → BUCKET.put → release.
@@ -73,16 +84,17 @@ export async function ensureAudio(
   try {
     // The winner of an earlier claim may have stored the clip and released between our R2 miss and this claim.
     if (await env.BUCKET.head(key)) return { ok: true, key, made: false };
-    const { audio, calls } = await synthesize(env, line.text, line.voice, line.lang);
+    let made: { audio: ArrayBuffer; calls: number };
+    try {
+      made = await synthesize(env, line.text, line.voice, line.lang);
+    } catch (e) {
+      // Paid calls that ended in a failure (the prompt spoken three times, an API error) still use up the cap.
+      if (e instanceof SynthesisError && e.calls > 0) await countSynthesis(db, key, line, 0, e.calls);
+      throw e;
+    }
     // Counted as soon as the paid calls return (retries included), so a failed put still uses up the cap.
-    await db
-      .prepare(
-        `INSERT INTO tts_audio (key, lang, voice, bytes, synth_count, created_at) VALUES (?, ?, ?, ?, ?, ?)
-         ON CONFLICT(key) DO UPDATE SET synth_count = synth_count + excluded.synth_count, bytes = excluded.bytes, created_at = excluded.created_at`,
-      )
-      .bind(key, line.lang, line.voice, audio.byteLength, calls, new Date().toISOString())
-      .run();
-    await env.BUCKET.put(key, audio, { httpMetadata: { contentType: "audio/mpeg" } });
+    await countSynthesis(db, key, line, made.audio.byteLength, made.calls);
+    await env.BUCKET.put(key, made.audio, { httpMetadata: { contentType: "audio/mpeg" } });
     return { ok: true, key, made: true };
   } catch (e) {
     // Name and our own fixed messages only: a fetch TypeError can quote the request URL, and the body can carry the line.

@@ -170,3 +170,17 @@ describe("ensureAudio when the prompt was spoken", () => {
     expect(await countSynthesizedToday(env.DB)).toBe(2);
   });
 });
+
+describe("ensureAudio when every attempt speaks the prompt", () => {
+  it("fails, and the three paid calls still count toward the cap", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const long = btoa("x".repeat(25 * 4000));
+    const { fn } = stubFetch([[GOOGLE, () => json({ audioContent: long })]]);
+    expect(await ensureAudio(keyed, env.DB, line)).toEqual({ ok: false, reason: "failed" });
+    expect(fn).toHaveBeenCalledTimes(3);
+    expect(await countSynthesizedToday(env.DB)).toBe(3);
+    // The cap now stops the next miss of another key.
+    expect(await ensureAudio({ ...keyed, CLOUD_TTS_GLOBAL_DAILY_LIMIT: "3" }, env.DB, { ...line, text: "別の行です。" })).toEqual({ ok: false, reason: "limit" });
+  });
+
+});
