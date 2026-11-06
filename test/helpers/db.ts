@@ -1,5 +1,5 @@
 /** Children first so D1's foreign keys hold; any table not listed here is cleared afterwards. */
-const DELETE_FIRST = ["reports", "takedowns", "episodes", "history", "letters", "items", "listeners"];
+const DELETE_FIRST = ["reports", "takedowns", "episodes", "history", "units", "letters", "items", "listeners"];
 
 /** Storage is shared by all tests in a file, so each test starts from empty tables. */
 export async function resetDb(db: D1Database): Promise<void> {

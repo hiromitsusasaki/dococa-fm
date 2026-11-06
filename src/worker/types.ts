@@ -72,9 +72,15 @@ export type HistoryRow = {
   rank: number | null;
 };
 
+/** The DJ's talk for one letter in one language, made once and reused by every programme that reads it. */
+export type Unit = { letterId: string; lang: "ja" | "en"; intro: string; after: string; verified: boolean; audioReady: boolean; createdAt: string };
+
 export type ScriptLine =
-  /** `fixed` marks a line built from a template and data (names, places), never written by the model. */
-  | { type: "dj"; text: string; fixed?: true; bridge?: string }
+  /**
+   * `fixed` marks a line built from a template and data (names, places), never written by the model.
+   * `unit` marks a line taken from the unit of that letter, so the line goes when the letter is hidden.
+   */
+  | { type: "dj"; text: string; fixed?: true; bridge?: string; unit?: { letterId: string; part: "intro" | "after" } }
   | {
       type: "letter";
       letterId: string;
