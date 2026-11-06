@@ -149,6 +149,25 @@ export function whoOf(l: LetterLine, str: (key: string) => string): string {
   return whoLine(l, (key, params) => fmt(str(key), params ?? {}), lang);
 }
 
+/** A stored place in an episode: its segment and line, and the first letter that segment read when saved. */
+export type StoredPosition = { seg: number; line: number; letterId?: string };
+
+/**
+ * Where to pick `view` up from `stored`, or null when it was played to its end. The segment indices are the
+ * public view's, which shift when an earlier letter is taken down: when the stored segment no longer reads
+ * `stored.letterId`, the segment that does is resumed from its start; only then the indices decide.
+ */
+export function resumeAt(view: Pick<PlayerEpisode, "segments">, stored: StoredPosition): { seg: number; line: number } | null {
+  const reads = (i: number) => view.segments[i]?.lines.some((l) => l.type === "letter" && l.letterId === stored.letterId) === true;
+  if (stored.letterId && !reads(stored.seg)) {
+    const moved = view.segments.findIndex((_, i) => reads(i));
+    if (moved >= 0) return { seg: moved, line: 0 };
+  }
+  const last = view.segments.length - 1;
+  if (stored.seg > last || (stored.seg === last && stored.line >= view.segments[last]!.lines.length)) return null;
+  return { seg: stored.seg, line: stored.line < view.segments[stored.seg]!.lines.length ? stored.line : 0 };
+}
+
 export type NextReason = "limit" | "empty" | "failed";
 
 /** Asks for the listener's next episode. The same mapping for both players: 429 is today's limit, 409 is a station with nothing to play. */

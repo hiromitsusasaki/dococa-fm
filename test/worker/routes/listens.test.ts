@@ -45,15 +45,13 @@ describe("POST /listens", () => {
     expect(rows.map((r) => [r.letter.id, r.episodeId, r.segmentIndex]).sort()).toEqual([[la.id, ep.id, 0], [lb.id, ep.id, 1]].sort());
   });
 
-  it("answers 404 and writes nothing for a reply line, a wrong segment, a letter the episode does not read or a non-public letter", async () => {
-    const { cookie, me, ep, la, lb, lr } = await setup();
+  it("answers 404 and writes nothing for a reply line, a letter the episode does not read or a non-public letter", async () => {
+    const { cookie, me, ep, la, lr } = await setup();
     const other = await insertLetter(env.DB, letterDraft((await insertItem(env.DB, itemDraft({ externalIds: { itunes: "3" } }))).id));
     const bad = [
       { episodeId: ep.id, letterId: lr.id, segmentIndex: 1 },
-      { episodeId: ep.id, letterId: la.id, segmentIndex: 1 },
-      { episodeId: ep.id, letterId: lb.id, segmentIndex: 0 },
       { episodeId: ep.id, letterId: other.id, segmentIndex: 0 },
-      { episodeId: ep.id, letterId: la.id, segmentIndex: 5 },
+      { episodeId: ep.id, letterId: other.id },
     ];
     for (const b of bad) expect((await post(cookie, b)).status, JSON.stringify(b)).toBe(404);
     await setLetterStatus(env.DB, la.id, "rejected");
@@ -62,11 +60,19 @@ describe("POST /listens", () => {
     expect((await env.DB.prepare("SELECT COUNT(*) AS n FROM listens").first<{ n: number }>())!.n).toBe(0);
   });
 
-  it("uses the public view's segment index when an earlier segment has been dropped", async () => {
-    const { cookie, ep, la, lb } = await setup();
+  it("records the public-view segment that reads the letter, whatever index the player sends", async () => {
+    const { cookie, me, ep, la, lb } = await setup();
+    expect((await post(cookie, { episodeId: ep.id, letterId: la.id, segmentIndex: 5 })).status).toBe(204);
+    expect((await post(cookie, { episodeId: ep.id, letterId: lb.id })).status).toBe(204);
+    const rows = await listHeardLetters(env.DB, me);
+    expect(rows.map((r) => [r.letter.id, r.segmentIndex]).sort()).toEqual([[la.id, 0], [lb.id, 1]].sort());
+  });
+
+  it("records index 0 when an earlier letter was hidden after the episode was made and the player still reports 1", async () => {
+    const { cookie, me, ep, la, lb } = await setup();
     await setLetterStatus(env.DB, la.id, "rejected");
-    expect((await post(cookie, { episodeId: ep.id, letterId: lb.id, segmentIndex: 0 })).status).toBe(204);
-    expect((await post(cookie, { episodeId: ep.id, letterId: lb.id, segmentIndex: 1 })).status).toBe(404);
+    expect((await post(cookie, { episodeId: ep.id, letterId: lb.id, segmentIndex: 1 })).status).toBe(204);
+    expect((await listHeardLetters(env.DB, me)).map((r) => [r.letter.id, r.segmentIndex])).toEqual([[lb.id, 0]]);
   });
 
   it("answers 404 for another listener's episode and for an unverified one", async () => {
@@ -81,7 +87,7 @@ describe("POST /listens", () => {
   it("answers 400 for bad JSON or a body of the wrong shape", async () => {
     const { cookie, ep, la } = await setup();
     expect((await post(cookie, "{nope", true)).status).toBe(400);
-    expect((await post(cookie, { episodeId: ep.id, letterId: la.id })).status).toBe(400);
+    expect((await post(cookie, { episodeId: ep.id })).status).toBe(400);
     expect((await post(cookie, { episodeId: ep.id, letterId: la.id, segmentIndex: -1 })).status).toBe(400);
     expect((await post(cookie, { episodeId: ep.id, letterId: la.id, segmentIndex: 0.5 })).status).toBe(400);
     expect((await post(cookie, { episodeId: 1, letterId: la.id, segmentIndex: 0 })).status).toBe(400);

@@ -1,7 +1,7 @@
 /** @jsxImportSource hono/jsx/dom */
 import { flushSync } from "hono/jsx/dom";
 import { createRoot } from "hono/jsx/dom/client";
-import { bindMediaSession, createLinePlayer, fetchNext, type LetterLine, type PlayerEpisode, type PlayerItem, reportListen, syncMediaSession, whoOf } from "./playback";
+import { bindMediaSession, createLinePlayer, fetchNext, type LetterLine, type PlayerEpisode, type PlayerItem, reportListen, resumeAt, type StoredPosition, syncMediaSession, whoOf } from "./playback";
 import { postLetter, reactionOf, saveDial } from "./reactions";
 import { StationScreen, type UpNextRow } from "./station-view";
 
@@ -48,13 +48,13 @@ function loadVolume(): number {
   return DEFAULT_VOLUME;
 }
 
-/** Where this browser left off on a station: the episode being played, and its segment and line. */
-type Position = { episodeId: string; seg: number; line: number };
+/** Where this browser left off on a station: the episode being played, its segment and line, and that segment's first letter. */
+type Position = StoredPosition & { episodeId: string };
 
 const loadPosition = (stationKey: string): Position | null => {
   try {
     const p = JSON.parse(localStorage.getItem(POS_KEY + stationKey) ?? "null") as Partial<Position> | null;
-    if (p && typeof p.episodeId === "string" && p.episodeId !== "" && Number.isInteger(p.seg) && Number.isInteger(p.line) && p.seg! >= 0 && p.line! >= 0) return p as Position;
+    if (p && typeof p.episodeId === "string" && p.episodeId !== "" && Number.isInteger(p.seg) && Number.isInteger(p.line) && p.seg! >= 0 && p.line! >= 0 && (p.letterId === undefined || typeof p.letterId === "string")) return p as Position;
   } catch {}
   return null;
 };
@@ -95,7 +95,10 @@ export function mountStation(root: HTMLElement, opts: StationOptions) {
     const was = state;
     state = { ...state, ...patch };
     flushSync(() => reactRoot.render(<StationScreen {...screenProps()} />));
-    if (state.current && (was.current !== state.current || was.seg !== state.seg || was.line !== state.line)) savePosition(opts.stationKey, { episodeId: state.current.id, seg: state.seg, line: state.line });
+    if (state.current && (was.current !== state.current || was.seg !== state.seg || was.line !== state.line)) {
+      const letterId = state.current.segments[state.seg]?.lines.find((l): l is LetterLine => l.type === "letter")?.letterId;
+      savePosition(opts.stationKey, { episodeId: state.current.id, seg: state.seg, line: state.line, ...(letterId ? { letterId } : {}) });
+    }
     if (was.current !== state.current || was.seg !== state.seg || was.power !== state.power) syncMediaSession(itemOf(state.current, state.seg), state.power === "on");
   }
 
@@ -125,14 +128,11 @@ export function mountStation(root: HTMLElement, opts: StationOptions) {
     if (stored) {
       const view = await read(`${opts.resumeUrl}?id=${encodeURIComponent(stored.episodeId)}`);
       if (view) {
-        const last = view.segments.length - 1;
-        if (stored.seg > last || (stored.seg === last && stored.line >= view.segments[last]!.lines.length)) {
-          // Played to its end: the next one may already be made (a prefetch); if it is not, a new one is.
-          const latest = await read(opts.resumeUrl);
-          return latest && latest.id !== view.id ? { view: latest, seg: 0, line: 0 } : null;
-        }
-        const inRange = stored.line < view.segments[stored.seg]!.lines.length;
-        return { view, seg: stored.seg, line: inRange ? stored.line : 0 };
+        const at = resumeAt(view, stored);
+        if (at) return { view, ...at };
+        // Played to its end: the next one may already be made (a prefetch); if it is not, a new one is.
+        const latest = await read(opts.resumeUrl);
+        return latest && latest.id !== view.id ? { view: latest, seg: 0, line: 0 } : null;
       }
     }
     const view = await read(opts.resumeUrl);

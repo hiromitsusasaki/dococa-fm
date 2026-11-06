@@ -4,14 +4,18 @@ import type { Variables } from "../auth/session";
 import { getVerifiedEpisode } from "../db/episodes";
 import { recordListen } from "../db/listens";
 import type { Env } from "../env";
-import { loadPublicEpisode } from "../program/stored";
+import { loadPublicEpisode, segmentReading } from "../program/stored";
 import { listensIpRateLimit, listensListenerRateLimit } from "../security/rate-limit";
 
 export const listens = new Hono<{ Bindings: Env; Variables: Variables }>();
 
-const bodySchema = z.object({ episodeId: z.string().min(1).max(100), letterId: z.string().min(1).max(100), segmentIndex: z.number().int().min(0).max(10_000) });
+/** `segmentIndex` is advisory and ignored: the public view's indices shift when an earlier letter is taken down. */
+const bodySchema = z.object({ episodeId: z.string().min(1).max(100), letterId: z.string().min(1).max(100), segmentIndex: z.number().int().min(0).max(10_000).optional() });
 
-/** The player calls this when a letter line starts. Only a letter the listener's own episode reads, in the segment it reads it, is recorded. */
+/**
+ * The player calls this when a letter line starts. Only a public letter the listener's own episode reads is
+ * recorded, with the public-view segment that reads it now.
+ */
 listens.post("/listens", listensIpRateLimit, listensListenerRateLimit, async (c) => {
   let raw: unknown;
   try {
@@ -21,15 +25,15 @@ listens.post("/listens", listensIpRateLimit, listensListenerRateLimit, async (c)
   }
   const parsed = bodySchema.safeParse(raw);
   if (!parsed.success) return c.json({ error: "bad request" }, 400);
-  const { episodeId, letterId, segmentIndex } = parsed.data;
+  const { episodeId, letterId } = parsed.data;
 
   const listener = c.get("listener");
   const episode = await getVerifiedEpisode(c.env.DB, episodeId);
   if (!episode || episode.listenerId !== listener.id) return c.notFound();
-  // The index the player holds is the public view's, so the check reads the same view; a reply is not "heard".
+  // The segment is found in the public view, as `/episodes/:id?letter=` finds it; a reply is not "heard".
   const { segments, letters } = await loadPublicEpisode(c.env.DB, episode);
-  const read = segments[segmentIndex]?.lines.some((l) => l.type === "letter" && l.kind !== "reply" && l.letterId === letterId);
-  if (!read || letters.get(letterId)?.status !== "public") return c.notFound();
+  const segmentIndex = segmentReading(segments, letterId);
+  if (segmentIndex < 0 || letters.get(letterId)?.status !== "public") return c.notFound();
 
   await recordListen(c.env.DB, { listenerId: listener.id, episodeId, letterId, segmentIndex });
   return c.body(null, 204);

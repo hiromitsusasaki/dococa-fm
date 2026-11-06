@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { forgetReportedListens } from "../../src/client/playback";
+import { forgetReportedListens, resumeAt } from "../../src/client/playback";
 import { mountStation, type StationOptions } from "../../src/client/station";
 
 const strings: Record<string, string> = {
@@ -220,7 +220,7 @@ describe("station: playing", () => {
       await vi.waitFor(() => expect(spoken).toEqual(["a1"]));
       held[0]!.onend?.();
       await vi.waitFor(() => expect(spoken).toEqual(["a1", "l1"]));
-      expect(JSON.parse(localStorage.getItem("dfm.pos:world")!)).toEqual({ episodeId: "epA", seg: 0, line: 1 });
+      expect(JSON.parse(localStorage.getItem("dfm.pos:world")!)).toEqual({ episodeId: "epA", seg: 0, line: 1, letterId: "L1" });
       expect(localStorage.getItem("dfm.pos:mine")).toBeNull();
     });
 
@@ -235,6 +235,17 @@ describe("station: playing", () => {
       expect(s.state().current?.id).toBe("epA");
       await vi.waitFor(() => expect(spoken[0]).toBe("b1"));
       expect(spoken).not.toContain("a1");
+    });
+
+    it("resumes at the segment that now reads the stored letter when an earlier one was taken down", async () => {
+      // Stored while segment 1 (曲B, letter L2) played; the view now lacks segment 0, so L2 is in segment 0.
+      localStorage.setItem("dfm.pos:world", JSON.stringify({ episodeId: "epT", seg: 1, line: 1, letterId: "L2" }));
+      resumeByIdReply = ok(view("epT", [["b", [dj("b1"), letter("L2", "l2")]], ["c", [dj("c1")]]]));
+      const s = mountStation(root, opts());
+      await power();
+      expect(s.state().current?.id).toBe("epT");
+      // The index rule alone would start at segment 1 line 1, which does not exist here, and read c1 first.
+      await vi.waitFor(() => expect(spoken.slice(0, 2)).toEqual(["b1", "l2"]));
     });
 
     it("falls back to the latest episode when the stored one is not found", async () => {
@@ -649,5 +660,29 @@ describe("station: listens", () => {
     await power();
     await vi.waitFor(() => expect(spoken).toEqual(["l2"]));
     expect(listens()).toHaveLength(0);
+  });
+});
+
+describe("resumeAt", () => {
+  const segs = view("v", [["a", [dj("a1"), letter("L1", "l1")]], ["b", [dj("b1"), letter("L2", "l2")]]]);
+
+  it("keeps the stored segment and line while that segment still reads the stored letter", () => {
+    expect(resumeAt(segs, { seg: 1, line: 1, letterId: "L2" })).toEqual({ seg: 1, line: 1 });
+  });
+
+  it("moves to the start of the segment that reads the letter now", () => {
+    expect(resumeAt(segs, { seg: 0, line: 1, letterId: "L2" })).toEqual({ seg: 1, line: 0 });
+    expect(resumeAt(segs, { seg: 5, line: 0, letterId: "L1" })).toEqual({ seg: 0, line: 0 });
+  });
+
+  it("falls back to the indices when no letter was stored or no segment reads it", () => {
+    expect(resumeAt(segs, { seg: 1, line: 0 })).toEqual({ seg: 1, line: 0 });
+    expect(resumeAt(segs, { seg: 0, line: 9, letterId: "gone" })).toEqual({ seg: 0, line: 0 });
+    expect(resumeAt(segs, { seg: 1, line: 2, letterId: "gone" })).toBeNull();
+    expect(resumeAt(segs, { seg: 2, line: 0 })).toBeNull();
+  });
+
+  it("treats the end marker of the last segment as played to its end", () => {
+    expect(resumeAt(segs, { seg: 1, line: 2, letterId: "L2" })).toBeNull();
   });
 });
