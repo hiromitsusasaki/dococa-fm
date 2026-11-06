@@ -30,6 +30,7 @@ Phase 2（ラジオ中心の体験への作り替え）と Phase 3（単位・�
 
 ### 本人作業
 
+- [ ] 開発機で `pnpm wrangler login` を済ませておく（Phase 4 Task 4 から `pnpm dev` がリモートの Workers AI に繋ぐ。使った分はそのアカウントに課金される。テストは繋がない）。
 - [ ] Workers AI を使えるようにする（Phase 4 Task 4。Workers Paid のアカウントで有効。`wrangler.jsonc` に `ai` バインディング `AI` を入れてある。無くても動き、そのときダイヤルは枠の順を決めるだけ）。
 - [ ] `pnpm db:migrate` で 0016（revoice_handover）と 0017（items_vec）を当てる。デプロイ後、`/admin/prepare` を一度回して既存の作品のベクトルを作る（`remaining.vectors` が 0 になるまで。20 作品で 1 件分の枠）。
 - [ ] 本番の `EPISODE_DAILY_LIMIT` を 30 にしてあれば、Task 3 のデプロイ前に消す（既定 60 枠）か 180 にする。

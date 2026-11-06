@@ -1,7 +1,9 @@
 import { env } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import app from "../../src/worker/index";
-import { insertItem } from "../../src/worker/db/items";
+import { insertItem, quantise } from "../../src/worker/db/items";
+import { upsertHistory } from "../../src/worker/db/history";
+import { angled } from "../helpers/ai";
 import { insertLetter } from "../../src/worker/db/letters";
 import { createListener } from "../../src/worker/db/listeners";
 import { getUnits } from "../../src/worker/db/units";
@@ -23,6 +25,11 @@ const EPISODE_BUDGET = 30;
  */
 const EPISODE_MAKING_UNITS_BUDGET = 150;
 const PER_UNIT = 6;
+/**
+ * The distance pick (Task 4) adds at most three statements to `next`: the taste, the candidates' vectors (one per 90
+ * ids not cached in the isolate) and the exclusions. Without a taste it costs the two taste reads and stops.
+ */
+const DISTANCE_EXTRA = 3;
 
 const track = (id: number, name: string) => ({ trackId: id, trackName: name, artistName: "Someone", releaseDate: "2001-01-01T00:00:00Z" });
 
@@ -99,5 +106,35 @@ describe("D1 statements per request", () => {
     expect((await getUnits(env.DB, results.map((r) => r.letter_id), "ja")).size).toBe(results.length);
     expect(keyed.count()).toBe(keyless.count() + PER_UNIT * results.length);
     expect(keyed.count()).toBeLessThan(EPISODE_MAKING_UNITS_BUDGET);
+  });
+
+  it(`POST /stations/mine/next by distance adds at most ${DISTANCE_EXTRA} statements and stays under ${EPISODE_BUDGET}`, async () => {
+    const measure = async (withVectors: boolean) => {
+      await resetDb(env.DB);
+      await seedWorld();
+      const cookie = await newSession();
+      const me = cookie.split("=")[1]!.split(".")[0]!;
+      const fav = await insertItem(env.DB, itemDraft({ title: "favourite", externalIds: { itunes: "777" } }));
+      await upsertHistory(env.DB, [{ listenerId: me, itemId: fav.id, source: "manual", occurredAt: null, rank: 1 }]);
+      if (withVectors) {
+        // Written straight to the table so the isolate's vector cache is cold: the worst case.
+        const { results } = await env.DB.prepare("SELECT id FROM items ORDER BY id").all<{ id: string }>();
+        for (const [i, r] of results.entries()) await env.DB.prepare("UPDATE items SET vec = ? WHERE id = ?").bind(quantise(angled(r.id === fav.id ? 0 : 0.2 + i * 0.05)), r.id).run();
+      }
+      const counted = countingD1(env.DB);
+      const res = await app.request(
+        "/stations/mine/next",
+        { method: "POST", headers: { cookie, origin: "http://127.0.0.1:5173", "content-type": "application/json" }, body: JSON.stringify({ dial: 0.5 }) },
+        { ...env, DB: counted.db },
+      );
+      expect(res.status).toBe(200);
+      return counted.count();
+    };
+    const byPools = await measure(false);
+    const byDistance = await measure(true);
+    // The distance path ran: it reads the vectors and the exclusions, which the pools alone never do.
+    expect(byDistance).toBeGreaterThan(byPools);
+    expect(byDistance).toBeLessThanOrEqual(byPools + DISTANCE_EXTRA);
+    expect(byDistance).toBeLessThan(EPISODE_BUDGET);
   });
 });

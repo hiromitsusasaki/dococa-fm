@@ -25,7 +25,7 @@ Built with Claude: Japan 2026 への応募作です。
 
 ダイヤル（セレンディピティ）はラジオの面にあり、値はブラウザに残ります。ラジオは次の回を頼むたびにダイヤルの値を送るので、回すと次の回から効きます（作り置きの次の回は捨てて頼み直します）。左寄りは近く、中ほどは隣、右寄りは遠くを先に探し、見つからなければ遠く・近く・隣の順に探します。サインインしていれば、送った値はアカウントにも残ります。ホームの Dococa FM と、人のラジオ（〇〇さんのラジオ）にダイヤルはありません。
 
-ダイヤルが指すのは、正確には「遠さ」です。作品ごとに、題名・作り手・年・種類だけから Workers AI（`@cf/baai/bge-m3`）でベクトルを作っておきます。あなたの好きなもの（無ければ最近聴いた作品）のベクトルの平均を基準に、候補の作品を近い順に並べ、ダイヤルの位置の前後（±0.2、空なら少しずつ広げる）から 1 つを無作為に選びます。7 日以内に聴いた作品と、このラジオの直近 30 回の作品は外します（候補が尽きたら、聴いた作品の制限から外します）。近く・隣・遠くの札は、選んだ作品がこの並びのどこにいたかで付きます。遠さは選ぶためだけに使い、画面にも応答にもログにも DJ の言葉にも出しません。ベクトルがまだ無いあいだは、上の表の順に探します。反響（あなたのお便りへの私も・返信）は、このラジオで最後にお便りを聴いたときより新しいものがあれば、ダイヤルが遠くの端でない限り先に流れます。
+ダイヤルが指すのは、正確には「遠さ」です。作品ごとに、題名・作り手・年・種類だけから Workers AI（`@cf/baai/bge-m3`）でベクトルを作っておきます。あなたの好きなもの（無ければ最近聴いた作品）のベクトルの平均を基準に、候補の作品を近い順に並べ、ダイヤルの位置の前後（±0.2、空なら少しずつ広げる）から 1 つを無作為に選びます。7 日以内に聴いた作品と、このラジオの直近 30 回の作品は外します（候補が尽きたら、聴いた作品の制限から外します）。近く・隣・遠くの札（DJ のつなぎが言う枠）は、あなたの近くの枠の作品なら近く、それ以外は並びの前 3 分の 2 なら隣、残りは遠くです。遠さは選ぶためだけに使い、画面にも応答にもログにも DJ の言葉にも出しません。ベクトルがまだ無いあいだは、上の表の順に探します。反響（あなたのお便りへの私も・返信）は、このラジオで最後にお便りを聴いたときより新しいものがあれば、ダイヤルが遠くの端でない限り先に流れます。
 
 ## 材料の三層と見つけた声
 
@@ -96,10 +96,13 @@ DJ が語る材料は 3 層に分かれ、混ぜません。
 pnpm install
 cp .dev.vars.example .dev.vars   # 鍵を入れる（.dev.vars は gitignore 済み）
 pnpm db:migrate:local   # 初回だけ。pnpm dev の前に
+pnpm wrangler login     # pnpm dev が Workers AI に繋ぐため
 pnpm dev          # http://127.0.0.1:5173
 pnpm test         # vitest + @cloudflare/vitest-plugin
 pnpm typecheck
 ```
+
+Workers AI（作品のベクトル）はローカルで動かせません。`pnpm dev` は起動のたびにリモートの Workers AI に繋ぐので、先に `pnpm wrangler login` が要り、使った分はそのアカウントに課金されます。テストは Workers AI に繋ぎません。
 
 必要な鍵は `.dev.vars.example` に一覧があります。鍵は `.dev.vars` と Cloudflare secrets にだけ置き、リポジトリには入れません。
 
@@ -112,7 +115,7 @@ pnpm wrangler login
 pnpm wrangler d1 create dococa            # 出力の database_id を wrangler.jsonc の d1_databases に書く
 pnpm wrangler r2 bucket create dococa-audio
 pnpm wrangler secret put ANTHROPIC_API_KEY   # .dev.vars.example の鍵を 1 つずつ（ADMIN_TOKEN、SESSION_SECRET、SPOTIFY_CLIENT_ID、GOOGLE_TTS_SA_JSON、GOOGLE_OAUTH_CLIENT_ID、GOOGLE_OAUTH_CLIENT_SECRET、TMDB_API_KEY、YOUTUBE_API_KEY、任意で GOOGLE_BOOKS_API_KEY）
-pnpm db:migrate   # migrations/0001〜0007 を順に当てる
+pnpm db:migrate   # migrations/ の 0001〜0017 のうち、まだ当てていないものを順に当てる
 # wrangler.jsonc の routes にカスタムドメイン、vars.PUBLIC_ORIGIN にその origin（例 https://dococafm.app）を書いてから
 pnpm run deploy   # pnpm deploy は pnpm 組み込みの別コマンドなので、run を付ける
 ```
