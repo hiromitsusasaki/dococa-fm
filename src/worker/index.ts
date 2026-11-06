@@ -4,6 +4,7 @@ import { type Variables, requireSessionSecret, sessionMiddleware } from "./auth/
 import type { Env } from "./env";
 import { prepareBatch } from "./program/prepare";
 import { admin } from "./routes/admin";
+import { adminUnits } from "./routes/admin-units";
 import { auth } from "./routes/auth";
 import { authGoogle } from "./routes/auth-google";
 import { episodes } from "./routes/episodes";
@@ -40,6 +41,7 @@ app.use("*", listenerRateLimit);
 app.get("/healthz", (c) => c.json({ ok: true }));
 
 app.route("/", admin);
+app.route("/", adminUnits);
 app.route("/", auth);
 app.route("/", authGoogle);
 app.route("/", settings);

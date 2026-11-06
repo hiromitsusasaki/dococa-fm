@@ -32,6 +32,16 @@ export const sameOriginOnly: MiddlewareHandler<{ Bindings: Env }> = async (c, ne
   return next();
 };
 
+/**
+ * A strict same-origin test for writes carrying an ambient credential other than the session cookie (the admin
+ * page's Basic auth, which the browser re-sends on its own): the `Origin` must be PUBLIC_ORIGIN, or, without one,
+ * `Sec-Fetch-Site` must say same-origin. A request that says neither is refused, unlike in `sameOriginOnly`.
+ */
+export function fromPublicOrigin(origin: string | undefined, site: string | undefined, publicOrigin: string): boolean {
+  if (origin !== undefined && origin !== "null") return origin === normalized(publicOrigin);
+  return site === "same-origin";
+}
+
 let warnedMissingOrigin = false;
 
 /**

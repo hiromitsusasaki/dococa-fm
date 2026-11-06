@@ -18,6 +18,7 @@ import { prepareBatch, prepareLetter } from "../program/prepare";
 import { looksLikeContact } from "../program/pii-patterns";
 import { resolveOrCreate, resolveUrl } from "../resolve";
 import { isFetchableUrl } from "../resolve/url";
+import { fromPublicOrigin } from "../security/origin";
 
 type AppEnv = { Bindings: Env; Variables: Variables };
 
@@ -33,12 +34,46 @@ async function sameToken(given: string, expected: string): Promise<boolean> {
   return diff === 0;
 }
 
-/** `/admin/*` is exempt from the listener session, so each route proves itself with `Authorization: Bearer ADMIN_TOKEN`. */
+const decoder = new TextDecoder();
+
+/** The password of `Basic base64("admin:" + token)`; undefined for any other user or a malformed value. */
+function basicToken(header: string): string | undefined {
+  const encoded = /^Basic ([A-Za-z0-9+/]+={0,2})$/.exec(header)?.[1];
+  if (!encoded) return undefined;
+  let decoded: string;
+  try {
+    decoded = decoder.decode(Uint8Array.from(atob(encoded), (ch) => ch.charCodeAt(0)));
+  } catch {
+    return undefined;
+  }
+  const colon = decoded.indexOf(":");
+  return colon >= 0 && decoded.slice(0, colon) === "admin" ? decoded.slice(colon + 1) : undefined;
+}
+
+const UNSAFE = new Set(["POST", "PUT", "PATCH", "DELETE"]);
+
+/** The page a browser opens; only there a 401 asks the browser for the Basic password. */
+const ADMIN_PAGE = "/admin/units";
+
+/**
+ * `/admin/*` is exempt from the listener session, so each route proves itself with `Authorization: Bearer ADMIN_TOKEN`
+ * or, for the owner's page in a browser, `Basic base64("admin:" + ADMIN_TOKEN)`. A browser re-sends Basic on its own,
+ * so a Basic write must also come from PUBLIC_ORIGIN (a cross-site form could otherwise ride on it).
+ */
 const adminAuth: MiddlewareHandler<AppEnv> = async (c, next) => {
   const expected = c.env.ADMIN_TOKEN;
-  const given = /^Bearer (.+)$/.exec(c.req.header("authorization") ?? "")?.[1];
+  const header = c.req.header("authorization") ?? "";
+  const bearer = /^Bearer (.+)$/.exec(header)?.[1];
+  const basic = bearer === undefined ? basicToken(header) : undefined;
+  const given = bearer ?? basic;
   // An unset token must never match, not even an empty bearer.
-  if (!expected || !given || !(await sameToken(given, expected))) return c.json({ error: "unauthorized" }, 401);
+  if (!expected || !given || !(await sameToken(given, expected))) {
+    if (c.req.method === "GET" && c.req.path === ADMIN_PAGE) c.header("WWW-Authenticate", 'Basic realm="dococa admin"');
+    return c.json({ error: "unauthorized" }, 401);
+  }
+  if (basic !== undefined && UNSAFE.has(c.req.method) && !fromPublicOrigin(c.req.header("origin"), c.req.header("sec-fetch-site"), c.env.PUBLIC_ORIGIN)) {
+    return c.text("Forbidden", 403);
+  }
   return next();
 };
 
@@ -64,7 +99,7 @@ async function readJson(c: Context<AppEnv>): Promise<unknown> {
 }
 
 /** The first problem as `{ error, index?, reason }`, so the operator can find the voice to fix. */
-function invalid(c: Context<AppEnv>, error: z.ZodError) {
+export function invalid(c: Context<AppEnv>, error: z.ZodError) {
   const issue = error.issues[0];
   const [head, index] = issue?.path ?? [];
   return c.json({ error: "invalid", ...(head === "voices" && typeof index === "number" ? { index } : {}), reason: issue?.message ?? "invalid" }, 422);

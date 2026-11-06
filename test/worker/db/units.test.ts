@@ -2,7 +2,7 @@ import { env } from "cloudflare:workers";
 import { beforeEach, describe, expect, it } from "vitest";
 import { insertItem } from "../../../src/worker/db/items";
 import { insertLetter } from "../../../src/worker/db/letters";
-import { getUnits, listLettersWithoutUnit, listUnitsWithoutAudio, setUnitAudioReady, upsertUnit } from "../../../src/worker/db/units";
+import { clearUnit, getUnits, listLettersWithoutUnit, listLikedUnits, listUnits, listUnitsWithoutAudio, setUnitAudioReady, setUnitLiked, upsertUnit } from "../../../src/worker/db/units";
 import { resetDb } from "../../helpers/db";
 import { itemDraft, letterDraft } from "./helpers";
 
@@ -113,5 +113,61 @@ describe("units", () => {
     expect((await listUnitsWithoutAudio(env.DB, "ja", 10)).map((u) => u.letterId)).toEqual([b!.id, a!.id]);
     expect((await listUnitsWithoutAudio(env.DB, "ja", 1)).map((u) => u.letterId)).toEqual([b!.id]);
     expect(await listUnitsWithoutAudio(env.DB, "en", 10)).toEqual([]);
+  });
+});
+
+describe("the units feedback loop", () => {
+  it("lists units of a language with the work title and the letter body, in letter id order after the cursor", async () => {
+    const item = await insertItem(env.DB, itemDraft({ title: "Kind of Blue" }));
+    const letters = [];
+    for (let i = 0; i < 3; i++) letters.push(await insertLetter(env.DB, letterDraft(item.id, { body: `本文${i}` })));
+    for (const l of letters) await upsertUnit(env.DB, unit(l.id));
+    await upsertUnit(env.DB, unit(letters[0]!.id, { lang: "en", intro: "A quiet song." }));
+    const ids = letters.map((l) => l.id).sort();
+
+    const all = await listUnits(env.DB, { lang: "ja", limit: 50 });
+    expect(all.map((u) => u.letterId)).toEqual(ids);
+    expect(all[0]).toMatchObject({ lang: "ja", title: "Kind of Blue", intro: "静かな一曲です。", after: "いいお便りでした。", verified: true, liked: false });
+    expect(all.map((u) => u.letterBody).sort()).toEqual(["本文0", "本文1", "本文2"]);
+    expect((await listUnits(env.DB, { lang: "ja", limit: 1, after: ids[0] })).map((u) => u.letterId)).toEqual([ids[1]]);
+    expect((await listUnits(env.DB, { lang: "en", limit: 50 })).map((u) => u.intro)).toEqual(["A quiet song."]);
+  });
+
+  it("sets liked, and listLikedUnits returns at most 5 liked verified units of the language, newest first", async () => {
+    const item = await insertItem(env.DB, itemDraft());
+    const ids: string[] = [];
+    for (let i = 0; i < 7; i++) {
+      const l = await insertLetter(env.DB, letterDraft(item.id));
+      ids.push(l.id);
+      await upsertUnit(env.DB, unit(l.id, { intro: `紹介${i}`, createdAt: `2026-11-0${i + 1}T00:00:00.000Z` }));
+      await setUnitLiked(env.DB, l.id, "ja", true);
+    }
+    // Not counted: unliked, unverified, another language, a letter no longer public.
+    const plain = await insertLetter(env.DB, letterDraft(item.id));
+    await upsertUnit(env.DB, unit(plain.id, { intro: "いいねなし", createdAt: "2026-12-01T00:00:00.000Z" }));
+    const unverified = await insertLetter(env.DB, letterDraft(item.id));
+    await upsertUnit(env.DB, unit(unverified.id, { intro: "未検証", verified: false, createdAt: "2026-12-01T00:00:00.000Z" }));
+    await setUnitLiked(env.DB, unverified.id, "ja", true);
+    await upsertUnit(env.DB, unit(ids[0]!, { lang: "en", intro: "English", createdAt: "2026-12-01T00:00:00.000Z" }));
+    await setUnitLiked(env.DB, ids[0]!, "en", true);
+    const hidden = await insertLetter(env.DB, letterDraft(item.id, { status: "rejected" }));
+    await upsertUnit(env.DB, unit(hidden.id, { intro: "非公開", createdAt: "2026-12-01T00:00:00.000Z" }));
+    await setUnitLiked(env.DB, hidden.id, "ja", true);
+    await setUnitLiked(env.DB, ids[6]!, "ja", false);
+
+    const liked = await listLikedUnits(env.DB, "ja", 5);
+    expect(liked.map((u) => u.intro)).toEqual(["紹介5", "紹介4", "紹介3", "紹介2", "紹介1"]);
+    expect((await listLikedUnits(env.DB, "en", 5)).map((u) => u.intro)).toEqual(["English"]);
+    expect((await listUnits(env.DB, { lang: "ja", limit: 50 })).find((u) => u.letterId === ids[1])?.liked).toBe(true);
+  });
+
+  it("clearUnit deletes the one unit row of the letter and language", async () => {
+    const item = await insertItem(env.DB, itemDraft());
+    const l = await insertLetter(env.DB, letterDraft(item.id));
+    await upsertUnit(env.DB, unit(l.id, { audioReady: true }));
+    await upsertUnit(env.DB, unit(l.id, { lang: "en" }));
+    await clearUnit(env.DB, l.id, "ja");
+    expect((await getUnits(env.DB, [l.id], "ja")).size).toBe(0);
+    expect((await getUnits(env.DB, [l.id], "en")).size).toBe(1);
   });
 });
