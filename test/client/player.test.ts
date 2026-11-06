@@ -542,6 +542,35 @@ describe("player", () => {
     expect(JSON.parse(String(init.body))).toEqual({ dial: 0.7, first: false });
   });
 
+  it("drops the next episode asked for with the old dial when the knob turns, and goes to the one asked for with the new", async () => {
+    let release!: () => void;
+    fetchMock.mockImplementationOnce(() => new Promise<Response>((r) => (release = () => void respond(200, { id: "old" }).then(r))));
+    fetchMock.mockImplementation(() => respond(200, { id: "new" }));
+    mountPlayer(root, one, opts({ dial: 0.3 }));
+    await tap("toggle");
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    const dial = root.querySelector<HTMLInputElement>("input[type=range]")!;
+    dial.value = "0.9";
+    dial.dispatchEvent(new Event("change", { bubbles: true }));
+    release();
+    await vi.waitFor(() => expect(navigate).toHaveBeenCalled());
+    expect(navigate).toHaveBeenCalledTimes(1);
+    expect(navigate).toHaveBeenCalledWith("/episodes/new");
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(JSON.parse(String(fetchMock.mock.calls[0]![1].body))).toEqual({ dial: 0.3, first: false });
+    expect(JSON.parse(String(fetchMock.mock.calls[1]![1].body))).toEqual({ dial: 0.9, first: false });
+  });
+
+  it("keeps the prefetch when the knob comes back to the same value", async () => {
+    mountPlayer(root, one, opts({ dial: 0.3 }));
+    const dial = root.querySelector<HTMLInputElement>("input[type=range]")!;
+    await tap("toggle");
+    dial.value = "0.3";
+    dial.dispatchEvent(new Event("change", { bubbles: true }));
+    await vi.waitFor(() => expect(navigate).toHaveBeenCalledWith("/episodes/next-ep"));
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
   it("registers media session metadata and handlers when available", async () => {
     const handlers: Record<string, () => void> = {};
     const mediaSession = { metadata: null as unknown, playbackState: "none", setActionHandler: (a: string, fn: () => void) => (handlers[a] = fn) };

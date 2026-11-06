@@ -57,6 +57,8 @@ export function mountPlayer(root: HTMLElement, episode: PlayerEpisode, opts: Pla
   let state: State = { status: "idle", seg: startSeg, line: 0, loading: false, message: null, replyOpen: false, sent: {} };
   let abort = new AbortController();
   let prefetch: Promise<Next> | null = null;
+  /** Bumped when the dial turns: the next episode asked for before that is dropped, and its answer ignored. */
+  let generation = 0;
   const lineOf = (seg: number, line: number): ScriptLine | undefined => segments[seg]?.lines[line];
   const itemOf = (seg: number): PlayerItem | undefined => {
     const id = segments[seg]?.itemId;
@@ -73,11 +75,25 @@ export function mountPlayer(root: HTMLElement, episode: PlayerEpisode, opts: Pla
   const sync = () => syncMediaSession(itemOf(state.seg), state.status === "playing");
 
   function ensureNext(): Promise<Next> {
-    prefetch ??= fetchNext(opts.nextUrl, { dial: loadDial(opts.dial), first: false }).then((r): Next => {
-      if (!r.ok) return { ok: false, reason: r.reason === "limit" ? "limit" : "failed" };
-      return typeof r.body.id === "string" && r.body.id !== "" ? { ok: true, id: r.body.id } : { ok: false, reason: "failed" };
-    });
+    if (prefetch) return prefetch;
+    const asked = generation;
+    prefetch = fetchNext(opts.nextUrl, { dial: loadDial(opts.dial), first: false })
+      .then((r): Next => {
+        if (!r.ok) return { ok: false, reason: r.reason === "limit" ? "limit" : "failed" };
+        return typeof r.body.id === "string" && r.body.id !== "" ? { ok: true, id: r.body.id } : { ok: false, reason: "failed" };
+      })
+      // Made with a dial that has since turned: whoever waits gets the episode asked for with the new one.
+      .then((next) => (asked === generation ? next : ensureNext()));
     return prefetch;
+  }
+
+  /** Keeps the dial; when it changed, the next episode already asked for no longer fits and is asked for again when needed. */
+  function turnDial(value: string) {
+    const before = loadDial(opts.dial);
+    const kept = storeDial(value);
+    if (kept === null || kept === before) return;
+    generation++;
+    prefetch = null;
   }
 
   /** The last line is done: hand over to the next episode, which has been made in the background since the second-to-last segment. */
@@ -157,7 +173,7 @@ export function mountPlayer(root: HTMLElement, episode: PlayerEpisode, opts: Pla
     toggleReply: () => setState({ replyOpen: !state.replyOpen }),
     watashimo: () => react("watashimo"),
     reply: (body) => react("reply", body),
-    saveDial: (value) => void storeDial(value),
+    saveDial: turnDial,
     dial: loadDial(opts.dial),
     item: (seg) => itemOf(seg),
     itemId: (seg) => segments[seg]?.itemId,
