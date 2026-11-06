@@ -4,7 +4,7 @@
 
 ## 2026-11-06 Phase 3 完了（最終レビュー済み・ローカル）。次は本人作業 → デプロイ → public 化
 
-Phase 2（ラジオ中心の体験への作り替え）と Phase 3（単位・音声の鍵・つなぎ・事前生成・聴いた記録・土地コード・英語の DJ）の実装は、最終レビューの修正まで含めてすべて main にコミット済み（push は未）。本番は Phase 1 の状態のままなので、下の本人作業を上から順に済ませてデプロイする（migrate → deploy → `/admin/prepare`）。本番 URL は `https://dococafm.app`、再デプロイは `pnpm run deploy`。
+Phase 2（ラジオ中心の体験への作り替え）と Phase 3（単位・音声の鍵・つなぎ・事前生成・聴いた記録・土地コード・英語の DJ）の実装は、最終レビューの修正まで含めてすべて main にコミット済み。本番は Phase 1 の状態のままなので、下の本人作業を上から順に済ませてデプロイする（migrate → deploy → `/admin/prepare`）。本番 URL は `https://dococafm.app`、再デプロイは `pnpm run deploy`。
 
 ### 本人作業
 
