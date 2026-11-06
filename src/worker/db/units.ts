@@ -1,4 +1,5 @@
 import type { Unit } from "../types";
+import { jstDayStartIso } from "./episodes";
 
 type Row = Record<string, unknown>;
 
@@ -109,5 +110,11 @@ export async function countUnitsWithoutAudio(db: D1Database, lang: Unit["lang"])
     )
     .bind(lang)
     .first<{ n: number }>();
+  return row?.n ?? 0;
+}
+
+/** Units stored since the JST day began: what `UNIT_DAILY_LIMIT` counts. */
+export async function countUnitsToday(db: D1Database, now: Date = new Date()): Promise<number> {
+  const row = await db.prepare("SELECT COUNT(*) AS n FROM units WHERE created_at >= ?").bind(jstDayStartIso(now)).first<{ n: number }>();
   return row?.n ?? 0;
 }

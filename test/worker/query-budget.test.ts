@@ -16,7 +16,7 @@ import { newSession } from "./routes/helpers";
 const START_BUDGET = 50;
 /** With every unit stored: the selection, three loads, one units read, the insert. */
 const EPISODE_BUDGET = 30;
-/** The worst case: no unit made yet, so one write per letter read (at most 6 segments × 3 letters) on top. */
+/** The worst case: no unit made yet, so per letter read (at most 6 segments × 3 letters) the cap read and one write on top. */
 const EPISODE_MAKING_UNITS_BUDGET = 50;
 
 const track = (id: number, name: string) => ({ trackId: id, trackName: name, artistName: "Someone", releaseDate: "2001-01-01T00:00:00Z" });
@@ -78,7 +78,7 @@ describe("D1 statements per request", () => {
     expect(counted.count()).toBeLessThan(EPISODE_BUDGET);
   });
 
-  it(`POST /episodes that makes every unit adds one write per unit, and stays under ${EPISODE_MAKING_UNITS_BUDGET}`, async () => {
+  it(`POST /episodes that makes every unit adds the cap read and one write per unit, and stays under ${EPISODE_MAKING_UNITS_BUDGET}`, async () => {
     await seedWorld();
     const cookie = await newSession();
     const keyless = countingD1(env.DB);
@@ -92,7 +92,7 @@ describe("D1 statements per request", () => {
     const { results } = await env.DB.prepare("SELECT letter_id FROM units").all<{ letter_id: string }>();
     expect(results.length).toBeGreaterThan(0);
     expect((await getUnits(env.DB, results.map((r) => r.letter_id), "ja")).size).toBe(results.length);
-    expect(keyed.count()).toBe(keyless.count() + results.length);
+    expect(keyed.count()).toBe(keyless.count() + 2 * results.length);
     expect(keyed.count()).toBeLessThan(EPISODE_MAKING_UNITS_BUDGET);
   });
 });

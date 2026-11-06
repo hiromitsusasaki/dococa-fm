@@ -215,6 +215,28 @@ describe("makeUnit", () => {
     expect((await getUnits(env.DB, [f.letter.id], "ja")).size).toBe(0);
   });
 
+  it("returns null without calling Claude once today's units are at UNIT_DAILY_LIMIT, and 0 pauses", async () => {
+    const f = await stored();
+    const other = await insertLetter(env.DB, letterDraft(f.item.id, { body: "二通目。", bodyJa: "二通目。" }));
+    create.mockResolvedValue(lines());
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    expect(await makeUnit({ ...keyed, UNIT_DAILY_LIMIT: "0" } as Env, env.DB, f.letter, f.item, "ja")).toBeNull();
+    expect(create).not.toHaveBeenCalled();
+    expect(await makeUnit({ ...keyed, UNIT_DAILY_LIMIT: "1" } as Env, env.DB, f.letter, f.item, "ja")).toMatchObject({ verified: true });
+    expect(await makeUnit({ ...keyed, UNIT_DAILY_LIMIT: "1" } as Env, env.DB, other, f.item, "ja")).toBeNull();
+    expect(create).toHaveBeenCalledTimes(1);
+    expect((await getUnits(env.DB, [other.id], "ja")).size).toBe(0);
+    expect(warn.mock.calls.some((c) => c.join(" ").includes("[dococa] unit cap reached"))).toBe(true);
+  });
+
+  it("does not count a unit made before today's JST midnight", async () => {
+    const f = await stored();
+    const other = await insertLetter(env.DB, letterDraft(f.item.id, { body: "二通目。", bodyJa: "二通目。" }));
+    await upsertUnit(env.DB, { letterId: other.id, lang: "ja", intro: "a", after: "b", verified: true, audioReady: false, createdAt: "2020-01-01T00:00:00.000Z" });
+    create.mockResolvedValue(lines());
+    expect(await makeUnit({ ...keyed, UNIT_DAILY_LIMIT: "1" } as Env, env.DB, f.letter, f.item, "ja")).toMatchObject({ verified: true });
+  });
+
   it("returns null and stores nothing when Claude keeps answering out of shape", async () => {
     const f = await stored();
     create.mockResolvedValue({ content: [{ type: "text", text: "はい" }] });
@@ -227,8 +249,13 @@ describe("makeUnit when the unit cannot be stored", () => {
   it("returns null and logs its own message, name only", async () => {
     const f = await stored();
     create.mockResolvedValue(lines());
-    // A D1 error can quote the statement with its values, so the message here carries the intro.
-    const broken = { prepare: () => { throw new Error("D1_ERROR: INSERT INTO units ... 静かな一曲です。"); } } as unknown as D1Database;
+    // A D1 error can quote the statement with its values, so the message here carries the intro. Reads still work.
+    const broken = {
+      prepare: (sql: string) => {
+        if (sql.startsWith("INSERT")) throw new Error("D1_ERROR: INSERT INTO units ... 静かな一曲です。");
+        return env.DB.prepare(sql);
+      },
+    } as unknown as D1Database;
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     expect(await makeUnit(keyed, broken, f.letter, f.item, "ja")).toBeNull();
     const logged = warn.mock.calls.map((c) => c.join(" ")).join("\n");

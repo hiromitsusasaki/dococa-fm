@@ -201,6 +201,20 @@ describe("prepareBatch", () => {
     expect(google).toHaveBeenCalledTimes(2);
   });
 
+  it("halts the unit phase at UNIT_DAILY_LIMIT without counting a failure, and still voices stored units", async () => {
+    const { letters } = await seed(3);
+    await upsertUnit(env.DB, { letterId: letters[0]!.id, lang: "ja", intro: "静かな一曲です。", after: "いいお便りでした。", verified: true, audioReady: false, createdAt: "2020-01-01T00:00:00.000Z" });
+    const r = await prepareBatch({ ...keyed, UNIT_DAILY_LIMIT: "1" } as Env, env.DB, 20);
+    expect(create).toHaveBeenCalledTimes(1);
+    expect(r).toMatchObject({ units: 1, failed: 0, remaining: { units: { ja: 1, en: 3 }, audio: { ja: 0, en: 0 } } });
+    expect(await unitOf(letters[0]!.id)).toMatchObject({ audioReady: true });
+    expect(await unitOf(letters[1]!.id)).toMatchObject({ audioReady: true });
+
+    create.mockClear();
+    expect(await prepareBatch({ ...keyed, UNIT_DAILY_LIMIT: "0" } as Env, env.DB, 20)).toMatchObject({ units: 0, audio: 0, failed: 0 });
+    expect(create).not.toHaveBeenCalled();
+  });
+
   it("leaves a found voice without a source alone, since it can never be verified", async () => {
     const { item } = await seed(0);
     for (const sourceUrl of [null, "", "  "]) await insertLetter(env.DB, letterDraft(item.id, { kind: "found", sourceUrl, sourceAuthor: "@x", radioName: "" }));

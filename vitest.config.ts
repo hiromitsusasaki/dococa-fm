@@ -30,6 +30,7 @@ export default defineConfig(async () => {
                   EPISODE_DAILY_LIMIT: "",
                   EPISODE_GLOBAL_DAILY_LIMIT: "",
                   CLOUD_TTS_GLOBAL_DAILY_LIMIT: "",
+                  UNIT_DAILY_LIMIT: "",
                   RATE_LIMIT_PER_MINUTE: "",
                   CLAUDE_MODEL: "",
                   GEMINI_TTS_MODEL: "",

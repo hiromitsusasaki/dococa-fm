@@ -1,6 +1,7 @@
 import { claude, hasClaude, model } from "../claude/client";
-import { getUnits, upsertUnit } from "../db/units";
+import { countUnitsToday, getUnits, upsertUnit } from "../db/units";
 import type { Env } from "../env";
+import { limitFrom } from "../limits";
 import type { Item, Letter, Segment, Unit } from "../types";
 import { letterLines, type UnitLines } from "./compose";
 import { DJ_SYSTEM, DJ_SYSTEM_EN, letterTag, retryNote, workTag } from "./script";
@@ -18,6 +19,15 @@ const RETRYABLE = /^(?:topical|measure|pii|announce|playback): /;
 const CONCURRENCY = 3;
 /** A unit is for everyone, so it is checked against no listener's account. */
 const NOBODY = { id: "", mcpToken: "" };
+/** Units made per JST day when `UNIT_DAILY_LIMIT` is unset. */
+export const DEFAULT_UNIT_DAILY_LIMIT = 1000;
+
+/** Whether today's units have reached `UNIT_DAILY_LIMIT` (`0` pauses); counted before any Claude call. */
+export async function unitCapReached(env: Env, db: D1Database): Promise<boolean> {
+  const reached = (await countUnitsToday(db)) >= limitFrom(env.UNIT_DAILY_LIMIT, DEFAULT_UNIT_DAILY_LIMIT);
+  if (reached) console.warn("[dococa] unit cap reached");
+  return reached;
+}
 
 /**
  * Sonnet 5.5 rejects forced tool_choice and strict schemas drop maxLength, so the call is `auto` +
@@ -120,10 +130,12 @@ function verifyUnit(lines: UnitLines, letter: Letter, item: Item, lang: Unit["la
 
 /**
  * write → unitSegment → verifyEpisode; one retry with the retryable details; stores verified 0/1. Null when
- * Claude is unavailable (no key, an API error, or replies out of shape): nothing is stored, so a later run makes it.
+ * Claude is unavailable (no key, an API error, or replies out of shape) or today's units are at
+ * `UNIT_DAILY_LIMIT`: nothing is stored, so a later run makes it.
  */
 export async function makeUnit(env: Env, db: D1Database, letter: Letter, item: Item, lang: Unit["lang"]): Promise<Unit | null> {
   if (!hasClaude(env)) return null;
+  if (await unitCapReached(env, db)) return null;
   let lines: UnitLines;
   let ok: boolean;
   try {

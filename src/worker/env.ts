@@ -18,6 +18,8 @@ export type Env = {
   EPISODE_DAILY_LIMIT?: string;
   EPISODE_GLOBAL_DAILY_LIMIT?: string;
   CLOUD_TTS_GLOBAL_DAILY_LIMIT?: string;
+  /** Units (one Claude-written intro/after per letter and language) made per JST day; default 1000, `0` pauses. */
+  UNIT_DAILY_LIMIT?: string;
   RATE_LIMIT_PER_MINUTE?: string;
   CLAUDE_MODEL?: string;
   GEMINI_TTS_MODEL?: string;

@@ -171,6 +171,19 @@ describe("buildEpisode", () => {
     for (const seg of ep.segments) expect(seg.lines[1]).toEqual({ type: "dj", text: expect.stringMatching(/からのお便りです。$/), fixed: true });
   });
 
+  it("composes fixed lines only without calling Claude when today's units are at UNIT_DAILY_LIMIT", async () => {
+    const f = await fixture();
+    create.mockResolvedValue(unitReply());
+    for (const limit of ["0", "1"]) {
+      if (limit === "1") await storeUnit(f.mine.id, "前の日の紹介です。", "前の日の感想です。", false);
+      const ep = await buildEpisode({ ...keyed, UNIT_DAILY_LIMIT: limit } as Env, env.DB, f.a, { size: 2, seed: "s" });
+      expect(ep.verified).toBe(true);
+      for (const seg of ep.segments) expect(seg.lines[1]).toEqual({ type: "dj", text: expect.stringMatching(/からのお便りです。$/), fixed: true });
+    }
+    expect(create).not.toHaveBeenCalled();
+    expect((await getUnits(env.DB, [f.near.id, f.far.id], "ja")).size).toBe(0);
+  });
+
   it("falls back to readings only when Claude keeps returning a broken script", async () => {
     const f = await fixture();
     create.mockResolvedValue({ content: [{ type: "text", text: "はい" }] });
