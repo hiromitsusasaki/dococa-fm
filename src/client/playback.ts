@@ -162,3 +162,21 @@ export async function fetchNext(url: string): Promise<{ ok: true; body: Record<s
     return { ok: false, reason: "failed" };
   }
 }
+
+const reportedListens = new Set<string>();
+
+/** Tests only: a page lives once, so the set is never cleared at run time. */
+export const forgetReportedListens = (): void => reportedListens.clear();
+
+/**
+ * Tells the server a letter began playing, once per (episode, letter) per page. Fire and forget: the listening
+ * record is a convenience, so a failed request never stops the radio.
+ */
+export function reportListen(url: string, r: { episodeId: string; letterId: string; segmentIndex: number }): void {
+  const key = `${r.episodeId}\u0000${r.letterId}`;
+  if (reportedListens.has(key)) return;
+  reportedListens.add(key);
+  try {
+    void fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(r) }).catch(() => {});
+  } catch {}
+}

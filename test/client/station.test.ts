@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { forgetReportedListens } from "../../src/client/playback";
 import { mountStation, type StationOptions } from "../../src/client/station";
 
 const strings: Record<string, string> = {
@@ -138,6 +139,7 @@ beforeEach(() => {
     }),
   );
   localStorage.clear();
+  forgetReportedListens();
   document.body.innerHTML = '<div id="station"></div>';
   root = document.getElementById("station")!;
 });
@@ -594,5 +596,47 @@ describe("station: reactions", () => {
     await onLetter();
     expect(root.querySelector(".react")!.textContent).toContain("私も");
     expect(root.querySelector('[data-action="again"] a')!.getAttribute("href")).toBe("https://open.spotify.com/a");
+  });
+});
+
+describe("station: listens", () => {
+  const listens = () => (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls.filter((c) => c[0] === "/listens");
+
+  it("reports each letter once when its line starts, with the segment index, and not the DJ's lines or a reply", async () => {
+    nextReplies = [ok(view("epL", [["a", [{ type: "dj", text: "d1" }, letter("L1", "l1")]], ["b", [{ ...letter("R1", "r1"), kind: "reply" }, letter("L2", "l2")]]]))];
+    mountStation(root, opts({ listensUrl: "/listens" }));
+    await power();
+    await vi.waitFor(() => expect(spoken).toEqual(["d1", "l1", "r1", "l2"]));
+    const bodies = listens().map((c) => [c[1].method, c[1].headers["content-type"], JSON.parse(c[1].body)]);
+    expect(bodies).toEqual([
+      ["POST", "application/json", { episodeId: "epL", letterId: "L1", segmentIndex: 0 }],
+      ["POST", "application/json", { episodeId: "epL", letterId: "L2", segmentIndex: 1 }],
+    ]);
+  });
+
+  it("does not report the same letter of the same episode twice", async () => {
+    nextReplies = [ok(view("epL", [["a", [letter("L1", "l1"), letter("L1", "l1")]]]))];
+    mountStation(root, opts({ listensUrl: "/listens" }));
+    await power();
+    await vi.waitFor(() => expect(spoken).toEqual(["l1", "l1"]));
+    expect(listens()).toHaveLength(1);
+  });
+
+  it("keeps playing when the report fails, and sends nothing without a url", async () => {
+    nextReplies = [ok(view("epL", [["a", [letter("L1", "l1")]]]))];
+    const base = (fetch as unknown as ReturnType<typeof vi.fn>).getMockImplementation()!;
+    vi.stubGlobal("fetch", vi.fn((url: string, init?: RequestInit) => (url === "/listens" ? Promise.reject(new Error("offline")) : base(url, init))));
+    mountStation(root, opts({ listensUrl: "/listens" }));
+    await power();
+    await vi.waitFor(() => expect(spoken).toEqual(["l1"]));
+    root.innerHTML = "";
+    vi.stubGlobal("fetch", vi.fn(base));
+    forgetReportedListens();
+    spoken.length = 0;
+    nextReplies = [ok(view("epM", [["a", [letter("L2", "l2")]]]))];
+    mountStation(root, opts());
+    await power();
+    await vi.waitFor(() => expect(spoken).toEqual(["l2"]));
+    expect(listens()).toHaveLength(0);
   });
 });

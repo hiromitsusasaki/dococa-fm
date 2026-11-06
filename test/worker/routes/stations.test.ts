@@ -222,6 +222,7 @@ describe("GET /stations/:key (page)", () => {
     await updateListener(env.DB, owner.id, { stationSlug: "hiro", stationPublic: true });
     const html = await (await page("s:hiro", await newSession())).text();
     expect(html).toContain('data-next-url="/stations/s:hiro/next"');
+    expect(html).toContain('data-listens-url="/listens"');
     expect(html).toContain("ヒロ");
   });
 

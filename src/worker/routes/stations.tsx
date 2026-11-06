@@ -69,6 +69,7 @@ export function StationPage({ stationKey, label, lang, listener, path, voice, di
           data-next-url={`/stations/${stationKey}/next`}
           data-resume-url={`/stations/${stationKey}.json`}
           data-tts-url="/tts"
+          data-listens-url="/listens"
           data-voice={voice}
           data-dial={String(dial)}
           data-grow={grow ? "1" : "0"}

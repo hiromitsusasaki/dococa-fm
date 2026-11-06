@@ -1,7 +1,7 @@
 /** @jsxImportSource hono/jsx/dom */
 import { flushSync } from "hono/jsx/dom";
 import { createRoot } from "hono/jsx/dom/client";
-import { bindMediaSession, createLinePlayer, fetchNext, type LetterLine, type PlayerEpisode, type PlayerItem, syncMediaSession, whoOf } from "./playback";
+import { bindMediaSession, createLinePlayer, fetchNext, type LetterLine, type PlayerEpisode, type PlayerItem, reportListen, syncMediaSession, whoOf } from "./playback";
 import { postLetter, reactionOf, saveDial } from "./reactions";
 import { StationScreen, type UpNextRow } from "./station-view";
 
@@ -12,6 +12,8 @@ export type StationOptions = {
   resumeUrl: string;
   /** When set, episodes that have a cloud voice read from `${ttsUrl}?episode=&line=`; the rest use Web Speech. */
   ttsUrl: string | null;
+  /** Where a letter that starts playing is reported (`POST`, JSON); absent means nothing is recorded. */
+  listensUrl?: string;
   voiceURI: string;
   /** The listener's dial; the world station has none and shows no dial. */
   dial?: number;
@@ -179,6 +181,8 @@ export function mountStation(root: HTMLElement, opts: StationOptions) {
         for (let j = i === startSeg ? startLine : 0; j < lines.length; j++) {
           if (signal.aborted) return;
           if (i !== state.seg || j !== state.line) setState({ seg: i, line: j, replyOpen: false });
+          const line = lines[j]!;
+          if (opts.listensUrl && line.type === "letter" && line.kind !== "reply") reportListen(opts.listensUrl, { episodeId: ep.id, letterId: line.letterId, segmentIndex: i });
           await player.play(ep, i, j, signal);
         }
       }
@@ -350,6 +354,7 @@ function boot() {
     nextUrl: el.dataset.nextUrl ?? "",
     resumeUrl: el.dataset.resumeUrl ?? "",
     ttsUrl: el.dataset.ttsUrl ? el.dataset.ttsUrl : null,
+    ...(el.dataset.listensUrl ? { listensUrl: el.dataset.listensUrl } : {}),
     voiceURI: el.dataset.voice ?? "",
     ...(Number.isFinite(dial) ? { dial } : {}),
     grow: el.dataset.grow === "1",

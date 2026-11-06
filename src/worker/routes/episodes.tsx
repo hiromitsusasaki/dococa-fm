@@ -128,7 +128,7 @@ episodes.get("/episodes/:id", async (c) => {
   return c.html(
     <Layout title={t("episode.title")} script="player" lang={lang} listener={listener} path={currentPath(c)}>
       <main class="episode-page">
-        <div id="player" data-episode-id={episode.id} data-voice={listener.voice} data-next-url={`/episodes/${episode.id}/next`} data-tts-url={episode.cloudTts ? "/tts" : ""} data-dial={String(listener.dial)} data-start-seg={String(startSeg)}></div>
+        <div id="player" data-episode-id={episode.id} data-voice={listener.voice} data-next-url={`/episodes/${episode.id}/next`} data-tts-url={episode.cloudTts ? "/tts" : ""} data-listens-url="/listens" data-dial={String(listener.dial)} data-start-seg={String(startSeg)}></div>
         <ol class="program">
           {rows.map((r) => (
             <li>

@@ -19,7 +19,7 @@
 
 - `/admin/*` は `ADMIN_TOKEN`（Bearer）が必須です。`/mcp/<token>` は推測できない token だけが鍵です。
 - 書き込みの `POST` は同一オリジンのみです。`Origin` があれば `PUBLIC_ORIGIN` と一致が必要で、無いときは `Sec-Fetch-Site` が `same-origin` か `none` のときだけ通します（curl などブラウザ以外は通ります。Cookie を持たないため）。
-- レート制限: `POST /letters`、`/settings`、`/settings/mcp-token`、`/settings/dial`、`/auth/signout`、`/episodes`、`/episodes/:id/next`、`/stations/:key/next`、`/start`、`/put/register`、`/takedown`、お便りの通報、`GET /auth/google`、`GET /put?itemId=|url=`、`/api/*` は、IP（`CF-Connecting-IP`）とリスナーのそれぞれで 1 分 20 回までです。`GET /tts` はリスナーごとに 1 分 60 回、IP ごとに 120 回です。`/mcp/*` は下の規則です。超えると 429 を返します。
+- レート制限: `POST /letters`、`/settings`、`/settings/mcp-token`、`/settings/dial`、`/auth/signout`、`/episodes`、`/episodes/:id/next`、`/stations/:key/next`、`/start`、`/put/register`、`/takedown`、`/listens`、お便りの通報、`GET /auth/google`、`GET /put?itemId=|url=`、`/api/*` は、IP（`CF-Connecting-IP`）とリスナーのそれぞれで 1 分 20 回までです。`GET /tts` はリスナーごとに 1 分 60 回、IP ごとに 120 回です。`/mcp/*` は下の規則です。超えると 429 を返します。
 - リクエストの本文は、`/admin/*` 以外 64 KB まで、`/admin/*` は 1 MB までです（超えると 413）。
 - クラウドの声は、行の本文・言語・声から決まる鍵（`tts/v2/…/<本文の SHA-256>.mp3`）で R2 に 1 回だけ作り、全リスナーで共有します。同じ行への同時の要求でも合成は 1 回です（D1 の `tts_claims` で取り合い、負けた要求は R2 に音声ができるのを待ちます）。
 - `PUBLIC_ORIGIN` が空のときは、`/healthz` 以外すべて 500 を返します。鍵が空のときにお便りの判定と翻訳を素通しにするのは、`DEV_SKIP_CLAUDE=1` を明示した開発環境だけです。

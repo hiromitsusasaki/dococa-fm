@@ -150,6 +150,7 @@ describe("tts url on the episode page", () => {
     const without = locationId(await post("/episodes", cookie, { ...env, GOOGLE_TTS_SA_JSON: "" }));
     expect(await (await get(`/episodes/${withKey}`, cookie)).text()).toContain('data-tts-url="/tts"');
     expect(await (await get(`/episodes/${without}`, cookie)).text()).toContain('data-tts-url=""');
+    expect(await (await get(`/episodes/${withKey}`, cookie)).text()).toContain('data-listens-url="/listens"');
   });
 });
 

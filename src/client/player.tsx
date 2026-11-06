@@ -13,6 +13,7 @@ import {
   type PlayerEpisode,
   type PlayerItem,
   type PlayerOriginals,
+  reportListen,
   syncMediaSession,
 } from "./playback";
 import { onReleased, postLetter, reactionOf, saveDial } from "./reactions";
@@ -23,6 +24,8 @@ export type PlayerOptions = {
   nextUrl: string;
   /** When set, dj and letter lines are mp3s from `${ttsUrl}?episode=&line=` instead of Web Speech. */
   ttsUrl: string | null;
+  /** Where a letter that starts playing is reported (`POST`, JSON); absent means nothing is recorded. */
+  listensUrl?: string;
   dial?: number;
   /** Segment to start from (line 0), for "listen again" links; out of range means 0. */
   startSeg?: number;
@@ -94,6 +97,8 @@ export function mountPlayer(root: HTMLElement, episode: PlayerEpisode, opts: Pla
       for (let j = i === fromSeg ? fromLine : 0; j < lines.length; j++) {
         if (signal.aborted) return;
         if (i !== state.seg || j !== state.line) setState({ seg: i, line: j, replyOpen: false });
+        const line = lines[j]!;
+        if (opts.listensUrl && line.type === "letter" && line.kind !== "reply") reportListen(opts.listensUrl, { episodeId: episode.id, letterId: line.letterId, segmentIndex: i });
         await player.play(episode, i, j, signal);
       }
     }
@@ -285,6 +290,7 @@ function boot() {
     voiceURI: el.dataset.voice ?? "",
     nextUrl: el.dataset.nextUrl ?? "",
     ttsUrl: el.dataset.ttsUrl ? el.dataset.ttsUrl : null,
+    ...(el.dataset.listensUrl ? { listensUrl: el.dataset.listensUrl } : {}),
     ...(Number.isFinite(dial) ? { dial } : {}),
     ...(Number.isFinite(startSeg) ? { startSeg } : {}),
     strings,

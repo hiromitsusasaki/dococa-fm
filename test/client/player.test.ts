@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { forgetReportedListens } from "../../src/client/playback";
 import { mountPlayer, type PlayerEpisode } from "../../src/client/player";
 
 const strings: Record<string, string> = {
@@ -156,6 +157,7 @@ beforeEach(() => {
     removeEventListener: () => {},
   });
   vi.stubGlobal("fetch", fetchMock);
+  forgetReportedListens();
   document.body.innerHTML = '<div id="player"></div>';
   root = document.getElementById("player")!;
 });
@@ -554,5 +556,45 @@ describe("player", () => {
     handlers.pause!();
     await flush();
     expect(btn("toggle").textContent).toContain("再生");
+  });
+});
+
+describe("player: listens", () => {
+  const listens = () => fetchMock.mock.calls.filter((c) => c[0] === "/listens");
+  const mixed: PlayerEpisode = {
+    id: "epM",
+    items,
+    segments: [
+      { itemId: "a", slot: "near", lines: [{ type: "dj", text: "d1" }, letter("L1", "l1")] },
+      { itemId: "b", slot: "far", lines: [{ ...letter("R1", "r1"), kind: "reply" as const }, letter("L2", "l2")] },
+    ],
+  };
+
+  it("reports each letter once as it starts, with the segment index, but not a reply", async () => {
+    mountPlayer(root, mixed, opts({ listensUrl: "/listens" }));
+    await tap("toggle");
+    await vi.waitFor(() => expect(spoken).toEqual(["d1", "l1", "r1", "l2"]));
+    expect(listens().map((c) => [c[1].method, c[1].headers["content-type"], JSON.parse(c[1].body)])).toEqual([
+      ["POST", "application/json", { episodeId: "epM", letterId: "L1", segmentIndex: 0 }],
+      ["POST", "application/json", { episodeId: "epM", letterId: "L2", segmentIndex: 1 }],
+    ]);
+  });
+
+  it("does not report a letter again when the listener starts it over, and sends nothing without a url", async () => {
+    mountPlayer(root, one, opts({ listensUrl: "/listens" }));
+    await tap("toggle");
+    await vi.waitFor(() => expect(spoken).toContain("l1"));
+    root.innerHTML = "";
+    mountPlayer(root, one, opts({ listensUrl: "/listens" }));
+    await tap("toggle");
+    await vi.waitFor(() => expect(spoken.filter((x) => x === "l1")).toHaveLength(2));
+    expect(listens()).toHaveLength(1);
+    forgetReportedListens();
+    fetchMock.mockClear();
+    root.innerHTML = "";
+    mountPlayer(root, one, opts());
+    await tap("toggle");
+    await vi.waitFor(() => expect(spoken.filter((x) => x === "l1")).toHaveLength(3));
+    expect(listens()).toHaveLength(0);
   });
 });
