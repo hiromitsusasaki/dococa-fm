@@ -61,9 +61,9 @@ describe("composeEpisode", () => {
     const bare = [t("bridge.open"), "みなとさん（函館）からのお便りです。", "letter:a", t("bridge.sameWork"), "そらさんからのお便りです。", "letter:b", t("bridge.close")];
     expect(texts(null)).toEqual(bare);
     expect(texts(unitsOf(unit("a", "紹介", "感想", false), unit("b", "紹介b", "感想b", false)))).toEqual(bare);
-    // The first letter's unit failed alone: the work is introduced by the next letter's unit, once, at the start.
+    // The first letter's unit failed alone: no intro, since the next letter's intro was written about that letter.
     expect(texts(unitsOf(unit("a", "紹介", "感想", false), unit("b", "紹介b", "感想b")))).toEqual([
-      t("bridge.open"), "紹介b", "みなとさん（函館）からのお便りです。", "letter:a", t("bridge.sameWork"), "そらさんからのお便りです。", "letter:b", "感想b", t("bridge.close"),
+      t("bridge.open"), "みなとさん（函館）からのお便りです。", "letter:a", t("bridge.sameWork"), "そらさんからのお便りです。", "letter:b", "感想b", t("bridge.close"),
     ]);
     // An empty line is not said.
     expect(texts(unitsOf(unit("a", "", "感想")))).toEqual([
@@ -71,12 +71,20 @@ describe("composeEpisode", () => {
     ]);
   });
 
-  it("introduces the work from the first letter with a unit when a reply is read first", () => {
+  it("says no intro when a reply is read first, since only the first letter's own unit introduces the work", () => {
     const r2 = letter({ id: "r2", kind: "reply", body: "届きました", bodyJa: "届きました", radioName: "そら", place: "熊本" });
     const [seg] = composeEpisode([{ itemId: "i1", slot: "near", letterIds: ["r2", "a"], reactionIds: [] }], unitsOf(unit("a", "紹介", "感想")), byId([r2, plain]), items);
     expect(seg!.lines.map((l) => (l.type === "letter" ? `letter:${l.letterId}` : (l as { text: string }).text))).toEqual([
-      t("bridge.open"), "紹介", "そらさん（熊本）からのお便りです。", "letter:r2", t("bridge.sameWork"), "みなとさん（函館）からのお便りです。", "letter:a", "感想", t("bridge.close"),
+      t("bridge.open"), "そらさん（熊本）からのお便りです。", "letter:r2", t("bridge.sameWork"), "みなとさん（函館）からのお便りです。", "letter:a", "感想", t("bridge.close"),
     ]);
+  });
+
+  it("introduces the work with the first letter's own intro", () => {
+    const b = letter({ id: "b", radioName: "そら", place: "" });
+    const [seg] = composeEpisode([{ itemId: "i1", slot: "near", letterIds: ["a", "b"], reactionIds: [] }], unitsOf(unit("a", "紹介a", "感想a"), unit("b", "紹介b", "感想b")), byId([plain, b]), items);
+    const intros = seg!.lines.filter((l) => l.type === "dj" && l.unit?.part === "intro");
+    expect(intros).toEqual([{ type: "dj", text: "紹介a", unit: { letterId: "a", part: "intro" } }]);
+    expect(seg!.lines[1]).toEqual(intros[0]);
   });
 
   it("never adds a preview clip, even for a work that has a preview url: only talk plays", () => {

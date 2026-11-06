@@ -76,8 +76,8 @@ export function letterLines(l: Letter, unit: UnitLines | null, withIntro: boolea
 
 /**
  * Lays out each segment: bridge, the work's intro, then per letter [hand-over, letter, after] with a sameWork
- * bridge between letters, then the reactions; the close bridge ends the episode. The intro is the unit of the
- * first letter that has one (a reply read as a letter has no unit), said once before the first hand-over.
+ * bridge between letters, then the reactions; the close bridge ends the episode. The intro is the first
+ * letter's own verified unit, said once before its hand-over; with none (a reply read first has no unit), none.
  * Letter lines come from `letters` only, so nothing the DJ wrote can stand in for a letter. Only verified
  * units speak; with `units === null`, or no verified unit for a letter, the DJ says only fixed phrases around it.
  */
@@ -100,8 +100,10 @@ export function composeEpisode(
     if (p.letterIds.length === 0 && p.reactionIds.length === 0) throw new Error("segment without letters");
     const present = p.letterIds.flatMap((id) => letters.get(id) ?? []);
     const lines: ScriptLine[] = [bridgeLine(bridgeBefore(i, p.slot, station), lang)];
-    const introBy = present.find((l) => (spoken(l)?.intro ?? "") !== "");
-    if (introBy) lines.push(unitLine(spoken(introBy)!.intro, introBy.id, "intro"));
+    // A unit's intro was written with its own letter in the prompt, so it airs only before that letter.
+    const first = present[0];
+    const intro = first ? (spoken(first)?.intro ?? "") : "";
+    if (first && intro !== "") lines.push(unitLine(intro, first.id, "intro"));
     present.forEach((l, n) => {
       if (n > 0) lines.push(bridgeLine("bridge.sameWork", lang));
       lines.push(...letterLines(l, spoken(l), false, lang));
