@@ -131,6 +131,33 @@ describe("GET /episodes/:id?seg", () => {
   });
 });
 
+describe("GET /episodes/:id?letter", () => {
+  it("starts at the public-view segment that reads the letter, even after an earlier letter was taken down", async () => {
+    const cookie = await newSession();
+    const a = await insertItem(env.DB, itemDraft());
+    const b = await insertItem(env.DB, itemDraft({ externalIds: { itunes: "9" } }));
+    const la = await insertLetter(env.DB, letterDraft(a.id, { body: "Aへのお便り", bodyJa: "Aへのお便り" }));
+    const lb = await insertLetter(env.DB, letterDraft(b.id, { body: "Bへのお便り", bodyJa: "Bへのお便り" }));
+    const line = (l: typeof la) => ({ type: "letter" as const, letterId: l.id, text: l.body, radioName: l.radioName, place: l.place, kind: "letter" as const, sourceUrl: null, sourceAuthor: null });
+    const ep = await insertEpisode(env.DB, {
+      listenerId: idOf(cookie),
+      segments: [
+        { itemId: a.id, slot: "near", lines: [line(la)] },
+        { itemId: b.id, slot: "far", lines: [line(lb)] },
+      ],
+      verified: true,
+      report: { verbatim: true, sources: true, topical: true, pii: true, details: [] },
+    });
+    const start = async (q: string) => (await (await get(`/episodes/${ep.id}${q}`, cookie)).text()).match(/data-start-seg="(\d+)"/)?.[1];
+    expect(await start(`?letter=${lb.id}`)).toBe("1");
+    await setLetterStatus(env.DB, la.id, "rejected");
+    // The first segment is gone from the public view, so the letter is now in segment 0; a stale ?seg=1 would miss it.
+    expect(await start(`?letter=${lb.id}&seg=1`)).toBe("0");
+    expect(await start(`?letter=nope&seg=0`)).toBe("0");
+    expect(await start(`?letter=nope`)).toBe("0");
+  });
+});
+
 describe("unverified episodes", () => {
   it("are not rendered or served as JSON", async () => {
     const cookie = await newSession();

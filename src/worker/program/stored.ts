@@ -20,6 +20,10 @@ export function originalsOf(letters: ReadonlyMap<string, Letter>, lang: Lang): O
   return out;
 }
 
+/** The index of the first segment that reads `letterId` as a letter (a reply's 一言 aside), or -1. */
+export const segmentReading = (segments: Segment[], letterId: string): number =>
+  segments.findIndex((s) => s.lines.some((l) => l.type === "letter" && l.kind !== "reply" && l.letterId === letterId));
+
 export type PublicView = {
   segments: Segment[];
   /** For each line of `segments` in reading order, its index across the stored episode (the TTS cache key). */

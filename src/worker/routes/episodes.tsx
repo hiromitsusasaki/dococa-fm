@@ -11,7 +11,7 @@ import { ja } from "../i18n/ja";
 import { type Lang, tFor } from "../i18n/t";
 import { makeEpisode } from "../program/create";
 import { toPlayerView } from "../program/player-view";
-import { loadPublicEpisode } from "../program/stored";
+import { loadPublicEpisode, segmentReading } from "../program/stored";
 import type { Episode, Listener, ScriptLine } from "../types";
 
 export const episodes = new Hono<{ Bindings: Env; Variables: Variables }>();
@@ -115,8 +115,12 @@ episodes.get("/episodes/:id", async (c) => {
   const listener = c.get("listener");
   const lang = listener.lang;
   const t = tFor(lang);
+  // `?letter=` (the listen-again link) starts at the segment that reads it in the public view, which shifts when
+  // an earlier letter is taken down; an old `?seg=` link, then 0, are the fallbacks.
+  const letter = c.req.query("letter");
+  const byLetter = letter ? segmentReading(segments, letter) : -1;
   const seg = Number(c.req.query("seg") ?? "");
-  const startSeg = Number.isInteger(seg) && seg >= 0 && seg < segments.length ? seg : 0;
+  const startSeg = byLetter >= 0 ? byLetter : Number.isInteger(seg) && seg >= 0 && seg < segments.length ? seg : 0;
   const stored = await getItemsByIds(c.env.DB, segments.map((s) => s.itemId));
   const rows = segments.flatMap((s) => {
     const item = stored.get(s.itemId);

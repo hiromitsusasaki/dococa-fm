@@ -65,7 +65,7 @@ me.get("/me", requireSignin, async (c) => {
                   {h.letter.kind === "found" ? <LetterSource letter={h.letter} lang={lang} /> : <p class="letter-who">{whoOf(h.letter, lang)}</p>}
                   <p class="muted">{t("me.heardOn", { date: jstDate(h.heardAt) })}</p>
                   <p>
-                    <a href={`/episodes/${h.episodeId}?seg=${h.segmentIndex}`}>{t("me.replay")}</a>
+                    <a href={`/episodes/${h.episodeId}?letter=${encodeURIComponent(h.letter.id)}`}>{t("me.replay")}</a>
                   </p>
                   <div class="letter-actions">
                     <ReactionForms letterId={h.letter.id} itemId={h.item.id} lang={lang} />

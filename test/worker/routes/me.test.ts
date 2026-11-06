@@ -96,7 +96,7 @@ describe("GET /me", () => {
     expect(html).toContain(t("me.heard"));
     expect(html).toContain("Bへのお便り");
     expect(html).not.toContain("那覇");
-    expect(html).toContain(`href="/episodes/${ep.id}?seg=1"`);
+    expect(html).toContain(`href="/episodes/${ep.id}?letter=${lb.id}"`);
     expect(html).toContain(`name="parentLetterId" value="${lb.id}"`);
     expect(html).not.toMatch(/\d+ ?件/);
     expect(html).not.toMatch(/\d+ letters/);
