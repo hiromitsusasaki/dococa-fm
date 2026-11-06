@@ -46,7 +46,7 @@ describe("composeEpisode", () => {
   it("never adds a preview clip, even for a work that has a preview url: only talk plays", () => {
     expect(items.get("i1")!.previewUrl).not.toBeNull();
     const segs = composeEpisode(
-      [{ itemId: "i1", slot: "near", letterIds: ["a", "f"], reactionIds: ["w1"] }, { itemId: "i1", slot: "far", letterIds: [], reactionIds: [] }],
+      [{ itemId: "i1", slot: "near", letterIds: ["a", "f"], reactionIds: ["w1"] }, { itemId: "i1", slot: "far", letterIds: ["f"], reactionIds: [] }],
       [{ sayBefore: "は", sayAfter: "お" }, { sayBefore: "は", sayAfter: "お" }],
       letters,
       items,
@@ -58,7 +58,7 @@ describe("composeEpisode", () => {
 
   it("reads at most three reactions", () => {
     const [seg] = composeEpisode(
-      [{ itemId: "i2", slot: "near", letterIds: [], reactionIds: ["w1", "w2", "w3", "w4"] }],
+      [{ itemId: "i2", slot: "near", letterIds: ["a"], reactionIds: ["w1", "w2", "w3", "w4"] }],
       [{ sayBefore: "は", sayAfter: "お" }],
       letters,
       items,
@@ -68,7 +68,7 @@ describe("composeEpisode", () => {
 
   it("names a reaction without a radio name or place gently", () => {
     const anon = letter({ id: "x", kind: "watashimo", body: "私も", bodyJa: "私も", radioName: "", place: "" });
-    const [seg] = composeEpisode([{ itemId: "i2", slot: "near", letterIds: [], reactionIds: ["x"] }], null, byId([anon]), items);
+    const [seg] = composeEpisode([{ itemId: "i2", slot: "near", letterIds: ["a"], reactionIds: ["x"] }], null, byId([anon, plain]), items);
     expect(seg!.lines).toContainEqual({ type: "dj", text: "どなたかから『私も』が届いています", fixed: true });
   });
 
@@ -103,12 +103,9 @@ describe("composeEpisode", () => {
     expect(seg!.lines[0]).toEqual({ type: "dj", text: "お便りを読みます。", fixed: true });
   });
 
-  it("introduces the work, not a letter, in a letterless fallback segment", () => {
-    const [seg] = composeEpisode([{ itemId: "i2", slot: "near", letterIds: [], reactionIds: [] }], null, letters, items);
-    const t0 = (seg!.lines[0] as { text: string }).text;
-    expect(t0).toMatch(/^続いては、『.+』です。$/);
-    expect(t0).not.toContain("お便り");
-    expect(seg!.lines[0]).toMatchObject({ type: "dj", fixed: true });
+  it("throws when a plan entry has no letters", () => {
+    expect(() => composeEpisode([{ itemId: "i2", slot: "near", letterIds: [], reactionIds: [] }], null, letters, items)).toThrow("segment without letters");
+    expect(() => composeEpisode([{ itemId: "i1", slot: "near", letterIds: [], reactionIds: ["w1"] }], [{ sayBefore: "は", sayAfter: "お" }], letters, items)).toThrow("segment without letters");
   });
 
   it("keeps the plain reading cue for an anonymous sender", () => {
@@ -127,15 +124,6 @@ describe("composeEpisode", () => {
     expect(siteName(url)).toBe(site);
   });
 
-  it("composes and verifies a segment that has only a 私も reaction and no letter", () => {
-    const only = composeEpisode([{ itemId: "i1", slot: "near", letterIds: [], reactionIds: ["w1"] }], [{ sayBefore: "静かな一曲の話から。", sayAfter: "次の作品へ。" }], letters, items);
-    expect(only[0]!.lines.some((l) => l.type === "letter")).toBe(false);
-    expect(only[0]!.lines.some((l) => l.type === "dj" && l.fixed === true)).toBe(true);
-    expect(verifyEpisode(only, letters, listener(), items).details).toEqual([]);
-    const announcing = composeEpisode([{ itemId: "i1", slot: "near", letterIds: [], reactionIds: ["w1"] }], [{ sayBefore: "あおいさんからのお便りです。", sayAfter: "次へ。" }], letters, items);
-    expect(verifyEpisode(announcing, letters, listener(), items).details.some((d) => d.startsWith("announce:"))).toBe(true);
-  });
-
   it("throws when the dj lines do not match the segments", () => {
     expect(() => composeEpisode([{ itemId: "i1", slot: "near", letterIds: [], reactionIds: [] }], [], letters, items)).toThrow();
   });
@@ -144,7 +132,6 @@ describe("composeEpisode", () => {
 describe("fixed templates", () => {
   it.each(FIXED_TEMPLATES)("%s says nothing the dj checks would refuse, so a fixed line never needs them", (key) => {
     const text = t(key, { who: "みなとさん（函館）", author: "@jazzcat", site: "YouTube" });
-    // The segment carries a letter so the announce check, which only fires in a letterless segment, stays out of it.
     const aLetter = { type: "letter" as const, letterId: plain.id, text: plain.bodyJa, radioName: plain.radioName, place: plain.place, kind: plain.kind, sourceUrl: null, sourceAuthor: null };
     const r = verifyEpisode([{ itemId: "i1", slot: "near", lines: [{ type: "dj", text }, aLetter] }], letters, listener());
     expect(r).toMatchObject({ topical: true, pii: true });

@@ -20,7 +20,7 @@ type Fixture = {
 
 /**
  * 12 items, 3 listeners. For listener A:
- *   own  = i0..i3 (history) ; near = i0,i1,i2 ; fallback = i3 (no letters)
+ *   own  = i0..i3 (history) ; near = i0,i1,i2 ; i3 has no letters from others (never selected)
  *   neighbor = i4 (B wrote on A's i0, and B also wrote on i4)
  *   far = i5..i11 (written by C and an unrelated source author)
  */
@@ -91,18 +91,28 @@ describe("selectProgram", () => {
     expect(bySlot(high, "far")).toBe(6);
   });
 
-  it("fills a short near pool from the listener's own works first, then from far, and keeps length 6", async () => {
+  it("seats that near and neighbor cannot fill go to far, never to the listener's own unwritten works", async () => {
     const f = await buildFixture();
     const d = await createListener(env.DB);
     await upsertHistory(env.DB, [{ listenerId: d.id, itemId: f.items[3] as string, source: "manual", occurredAt: null, rank: null }]);
     const p = await selectProgram(env.DB, { ...d, dial: 0.3 }, { seed: "s" });
     expect(p).toHaveLength(6);
-    expect(p.filter((s) => s.slot === "near")).toEqual([{ itemId: f.items[3], slot: "near", letterIds: [] }]);
-    expect(bySlot(p, "far")).toBe(5);
+    expect(p.some((s) => s.itemId === f.items[3])).toBe(false);
+    expect(p.filter((s) => s.slot === "near")).toEqual([]);
+    expect(p.every((s) => s.letterIds.length > 0)).toBe(true);
     expect(new Set(p.map((s) => s.itemId)).size).toBe(6);
   });
 
-  it("a new listener's three works land in near seats among many seed letters, and the dial moves the far share", async () => {
+  it("every selection has at least one letter", async () => {
+    const f = await buildFixture();
+    const mine = await selectProgram(env.DB, { ...f.a, dial: 0.3 }, { seed: "s" });
+    const world = await selectProgram(env.DB, f.a, { station: { kind: "world" }, size: 10, seed: "w" });
+    expect(mine.length).toBeGreaterThan(0);
+    expect(world.length).toBeGreaterThan(0);
+    expect([...mine, ...world].every((s) => s.letterIds.length >= 1)).toBe(true);
+  });
+
+  it("a new listener whose works nobody has written about still gets a full programme from far letters", async () => {
     const seedWriter = await createListener(env.DB);
     for (let n = 0; n < 12; n++) {
       const it = await insertItem(env.DB, itemDraft({ title: `seeded-${n}`, externalIds: { itunes: `s${n}` } }));
@@ -120,25 +130,23 @@ describe("selectProgram", () => {
 
     const low = await selectProgram(env.DB, { ...judge, dial: 0.3 }, { seed: "s" });
     expect(low).toHaveLength(6);
-    expect(low.filter((s) => s.slot === "near").map((s) => s.itemId).sort()).toEqual([...mine].sort());
-    expect(bySlot(low, "far")).toBe(3);
-    expect(low.every((s) => !s.letterIds.some((id) => id === undefined))).toBe(true);
+    expect(low.some((s) => mine.includes(s.itemId))).toBe(false);
+    expect(bySlot(low, "far")).toBe(6);
+    expect(low.every((s) => s.letterIds.length > 0)).toBe(true);
 
     const zero = await selectProgram(env.DB, { ...judge, dial: 0 }, { seed: "s" });
-    expect(bySlot(zero, "far")).toBe(3);
-    expect(zero.filter((s) => s.slot === "near").length).toBe(3);
+    expect(bySlot(zero, "far")).toBe(6);
 
     const high = await selectProgram(env.DB, { ...judge, dial: 1 }, { seed: "s" });
     expect(bySlot(high, "far")).toBe(6);
     expect(high.some((s) => mine.includes(s.itemId))).toBe(false);
   });
 
-  it("uses history-only items as the last resort and never pads with duplicates", async () => {
+  it("a listener whose only work has no letters from others gets an empty programme", async () => {
     const d = await createListener(env.DB);
     const only = await insertItem(env.DB, itemDraft({ title: "only" }));
     await upsertHistory(env.DB, [{ listenerId: d.id, itemId: only.id, source: "manual", occurredAt: null, rank: null }]);
-    const p = await selectProgram(env.DB, d, { seed: "s" });
-    expect(p).toEqual([{ itemId: only.id, slot: "near", letterIds: [] }]);
+    expect(await selectProgram(env.DB, d, { seed: "s" })).toEqual([]);
   });
 
   it("letterIds hold at most 3, never own letters, never watashimo", async () => {
@@ -185,6 +193,7 @@ describe("selectProgram", () => {
     const addOwnLetterWithReaction = async (f: Fixture, episodeCreatedAt: string) => {
       const x = await insertItem(env.DB, itemDraft({ title: "echo" }));
       const mine = await insertLetter(env.DB, letterDraft(x.id, { listenerId: f.a.id, body: "A on echo" }));
+      await insertLetter(env.DB, letterDraft(x.id, { kind: "found", sourceAuthor: "echo-fan", sourceUrl: "https://example.com/echo-fan", body: "fan on echo" }));
       await insertEpisode(env.DB, {
         listenerId: f.a.id,
         segments: [],
@@ -286,7 +295,7 @@ describe("selectProgram stations", () => {
     expect(new Set(p.map((s) => s.itemId)).size).toBe(3);
   });
 
-  it("world: no echo and no fallback for a listener with history", async () => {
+  it("world: no echo and no own works for a listener with history", async () => {
     const f = await buildFixture();
     const p = await selectProgram(env.DB, f.a, { station: { kind: "world" }, size: 10, seed: "w" });
     const own = new Set(f.items.slice(0, 4));
@@ -294,7 +303,7 @@ describe("selectProgram stations", () => {
     expect(p.every((s) => s.slot === "far" && !own.has(s.itemId))).toBe(true);
   });
 
-  it("public: only the owner's favourites, letterless ones included, never the listener's own letters", async () => {
+  it("a public station reads only works that someone has written about, never the listener's own letters", async () => {
     const owner = await createListener(env.DB);
     const guest = await createListener(env.DB);
     const other = await createListener(env.DB);
@@ -312,13 +321,13 @@ describe("selectProgram stations", () => {
     await insertLetter(env.DB, letterDraft(outsider, { listenerId: other.id, body: "other on outsider" }));
 
     const p = await selectProgram(env.DB, guest, { station: { kind: "public", ownerId: owner.id }, size: 6, seed: "p" });
-    expect(p.map((s) => s.itemId).sort()).toEqual([items[0], items[1], items[2]].sort());
-    expect(p.every((s) => s.slot === "near")).toBe(true);
-    expect(p.find((s) => s.itemId === items[1])?.letterIds).toEqual([]);
+    expect(p.map((s) => s.itemId)).toEqual([items[0]]);
+    expect(p.every((s) => s.slot === "near" && s.letterIds.length > 0)).toBe(true);
     expect(p.find((s) => s.itemId === items[0])?.letterIds).toHaveLength(2);
 
     const ownerListening = await selectProgram(env.DB, owner, { station: { kind: "public", ownerId: owner.id }, size: 6, seed: "p" });
     expect(ownerListening.find((s) => s.itemId === items[0])?.letterIds).toHaveLength(1);
+    expect(ownerListening.every((s) => s.letterIds.length > 0)).toBe(true);
     const letters = await env.DB.prepare("SELECT id FROM letters WHERE listener_id = ?").bind(owner.id).all<{ id: string }>();
     const ownIds = new Set(letters.results.map((r) => r.id));
     expect(ownerListening.flatMap((s) => s.letterIds).some((id) => ownIds.has(id))).toBe(false);

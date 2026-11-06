@@ -184,6 +184,23 @@ describe("buildEpisode", () => {
     expect(ep.segments.flatMap((s) => djTexts(s.lines))).toContain("a@b.coさんから『私も』が届いています");
   });
 
+  it("a segment whose only letters are sourceless found voices is dropped", async () => {
+    const f = await fixture();
+    const lone = (await insertItem(env.DB, itemDraft({ title: "出典のない曲" }))).id;
+    await insertLetter(env.DB, letterDraft(lone, { kind: "found", listenerId: null, sourceAuthor: "@x", sourceUrl: null, body: "no link", bodyJa: "出典なし" }));
+    const ep = await buildEpisode(keyless, env.DB, f.a, { size: 6, seed: "s" });
+    expect(ep.segments.map((s) => s.itemId)).not.toContain(lone);
+    expect(ep.segments.map((s) => s.itemId).sort()).toEqual([f.i0, f.i1].sort());
+    expect(ep.verified).toBe(true);
+  });
+
+  it("an episode can end up with no segment at all when every letter is sourceless", async () => {
+    const lone = (await insertItem(env.DB, itemDraft({ title: "出典のない曲" }))).id;
+    await insertLetter(env.DB, letterDraft(lone, { kind: "found", listenerId: null, sourceAuthor: "@x", sourceUrl: null, body: "no link", bodyJa: "出典なし" }));
+    const ep = await buildEpisode(keyless, env.DB, await createListener(env.DB), { station: { kind: "world" }, seed: "s" });
+    expect(ep.segments).toEqual([]);
+  });
+
   it("throws EpisodeUnverifiedError when even the readings-only episode fails", async () => {
     const f = await fixture();
     // A reaction whose radio name is the listener's own id: the fixed line would read the account aloud.
@@ -193,17 +210,22 @@ describe("buildEpisode", () => {
     expect((err as EpisodeUnverifiedError).report.pii).toBe(false);
   });
 
-  it("a public station builds a verified episode from a letterless favourite", async () => {
+  it("a public station builds a verified episode from a favourite someone has written about", async () => {
     const owner = await createListener(env.DB);
     const guest = await createListener(env.DB);
+    const writer = await createListener(env.DB);
     const item = (await insertItem(env.DB, itemDraft({ title: "お気に入り" }))).id;
-    await upsertHistory(env.DB, [{ listenerId: owner.id, itemId: item, source: "manual", occurredAt: null, rank: 1 }]);
+    const bare = (await insertItem(env.DB, itemDraft({ title: "まだ誰も書いていない" }))).id;
+    await upsertHistory(env.DB, [
+      { listenerId: owner.id, itemId: item, source: "manual", occurredAt: null, rank: 1 },
+      { listenerId: owner.id, itemId: bare, source: "manual", occurredAt: null, rank: 2 },
+    ]);
+    await insertLetter(env.DB, letterDraft(item, { listenerId: writer.id, body: "好きです。", bodyJa: "好きです。" }));
     const ep = await buildEpisode(keyless, env.DB, guest, { station: { kind: "public", ownerId: owner.id }, seed: "t" });
     expect(ep.verified).toBe(true);
     expect(ep.listenerId).toBe(guest.id);
-    expect(ep.segments).toHaveLength(1);
-    expect(ep.segments[0]?.lines.filter((l) => l.type === "letter")).toEqual([]);
-    expect(ep.segments[0]?.lines.some((l) => l.type === "dj")).toBe(true);
+    expect(ep.segments.map((s) => s.itemId)).toEqual([item]);
+    expect(ep.segments[0]?.lines.filter((l) => l.type === "letter")).toHaveLength(1);
   });
 
 });

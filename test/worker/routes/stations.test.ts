@@ -72,12 +72,24 @@ describe("POST /stations/:key/next", () => {
     await updateListener(env.DB, owner.id, { stationSlug: "hiro", stationPublic: true });
     const fav = await insertItem(env.DB, itemDraft({ title: "owner-fav" }));
     await upsertHistory(env.DB, [{ listenerId: owner.id, itemId: fav.id, source: "manual", occurredAt: null, rank: 1 }]);
+    const writer = await createListener(env.DB);
+    await insertLetter(env.DB, letterDraft(fav.id, { listenerId: writer.id, body: "手紙", bodyJa: "手紙" }));
     const res = await postNext("s:hiro", await newSession());
     expect(res.status).toBe(200);
     const body = (await res.json()) as Body;
     expect(body.episode.segments.map((s) => s.itemId)).toEqual([fav.id]);
     expect(body.station.key).toBe("s:hiro");
     expect(body.station.label).toContain("ヒロ");
+  });
+
+  it("public: a favourite nobody has written about is not aired, and the answer is 409 empty", async () => {
+    const owner = await createListener(env.DB);
+    await updateListener(env.DB, owner.id, { stationSlug: "hiro", stationPublic: true });
+    const fav = await insertItem(env.DB, itemDraft({ title: "owner-fav" }));
+    await upsertHistory(env.DB, [{ listenerId: owner.id, itemId: fav.id, source: "manual", occurredAt: null, rank: 1 }]);
+    const res = await postNext("s:hiro", await newSession());
+    expect(res.status).toBe(409);
+    expect(await res.json()).toEqual({ error: "empty" });
   });
 
   it("answers 429 json at the daily limit", async () => {

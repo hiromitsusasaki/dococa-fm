@@ -11,7 +11,7 @@ import { verifyEpisode } from "./verify";
 
 const DJ_ATTEMPTS = 2;
 /** Checks a rephrased script can fix; verbatim and sources failures come from the data. */
-const RETRYABLE = /^(?:topical|measure|pii|announce|playback): /;
+const RETRYABLE = /^(?:topical|measure|pii|playback): /;
 
 /** Even the readings-only episode failed verification: the data itself is bad, and nothing may air. */
 export class EpisodeUnverifiedError extends Error {
@@ -63,6 +63,7 @@ export async function buildEpisode(
   const plan: SegmentPlan[] = [];
   const input: Parameters<typeof writeDjLines>[1] = { listener, segments: [] };
   let sourceless = 0;
+  let skippedSegments = 0;
 
   for (const s of selection) {
     const item = stored.get(s.itemId);
@@ -77,6 +78,11 @@ export async function buildEpisode(
         read.push(l);
       }
     }
+    // A segment with nothing left to read does not air: the programme is made of letters.
+    if (read.length === 0) {
+      skippedSegments++;
+      continue;
+    }
     // Public 私も and 一言 that others left on this listener's letters about the item, newest first.
     const reactions = allReactions.filter((r) => r.itemId === item.id).slice(0, MAX_REACTIONS);
     for (const r of reactions) letters.set(r.id, r);
@@ -85,6 +91,8 @@ export async function buildEpisode(
   }
 
   if (sourceless > 0) console.warn(`[dococa] skipped ${sourceless} found voice(s) without a source; fix the data`);
+
+  if (skippedSegments > 0) console.warn(`[dococa] skipped ${skippedSegments} segment(s) with no readable letter`);
 
   const finish = (segments: Episode["segments"]): Episode => {
     const report = verifyEpisode(segments, letters, listener, items);

@@ -85,23 +85,6 @@ describe("writeDjLines", () => {
     }
   });
 
-  it("says a segment has no letter whenever it has no letters, reactions or not", async () => {
-    create.mockResolvedValue(lines(6));
-    await writeDjLines(keyed, input);
-    const content = create.mock.calls[0]![0].messages[0].content as string;
-    const note = "この作品へのお便りはまだありません。読み上げ役に渡さず、作品の紹介から say_after へつなげてください。";
-    const blocks = content.split("<segment ").slice(1);
-    expect(blocks[0]).not.toContain(note);
-    for (const b of blocks.slice(1)) expect(b).toContain(note);
-    const reactionOnly = { ...segments[1]!, reactions: [letter({ id: "w2", kind: "watashimo", body: "私も", bodyJa: "私も", radioName: "いつき", place: "松本" })] };
-    create.mockClear();
-    create.mockResolvedValue(lines(1));
-    await writeDjLines(keyed, { ...input, segments: [reactionOnly] });
-    const only = create.mock.calls[0]![0].messages[0].content as string;
-    expect(only).toContain(note);
-    expect(only).toContain("<reaction");
-  });
-
   it("tells a retry which rules the previous script broke", async () => {
     create.mockResolvedValue(lines(6));
     await writeDjLines(keyed, { ...input, retryNotes: ["topical: segment 1 line 1 「今年」 in 「今年の一曲」"] });

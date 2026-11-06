@@ -42,15 +42,6 @@ export const FAR_SQL = `WITH ${OWN},
     AND l.item_id NOT IN (SELECT item_id FROM neighbor)
   ORDER BY l.item_id`;
 
-/**
- * Own items nobody else has written about (the listener's own letter does not count, since it is never read
- * back to them): the DJ introduces them from the work's data alone.
- */
-export const FALLBACK_SQL = `WITH ${OWN}
-  SELECT o.item_id FROM own o
-  WHERE NOT EXISTS (SELECT 1 FROM letters l WHERE l.item_id = o.item_id AND ${OTHERS_TEXT} AND ${NOT_ME})
-  ORDER BY o.item_id`;
-
 /** Own items whose letter got a reaction from someone else since the listener's last episode of their own station; none before the first. */
 export const ECHO_SQL = `SELECT DISTINCT r.item_id FROM letters r
   JOIN letters p ON p.id = r.parent_letter_id

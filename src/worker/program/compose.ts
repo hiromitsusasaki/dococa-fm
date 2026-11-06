@@ -14,7 +14,7 @@ const dj = (text: string): ScriptLine => ({ type: "dj", text });
 const fixed = (text: string): ScriptLine => ({ type: "dj", text, fixed: true });
 
 /** Every template a `fixed` line is made from; the quote check reads only what was filled into them. */
-export const FIXED_TEMPLATES = ["script.readingOnly", "script.letterFrom", "script.workOnly", "script.foundVoice", "script.reaction", "script.replyReaction"] as const;
+export const FIXED_TEMPLATES = ["script.readingOnly", "script.letterFrom", "script.foundVoice", "script.reaction", "script.replyReaction"] as const;
 
 /** Where a found voice was found, said aloud; the same label the screens show. */
 export const siteName = (sourceUrl: string | null): string => siteLabel(sourceUrl) || t("script.web");
@@ -57,10 +57,10 @@ export function composeEpisode(
   return plan.map((p, i) => {
     const item = items.get(p.itemId);
     if (!item) throw new Error(`item missing: ${p.itemId}`);
+    if (p.letterIds.length === 0) throw new Error("segment without letters");
     const said = djLines?.[i];
     const lines: ScriptLine[] = [];
     if (said && said.sayBefore !== "") lines.push(dj(said.sayBefore));
-    if (!said && p.letterIds.length === 0) lines.push(fixed(t("script.workOnly", { title: item.title })));
     for (const id of p.letterIds) {
       const l = letters.get(id);
       if (!l) continue;

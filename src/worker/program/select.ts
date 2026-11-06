@@ -1,5 +1,5 @@
 import type { Listener } from "../types";
-import { ECHO_SQL, FALLBACK_SQL, FAR_SQL, letterIdsSql, NEAR_SQL, NEIGHBOR_SQL, OWNER_FAVORITES_SQL } from "./select-sql";
+import { ECHO_SQL, FAR_SQL, letterIdsSql, NEAR_SQL, NEIGHBOR_SQL, OWNER_FAVORITES_SQL } from "./select-sql";
 import type { StationKey } from "./station";
 
 export type Slot = "near" | "neighbor" | "far";
@@ -44,7 +44,10 @@ async function ids(db: D1Database, sql: string, ...binds: unknown[]): Promise<st
 
 async function echoItem(db: D1Database, listener: Listener, rng: () => number): Promise<string | null> {
   const candidates = await ids(db, ECHO_SQL, listener.id);
-  return candidates.length === 0 ? null : (shuffle(candidates, rng)[0] ?? null);
+  // An echo nobody else has written about would have nothing to read, so it cannot take a seat.
+  const readable = await letterIdsByItem(db, listener.id, candidates);
+  const airable = candidates.filter((id) => readable.has(id));
+  return airable.length === 0 ? null : (shuffle(airable, rng)[0] ?? null);
 }
 
 /** Readable letter ids of every chosen item, in one query; each item's list is ordered by id, as the shuffle expects. */
@@ -64,22 +67,24 @@ function interleave(lists: Selection[][]): Selection[] {
   return out;
 }
 
+const hasLetters = (s: Selection): boolean => s.letterIds.length > 0;
+
 /** Letters the listener may hear for each item, up to the per-segment cap, in a seeded order. */
 async function withLetters(db: D1Database, listener: Listener, itemIds: string[], slot: Slot, rng: () => number): Promise<Selection[]> {
   const readable = await letterIdsByItem(db, listener.id, itemIds);
   return itemIds.map((itemId) => ({ itemId, slot, letterIds: shuffle(readable.get(itemId) ?? [], rng).slice(0, MAX_LETTERS_PER_SEGMENT) }));
 }
 
-/** The world station: far only, for anyone. No echo and no fallback: nothing here is the listener's own. */
+/** The world station: far only, for anyone. No echo: nothing here is the listener's own. */
 async function worldProgram(db: D1Database, listener: Listener, size: number, rng: () => number): Promise<Selection[]> {
   const pool = shuffle(await ids(db, FAR_SQL, listener.id), rng).slice(0, size);
   return withLetters(db, listener, pool, "far", rng);
 }
 
-/** A public station: the owner's favourites only. An item nobody has written about is still played, introduced by the DJ alone. */
+/** A public station: the owner's favourites that someone has written about. The rest wait until a letter arrives. */
 async function publicProgram(db: D1Database, listener: Listener, ownerId: string, size: number, rng: () => number): Promise<Selection[]> {
   const pool = shuffle(await ids(db, OWNER_FAVORITES_SQL, ownerId), rng).slice(0, size);
-  return withLetters(db, listener, pool, "near", rng);
+  return (await withLetters(db, listener, pool, "near", rng)).filter(hasLetters);
 }
 
 export async function selectProgram(
@@ -102,34 +107,23 @@ export async function selectProgram(
   const taken = new Set<string>(echo ? [echo] : []);
   const pool = async (sql: string) => shuffle((await ids(db, sql, listener.id)).filter((id) => !taken.has(id)), rng);
 
-  const pools: Record<Slot | "fallback", string[]> = {
+  const pools: Record<Slot, string[]> = {
     near: await pool(NEAR_SQL),
     neighbor: await pool(NEIGHBOR_SQL),
     far: await pool(FAR_SQL),
-    fallback: await pool(FALLBACK_SQL),
   };
 
   const chosen: Record<Slot, string[]> = { near: echo ? [echo] : [], neighbor: [], far: [] };
   // The echo item uses one unit of the near quota; it never adds to the program size.
   const nearRoom = nearQuota - (echo ? 1 : 0);
   const quota: Record<Slot, number> = { near: nearRoom, neighbor: neighborQuota, far: farQuota };
-  let short = 0;
-  for (const slot of ["near", "neighbor", "far"] as const) {
-    const took = pools[slot].splice(0, Math.max(0, quota[slot]));
-    chosen[slot].push(...took);
-    if (slot !== "far") short += Math.max(0, quota[slot]) - took.length;
-  }
-  // Near and neighbor seats nobody else's letters can fill go to the listener's own works, introduced from
-  // the work alone, before far takes them: a new listener hears the three works they just named, and the
-  // dial still decides the far share.
-  chosen.near.push(...pools.fallback.splice(0, short));
-
+  for (const slot of ["near", "neighbor", "far"] as const) chosen[slot].push(...pools[slot].splice(0, Math.max(0, quota[slot])));
+  // Seats near and neighbor cannot fill go to far (then to whatever is left), never to works nobody has written about.
   const count = () => chosen.near.length + chosen.neighbor.length + chosen.far.length;
   for (const slot of ["far", "near", "neighbor"] as const) {
     if (count() >= size) break;
     chosen[slot].push(...pools[slot].splice(0, size - count()));
   }
-  if (count() < size) chosen.near.push(...pools.fallback.splice(0, size - count()));
 
   const readable = await letterIdsByItem(db, listener.id, [...chosen.near, ...chosen.neighbor, ...chosen.far]);
   const segments: Record<Slot, Selection[]> = { near: [], neighbor: [], far: [] };
@@ -140,5 +134,5 @@ export async function selectProgram(
   }
 
   const first = echo ? segments.near.splice(0, 1) : [];
-  return [...first, ...interleave([segments.near, segments.neighbor, segments.far])];
+  return [...first, ...interleave([segments.near, segments.neighbor, segments.far])].filter(hasLetters);
 }
