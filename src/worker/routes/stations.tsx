@@ -116,9 +116,10 @@ stations.get("/stations/:key", async (c) => {
   const label = stationLabel(station.key, station.ownerName, listener.lang);
 
   if (!asJson) {
-    const grow = station.key.kind === "mine" && (await listHistory(c.env.DB, listener.id, 1)).length === 0;
     const asked = c.req.query("letter") ?? "";
     const letter = station.key.kind === "mine" && asked.length > 0 && asked.length <= 100 ? asked : undefined;
+    // A letter link plays even before the listener has favourites: after it, the station goes on like the world radio.
+    const grow = station.key.kind === "mine" && !letter && (await listHistory(c.env.DB, listener.id, 1)).length === 0;
     return c.html(<StationPage letter={letter} stationKey={raw} label={label} lang={listener.lang} listener={listener} path={currentPath(c)} voice={listener.voice} dial={listener.dial} grow={grow} og={station.url ? { title: label, description: tFor(listener.lang)("app.tagline"), url: station.url } : undefined} />);
   }
 

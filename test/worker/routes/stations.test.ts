@@ -364,6 +364,27 @@ describe("GET /stations/:key (page)", () => {
     expect(await (await page("mine", cookie)).text()).toContain('data-grow="0"');
   });
 
+  it("a letter link plays for a brand-new listener: the switch works, the first next reads it, the next one still answers", async () => {
+    await seedWorld();
+    const writer = await createListener(env.DB);
+    const item = await insertItem(env.DB, itemDraft({ title: "asked", externalIds: { itunes: "950" } }));
+    const asked = await insertLetter(env.DB, letterDraft(item.id, { listenerId: writer.id, body: "聴いてほしい", bodyJa: "聴いてほしい" }));
+    const cookie = await newSession();
+    const html = await (await page(`mine?letter=${asked.id}`, cookie)).text();
+    expect(html).toContain('data-grow="0"');
+    expect(html).toContain(`data-letter="${asked.id}"`);
+    const send = (body: unknown) =>
+      app.request("/stations/mine/next", { method: "POST", headers: { cookie, origin: ORIGIN, "content-type": "application/json" }, body: JSON.stringify(body) }, env);
+    const first = await send({ dial: 0.5, first: true, letterId: asked.id });
+    expect(first.status).toBe(200);
+    const one = (await first.json()) as { episode: { segments: { itemId: string; lines: { type: string; letterId?: string }[] }[] } };
+    expect(one.episode.segments[0]!.itemId).toBe(item.id);
+    expect(one.episode.segments[0]!.lines.some((l) => l.type === "letter" && l.letterId === asked.id)).toBe(true);
+    const second = await send({ dial: 0.5, first: false });
+    expect(second.status).toBe(200);
+    expect(((await second.json()) as Body).episode.segments).toHaveLength(1);
+  });
+
   it("mine carries a letter asked for in the url; other stations and odd values do not", async () => {
     const cookie = await newSession();
     expect(await (await page("mine?letter=abc-123", cookie)).text()).toContain('data-letter="abc-123"');
