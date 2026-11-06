@@ -44,10 +44,7 @@ async function ids(db: D1Database, sql: string, ...binds: unknown[]): Promise<st
 
 async function echoItem(db: D1Database, listener: Listener, rng: () => number): Promise<string | null> {
   const candidates = await ids(db, ECHO_SQL, listener.id);
-  // An echo nobody else has written about would have nothing to read, so it cannot take a seat.
-  const readable = await letterIdsByItem(db, listener.id, candidates);
-  const airable = candidates.filter((id) => readable.has(id));
-  return airable.length === 0 ? null : (shuffle(airable, rng)[0] ?? null);
+  return candidates.length === 0 ? null : (shuffle(candidates, rng)[0] ?? null);
 }
 
 /** Readable letter ids of every chosen item, in one query; each item's list is ordered by id, as the shuffle expects. */
@@ -134,5 +131,6 @@ export async function selectProgram(
   }
 
   const first = echo ? segments.near.splice(0, 1) : [];
-  return [...first, ...interleave([segments.near, segments.neighbor, segments.far])].filter(hasLetters);
+  // The echo stays even without a letter: the reactions it carries are other people's words, read verbatim.
+  return [...first, ...interleave([segments.near, segments.neighbor, segments.far]).filter(hasLetters)];
 }

@@ -194,6 +194,21 @@ describe("buildEpisode", () => {
     expect(ep.verified).toBe(true);
   });
 
+  it("an echo segment with no readable letter still airs with its reaction lines", async () => {
+    const f = await fixture();
+    // A work only the listener wrote about, answered by someone else since the last episode.
+    const echo = (await insertItem(env.DB, itemDraft({ title: "返事のあった曲" }))).id;
+    const own = await insertLetter(env.DB, letterDraft(echo, { listenerId: f.a.id, body: "私の一通。", bodyJa: "私の一通。" }));
+    const b = await createListener(env.DB);
+    await insertLetter(env.DB, letterDraft(echo, { kind: "reply", listenerId: b.id, radioName: "そら", place: "熊本", parentLetterId: own.id, body: "届きました", bodyJa: "届きました" }));
+    const ep = await buildEpisode(keyless, env.DB, f.a, { size: 3, seed: "s" });
+    const seg = ep.segments.find((s) => s.itemId === echo)!;
+    expect(seg).toBeDefined();
+    expect(seg.lines).toContainEqual(expect.objectContaining({ type: "letter", text: "届きました", kind: "reply" }));
+    expect(seg.lines.some((l) => l.type === "letter" && l.letterId === own.id)).toBe(false);
+    expect(ep.verified).toBe(true);
+  });
+
   it("an episode can end up with no segment at all when every letter is sourceless", async () => {
     const lone = (await insertItem(env.DB, itemDraft({ title: "出典のない曲" }))).id;
     await insertLetter(env.DB, letterDraft(lone, { kind: "found", listenerId: null, sourceAuthor: "@x", sourceUrl: null, body: "no link", bodyJa: "出典なし" }));

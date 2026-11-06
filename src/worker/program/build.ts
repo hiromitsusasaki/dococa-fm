@@ -78,13 +78,13 @@ export async function buildEpisode(
         read.push(l);
       }
     }
-    // A segment with nothing left to read does not air: the programme is made of letters.
-    if (read.length === 0) {
+    // Public 私も and 一言 that others left on this listener's letters about the item, newest first.
+    const reactions = allReactions.filter((r) => r.itemId === item.id).slice(0, MAX_REACTIONS);
+    // A segment with nothing left to read does not air: the programme is made of letters and reactions.
+    if (read.length === 0 && reactions.length === 0) {
       skippedSegments++;
       continue;
     }
-    // Public 私も and 一言 that others left on this listener's letters about the item, newest first.
-    const reactions = allReactions.filter((r) => r.itemId === item.id).slice(0, MAX_REACTIONS);
     for (const r of reactions) letters.set(r.id, r);
     plan.push({ ...s, letterIds: read.map((l) => l.id), reactionIds: reactions.map((r) => r.id) });
     input.segments.push({ item, slot: s.slot, letters: read, reactions });

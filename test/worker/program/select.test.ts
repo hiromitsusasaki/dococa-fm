@@ -193,7 +193,6 @@ describe("selectProgram", () => {
     const addOwnLetterWithReaction = async (f: Fixture, episodeCreatedAt: string) => {
       const x = await insertItem(env.DB, itemDraft({ title: "echo" }));
       const mine = await insertLetter(env.DB, letterDraft(x.id, { listenerId: f.a.id, body: "A on echo" }));
-      await insertLetter(env.DB, letterDraft(x.id, { kind: "found", sourceAuthor: "echo-fan", sourceUrl: "https://example.com/echo-fan", body: "fan on echo" }));
       await insertEpisode(env.DB, {
         listenerId: f.a.id,
         segments: [],

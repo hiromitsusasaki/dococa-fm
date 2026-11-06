@@ -57,7 +57,7 @@ export function composeEpisode(
   return plan.map((p, i) => {
     const item = items.get(p.itemId);
     if (!item) throw new Error(`item missing: ${p.itemId}`);
-    if (p.letterIds.length === 0) throw new Error("segment without letters");
+    if (p.letterIds.length === 0 && p.reactionIds.length === 0) throw new Error("segment without letters");
     const said = djLines?.[i];
     const lines: ScriptLine[] = [];
     if (said && said.sayBefore !== "") lines.push(dj(said.sayBefore));
