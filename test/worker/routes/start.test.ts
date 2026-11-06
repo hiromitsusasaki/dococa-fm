@@ -181,12 +181,11 @@ describe("home and bookmarklet", () => {
     expect(html).toMatch(/href="\/start"[^>]*>好きなものを 3 つ送って、あなたのラジオを始める/);
   });
 
-  it("explains the bookmarklet on /put and /settings", async () => {
+  it("puts the bookmarklet itself on /put and a link to it on /settings", async () => {
     const cookie = await signedInSession();
-    for (const path of ["/put", "/settings"]) {
-      const html = await (await get(path, cookie)).text();
-      expect(html).toContain('href="/bookmarklet"');
-    }
-    expect(await (await get("/settings", cookie)).text()).toContain(t("settings.bookmarklet"));
+    expect(await (await get("/put", cookie)).text()).toContain('href="javascript:location.href=');
+    const settings = await (await get("/settings", cookie)).text();
+    expect(settings).toContain('href="/bookmarklet"');
+    expect(settings).toContain(t("settings.bookmarklet"));
   });
 });

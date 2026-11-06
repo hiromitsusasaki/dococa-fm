@@ -29,7 +29,7 @@ async function listenerId(cookie: string): Promise<string> {
 }
 
 describe("GET /put with a history", () => {
-  it("lists the history with links to put each one, and offers to connect Spotify", async () => {
+  it("lists the history with links to put each one, and leaves connecting Spotify to the settings", async () => {
     const cookie = await signedInSession();
     const item = await insertItem(env.DB, itemDraft());
     await upsertHistory(env.DB, [{ listenerId: await listenerId(cookie), itemId: item.id, source: "spotify", occurredAt: null, rank: null }]);
@@ -38,17 +38,16 @@ describe("GET /put with a history", () => {
     expect(html).toContain(`/put?itemId=${item.id}`);
     expect(html).toContain("Blue in Green");
     expect(html).toContain("Miles Davis");
-    expect(html).toContain('href="/auth/spotify"');
-    expect(html).toContain(t("put.connectSpotify"));
+    expect(html).not.toContain('href="/auth/spotify"');
   });
 
-  it("hides the history section and the connect link when there is nothing to show", async () => {
+  it("hides the favourites section when there is nothing to show", async () => {
     const cookie = await signedInSession();
     const id = await listenerId(cookie);
     await updateListener(env.DB, id, { spotifyRefreshToken: await encryptSecret("rt", env.SESSION_SECRET) });
     const html = await (await get("/put", cookie)).text();
     expect(html).not.toContain(t("put.fromHistory"));
-    expect(html).not.toContain(t("put.connectSpotify"));
+    expect(html).not.toContain(t("put.fromFavorites"));
   });
 
   it("shows the DJ's questions for an item in the history", async () => {
@@ -73,6 +72,31 @@ describe("GET /put with a history", () => {
     const html = await (await get("/put?imported=1", await signedInSession())).text();
     expect(html).toContain(t("put.imported"));
     expect(html).not.toMatch(/\d+\s*(件|曲)/);
+  });
+});
+
+describe("GET /put?pick= (narrowing the favourites)", () => {
+  it("keeps only favourites and imported titles whose title or creator holds the text, ignoring case", async () => {
+    const cookie = await signedInSession();
+    const id = await listenerId(cookie);
+    const [fav, other, imported] = await Promise.all([
+      insertItem(env.DB, itemDraft({ title: "Blue in Green", creator: "Miles Davis", externalIds: { k: "1" } })),
+      insertItem(env.DB, itemDraft({ title: "Naima", creator: "John Coltrane", externalIds: { k: "2" } })),
+      insertItem(env.DB, itemDraft({ title: "So What", creator: "MILES DAVIS", externalIds: { k: "3" } })),
+    ]);
+    await upsertHistory(env.DB, [
+      { listenerId: id, itemId: fav!.id, source: "manual", occurredAt: null, rank: null },
+      { listenerId: id, itemId: other!.id, source: "manual", occurredAt: null, rank: null },
+      { listenerId: id, itemId: imported!.id, source: "spotify", occurredAt: null, rank: 1 },
+    ]);
+    const html = await (await get("/put?pick=miles", cookie)).text();
+    expect(html).toContain("Blue in Green");
+    expect(html).toContain("So What");
+    expect(html).not.toContain("Naima");
+    expect(html).toContain('name="pick" value="miles"');
+    const none = await (await get("/put?pick=nothing-like-this", cookie)).text();
+    expect(none).toContain(t("search.none"));
+    expect(none).not.toContain("Blue in Green");
   });
 });
 

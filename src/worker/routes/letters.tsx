@@ -1,6 +1,7 @@
 import { zValidator } from "@hono/zod-validator";
 import { type Context, Hono, type MiddlewareHandler } from "hono";
 import { z } from "zod";
+import { BookmarkletHelp, bookmarkletCode } from "../../views/bookmarklet";
 import { LetterText, ReportForm, whoOf } from "../../views/components";
 import { Layout } from "../../views/layout";
 import { currentPath, requireSignin } from "../auth/require-signin";
@@ -36,7 +37,7 @@ export const letters = new Hono<{ Bindings: Env; Variables: Variables }>();
 async function putError(c: AppContext, form: Partial<LetterForm>, error: string, status: 404 | 422 | 429 | 409 | 503, draft?: ItemDraft | null) {
   const card = form.itemId ? await getItem(c.env.DB, form.itemId) : (draft ?? null);
   const itemId = card && form.itemId ? form.itemId : undefined;
-  return c.html(<PutPage listener={c.get("listener")} card={card} itemId={itemId} url={form.url} body={form.body} error={error} />, status);
+  return c.html(<PutPage listener={c.get("listener")} bookmarklet={bookmarkletCode(c.env.PUBLIC_ORIGIN)} card={card} itemId={itemId} url={form.url} body={form.body} error={error} />, status);
 }
 
 /** Only a new letter needs an account; 私も and a reply stay open to anonymous listeners. */
@@ -149,36 +150,19 @@ letters.post("/takedown", zValidator("form", takedownSchema, (r, c) => (r.succes
   return c.html(<TakedownPage received listener={c.get("listener")} path="/takedown" />);
 });
 
-/** The origin the bookmarklet sends people to; null when the configured one is not a plain http(s) origin. */
-function bookmarkletOrigin(publicOrigin: string): string | null {
-  try {
-    const url = new URL(publicOrigin);
-    const plain = /^https?:\/\/[A-Za-z0-9.:[\]-]+$/.test(url.origin);
-    return (url.protocol === "http:" || url.protocol === "https:") && plain ? url.origin : null;
-  } catch {
-    return null;
-  }
-}
-
 letters.get("/bookmarklet", (c) => {
-  const origin = bookmarkletOrigin(c.env.PUBLIC_ORIGIN);
-  const code = origin && `javascript:location.href='${origin}/put?url='+encodeURIComponent(location.href)`;
+  const code = bookmarkletCode(c.env.PUBLIC_ORIGIN);
   const lang = c.get("listener").lang;
   const t = tFor(lang);
   return c.html(
     <Layout title={t("bookmarklet.title")} lang={lang} listener={c.get("listener")} path={currentPath(c)}>
       <main class="bookmarklet">
         <h1>{t("bookmarklet.title")}</h1>
-        {code ? (
-          <>
-            <p>{t("bookmarklet.help")}</p>
-            <p>
-              <a class="button" href={code}>{t("bookmarklet.drag")}</a>
-            </p>
-            <pre><code>{code}</code></pre>
-          </>
-        ) : (
-          <p>{t("bookmarklet.unavailable")}</p>
+        <BookmarkletHelp code={code} lang={lang} />
+        {code && (
+          <pre>
+            <code>{code}</code>
+          </pre>
         )}
       </main>
     </Layout>,

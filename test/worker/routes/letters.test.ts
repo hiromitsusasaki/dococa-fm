@@ -1,6 +1,7 @@
 import { env } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it, type MockInstance, vi } from "vitest";
 import app from "../../../src/worker/index";
+import { upsertHistory } from "../../../src/worker/db/history";
 import { insertItem } from "../../../src/worker/db/items";
 import { insertLetter, listLettersForItem } from "../../../src/worker/db/letters";
 import { t } from "../../../src/worker/i18n/t";
@@ -392,8 +393,44 @@ describe("GET /put", () => {
     expect(res.status).toBe(200);
     const html = await res.text();
     expect(html).toContain(t("put.notFound"));
-    // Searching by title happens on /start; the home page has no search.
-    expect(html).toContain(`<a href="/start">${t("put.search")}</a>`);
+    // Searching by title is on the same page.
+    expect(html).toContain(t("put.searchTitle"));
+    expect(html).toContain('name="q"');
+  });
+
+  it("lays the page out in three panels: choose the work, write the letter, the bookmarklet", async () => {
+    const item = await seedItem();
+    const html = await (await get(`/put?itemId=${item.id}`, await signedInSession())).text();
+    const at = (s: string) => html.indexOf(s);
+    expect(html.match(/<section class="panel /g)).toHaveLength(3);
+    expect(at(t("put.choose"))).toBeGreaterThan(-1);
+    expect(at(t("put.choose"))).toBeLessThan(at(t("put.write")));
+    expect(at(t("put.write"))).toBeLessThan(at('name="body"'));
+    expect(at('name="body"')).toBeLessThan(at(t("bookmarklet.title")));
+    expect(html).not.toContain("/auth/spotify");
+  });
+
+  it("offers the three ways to choose a work, in order, before anything is chosen", async () => {
+    const cookie = await signedInSession();
+    const item = await seedItem();
+    const id = decodeURIComponent(cookie.split("=")[1]!).split(".")[0]!;
+    await upsertHistory(env.DB, [{ listenerId: id, itemId: item.id, source: "manual", occurredAt: null, rank: null }]);
+    const html = await (await get("/put", cookie)).text();
+    const at = (s: string) => html.indexOf(s);
+    expect(at(t("put.pasteUrl"))).toBeGreaterThan(-1);
+    expect(at(t("put.pasteUrl"))).toBeLessThan(at(t("put.fromFavorites")));
+    expect(at(t("put.fromFavorites"))).toBeLessThan(at(t("put.searchTitle")));
+    expect(at(t("put.searchTitle"))).toBeLessThan(at(t("bookmarklet.title")));
+    expect(html).not.toContain(t("put.write"));
+    expect(html.match(/<section class="panel /g)).toHaveLength(2);
+    expect(html).not.toContain("/auth/spotify");
+  });
+
+  it("puts the draggable bookmarklet button and its three lines on the page", async () => {
+    const html = await (await get("/put", await signedInSession())).text();
+    expect(html).toMatch(/<a class="button" href="javascript:location.href=[^"]*\/put\?url=[^"]*" draggable="true">/);
+    expect(html).toContain(t("bookmarklet.addTitle"));
+    for (const key of ["bookmarklet.help1", "bookmarklet.help2", "bookmarklet.help3"] as const) expect(html).toContain(t(key));
   });
 });
 
@@ -465,10 +502,16 @@ describe("reactions, report, takedown, bookmarklet", () => {
     expect(html).toContain("https://example.org/p");
   });
 
-  it("bookmarklet page shows the javascript: one-liner", async () => {
+  it("bookmarklet page shows the javascript: one-liner and the three lines on how to use it", async () => {
     const html = await (await get("/bookmarklet", await signedInSession())).text();
     expect(html).toContain("javascript:location.href=");
     expect(html).toContain("/put?url=");
+    expect(html).toContain('draggable="true"');
+    expect(html).toContain(t("bookmarklet.addTitle"));
+    const at = (s: string) => html.indexOf(s);
+    expect(at(t("bookmarklet.help1"))).toBeGreaterThan(-1);
+    expect(at(t("bookmarklet.help1"))).toBeLessThan(at(t("bookmarklet.help2")));
+    expect(at(t("bookmarklet.help2"))).toBeLessThan(at(t("bookmarklet.help3")));
   });
 
   it("bookmarklet builds its origin from a parsed url and refuses a non-http one", async () => {
