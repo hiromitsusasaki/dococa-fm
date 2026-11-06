@@ -199,6 +199,24 @@ describe("prepareBatch", () => {
     expect(r).toMatchObject({ units: 3, failed: 0, remaining: { units: { ja: 0, en: 1 }, audio: { ja: 0, en: 0 } } });
   });
 
+  it("spends the whole budget when the audio listing starts with a letter this run already took", async () => {
+    const { letters } = await seed(4);
+    const later = new Date(Date.now() + 3_600_000).toISOString();
+    for (const [i, l] of letters.entries()) {
+      await upsertUnit(env.DB, { letterId: l.id, lang: "en", intro: "A quiet piece.", after: "A lovely letter.", verified: true, audioReady: true });
+      if (i > 0) await upsertUnit(env.DB, { letterId: l.id, lang: "ja", intro: `紹介${i}です。`, after: `感想${i}です。`, verified: true, audioReady: false, createdAt: later });
+    }
+    // The first clip of the run fails, so the letter whose unit is made now stays first in the audio listing.
+    let calls = 0;
+    stubBoth(() => (++calls === 1 ? json({ error: "x" }, 500) : json({ audioContent: audio })));
+    const r = await prepareBatch(keyed, env.DB, 3);
+    expect(r).toMatchObject({ units: 1, remaining: { units: { ja: 0, en: 0 }, audio: { ja: 2, en: 0 } } });
+    // Two of the three older units were voiced (they share created_at, so the listing orders them by id).
+    const ready = await Promise.all(letters.slice(1).map(async (l) => (await unitOf(l.id))!.audioReady));
+    expect(ready.filter(Boolean)).toHaveLength(2);
+    expect(await unitOf(letters[0]!.id)).toMatchObject({ audioReady: false });
+  });
+
   it("spends the whole budget on audio when there is no unit work", async () => {
     await seed(3);
     await prepareBatch(keylessTts, env.DB, 20);

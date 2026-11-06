@@ -163,7 +163,8 @@ export async function prepareBatch(env: Env, db: D1Database, limit = 20): Promis
   }
   for (const lang of LANGS) {
     if (budget <= 0 || audioHalted) break;
-    for (const u of await listUnitsWithoutAudio(db, lang, budget)) {
+    // Letters already run in the unit phase are skipped without spending budget, so the listing asks for them too.
+    for (const u of await listUnitsWithoutAudio(db, lang, budget + done.size)) {
       if (budget <= 0 || audioHalted) break;
       if (!done.has(`${lang}:${u.letterId}`)) await one(u.letterId, lang);
     }
