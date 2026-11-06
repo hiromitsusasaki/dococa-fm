@@ -79,6 +79,27 @@ describe("prepareLetter", () => {
     expect(google).toHaveBeenCalledTimes(8);
   });
 
+  it("makes both units before any audio: ja unit, en unit, then the ja clips, then the en clips", async () => {
+    const { letters } = await seed(1, { bodyEn: "It rained the day I heard it." });
+    const order: string[] = [];
+    create.mockImplementation((req: { system: string }) => {
+      const en = req.system.startsWith("You are");
+      order.push(en ? "unit:en" : "unit:ja");
+      return toolUse("write_unit", en ? { intro: "A quiet piece.", after: "A lovely letter." } : { intro: "静かな一曲です。", after: "いいお便りでした。" });
+    });
+    google.mockImplementation(() => {
+      order.push("clip");
+      return json({ audioContent: audio });
+    });
+    const head = vi.spyOn(env.BUCKET, "head");
+    expect(await prepareLetter(keyed, env.DB, letters[0]!.id)).toEqual({ units: 2, audio: 8, failed: 0 });
+    expect(order).toEqual(["unit:ja", "unit:en", ...Array(8).fill("clip")]);
+    // The clips are asked for in the order ja (tts/v2/ja/...) then en.
+    const langs = head.mock.calls.map((c) => String(c[0]).split("/")[2]);
+    expect(langs.slice(0, 4)).toEqual(["ja", "ja", "ja", "ja"]);
+    expect(langs.slice(-4)).toEqual(["en", "en", "en", "en"]);
+  });
+
   it("does nothing more the second time", async () => {
     const { letters } = await seed();
     await prepareLetter(keyed, env.DB, letters[0]!.id, "ja");

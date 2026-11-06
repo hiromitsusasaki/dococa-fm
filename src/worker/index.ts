@@ -63,8 +63,9 @@ app.get("*", async (c) => {
 });
 
 /** Every 15 minutes: units for letters that have none and audio that is still missing. */
-async function scheduled(_event: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
-  ctx.waitUntil(prepareBatch(env, env.DB));
+/** Awaited, not handed to `waitUntil`: the batch never throws, and the cron invocation lasts as long as it runs. */
+async function scheduled(_event: ScheduledController, env: Env, _ctx: ExecutionContext): Promise<void> {
+  await prepareBatch(env, env.DB);
 }
 
 // The app itself stays the default export (tests call `app.request` and read `app.routes`); the runtime finds

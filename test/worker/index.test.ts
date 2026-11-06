@@ -18,12 +18,17 @@ describe("worker", () => {
     expect(res.headers.get("content-type")).toContain("text/css");
   });
 
-  it("scheduled hands prepareBatch to waitUntil", async () => {
-    const batch = vi.spyOn(prepare, "prepareBatch").mockResolvedValue({ units: 0, audio: 0, failed: 0, remaining: { units: { ja: 0, en: 0 }, audio: { ja: 0, en: 0 } } });
+  it("scheduled awaits prepareBatch itself instead of handing it to waitUntil", async () => {
+    let finished = false;
+    const batch = vi.spyOn(prepare, "prepareBatch").mockImplementation(async () => {
+      await new Promise((r) => setTimeout(r, 5));
+      finished = true;
+      return { units: 0, audio: 0, failed: 0, remaining: { units: { ja: 0, en: 0 }, audio: { ja: 0, en: 0 } } };
+    });
     const waited: Promise<unknown>[] = [];
     await worker.scheduled({ scheduledTime: Date.now(), cron: "*/15 * * * *", noRetry() {} } as ScheduledController, env, { waitUntil: (p: Promise<unknown>) => void waited.push(p), passThroughOnException() {} } as ExecutionContext);
     expect(batch).toHaveBeenCalledWith(env, env.DB);
-    expect(waited).toHaveLength(1);
-    await Promise.all(waited);
+    expect(finished).toBe(true);
+    expect(waited).toHaveLength(0);
   });
 });

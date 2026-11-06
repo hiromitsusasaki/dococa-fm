@@ -25,7 +25,8 @@ function logFailure(e: unknown): void {
   console.error(`[dococa] prepare failed: ${e instanceof Error ? e.name : "unknown"}`);
 }
 
-async function run(env: Env, db: D1Database, letterId: string, lang: Unit["lang"], withAudio: boolean): Promise<Run> {
+/** One letter in one language: its unit when `steps.unit` and it is missing, then its clips when `steps.audio`. */
+async function run(env: Env, db: D1Database, letterId: string, lang: Unit["lang"], steps: { unit: boolean; audio: boolean }): Promise<Run> {
   const out = none();
   const letter = await getLetter(db, letterId);
   if (!letter || letter.status !== "public" || (letter.kind !== "letter" && letter.kind !== "found")) return out;
@@ -34,7 +35,7 @@ async function run(env: Env, db: D1Database, letterId: string, lang: Unit["lang"
 
   let unit = (await getUnits(db, [letter.id], lang)).get(letter.id) ?? null;
   if (!unit) {
-    if (!hasClaude(env)) return out;
+    if (!steps.unit || !hasClaude(env)) return out;
     if (await unitCapReached(env, db)) {
       out.unitHalted = true;
       return out;
@@ -50,7 +51,7 @@ async function run(env: Env, db: D1Database, letterId: string, lang: Unit["lang"
     }
     out.units++;
   }
-  if (!withAudio) return out;
+  if (!steps.audio) return out;
 
   // An unverified unit is never spoken, so only the fixed hand-over and the letter are voiced for it.
   const texts = unitSegment(unit.verified ? unit : null, letter, item, lang).lines.flatMap((l) => (l.type === "dj" || l.type === "letter") && l.text !== "" ? [l.text] : []);
@@ -78,22 +79,32 @@ const LANGS: readonly Unit["lang"][] = ["ja", "en"];
 
 /**
  * The letter's unit in `lang` (made if missing), or in every language when none is named, and the audio of
- * every dj/letter line of `unitSegment`; marks `audio_ready` when all clips exist. Once the cloud voice
- * refuses a clip, the next language makes its unit only. Non-public letters and reactions are ignored. Never throws.
+ * every dj/letter line of `unitSegment`; marks `audio_ready` when all clips exist. Every unit is made first
+ * (ja, then en), then the clips (ja, then en): a letter gets its talk in both languages before any paid
+ * voice. Once the cloud voice refuses a clip, the next language is not voiced. Non-public letters and
+ * reactions are ignored. Never throws.
  */
 export async function prepareLetter(env: Env, db: D1Database, letterId: string, lang?: Unit["lang"]): Promise<Prepared> {
   const total: Prepared = { units: 0, audio: 0, failed: 0 };
   let audioHalted = false;
-  for (const l of lang ? [lang] : LANGS) {
-    try {
-      const r = await run(env, db, letterId, l, !audioHalted);
-      audioHalted ||= r.audioHalted;
-      total.units += r.units;
-      total.audio += r.audio;
-      total.failed += r.failed;
-    } catch (e) {
-      logFailure(e);
-      total.failed++;
+  const langs = lang ? [lang] : LANGS;
+  // A language whose unit step threw is not tried again for its clips: one failure per letter and language.
+  const threw = new Set<Unit["lang"]>();
+  for (const steps of [{ unit: true, audio: false }, { unit: false, audio: true }]) {
+    for (const l of langs) {
+      if (steps.audio && audioHalted) break;
+      if (threw.has(l)) continue;
+      try {
+        const r = await run(env, db, letterId, l, steps);
+        audioHalted ||= r.audioHalted;
+        total.units += r.units;
+        total.audio += r.audio;
+        total.failed += r.failed;
+      } catch (e) {
+        logFailure(e);
+        total.failed++;
+        threw.add(l);
+      }
     }
   }
   return total;
@@ -127,7 +138,7 @@ export async function prepareBatch(env: Env, db: D1Database, limit = 20): Promis
     budget--;
     done.add(`${lang}:${id}`);
     try {
-      const r = await run(env, db, id, lang, !audioHalted);
+      const r = await run(env, db, id, lang, { unit: true, audio: !audioHalted });
       audioHalted ||= r.audioHalted;
       unitHalted ||= r.unitHalted;
       unitMisses = r.unitFailed ? unitMisses + 1 : r.units > 0 ? 0 : unitMisses;
