@@ -68,11 +68,14 @@ Phase 2（ラジオ中心の体験への作り替え）の実装は、すべて 
 | Task 1 | お便りの無い作品を枠から外す | 完了（FALLBACK プール・公開局の例外・`script.workOnly`・`NO_LETTER_NOTE`・`announce` 規則を撤去。出典なしの見つけた声だけの枠は build で落とす） |
 | Task 2 | 行の本文を鍵にした音声キャッシュ。クラウドの声を全員に | 完了（`tts/v2/<lang>/<voice>/<sha256>.mp3` で全員が共有、合成ごとに `tts_audio` へ記録して 1 日の行数を上限に、`ensureAudio` が上限確認→claim→合成。全エピソードが鍵があれば `cloudTts`、初回限定の claim は撤去） |
 | Task 3 | つなぎの定型 | 完了（`program/bridge.ts` の 6 本の定型。回の頭に open、2 作品目以降は slot ごと、同じ作品の 2 通目の前に sameWork、最後に close。いずれも `fixed`。`composeEpisode` に `lang` を追加） |
-| Task 4 | 単位（お便りごとの DJ の語り） | 未着手 |
+| Task 4 | 単位（お便りごとの DJ の語り） | 完了（`units (letter_id, lang)` を 0009 で追加。`makeUnit` が `write_unit` で intro/after を書き 1 枠で検証、通らなければ規則を伝えて 1 回だけ書き直し、`verified` 0/1 で保存。`buildEpisode` は単位を並べるだけで、無い単位だけ作る（同時 3）。番組の検証で落ちた枠は単位を外して再検証、それでも駄目なら定型だけ。`writeDjLines` と回ごとの台本は撤去） |
 | Task 5 | 事前生成（投稿後・15 分ごと・手動） | 未着手 |
 | Task 6 | 聴いた記録 | 未着手 |
 | Task 7 | お便りの土地コード | 未着手 |
 | Task 8 | 英語の DJ | 未着手 |
+
+### 決定（Phase 3）
+- 単位の並び（Task 4）: 枠は「つなぎ → intro（1 回だけ）→ 手渡し（定型）→ お便り → after」を通数ぶん、2 通目の前は sameWork、反応のあと最後の枠に close。intro は枠で最初に検証済みの単位を持つお便りのもの（一言の読み上げは単位を持たないので、先頭が一言でも作品の紹介が落ちない）。dj 行の `unit: { letterId, part }` で、非公開になったお便りの intro/after を `publicView` が落とす。手渡しの定型はお便りの種類を問わず一緒に落とす（以前の回の読み上げのみの手渡しも落ちる）。
 
 ## Phase 2 の進み
 

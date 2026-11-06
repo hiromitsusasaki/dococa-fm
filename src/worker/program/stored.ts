@@ -26,13 +26,15 @@ export type PublicView = {
   storedIndex: number[];
 };
 
-const isFixed = (l: ScriptLine | undefined): boolean => l?.type === "dj" && l.fixed === true;
+/** A fixed line that is not a bridge: the hand-over before a letter (sender, found voice's source, reply's 一言). */
+const isHandOver = (l: ScriptLine | undefined): boolean => l?.type === "dj" && l.fixed === true && l.bridge === undefined;
 
 /**
  * A stored episode as it may still be shown, read or voiced: a letter that is no longer public (rejected,
- * taken down, gone) is dropped with the fixed line that introduced it (a found voice's source line, a
- * reply's 「一言が届いています」). A segment left with none of the letters it read (replies aside) is dropped
- * whole, since its DJ talk answered them. 私も reactions carry no letter id in the script and stay.
+ * taken down, gone) is dropped with the fixed line that handed over to it (the sender, a found voice's
+ * source line, a reply's 「一言が届いています」) and with its unit's intro and after, so the DJ never talks
+ * about a letter nobody hears. DJ talk of older episodes carries no unit mark and stays. A segment left with
+ * none of the letters it read (replies aside) is dropped whole, since its DJ talk answered them. 私も reactions carry no letter id in the script and stay.
  * Only talk airs: a preview clip left in an older episode is dropped too (its stored index is skipped, not renumbered).
  */
 export function publicView(segments: Segment[], letters: ReadonlyMap<string, Letter>): PublicView {
@@ -50,7 +52,10 @@ export function publicView(segments: Segment[], letters: ReadonlyMap<string, Let
       if (letters.get(line.letterId)?.status === "public") return;
       if (read) gone++;
       keep[i] = false;
-      if ((line.kind === "found" || line.kind === "reply") && isFixed(seg.lines[i - 1])) keep[i - 1] = false;
+      if (isHandOver(seg.lines[i - 1])) keep[i - 1] = false;
+    });
+    seg.lines.forEach((line, i) => {
+      if (line.type === "dj" && line.unit && letters.get(line.unit.letterId)?.status !== "public") keep[i] = false;
     });
     // A "another letter" bridge needs a read letter before it and one after it; otherwise it points at nothing.
     const isRead = (j: number): boolean => {

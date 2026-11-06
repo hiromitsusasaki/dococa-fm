@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { t } from "../../../src/worker/i18n/t";
 import { bridgeLine } from "../../../src/worker/program/bridge";
 import { originalsOf, publicView } from "../../../src/worker/program/stored";
 import type { ScriptLine, Segment } from "../../../src/worker/types";
@@ -44,13 +45,55 @@ describe("publicView", () => {
     expect(view.storedIndex).toEqual([0, 1, 6, 7, 8, 9]);
   });
 
-  it("keeps the readings-only line when a plain letter goes, and drops a segment left with none of its letters", () => {
+  it("drops a plain letter's fixed hand-over with it, and drops a segment left with none of its letters", () => {
     const letters = byId([letter({ id: "a", status: "rejected" }), letter({ id: "f" }), letter({ id: "r" })]);
     const view = publicView(segments, letters);
     expect(view.segments).toHaveLength(1);
-    expect(view.segments[0]!.lines[0]).toEqual(fixed("お便りを読みます。"));
+    expect(view.segments[0]!.lines[0]).toEqual(fixed("found intro"));
     expect(view.segments[0]!.lines.some((l) => l.type === "letter" && l.letterId === "a")).toBe(false);
-    expect(view.storedIndex).toEqual([0, 2, 3, 4, 5, 6]);
+    expect(view.storedIndex).toEqual([2, 3, 4, 5, 6]);
+  });
+
+  it("keeps an older episode's DJ talk, which carries no unit mark, around a hidden letter", () => {
+    const old: Segment[] = [{ itemId: "i1", slot: "near", lines: [dj("before"), read("a"), read("b"), dj("after")] }];
+    const view = publicView(old, byId([letter({ id: "a", status: "rejected" }), letter({ id: "b" })]));
+    expect(view.segments[0]!.lines).toEqual([dj("before"), read("b"), dj("after")]);
+  });
+
+  describe("with units", () => {
+    const unitLine = (text: string, letterId: string, part: "intro" | "after"): ScriptLine => ({ type: "dj", text, unit: { letterId, part } });
+    const unitSegments: Segment[] = [
+      {
+        itemId: "i1",
+        slot: "near",
+        lines: [
+          bridgeLine("bridge.open", "ja"),
+          unitLine("intro a", "a", "intro"),
+          fixed("a hand-over"),
+          read("a"),
+          unitLine("after a", "a", "after"),
+          bridgeLine("bridge.sameWork", "ja"),
+          fixed("b hand-over"),
+          read("b"),
+          unitLine("after b", "b", "after"),
+          bridgeLine("bridge.close", "ja"),
+        ],
+      },
+    ];
+    const open = t("bridge.open");
+    const close = t("bridge.close");
+    const texts = (v: ReturnType<typeof publicView>) => v.segments.flatMap((s) => s.lines.map((l) => (l.type === "letter" ? `letter:${l.letterId}` : (l as { text: string }).text)));
+
+    it("drops a hidden letter's intro, hand-over and after, and the bridge left pointing at nothing", () => {
+      const view = publicView(unitSegments, byId([letter({ id: "a", status: "rejected" }), letter({ id: "b" })]));
+      expect(texts(view)).toEqual([open, "b hand-over", "letter:b", "after b", close]);
+      expect(view.storedIndex).toEqual([0, 6, 7, 8, 9]);
+    });
+
+    it("drops the second letter's hand-over and after, and keeps the first letter's unit", () => {
+      const view = publicView(unitSegments, byId([letter({ id: "a" }), letter({ id: "b", status: "rejected" })]));
+      expect(texts(view)).toEqual([open, "intro a", "a hand-over", "letter:a", "after a", close]);
+    });
   });
 });
 

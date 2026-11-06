@@ -54,7 +54,7 @@ function windows(text: string): string[] {
  * lines alike: the DJ may name the work in any case, but a name cannot pad a window, and a copied
  * sentence still matches around it. Used for the quote check only.
  */
-function maskNames(items: Map<string, Item>): (text: string) => string {
+function maskNames(items: ReadonlyMap<string, Item>): (text: string) => string {
   const names = [...new Set([...items.values()].flatMap((i) => [norm(i.title).trim().toLowerCase(), norm(i.creator).trim().toLowerCase()]))]
     .filter((n) => n !== "")
     .sort((a, b) => b.length - a.length);
@@ -75,9 +75,9 @@ function maskNames(items: Map<string, Item>): (text: string) => string {
  */
 export function verifyEpisode(
   segments: Segment[],
-  letters: Map<string, Letter>,
-  listener: Listener,
-  items: Map<string, Item> = new Map(),
+  letters: ReadonlyMap<string, Letter>,
+  listener: Pick<Listener, "id" | "mcpToken">,
+  items: ReadonlyMap<string, Item> = new Map(),
 ): VerifyReport {
   const details: string[] = [];
   let verbatim = true;

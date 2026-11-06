@@ -1,17 +1,12 @@
 import { getItemsByIds } from "../db/items";
 import { getLettersByIds, listReactionsToListener } from "../db/letters";
 import type { Env } from "../env";
-import { hasClaude } from "../claude/client";
-import type { Episode, Item, Letter, Listener, VerifyReport } from "../types";
+import type { Episode, Item, Letter, Listener, Unit, VerifyReport } from "../types";
 import { composeEpisode, MAX_REACTIONS, type SegmentPlan } from "./compose";
-import { type DjLines, writeDjLines } from "./script";
 import { selectProgram } from "./select";
 import type { StationKey } from "./station";
+import { ensureUnits } from "./unit";
 import { verifyEpisode } from "./verify";
-
-const DJ_ATTEMPTS = 2;
-/** Checks a rephrased script can fix; verbatim and sources failures come from the data. */
-const RETRYABLE = /^(?:topical|measure|pii|announce|playback): /;
 
 /** Even the readings-only episode failed verification: the data itself is bad, and nothing may air. */
 export class EpisodeUnverifiedError extends Error {
@@ -23,26 +18,23 @@ export class EpisodeUnverifiedError extends Error {
 
 const hasSource = (l: Letter) => l.kind !== "found" || (Boolean(l.sourceUrl?.trim()) && Boolean(l.sourceAuthor?.trim()));
 
-
-async function askDj(env: Env, input: Parameters<typeof writeDjLines>[1]): Promise<DjLines[] | null> {
-  try {
-    return await writeDjLines(env, input);
-  } catch (e) {
-    const status = (e as { status?: unknown } | null)?.status;
-    console.warn(
-      "[dococa] dj script unavailable; reading letters only",
-      typeof status === "number" ? `status ${status}` : "no status",
-      e instanceof Error ? e.message : "unknown error",
-    );
-    return null;
+/** The 0-based segments a verify report names (`{check}: segment {i} line {j}: …`). */
+function segmentsNamed(details: string[]): Set<number> {
+  const out = new Set<number>();
+  for (const d of details) {
+    const m = d.match(/^\w+: segment (\d+) /);
+    if (m) out.add(Number(m[1]) - 1);
   }
+  return out;
 }
 
 /**
- * select → write → compose → verify. A script that fails verification is asked for once more, told what
- * failed; if that one fails too, the episode is composed with fixed DJ phrases only. A found voice without
- * a source never enters. If even the fixed-phrase episode fails, `EpisodeUnverifiedError` is thrown so an
- * unverified episode can never be returned. Not inserted here.
+ * select → load → units → compose → verify. The DJ's talk comes from the letters' units (made here when
+ * missing); a unit that verified alone can still fail inside this programme (quoting another letter of the
+ * segment), so the units of the segments the report names are left out and the episode verified again,
+ * then every unit is left out. The unit rows are never changed here. A found voice without a source never
+ * enters. If even the fixed-phrase episode fails, `EpisodeUnverifiedError` is thrown so an unverified
+ * episode can never be returned. Not inserted here.
  */
 export async function buildEpisode(
   env: Env,
@@ -61,7 +53,6 @@ export async function buildEpisode(
   const items = new Map<string, Item>();
   const letters = new Map<string, Letter>();
   const plan: SegmentPlan[] = [];
-  const input: Parameters<typeof writeDjLines>[1] = { listener, segments: [] };
   let sourceless = 0;
   let skippedSegments = 0;
 
@@ -87,7 +78,6 @@ export async function buildEpisode(
     items.set(item.id, item);
     for (const r of reactions) letters.set(r.id, r);
     plan.push({ ...s, letterIds: read.map((l) => l.id), reactionIds: reactions.map((r) => r.id) });
-    input.segments.push({ item, slot: s.slot, letters: read, reactions });
   }
 
   if (sourceless > 0) console.warn(`[dococa] skipped ${sourceless} found voice(s) without a source; fix the data`);
@@ -100,20 +90,23 @@ export async function buildEpisode(
     return { id: crypto.randomUUID(), listenerId: listener.id, segments, verified, report, cloudTts: false, station: "mine", createdAt: new Date().toISOString() };
   };
 
-  if (plan.length > 0 && hasClaude(env)) {
-    let retryNotes: string[] | undefined;
-    for (let attempt = 0; attempt < DJ_ATTEMPTS; attempt++) {
-      const djLines = await askDj(env, { ...input, retryNotes });
-      if (!djLines) break;
-      const episode = finish(composeEpisode(plan, djLines, letters, items));
-      if (episode.verified) return episode;
-      console.warn("[dococa] dj script failed verification", episode.report.details.join("; "));
-      retryNotes = episode.report.details.filter((d) => RETRYABLE.test(d));
+  const readLetters = plan.flatMap((p) => p.letterIds.map((id) => letters.get(id)!));
+  const units = readLetters.length > 0 ? await ensureUnits(env, db, readLetters, items, "ja") : new Map<string, Unit>();
+  const compose = (u: ReadonlyMap<string, Unit> | null) => finish(composeEpisode(plan, u, letters, items, "ja"));
+
+  const usable = (u: ReadonlyMap<string, Unit>) => [...u.values()].some((x) => x.verified);
+  if (usable(units)) {
+    const whole = compose(units);
+    if (whole.verified) return whole;
+    console.warn("[dococa] units failed verification in the programme", whole.report.details.join("; "));
+    const kept = new Map(units);
+    for (const i of segmentsNamed(whole.report.details)) for (const id of plan[i]?.letterIds ?? []) kept.delete(id);
+    if (kept.size < units.size && usable(kept)) {
+      const fewer = compose(kept);
+      if (fewer.verified) return fewer;
     }
-  } else if (plan.length > 0) {
-    console.warn("[dococa] ANTHROPIC_API_KEY is empty; reading letters only");
   }
-  const readings = finish(composeEpisode(plan, null, letters, items));
+  const readings = compose(null);
   if (!readings.verified) throw new EpisodeUnverifiedError(readings.report);
   return readings;
 }

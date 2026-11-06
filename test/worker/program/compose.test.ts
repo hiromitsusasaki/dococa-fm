@@ -3,7 +3,11 @@ import { t } from "../../../src/worker/i18n/t";
 import { BRIDGE_KEYS } from "../../../src/worker/program/bridge";
 import { composeEpisode, FIXED_TEMPLATES, siteName } from "../../../src/worker/program/compose";
 import { verifyEpisode } from "../../../src/worker/program/verify";
+import type { Unit } from "../../../src/worker/types";
 import { byId, item, letter, listener } from "./fixtures";
+
+const unit = (letterId: string, intro: string, after: string, verified = true): Unit => ({ letterId, lang: "ja", intro, after, verified, audioReady: false, createdAt: "2026-01-01T00:00:00Z" });
+const unitsOf = (...us: Unit[]): Map<string, Unit> => new Map(us.map((u) => [u.letterId, u]));
 
 const plain = letter({ id: "a" });
 const found = letter({
@@ -24,26 +28,54 @@ const letters = byId([plain, found, w("w1", "あおい"), w("w2", "いつき"), 
 const items = byId([item({ id: "i1" }), item({ id: "i2", previewUrl: null })]);
 
 describe("composeEpisode", () => {
-  it("lays out dj, letters, the spoken found-voice source, reactions and the closing dj line", () => {
+  it("lays out bridge, intro, hand-over, letter, after per letter, then reactions and the closing bridge", () => {
     const [seg] = composeEpisode(
       [{ itemId: "i1", slot: "near", letterIds: ["a", "f"], reactionIds: ["w1", "r"] }],
-      [{ sayBefore: "はじめ", sayAfter: "おわり" }],
+      unitsOf(unit("a", "はじめ", "おわり"), unit("f", "二通目の紹介", "二通目のあと")),
       letters,
       items,
     );
     expect(seg).toMatchObject({ itemId: "i1", slot: "near" });
     expect(seg!.lines).toEqual([
       { type: "dj", text: "Dococa FM。世界のどこかにいる誰かの好きなものを、お届けします。", fixed: true, bridge: "bridge.open" },
-      { type: "dj", text: "はじめ" },
+      { type: "dj", text: "はじめ", unit: { letterId: "a", part: "intro" } },
+      { type: "dj", text: "みなとさん（函館）からのお便りです。", fixed: true },
       { type: "letter", letterId: "a", text: plain.bodyJa, radioName: "みなと", place: "函館", kind: "letter", sourceUrl: null, sourceAuthor: null },
+      { type: "dj", text: "おわり", unit: { letterId: "a", part: "after" } },
       { type: "dj", text: "同じ作品に、別の方からもお便りが届いています。", fixed: true, bridge: "bridge.sameWork" },
+      // The second letter of a work has no intro of its own: the first letter's introduced the work.
       { type: "dj", text: "ネットで見つけた声です。@jazzcatさん、YouTubeのコメントから。", fixed: true },
       { type: "letter", letterId: "f", text: "故郷を思い出す。", radioName: "", place: "", kind: "found", sourceUrl: "https://www.youtube.com/watch?v=x", sourceAuthor: "@jazzcat" },
+      { type: "dj", text: "二通目のあと", unit: { letterId: "f", part: "after" } },
       { type: "dj", text: "あおいさん（那覇）から『私も』が届いています", fixed: true },
       { type: "dj", text: "そらさん（熊本）から一言が届いています", fixed: true },
       { type: "letter", letterId: "r", text: "わかります", radioName: "そら", place: "熊本", kind: "reply", sourceUrl: null, sourceAuthor: null },
-      { type: "dj", text: "おわり" },
       { type: "dj", text: "ここで一息。このあとも、お便りは続きます。", fixed: true, bridge: "bridge.close" },
+    ]);
+  });
+
+  it("speaks only verified units, and fixed lines alone around a letter without one", () => {
+    const b = letter({ id: "b", radioName: "そら", place: "" });
+    const plan = [{ itemId: "i1", slot: "near" as const, letterIds: ["a", "b"], reactionIds: [] }];
+    const texts = (us: Map<string, Unit> | null) => composeEpisode(plan, us, byId([plain, b]), items)[0]!.lines.map((l) => (l.type === "letter" ? `letter:${l.letterId}` : (l as { text: string }).text));
+    const bare = [t("bridge.open"), "みなとさん（函館）からのお便りです。", "letter:a", t("bridge.sameWork"), "そらさんからのお便りです。", "letter:b", t("bridge.close")];
+    expect(texts(null)).toEqual(bare);
+    expect(texts(unitsOf(unit("a", "紹介", "感想", false), unit("b", "紹介b", "感想b", false)))).toEqual(bare);
+    // The first letter's unit failed alone: the work is introduced by the next letter's unit, once, at the start.
+    expect(texts(unitsOf(unit("a", "紹介", "感想", false), unit("b", "紹介b", "感想b")))).toEqual([
+      t("bridge.open"), "紹介b", "みなとさん（函館）からのお便りです。", "letter:a", t("bridge.sameWork"), "そらさんからのお便りです。", "letter:b", "感想b", t("bridge.close"),
+    ]);
+    // An empty line is not said.
+    expect(texts(unitsOf(unit("a", "", "感想")))).toEqual([
+      t("bridge.open"), "みなとさん（函館）からのお便りです。", "letter:a", "感想", t("bridge.sameWork"), "そらさんからのお便りです。", "letter:b", t("bridge.close"),
+    ]);
+  });
+
+  it("introduces the work from the first letter with a unit when a reply is read first", () => {
+    const r2 = letter({ id: "r2", kind: "reply", body: "届きました", bodyJa: "届きました", radioName: "そら", place: "熊本" });
+    const [seg] = composeEpisode([{ itemId: "i1", slot: "near", letterIds: ["r2", "a"], reactionIds: [] }], unitsOf(unit("a", "紹介", "感想")), byId([r2, plain]), items);
+    expect(seg!.lines.map((l) => (l.type === "letter" ? `letter:${l.letterId}` : (l as { text: string }).text))).toEqual([
+      t("bridge.open"), "紹介", "そらさん（熊本）からのお便りです。", "letter:r2", t("bridge.sameWork"), "みなとさん（函館）からのお便りです。", "letter:a", "感想", t("bridge.close"),
     ]);
   });
 
@@ -51,7 +83,7 @@ describe("composeEpisode", () => {
     expect(items.get("i1")!.previewUrl).not.toBeNull();
     const segs = composeEpisode(
       [{ itemId: "i1", slot: "near", letterIds: ["a", "f"], reactionIds: ["w1"] }, { itemId: "i1", slot: "far", letterIds: ["f"], reactionIds: [] }],
-      [{ sayBefore: "は", sayAfter: "お" }, { sayBefore: "は", sayAfter: "お" }],
+      unitsOf(unit("a", "は", "お"), unit("f", "は", "お")),
       letters,
       items,
     );
@@ -63,7 +95,7 @@ describe("composeEpisode", () => {
   it("reads at most three reactions", () => {
     const [seg] = composeEpisode(
       [{ itemId: "i2", slot: "near", letterIds: ["a"], reactionIds: ["w1", "w2", "w3", "w4"] }],
-      [{ sayBefore: "は", sayAfter: "お" }],
+      unitsOf(unit("a", "は", "お")),
       letters,
       items,
     );
@@ -117,15 +149,13 @@ describe("composeEpisode", () => {
     expect(() => composeEpisode([{ itemId: "i2", slot: "near", letterIds: [], reactionIds: [] }], null, letters, items)).toThrow("segment without letters");
   });
 
-  it("composes a reaction-only segment as just the reaction lines between the dj's", () => {
-    const [seg] = composeEpisode([{ itemId: "i1", slot: "near", letterIds: [], reactionIds: ["w1", "r"] }], [{ sayBefore: "は", sayAfter: "お" }], letters, items);
+  it("composes a reaction-only segment as the slot bridge and the reaction lines, with no DJ talk", () => {
+    const [seg] = composeEpisode([{ itemId: "i1", slot: "near", letterIds: [], reactionIds: ["w1", "r"] }], unitsOf(unit("r", "は", "お")), letters, items);
     expect(seg!.lines.map((l) => (l.type === "letter" ? `letter:${l.letterId}` : l.type === "dj" ? l.text : l.type))).toEqual([
       t("bridge.open"),
-      "は",
       "あおいさん（那覇）から『私も』が届いています",
       "そらさん（熊本）から一言が届いています",
       "letter:r",
-      "お",
       t("bridge.close"),
     ]);
     expect(verifyEpisode([seg!], letters, listener(), items).details).toEqual([]);
@@ -145,10 +175,6 @@ describe("composeEpisode", () => {
     ["not a url", "ウェブ"],
   ])("siteName(%s) is %s", (url, site) => {
     expect(siteName(url)).toBe(site);
-  });
-
-  it("throws when the dj lines do not match the segments", () => {
-    expect(() => composeEpisode([{ itemId: "i1", slot: "near", letterIds: [], reactionIds: [] }], [], letters, items)).toThrow();
   });
 });
 
@@ -174,8 +200,11 @@ describe("bridges", () => {
 
   it("puts sameWork between the letters of a segment, not before the first", () => {
     const b = letter({ id: "b", radioName: "そら", place: "" });
-    const [s] = composeEpisode([seg("i1", "near", ["a", "b"])], [{ sayBefore: "", sayAfter: "" }], byId([plain, b]), items);
-    expect(texts(s!.lines)).toEqual([t("bridge.open"), plain.bodyJa, t("bridge.sameWork"), b.bodyJa, t("bridge.close")]);
+    const [s] = composeEpisode([seg("i1", "near", ["a", "b"])], unitsOf(unit("a", "紹介", "感想a"), unit("b", "紹介b", "感想b")), byId([plain, b]), items);
+    expect(texts(s!.lines)).toEqual([
+      t("bridge.open"), "紹介", "みなとさん（函館）からのお便りです。", plain.bodyJa, "感想a",
+      t("bridge.sameWork"), "そらさんからのお便りです。", b.bodyJa, "感想b", t("bridge.close"),
+    ]);
   });
 
   it("puts a sameWork bridge between each pair of letters", () => {

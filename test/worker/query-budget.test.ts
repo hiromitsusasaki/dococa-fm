@@ -4,15 +4,20 @@ import app from "../../src/worker/index";
 import { insertItem } from "../../src/worker/db/items";
 import { insertLetter } from "../../src/worker/db/letters";
 import { createListener } from "../../src/worker/db/listeners";
+import { getUnits } from "../../src/worker/db/units";
 import { countingD1 } from "../helpers/d1-count";
 import { resetDb } from "../helpers/db";
+import { stubAnthropic, toolUse } from "../helpers/anthropic";
 import { json, stubFetch } from "../helpers/fetch";
 import { itemDraft, letterDraft } from "./db/helpers";
 import { newSession } from "./routes/helpers";
 
 /** Workers Free allows 50 D1 queries per invocation; these are the budgets the hot paths must stay under. */
 const START_BUDGET = 50;
+/** With every unit stored: the selection, three loads, one units read, the insert. */
 const EPISODE_BUDGET = 30;
+/** The worst case: no unit made yet, so one write per letter read (at most 6 segments × 3 letters) on top. */
+const EPISODE_MAKING_UNITS_BUDGET = 50;
 
 const track = (id: number, name: string) => ({ trackId: id, trackName: name, artistName: "Someone", releaseDate: "2001-01-01T00:00:00Z" });
 
@@ -71,5 +76,23 @@ describe("D1 statements per request", () => {
     const res = await app.request("/episodes", { method: "POST", headers: { cookie } }, { ...env, DB: counted.db });
     expect(res.status).toBe(303);
     expect(counted.count()).toBeLessThan(EPISODE_BUDGET);
+  });
+
+  it(`POST /episodes that makes every unit adds one write per unit, and stays under ${EPISODE_MAKING_UNITS_BUDGET}`, async () => {
+    await seedWorld();
+    const cookie = await newSession();
+    const keyless = countingD1(env.DB);
+    expect((await app.request("/episodes", { method: "POST", headers: { cookie } }, { ...env, DB: keyless.db })).status).toBe(303);
+    await env.DB.prepare("DELETE FROM episodes").run();
+
+    stubAnthropic().mockResolvedValue(toolUse("write_unit", { intro: "静かな一曲です。", after: "いいお便りでした。" }));
+    const keyed = countingD1(env.DB);
+    const res = await app.request("/episodes", { method: "POST", headers: { cookie } }, { ...env, DB: keyed.db, ANTHROPIC_API_KEY: "sk-test" });
+    expect(res.status).toBe(303);
+    const { results } = await env.DB.prepare("SELECT letter_id FROM units").all<{ letter_id: string }>();
+    expect(results.length).toBeGreaterThan(0);
+    expect((await getUnits(env.DB, results.map((r) => r.letter_id), "ja")).size).toBe(results.length);
+    expect(keyed.count()).toBe(keyless.count() + results.length);
+    expect(keyed.count()).toBeLessThan(EPISODE_MAKING_UNITS_BUDGET);
   });
 });
