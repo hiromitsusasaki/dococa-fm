@@ -93,6 +93,7 @@ CSS 変数は `:root` にライト、`@media (prefers-color-scheme: dark)` と `
 | 自分の局 | あなたのラジオ | Your radio |
 | 人の局 | 〇〇さんのラジオ | 〇〇's radio |
 | お便り | お便りを送る / 送る | Send a letter / Send |
+| 送り主の場所 | お住まい | Where you live |
 | 反応 | 私も / 一言を送る | Me too / Reply |
 | 出口 | この作品を聴く・観る | Listen or watch |
 | 原文 | 原文を見る（`<details>` で原文を開く。閉じる文言は持たない） | Show original |

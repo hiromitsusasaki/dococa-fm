@@ -29,18 +29,19 @@ const NAME = "\u{F0000}";
 const nonEmpty = (s: string | null) => s !== null && s.trim() !== "";
 const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
+/** One anchored pattern for a template: its wording normalised like a dj line and each `{param}` a lazy capture. */
+const templatePattern = (key: Parameters<typeof t>[0], lang: Lang) =>
+  new RegExp(`^${t(key, undefined, lang).split(/\{\w+\}/u).map((part) => escapeRe(norm(part))).join("(.*?)")}$`, "u");
 /**
- * One anchored pattern per fixed template, its wording normalised like a dj line and each `{param}` a lazy
- * capture. A fixed line is quote-checked on its captures only, joined by the name sentinel, so a letter that
- * happens to contain 「ネットで見つけた声です」 cannot fail the template that says it.
+ * A fixed line is quote-checked on its captures only, joined by the name sentinel, so a letter that happens to
+ * contain 「ネットで見つけた声です」 cannot fail the template that says it.
  */
-const fixedPatterns = (lang: Lang) =>
-  FIXED_TEMPLATES.map((key) => new RegExp(`^${t(key, undefined, lang).split(/\{\w+\}/u).map((part) => escapeRe(norm(part))).join("(.*?)")}$`, "u"));
-const FIXED_PATTERNS: Record<Lang, RegExp[]> = { ja: fixedPatterns("ja"), en: fixedPatterns("en") };
-/** The sender phrase filled into `{who}` is itself a template, so its own wording is not a quote either. */
-const whoPlacePattern = (lang: Lang) =>
-  new RegExp(`^${t("script.whoPlace", undefined, lang).split(/\{\w+\}/u).map((part) => escapeRe(norm(part))).join("(.*?)")}$`, "u");
-const WHO_PLACE: Record<Lang, RegExp> = { ja: whoPlacePattern("ja"), en: whoPlacePattern("en") };
+const FIXED_PATTERNS: Record<Lang, RegExp[]> = {
+  ja: FIXED_TEMPLATES.map((key) => templatePattern(key, "ja")),
+  en: FIXED_TEMPLATES.map((key) => templatePattern(key, "en")),
+};
+/** Every capture is re-split through the nested sender phrase (`script.whoPlace`), so its own wording is not a quote either. */
+const WHO_PLACE: Record<Lang, RegExp> = { ja: templatePattern("script.whoPlace", "ja"), en: templatePattern("script.whoPlace", "en") };
 
 /** What was filled into a fixed line of the episode's language; the whole line when it matches no template. */
 function filledValues(text: string, lang: Lang): string {

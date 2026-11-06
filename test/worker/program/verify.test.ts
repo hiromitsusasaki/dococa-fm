@@ -56,6 +56,15 @@ describe("verifyEpisode playback words", () => {
     expect(r.details).toEqual([]);
   });
 
+  it("still flags a hand-over whose filled name is quoted from a letter", () => {
+    const name = "あおいあおいあおいあおいあおい";
+    const sender = letter({ id: "s", radioName: name, place: "那覇", body: "別の話です。", bodyJa: "別の話です。" });
+    const quoting = letter({ id: "q", radioName: "ゆう", place: "", body: `那覇のあおいです。${name}さん、また会おう。`, bodyJa: `那覇のあおいです。${name}さん、また会おう。` });
+    const r = verifyEpisode(episode(fixedDj(`那覇にお住まいの、${name}さんからのお便りです。`), read(quoting)), byId([sender, quoting]), me);
+    expect(r.pii).toBe(false);
+    expect(r.details.some((d) => d.includes("quotes a letter"))).toBe(true);
+  });
+
   it("exempts fixed lines", () => {
     expect(verifyEpisode(episode(fixedDj("お便りを読みます。どうぞ"), read(plain)), letters, me).details.filter((d) => d.startsWith("playback:"))).toEqual([]);
   });
