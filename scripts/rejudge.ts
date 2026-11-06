@@ -1,7 +1,7 @@
 /**
  * Judges the stored public letters again with the current moderation (run once after the moderation changes).
  *
- *   pnpm rejudge --origin https://dococafm.app --token "$ADMIN_TOKEN"
+ *   ADMIN_TOKEN="$PROD_ADMIN_TOKEN" pnpm rejudge --origin https://dococafm.app
  *
  * Env: ADMIN_TOKEN, DOCOCA_ORIGIN (default http://127.0.0.1:5173); pnpm loads .dev.vars for you. Follows
  * `POST /admin/rejudge` page by page until it is done and prints ids, reasons and counts only, never letter

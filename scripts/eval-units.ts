@@ -2,7 +2,7 @@
  * Grades the DJ's units with Claude and writes docs/eval/units-<date>.md; with --remake, makes the units that
  * scored 2 or less again through the admin page's remake.
  *
- *   pnpm eval:units --origin https://dococafm.app --token "$ADMIN_TOKEN" --lang ja --limit 40 [--remake]
+ *   ADMIN_TOKEN="$PROD_ADMIN_TOKEN" pnpm eval:units --origin https://dococafm.app --lang ja --limit 40 [--remake]
  *
  * Env: ANTHROPIC_API_KEY, ADMIN_TOKEN, DOCOCA_ORIGIN (default http://127.0.0.1:5173), CLAUDE_MODEL (default
  * claude-sonnet-5-5); pnpm loads .dev.vars for you. One Claude call per unit, plus one for the prompt suggestions.

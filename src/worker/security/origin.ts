@@ -15,7 +15,8 @@ function normalized(origin: string): string {
  * Same-origin only for browser writes. With an `Origin` header it must equal PUBLIC_ORIGIN exactly. Without one,
  * a browser still says `Sec-Fetch-Site`, which must be same-origin or none; a client that sends neither is not a
  * browser (curl, the eval script, tests) and has no ambient cookie to abuse, so it passes.
- * `/admin/*` is Bearer-only, so it is not subject to this.
+ * `/admin/*` is not subject to this: it carries no session cookie, and `adminAuth` checks the origin of its own
+ * Basic-authenticated writes (`fromPublicOrigin`).
  */
 export const sameOriginOnly: MiddlewareHandler<{ Bindings: Env }> = async (c, next) => {
   const path = c.req.path;

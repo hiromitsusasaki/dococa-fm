@@ -11,10 +11,10 @@
 3. 本人のリスナー ID を `/settings` の末尾の「リスナー ID」の行で確かめる。
 
 ```bash
-pnpm eval --origin http://127.0.0.1:5173 --token "$ADMIN_TOKEN" --listener <listenerId> --runs 20 --out docs/eval/2026-11-0X.md
+pnpm eval --origin http://127.0.0.1:5173 --listener <listenerId> --runs 20 --out docs/eval/2026-11-0X.md
 ```
 
-`--origin` は省略すると `$DOCOCA_ORIGIN`、なければ `http://127.0.0.1:5173`。`--token` は省略すると `$ADMIN_TOKEN`（`pnpm eval` は `.dev.vars` を読む）。`--out` を付けないと標準出力に出すだけです。
+`--origin` は省略すると `$DOCOCA_ORIGIN`、なければ `http://127.0.0.1:5173`。トークンは環境変数 `ADMIN_TOKEN` から読みます（`pnpm eval` は `.dev.vars` を読み、シェルで指定した値が優先されます）。本番に向けるときは `ADMIN_TOKEN="$PROD_ADMIN_TOKEN" pnpm eval --origin https://dococafm.app …` のように渡します。`--token` は実行中にプロセスの引数として見えるので使いません。`--out` を付けないと標準出力に出すだけです。
 
 ## 何を数えるか
 

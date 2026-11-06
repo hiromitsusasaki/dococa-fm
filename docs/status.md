@@ -14,8 +14,8 @@
 | Task 6 | 送る画面（並び・お気に入りから選ぶ・検索・ブックマークレット） | 完了（`/put` を 3 枚のパネル（作品を決める・お便りを書く・ブックマークレット）にした。好きなものは `?pick=` でサーバー側でしぼる。`?q=` の題名検索はサインイン済みだけで、`searchByText` が iTunes・Google Books・TMDB と鍵があるときの YouTube を交互に 10 件まで並べ、`searchRateLimit`（リスナーごと 1 分 20 回）で守る。検索結果のリンク先で別の種類に化けないよう、TMDB と Google Books の URL は ID で引き直す。`/api/resolve`・`/api/search` は撤去。スクリーンショットは `docs/screenshots/2026-11-06-put-*.png`） |
 | Task 7 | マイページの並び | 完了（`/me` を 4 枚のパネル（好きなもの・聴いたお便り・届いた反応・公開ラジオ）にした。好きなものは 96px の絵の箱つきの小さなカードのグリッドで、`ItemCard` の `art` で出す。ページ内のサインアウトのフォームは外した（ヘッダに残る）。データと文言は変えていない。スクリーンショットは `docs/screenshots/2026-11-06-me-*.png`） |
 | Task 8 | モデレーションの理由と再判定 | 完了（理由に `obscene`（公序良俗）と `negative`（作品や作り手をけなすのが主体）を足した。悲しい一通・そっけない一通・辛口の一言は通す。`POST /admin/rejudge`（`limit` 1〜100 既定 20、`after` は `letters.id` のカーソル）が公開中の `letter`・`found`・`reply` を id 順に今の基準で判定し直し、断られたものを `rejected` にする。私も・既に `rejected` のものは対象外、判定が投げたものは `skipped` で公開のまま。`pnpm rejudge` が `next` が null になるまで回し、id・理由・件数だけを出す） |
-| Task 9 | 単位のフィードバックの輪（管理画面・良い例・採点スクリプト） | 完了（`units.liked`（0018）。`/admin/units` で単位を一覧し、👍（`liked` を立てる）と 👎（行を消して、その場で `prepareLetter` で作り直す。別の処理が作っている最中は 409、鍵が無い・その日の上限なら消さずに 503/429）。`adminAuth` は Basic（`admin:ADMIN_TOKEN`）も受け、ページだけ 401 で Basic を求める。Basic の書き込みは `PUBLIC_ORIGIN` からに限る。単位の指示文の末尾に、👍 付き・検証済みの intro を新しい順に 5 件（intro だけ）。単位 1 件の D1 の文は 6 → 7。`pnpm eval:units` が `/admin/units.json` を採点し `docs/eval/units-<日付>.md` を書く。`--remake` で 2 点以下を作り直す） |
-| Task 10 | 締めのドキュメント | 完了（README・SECURITY.md・DESIGN.md・`.dev.vars.example`・`wrangler.jsonc` のコメントをコードに合わせた。「土地」を「お住まい」に直し、マイグレーションは 0001〜0018、レート制限は題名検索の別枠まで書いた） |
+| Task 9 | 単位のフィードバックの輪（管理画面・良い例・採点スクリプト） | 完了（`units.liked`（0018）。`/admin/units` で単位を一覧し、👍（`liked` を立てる）と 👎（行を消して、その場で `prepareLetter` で作り直す。別の処理が作っている最中は 409、鍵が無い・その日の上限なら消さずに 503/429。今日作った単位の作り直しは `unit_remakes`（0019）に残して上限に数える）。一覧と JSON は公開中のお便りの単位だけで、未検証の行には 👍 を出さない。`adminAuth` は Basic（`admin:ADMIN_TOKEN`）も受け、ページだけ 401 で Basic を求める。Basic の書き込みは `PUBLIC_ORIGIN` からに限る。単位の指示文の末尾に、👍 付き・検証済みの intro を新しい順に 5 件（intro だけ）。単位 1 件の D1 の文は 6 → 7。`pnpm eval:units` が `/admin/units.json` を採点し `docs/eval/units-<日付>.md` を書く。`--remake` で 2 点以下を作り直す） |
+| Task 10 | 締めのドキュメント | 完了（README・SECURITY.md・DESIGN.md・`.dev.vars.example`・`wrangler.jsonc` のコメントをコードに合わせた。「土地」を「お住まい」に直し、マイグレーションは 0001〜0018（Task 9 の修正で 0019 を足した）、レート制限は題名検索の別枠まで書いた） |
 
 決定: 単位は本人の 👍 と 👎 で育てる（Task 9。👍 した intro が指示文の良い例になり、👎 は作り直す。採点スクリプトの提案は本人が読んで手で反映する）。
 決定: モデレーションの理由は 6 つ（Task 8。`obscene` と `negative` を足した）。悲しい一通・そっけない一通・辛口の一言は引き続き通す（`negative` は、けなす・嫌いと言うのが主体のものだけ）。
@@ -35,13 +35,13 @@ Phase 4（お住まい・MCP の撤去・ラジオ面のダイヤル・遠さ・
 
 ### 本人作業（Phase 4 のデプロイ。この順）
 
-- [ ] `pnpm db:migrate` で 0015 以降の当てていない分を順に当てる。本番には 0005〜0014 まで当て済み（2026-11-06）。残りは 0015（tts_v3: 音声の鍵を v3 に変え、`tts_audio` を空にして `units.audio_ready` を戻す）、0016（revoice_handover: 手渡しの言い方が変わるので単位の音声を作り直す）、0017（items_vec: 作品のベクトル）、0018（units_liked）。R2 の `tts/v2/` は手で消してよい（残っても害はない）。
+- [ ] `pnpm db:migrate` で 0015 以降の当てていない分を順に当てる。本番には 0005〜0014 まで当て済み（2026-11-06）。残りは 0015（tts_v3: 音声の鍵を v3 に変え、`tts_audio` を空にして `units.audio_ready` を戻す）、0016（revoice_handover: 手渡しの言い方が変わるので単位の音声を作り直す）、0017（items_vec: 作品のベクトル）、0018（units_liked）、0019（unit_remakes: 作り直した単位を 1 日の上限に数える）。R2 の `tts/v2/` は手で消してよい（残っても害はない）。
 - [ ] 本番の `EPISODE_DAILY_LIMIT` を 30 などにしてあれば、消す（既定 60 枠）か上げる。1 回が 1 枠なので、以前の「30 回」と数え方は同じだが、既定は 60 になった。
 - [ ] Workers AI を使えるようにする（Workers Paid のアカウント。`wrangler.jsonc` に `ai` バインディング `AI` を入れてある。新しい鍵は無い。無くても動き、そのときダイヤルは枠の順を決めるだけ）。開発機は `pnpm wrangler login` を済ませておく（`pnpm dev` がリモートの Workers AI に繋ぐ。使った分はそのアカウントに課金される。テストは繋がない）。
 - [ ] `pnpm run deploy`。
 - [ ] デプロイ後、`POST /admin/prepare`（`Authorization: Bearer $ADMIN_TOKEN`、`{"limit":20}`）を、`remaining`（`vectors`・`units`・`audio`）が全部 0 になるか `failed` が変わらなくなるまで繰り返す。作品のベクトル、日本語と英語の単位、手渡しと音声が揃う。音声の上限（既定 3000 行/日）に当たったら翌日（JST）に続く（Cron は 15 分ごとに 20 件ずつ埋める）。
-- [ ] `pnpm rejudge --origin https://dococafm.app --token "$ADMIN_TOKEN"` を一度実行する。公開済みのお便りを新しい基準（`obscene`・`negative`）で判定し直し、断られたものは `rejected` になる。`skipped` が出たらもう一度。
-- [ ] 最初の `pnpm eval:units --origin https://dococafm.app --token "$ADMIN_TOKEN" --lang ja --limit 40`。`docs/eval/units-<日付>.md` の低い 10 件と「指示文への提案」を読み、採るものを指示文に入れる。英語は `--lang en`。良い intro は `https://dococafm.app/admin/units?lang=ja`（ユーザー名 `admin`、パスワード `ADMIN_TOKEN`）で 👍、だめなものは 👎。
+- [ ] `ADMIN_TOKEN="$PROD_ADMIN_TOKEN" pnpm rejudge --origin https://dococafm.app`（先に `read -rs PROD_ADMIN_TOKEN`） を一度実行する。公開済みのお便りを新しい基準（`obscene`・`negative`）で判定し直し、断られたものは `rejected` になる。`skipped` が出たらもう一度。
+- [ ] 最初の `ADMIN_TOKEN="$PROD_ADMIN_TOKEN" pnpm eval:units --origin https://dococafm.app --lang ja --limit 40`。`docs/eval/units-<日付>.md` の低い 10 件と「指示文への提案」を読み、採るものを指示文に入れる。英語は `--lang en`。良い intro は `https://dococafm.app/admin/units?lang=ja`（ユーザー名 `admin`、パスワード `ADMIN_TOKEN`）で 👍、だめなものは 👎。
 - [ ] 画面を確かめる: ホームの「いま届いているお便り」のカード、ラジオの面のセレンディピティ（回すと次の回から効く）、送る画面（`/put`）の題名検索、マイページ（`/me`）。ライトとダーク、PC 幅とスマホ幅。
 
 以降は Phase 3 までの本人作業のうち、まだ済んでいないもの。
@@ -63,7 +63,7 @@ Phase 2（ラジオ中心の体験への作り替え）と Phase 3（単位・�
 - [ ] 題名検索の YouTube は `search.list` で 1 回 100 ユニットを使う（既定の枠は 1 日 10,000 ユニット、つまり 1 日およそ 100 回。見つけた声の収集バッチと同じ鍵なら枠も共有）。足りなければ Google Cloud で枠の引き上げを申請するか、`YOUTUBE_API_KEY` を外して YouTube なしで探す。
 - [ ] 本番で確かめる: ホームの「ラジオをつける」、Google サインイン、`/me`、公開局 `/stations/s:<slug>`、日本語と英語の切り替え。
 - [ ] Spotify Developer Dashboard の Redirect URI を `https://dococafm.app/auth/spotify/callback`、Website を `https://dococafm.app` に。TMDB の Application URL も同じく（済んでいなければ。新ドメインに揃える）。
-- [ ] eval 20 回（1 回が 1 枠で、既定の 60 枠で足りる）: `pnpm eval --origin https://dococafm.app --token "$ADMIN_TOKEN" --listener <id> --runs 20 --out docs/eval/<日付>.md`。結果を README の eval 表に書く。
+- [ ] eval 20 回（1 回が 1 枠で、既定の 60 枠で足りる）: `ADMIN_TOKEN="$PROD_ADMIN_TOKEN" pnpm eval --origin https://dococafm.app --listener <id> --runs 20 --out docs/eval/<日付>.md`。結果を README の eval 表に書く。
 - [ ] 声の聴き比べ（Phase 1 の Task 11 Step 5）が済んでいなければ、本番で自分の最初の回を聴く。
 - [ ] public 化後の GitHub 設定（fork PR の承認など）と、public 化前チェックリストの残り（下の 2026-11-04 の節）。gitleaks は public 化の直前にもう一度。
 
@@ -172,7 +172,7 @@ Phase 2（ラジオ中心の体験への作り替え）と Phase 3（単位・�
   - [ ] Google サインイン（Task 7）: Google Cloud で OAuth クライアント（ウェブ アプリケーション）を作り、承認済みのリダイレクト URI に `https://dococafm.app/auth/google/callback`（開発は `http://127.0.0.1:5173/auth/google/callback`）を登録。`pnpm wrangler secret put GOOGLE_OAUTH_CLIENT_ID` と `GOOGLE_OAUTH_CLIENT_SECRET` で入れ、`.dev.vars` にも写す。同意画面を「本番」に公開（テスト中のままだと登録したテストユーザーしか入れない）。
   - [ ] `printf '30' | pnpm wrangler secret put EPISODE_DAILY_LIMIT`（eval 20 回のため。エージェントの権限では secret の書き込みが拒まれる）。
   - [x] デモ投入（上記）。
-  - [ ] eval 20 回: `pnpm eval --origin https://dococafm.app --token "$ADMIN_TOKEN" --listener <id> --runs 20 --out docs/eval/<日付>.md`（`EPISODE_DAILY_LIMIT` を 25 以上に）。
+  - [ ] eval 20 回: `ADMIN_TOKEN="$PROD_ADMIN_TOKEN" pnpm eval --origin https://dococafm.app --listener <id> --runs 20 --out docs/eval/<日付>.md`（`EPISODE_DAILY_LIMIT` を 25 以上に）。
   - [ ] 下の「public 化前チェックリスト」の残り（GitHub 設定、gitleaks、public 化）。
 
 ## 2026-11-04 最終修正 完了。次は本人作業（push・鍵・デプロイ・public 化）
@@ -205,7 +205,7 @@ Phase 2（ラジオ中心の体験への作り替え）と Phase 3（単位・�
   pnpm db:migrate                                # 0004_tts_claims.sql まで当たる
   pnpm run deploy
   ```
-  そのあと本番 URL で `/start` → 番組を聴く。eval は `EPISODE_DAILY_LIMIT` を 25 などに上げて `pnpm eval --origin https://<URL> --token "$ADMIN_TOKEN" --listener <id> --runs 20 --out docs/eval/<日付>.md`。
+  そのあと本番 URL で `/start` → 番組を聴く。eval は `EPISODE_DAILY_LIMIT` を 25 などに上げて `ADMIN_TOKEN="$PROD_ADMIN_TOKEN" pnpm eval --origin https://<URL> --listener <id> --runs 20 --out docs/eval/<日付>.md`。
 - Demo seeding real run held: no key（`ANTHROPIC_API_KEY` が空。入れたら `pnpm seed --items <作品 URL の一覧> --personas 3 --dry-run` で確かめ、`--dry-run` を外して投入。`docs/demo/personas.json` はこのときできる）。デモ用リスナーは `listeners.demo = 1` で、画面・番組に「デモ用」の印が出る。
 - YouTube collection real run held: no key（`YOUTUBE_API_KEY` と `ANTHROPIC_API_KEY` を入れたら `pnpm collect --item <url>` を 1 作品で流す。既定は dry-run で `.found/<itemId>.json` に書くだけ。中身を読んで不要な行を消し、`pnpm collect --post .found/<itemId>.json` で投入して、`/items/:id` の「ネットで見つけた声」を確かめる）。`/admin/found` はお便りと同じモデレーションを通り、reject 済みの出典 URL は再投入されない。管理 API は `ADMIN_TOKEN`（Bearer）。デモ回は `POST /admin/episodes`（`listenerId` は `/settings` の末尾に出る）。
 - Gemini-TTS real check: 鍵は API キーで通る形だが、本番で 403（Vertex AI API が未有効化）。上の本人作業を参照。`GET /tts` は鍵が空なら 503。鍵が入ったら Task 11 Step 5（Charon / Kore の聴き比べと `DJ_STYLE_PROMPT` の調整）をする。クラウド TTS は各リスナーの最初の回（`claimCloudTts`）と、`makeEpisode(env, listener, { cloudTts: true })`（Task 13 のデモ回）だけ。

@@ -5,11 +5,12 @@ DJ の語り（単位。お便り 1 通ぶんの intro と after）を Claude �
 ## 走らせ方
 
 ```bash
-pnpm eval:units --origin https://dococafm.app --token "$ADMIN_TOKEN" --lang ja --limit 40
-pnpm eval:units --origin https://dococafm.app --token "$ADMIN_TOKEN" --lang ja --limit 40 --remake   # 2 点以下を作り直す
+read -rs PROD_ADMIN_TOKEN   # 本番のトークンをシェルに読み込む（画面にも履歴にも出ない）
+ADMIN_TOKEN="$PROD_ADMIN_TOKEN" pnpm eval:units --origin https://dococafm.app --lang ja --limit 40
+ADMIN_TOKEN="$PROD_ADMIN_TOKEN" pnpm eval:units --origin https://dococafm.app --lang ja --limit 40 --remake   # 2 点以下を作り直す
 ```
 
-`ANTHROPIC_API_KEY` が要ります（`.dev.vars` から読みます）。モデルは `CLAUDE_MODEL`、無ければ `claude-sonnet-5-5`。単位 1 件に Claude を 1 回、提案に 1 回呼びます。`--limit` は 1〜100（既定 40）で、`/admin/units.json` のお便り ID 順の先頭から採点します。標準出力に出すのは件数だけです。
+トークンは環境変数 `ADMIN_TOKEN` で渡します（`--token` も使えますが、実行中はプロセスの引数として他のユーザーから見えるので使わないでください）。シェルで指定した値は `.dev.vars` より優先されます。ローカル（`--origin` を省略）なら `.dev.vars` の `ADMIN_TOKEN` をそのまま使います。`ANTHROPIC_API_KEY` が要ります（`.dev.vars` から読みます）。モデルは `CLAUDE_MODEL`、無ければ `claude-sonnet-5-5`。単位 1 件に Claude を 1 回、提案に 1 回呼びます。`--limit` は 1〜100（既定 40）で、`/admin/units.json` のお便り ID 順の先頭から採点します。標準出力に出すのは件数だけです。
 
 ## 基準
 

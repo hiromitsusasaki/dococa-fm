@@ -127,7 +127,7 @@ pnpm wrangler login
 pnpm wrangler d1 create dococa            # 出力の database_id を wrangler.jsonc の d1_databases に書く
 pnpm wrangler r2 bucket create dococa-audio
 pnpm wrangler secret put ANTHROPIC_API_KEY   # .dev.vars.example の鍵を 1 つずつ（ADMIN_TOKEN、SESSION_SECRET、SPOTIFY_CLIENT_ID、GOOGLE_TTS_SA_JSON、GOOGLE_OAUTH_CLIENT_ID、GOOGLE_OAUTH_CLIENT_SECRET、TMDB_API_KEY、YOUTUBE_API_KEY、任意で GOOGLE_BOOKS_API_KEY）
-pnpm db:migrate   # migrations/ の 0001〜0018 のうち、まだ当てていないものを順に当てる
+pnpm db:migrate   # migrations/ の 0001〜0019 のうち、まだ当てていないものを順に当てる
 # wrangler.jsonc の routes にカスタムドメイン、vars.PUBLIC_ORIGIN にその origin（例 https://dococafm.app）を書いてから
 pnpm run deploy   # pnpm deploy は pnpm 組み込みの別コマンドなので、run を付ける
 ```
@@ -179,7 +179,8 @@ pnpm seed --items items.txt --personas 30             # 投入して、作品ペ
 お便り・一言・返信・見つけた声は、公開の前に Claude が 6 つの理由で選別します。誰かへの攻撃・差別（abuse）、宣伝・勧誘（ad）、個人情報（pii）、作品の話からの逸脱（offtopic）、公序良俗に反する内容（obscene）、作品や作り手をけなすのが主体のもの（negative）です。そっけない一通、悲しい一通、辛口の一言は通します。判定できないときは公開せず 503 を返し（閉じる側に倒します）、「私も」は判定しません。基準を変えたあと、すでに公開したお便りを今の基準で判定し直すには、一度だけ次を実行します。
 
 ```bash
-pnpm rejudge --origin https://dococafm.app --token "$ADMIN_TOKEN"
+# 本番のトークンは、先に `read -rs PROD_ADMIN_TOKEN` でシェルに読み込む（履歴にもプロセスの引数にも残らない）
+ADMIN_TOKEN="$PROD_ADMIN_TOKEN" pnpm rejudge --origin https://dococafm.app
 # 20 通ずつ POST /admin/rejudge を、next が null になるまで回す。出すのは id・理由・件数だけで、本文は出さない
 ```
 
@@ -206,7 +207,7 @@ DJ の語り（単位）は、本人が見直して育てます。管理画面 `
 
 ```bash
 open "https://dococafm.app/admin/units?lang=ja"          # ユーザー名 admin、パスワード ADMIN_TOKEN
-pnpm eval:units --origin https://dococafm.app --token "$ADMIN_TOKEN" --lang ja --limit 40 [--remake]
+ADMIN_TOKEN="$PROD_ADMIN_TOKEN" pnpm eval:units --origin https://dococafm.app --lang ja --limit 40 [--remake]
 # ANTHROPIC_API_KEY が要る（.dev.vars から読む）。出すのは件数だけで、お便りの本文は出さない
 ```
 
