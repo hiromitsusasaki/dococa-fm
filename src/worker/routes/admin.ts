@@ -278,7 +278,7 @@ admin.post("/admin/letters", async (c) => {
   return c.json({ letterId: made.letter.id, itemId: made.itemId });
 });
 
-const rejudgeSchema = z.object({ limit: z.number().int().min(1).max(100).default(20), after: z.string().min(1).max(100).optional() });
+const rejudgeSchema = z.object({ limit: z.number().int().min(1).max(50).default(20), after: z.string().min(1).max(100).optional() });
 
 /**
  * Judges stored public letters again with the current moderation, in id order after the `after` cursor.
@@ -308,7 +308,9 @@ admin.post("/admin/rejudge", async (c) => {
         await setLetterStatus(c.env.DB, row.id, "rejected");
         rejected.push({ id: row.id, reason: verdict.reason });
       }
-    } catch {
+    } catch (e) {
+      // The id and the error's name only: a message can echo the request, which carries the letter.
+      console.warn(`[dococa] rejudge skipped ${row.id} ${e instanceof Error ? e.name : "unknown"}`);
       skipped++;
     }
   }

@@ -354,21 +354,25 @@ describe("POST /admin/rejudge", () => {
     const create = stubAnthropic();
     create.mockImplementation(verdictFor({}));
     const item = await insertItem(env.DB, itemDraft());
-    await insertLetter(env.DB, letterDraft(item.id, { status: "rejected" }));
+    const gone = await insertLetter(env.DB, letterDraft(item.id, { status: "rejected" }));
     const out = (await (await rejudge()).json()) as { judged: number };
     expect(out.judged).toBe(0);
     expect(create).not.toHaveBeenCalled();
+    expect(await status(gone.id)).toBe("rejected");
   });
 
-  it("skips a letter whose judgement throws and leaves it public", async () => {
-    vi.spyOn(console, "error").mockImplementation(() => {});
+  it("skips a letter whose judgement throws, leaves it public, and logs its id and the error name, never the text", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const create = stubAnthropic();
     create.mockResolvedValue({ content: [{ type: "text", text: "hmm" }] });
     const item = await insertItem(env.DB, itemDraft());
-    const l = await insertLetter(env.DB, letterDraft(item.id));
+    const l = await insertLetter(env.DB, letterDraft(item.id, { body: "ひみつの本文です" }));
     const out = (await (await rejudge()).json()) as { judged: number; skipped: number; rejected: unknown[] };
     expect(out).toMatchObject({ judged: 0, skipped: 1, rejected: [] });
     expect(await status(l.id)).toBe("public");
+    const logged = warn.mock.calls.map((c) => c.join(" "));
+    expect(logged.some((line) => /^\[dococa\] rejudge skipped \S+ \S+$/.test(line) && line.includes(l.id))).toBe(true);
+    expect(logged.join("\n")).not.toContain("ひみつ");
   });
 
   it("paginates by the id cursor", async () => {
@@ -387,8 +391,8 @@ describe("POST /admin/rejudge", () => {
     expect(create).toHaveBeenCalledTimes(5);
   });
 
-  it("answers 422 for a limit outside 1-100, and 401 without the token", async () => {
-    for (const limit of [0, 101, 1.5]) expect((await rejudge({ limit })).status).toBe(422);
+  it("answers 422 for a limit outside 1-50, and 401 without the token", async () => {
+    for (const limit of [0, 51, 101, 1.5]) expect((await rejudge({ limit })).status).toBe(422);
     expect((await call("POST", "/admin/rejudge", {}, {}, keyed)).status).toBe(401);
   });
 });
