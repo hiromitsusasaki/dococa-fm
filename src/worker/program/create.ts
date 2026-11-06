@@ -19,6 +19,8 @@ export type MakeOptions = {
   first?: boolean;
   /** A letter the listener came to hear: it takes the seat when it may be read. */
   letterId?: string;
+  /** Segments in the episode; 1 for every listener. Only the operator's eval asks for more, to measure a whole programme. */
+  size?: number;
 };
 
 const nextBody = z.object({
@@ -61,7 +63,7 @@ export async function makeEpisode(env: Env, listener: Listener, opts: MakeOption
   if ((await countAllEpisodesToday(env.DB)) >= limitFrom(env.EPISODE_GLOBAL_DAILY_LIMIT, DEFAULT_GLOBAL_DAILY_LIMIT)) return { ok: false, reason: "limit" };
   try {
     const built = await buildEpisode(env, env.DB, listener, {
-      size: 1,
+      size: opts.size ?? 1,
       first: opts.first === true,
       ...(opts.station ? { station: opts.station } : {}),
       ...(opts.dial !== undefined ? { dial: opts.dial } : {}),

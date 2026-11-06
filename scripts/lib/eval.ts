@@ -1,6 +1,9 @@
 /** Pure parts of `pnpm eval`: argument parsing and the aggregation of episodes read from the admin API. */
 import type { Episode, Item } from "../../src/worker/types.ts";
 
+/** Segments asked for per eval run: a whole programme, so far shares and counts stay comparable with earlier reports. */
+export const EVAL_EPISODE_SIZE = 6;
+
 export type EvalItem = Pick<Item, "title" | "creator">;
 export type EvalEpisode = Pick<Episode, "id" | "segments" | "report">;
 

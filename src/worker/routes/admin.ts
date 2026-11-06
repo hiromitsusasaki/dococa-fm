@@ -155,7 +155,8 @@ admin.get("/admin/items/:id", async (c) => {
   return item ? c.json({ item }) : c.json({ error: "item not found" }, 404);
 });
 
-const episodeSchema = z.object({ listenerId: z.string().min(1) });
+/** `size`: segments in the episode (the eval asks for a whole programme; a listener always gets one). */
+const episodeSchema = z.object({ listenerId: z.string().min(1), size: z.number().int().min(1).max(6).optional() });
 
 /** The operator's own demo episode, made for the given listener. */
 admin.post("/admin/episodes", async (c) => {
@@ -163,7 +164,7 @@ admin.post("/admin/episodes", async (c) => {
   if (!parsed.success) return invalid(c, parsed.error);
   const listener = await getListener(c.env.DB, parsed.data.listenerId);
   if (!listener) return c.json({ error: "listener not found" }, 404);
-  const made = await makeEpisode(c.env, listener, { first: true });
+  const made = await makeEpisode(c.env, listener, { first: true, ...(parsed.data.size ? { size: parsed.data.size } : {}) });
   if (!made.ok) return c.json({ error: made.reason }, made.reason === "limit" ? 429 : made.reason === "empty" ? 409 : 503);
   const episode = await getEpisode(c.env.DB, made.id);
   return c.json({ id: made.id, cloudTts: episode?.cloudTts === true });

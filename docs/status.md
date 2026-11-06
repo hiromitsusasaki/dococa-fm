@@ -18,7 +18,7 @@
 | Task 10 | 締めのドキュメント | 未着手 |
 
 決定: MCP は Phase 4 で外した（事前生成で役目を終えた）。列 `mcp_token` は残して使わない。
-決定: 回は 1 枠（Task 3。`makeEpisode` は常に `size: 1`。`selectProgram` の `size` は eval・テスト・世界と公開のために残す）。
+決定: 回は 1 枠（Task 3。リスナーの回は `makeEpisode` の既定 `size: 1`。eval だけは `POST /admin/episodes` に `size: 6` を送り、1 回 6 枠で測る。`selectProgram` の `size` はそのためとテストのために残す）。
 決定: 終わりのつなぎは言わない（Task 3。`bridge.close` は出さないが、保存済みの回を描くためにキーと `BRIDGE_KEYS` は残す。`bridge.open` は訪問の最初の回だけ）。
 決定: 上限は枠の数（Task 3。`EPISODE_DAILY_LIMIT` 既定 60、`EPISODE_GLOBAL_DAILY_LIMIT` 既定 1800。数えるのは従来どおり回の行で、1 回が 1 枠）。
 

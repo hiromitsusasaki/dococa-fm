@@ -278,6 +278,22 @@ describe("POST /admin/episodes", () => {
     expect((await call("POST", "/admin/episodes", { listenerId: "nope" })).status).toBe(404);
     expect((await call("POST", "/admin/episodes", {})).status).toBe(422);
   });
+
+  it("makes one segment by default and as many as the eval asks for, up to six", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const listener = await createListener(env.DB);
+    for (let n = 0; n < 8; n++) {
+      const item = await insertItem(env.DB, itemDraft({ title: `t${n}`, externalIds: { itunes: String(500 + n) } }));
+      await insertLetter(env.DB, letterDraft(item.id));
+    }
+    const segments = async (body: object) => {
+      const made = (await (await call("POST", "/admin/episodes", { listenerId: listener.id, ...body })).json()) as { id: string };
+      return ((await (await call("GET", `/admin/episodes/${made.id}`)).json()) as { segments: unknown[] }).segments.length;
+    };
+    expect(await segments({})).toBe(1);
+    expect(await segments({ size: 6 })).toBe(6);
+    for (const size of [0, 7, 1.5]) expect((await call("POST", "/admin/episodes", { listenerId: listener.id, size })).status).toBe(422);
+  });
 });
 
 describe("GET /admin/episodes/:id", () => {

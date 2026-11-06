@@ -5,11 +5,12 @@
  *
  * Env: ADMIN_TOKEN, DOCOCA_ORIGIN (default http://127.0.0.1:5173); pnpm loads .dev.vars for you. The
  * listener id is shown on /settings. A run calls Claude only for letters whose unit is not made yet (run `POST /admin/prepare` first to make them), and the Worker caps
- * episodes per listener per day (EPISODE_DAILY_LIMIT, default 60; each episode is one segment now).
+ * episodes per listener per day (EPISODE_DAILY_LIMIT, default 60). Each run asks for EVAL_EPISODE_SIZE (6) segments,
+ * where a listener's episode is one segment.
  * Local only: the Worker never imports this file, and nothing here calls an LLM itself.
  */
 import { mkdir, writeFile } from "node:fs/promises";
-import { type EvalArgs, type EvalEpisode, type EvalItem, aggregate, parseEvalArgs, renderMarkdown } from "./lib/eval.ts";
+import { EVAL_EPISODE_SIZE, type EvalArgs, type EvalEpisode, type EvalItem, aggregate, parseEvalArgs, renderMarkdown } from "./lib/eval.ts";
 
 class CliError extends Error {}
 
@@ -44,7 +45,7 @@ async function main(): Promise<void> {
   const items: Record<string, EvalItem> = {};
   let unbuilt = 0;
   for (let i = 1; i <= args.runs; i++) {
-    const made = await admin("POST", "/admin/episodes", { listenerId: args.listener });
+    const made = await admin("POST", "/admin/episodes", { listenerId: args.listener, size: EVAL_EPISODE_SIZE });
     if (made.status === 429) throw new CliError(`daily episode limit reached after ${i - 1} runs; raise EPISODE_DAILY_LIMIT for the eval run`);
     if (made.status === 401) throw new CliError("401 from the admin API: --token / ADMIN_TOKEN does not match the Worker's");
     if (made.status === 404) throw new CliError(`404 from the admin API: listener ${args.listener} not found (the id is on /settings)`);
