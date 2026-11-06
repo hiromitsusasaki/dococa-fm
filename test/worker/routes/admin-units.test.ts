@@ -7,7 +7,9 @@ import { getUnits, listUnits, setUnitLiked, upsertUnit } from "../../../src/work
 import * as prepare from "../../../src/worker/program/prepare";
 import { UNIT_CLAIM_TTL_MS } from "../../../src/worker/program/unit";
 import { claimTts } from "../../../src/worker/tts/claim";
+import { stubAnthropic, toolUse } from "../../helpers/anthropic";
 import { resetDb } from "../../helpers/db";
+import { stubFetch } from "../../helpers/fetch";
 import { itemDraft, letterDraft } from "../db/helpers";
 
 const TOKEN = "admin-token-test";
@@ -33,6 +35,7 @@ beforeEach(async () => {
 });
 afterEach(() => {
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
 });
 
 describe("admin units auth", () => {
@@ -134,12 +137,18 @@ describe("POST /admin/units/:letterId/:lang/like", () => {
 });
 
 describe("POST /admin/units/:letterId/:lang/remake", () => {
-  it("deletes the unit, makes it again in the request and answers 303 back", async () => {
+  const NEW = { intro: "雨の夜に似合う一曲です。", after: "素敵なお便りでした。" };
+  const unitOf = async (id: string) => (await getUnits(env.DB, [id], "ja")).get(id);
+  /** The unit `seed` stores, as the page shows it. */
+  const OLD = { intro: "静かな一曲です。", after: "いいお便りでした。", verified: true, audioReady: true };
+
+  it("replaces the unit with a new verified one in the request, voices it, and answers 303 back", async () => {
     const letter = await seed();
+    stubAnthropic().mockResolvedValue(toolUse("write_unit", NEW));
     const res = await postForm(`/admin/units/${letter.id}/ja/remake`);
     expect(res.status).toBe(303);
     expect(res.headers.get("location")).toBe("/admin/units?lang=ja");
-    expect((await getUnits(env.DB, [letter.id], "ja")).size).toBe(0);
+    expect(await unitOf(letter.id)).toMatchObject({ ...NEW, verified: true, audioReady: false });
     expect(prepareLetter).toHaveBeenCalledTimes(1);
     expect(prepareLetter.mock.calls[0]!.slice(2)).toEqual([letter.id, "ja"]);
   });
@@ -160,13 +169,49 @@ describe("POST /admin/units/:letterId/:lang/remake", () => {
     expect(prepareLetter).not.toHaveBeenCalled();
   });
 
+  it("keeps the old unit and answers 503 when Claude answers 5xx", async () => {
+    const letter = await seed();
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    stubFetch([["https://api.anthropic.com/v1/messages", () => new Response("{}", { status: 500, headers: { "retry-after-ms": "0" } })]]);
+    expect((await postForm(`/admin/units/${letter.id}/ja/remake`)).status).toBe(503);
+    expect(await unitOf(letter.id)).toMatchObject(OLD);
+    expect(prepareLetter).not.toHaveBeenCalled();
+  });
+
+  it("keeps the old unit and answers 503 when the new lines fail verification", async () => {
+    const letter = await seed();
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    stubAnthropic().mockResolvedValue(toolUse("write_unit", { intro: "夜中に一人で聴いていました。", after: "夜中に一人で聴いていました。" }));
+    expect((await postForm(`/admin/units/${letter.id}/ja/remake`)).status).toBe(503);
+    expect(await unitOf(letter.id)).toMatchObject(OLD);
+  });
+
+  it("keeps the old unit and answers 503 when the new one cannot be stored", async () => {
+    const letter = await seed();
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    stubAnthropic().mockResolvedValue(toolUse("write_unit", NEW));
+    // Every statement still works except the replacing write (the second batch, after the claim), which fails as D1 would.
+    let batches = 0;
+    const db = new Proxy(env.DB, {
+      get(target, prop) {
+        if (prop === "batch") {
+          return async (stmts: D1PreparedStatement[]) => {
+            if (++batches === 2) throw new Error("D1_ERROR: replace failed");
+            return target.batch(stmts);
+          };
+        }
+        const v = Reflect.get(target, prop);
+        return typeof v === "function" ? v.bind(target) : v;
+      },
+    });
+    expect((await postForm(`/admin/units/${letter.id}/ja/remake`, {}, undefined, { ...e, DB: db })).status).toBe(503);
+    expect(await unitOf(letter.id)).toMatchObject(OLD);
+    expect(prepareLetter).not.toHaveBeenCalled();
+  });
+
   it("counts the remade unit toward UNIT_DAILY_LIMIT, so remakes stop at the cap", async () => {
     const letter = await seed();
-    // The mocked prepareLetter stores a new unit as the real one would.
-    prepareLetter.mockImplementation(async (_env: unknown, db: D1Database, id: string) => {
-      await upsertUnit(db, { letterId: id, lang: "ja", intro: "新しい紹介", after: "感想", verified: true, audioReady: false });
-      return { units: 1, audio: 0, failed: 0 };
-    });
+    stubAnthropic().mockResolvedValue(toolUse("write_unit", NEW));
     const capped = { ...e, UNIT_DAILY_LIMIT: "2" };
     expect((await postForm(`/admin/units/${letter.id}/ja/remake`, {}, undefined, capped)).status).toBe(303);
     expect((await postForm(`/admin/units/${letter.id}/ja/remake`, {}, undefined, capped)).status).toBe(429);

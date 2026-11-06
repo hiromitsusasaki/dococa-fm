@@ -2,12 +2,12 @@ import { type Context, Hono } from "hono";
 import { z } from "zod";
 import type { Variables } from "../auth/session";
 import { hasClaude } from "../claude/client";
+import { getItem } from "../db/items";
 import { getLetter } from "../db/letters";
-import { clearUnit, getUnits, listUnits, setUnitLiked, type UnitRow } from "../db/units";
+import { getUnits, listUnits, setUnitLiked, type UnitRow } from "../db/units";
 import type { Env } from "../env";
 import { prepareLetter } from "../program/prepare";
-import { UNIT_CLAIM_TTL_MS, unitCapReached } from "../program/unit";
-import { claimTts, releaseTts } from "../tts/claim";
+import { remakeUnit, unitCapReached } from "../program/unit";
 import { invalid } from "./admin";
 
 type AppEnv = { Bindings: Env; Variables: Variables };
@@ -21,20 +21,21 @@ export const adminUnits = new Hono<AppEnv>();
 
 const L = {
   title: "単位の見直し",
-  lead: "👍 した intro は、DJ の指示文に良い例として入ります（検証済みのものだけ。新しい順に 5 件）。👎 は単位を消して、その場で作り直します（今日の単位の上限に数えます）。",
+  lead: "👍 した intro は、DJ の指示文に良い例として入ります（検証済みのものだけ。新しい順に 5 件）。👎 はその場で作り直し、新しい単位が検証を通って保存できたときだけ置き換えます（今日の単位の上限に数えます）。",
   work: "作品",
   letter: "お便り（冒頭）",
   verified: "検証",
   like: "👍",
   unlike: "👍 を外す",
   remake: "👎 作り直す",
-  confirmRemake: "この単位を消して作り直しますか？",
+  confirmRemake: "この単位を作り直しますか？",
   next: "次へ",
   empty: "単位はまだありません。",
   notFound: "見つかりません",
   busy: "いま別の処理がこの単位を作っています。少し待ってからもう一度押してください。",
   noClaude: "ANTHROPIC_API_KEY が無いので作り直せません。単位は消していません。",
   capped: "今日の単位の上限（UNIT_DAILY_LIMIT）に達しています。単位は消していません。",
+  failed: "新しい単位を作れませんでした（Claude の失敗、検証に通らない、保存の失敗のどれか）。前の単位はそのままです。",
 } as const;
 
 const EXCERPT = 80;
@@ -163,25 +164,24 @@ adminUnits.post("/admin/units/:letterId/:lang/like", async (c) => {
 });
 
 /**
- * Deletes the unit and makes it again before answering, audio included, so the owner sees the new one on
- * reload. Nothing is deleted when a new unit could not be made right now (no key, today's cap) or while
- * another run holds the unit's claim; the claim is taken around the delete so no maker is cut in on.
+ * Makes the unit again before answering, audio included, so the owner sees the new one on reload. The old unit
+ * stays until a new verified one is stored (`remakeUnit`): no key, today's cap, another run holding the unit's
+ * claim, or a new unit that could not be made, verified or stored leave it as it was and answer with why.
  */
 adminUnits.post("/admin/units/:letterId/:lang/remake", async (c) => {
   const l = lang.safeParse(c.req.param("lang"));
   if (!l.success) return invalid(c, l.error);
   const letterId = c.req.param("letterId");
   const db = c.env.DB;
-  if (!(await getLetter(db, letterId))) return c.text(L.notFound, 404);
+  const letter = await getLetter(db, letterId);
+  const item = letter ? await getItem(db, letter.itemId) : null;
+  if (!letter || !item) return c.text(L.notFound, 404);
   if (!hasClaude(c.env)) return c.text(L.noClaude, 503);
   if (await unitCapReached(c.env, db)) return c.text(L.capped, 429);
-  const claim = `unit:${letterId}:${l.data}`;
-  if (!(await claimTts(db, claim, Date.now(), UNIT_CLAIM_TTL_MS))) return c.text(L.busy, 409);
-  try {
-    await clearUnit(db, letterId, l.data);
-  } finally {
-    await releaseTts(db, claim);
-  }
+  const remade = await remakeUnit(c.env, db, letter, item, l.data);
+  if (remade === "busy") return c.text(L.busy, 409);
+  if (remade === "capped") return c.text(L.capped, 429);
+  if (remade === "failed") return c.text(L.failed, 503);
   await prepareLetter(c.env, db, letterId, l.data);
   return c.redirect(back(l.data), 303);
 });

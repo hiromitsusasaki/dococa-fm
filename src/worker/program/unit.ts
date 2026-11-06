@@ -1,5 +1,5 @@
 import { claude, escapeTags, hasClaude, model, oneLine } from "../claude/client";
-import { countUnitsToday, getUnits, listLikedUnits, upsertUnit } from "../db/units";
+import { countUnitsToday, getUnits, listLikedUnits, replaceUnit, upsertUnit } from "../db/units";
 import type { Env } from "../env";
 import { limitFrom } from "../limits";
 import { claimTts, releaseTts } from "../tts/claim";
@@ -174,7 +174,39 @@ async function likedIntros(db: D1Database, lang: Unit["lang"]): Promise<string[]
   }
 }
 
-async function writeAndStore(env: Env, db: D1Database, letter: Letter, item: Item, lang: Unit["lang"]): Promise<Unit | null> {
+/** The owner's remake, as `remakeUnit` answers it. */
+export type Remade = "remade" | "busy" | "capped" | "failed";
+
+/**
+ * The owner's remake of a unit. The old unit stays until a new verified one is stored: the claim on
+ * `unit:<letterId>:<lang>` is held throughout, the new lines are written and verified (one retry, as `makeUnit`), and
+ * only then one batch notes the remake and replaces the row (`replaceUnit`). Claude unavailable, lines that fail
+ * verification, or a failed write: `"failed"`, the old row untouched. Today's cap reached: `"capped"`. Another run
+ * holds the claim: `"busy"`. The clips are not made here.
+ */
+export async function remakeUnit(env: Env, db: D1Database, letter: Letter, item: Item, lang: Unit["lang"]): Promise<Remade> {
+  if (!hasClaude(env)) return "failed";
+  const claim = `unit:${letter.id}:${lang}`;
+  if (!(await claimTts(db, claim, Date.now(), UNIT_CLAIM_TTL_MS))) return "busy";
+  try {
+    if (await unitCapReached(env, db)) return "capped";
+    const written = await writeChecked(env, db, letter, item, lang);
+    if (!written?.ok) return "failed";
+    try {
+      await replaceUnit(db, { letterId: letter.id, lang, intro: written.lines.intro, after: written.lines.after });
+    } catch (e) {
+      // The name only: a D1 error message can quote the statement and its bound values, which carry the lines.
+      console.warn("[dococa] dj unit could not be stored", e instanceof Error ? e.name : "unknown error");
+      return "failed";
+    }
+    return "remade";
+  } finally {
+    await releaseTts(db, claim);
+  }
+}
+
+/** write → verify, with one retry on the retryable details. Null when Claude is unavailable (an API error, or replies out of shape). */
+async function writeChecked(env: Env, db: D1Database, letter: Letter, item: Item, lang: Unit["lang"]): Promise<{ lines: UnitLines; ok: boolean } | null> {
   let lines: UnitLines;
   let ok: boolean;
   const examples = await likedIntros(db, lang);
@@ -201,6 +233,13 @@ async function writeAndStore(env: Env, db: D1Database, letter: Letter, item: Ite
     );
     return null;
   }
+  return { lines, ok };
+}
+
+async function writeAndStore(env: Env, db: D1Database, letter: Letter, item: Item, lang: Unit["lang"]): Promise<Unit | null> {
+  const written = await writeChecked(env, db, letter, item, lang);
+  if (!written) return null;
+  const { lines, ok } = written;
   try {
     await upsertUnit(db, { letterId: letter.id, lang, intro: lines.intro, after: lines.after, verified: ok, audioReady: false });
     return (await getUnits(db, [letter.id], lang)).get(letter.id) ?? null;

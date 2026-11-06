@@ -170,15 +170,22 @@ export async function listLikedUnits(db: D1Database, lang: Unit["lang"], limit: 
 }
 
 /**
- * Deletes the unit (and with it its `audio_ready`), so the next run makes it again. The clips stay cached by text.
- * A unit made today is first noted in `unit_remakes`, so the call that made it still counts toward today's cap
- * after its replacement is stored. One batch.
+ * The owner's remake: replaces the unit with new verified lines whatever the stored one is (the owner asked for it),
+ * with `audio_ready` off so the next run voices the new text. The clips of the old text stay cached by text. A unit
+ * made today is first noted in `unit_remakes`, so the call that made it still counts toward today's cap. One batch:
+ * when it fails, the old row is as it was.
  */
-export async function clearUnit(db: D1Database, letterId: string, lang: Unit["lang"], now: Date = new Date()): Promise<void> {
+export async function replaceUnit(db: D1Database, u: Pick<Unit, "letterId" | "lang" | "intro" | "after">, now: Date = new Date()): Promise<void> {
+  const at = now.toISOString();
   await db.batch([
     db
       .prepare("INSERT INTO unit_remakes (letter_id, lang, created_at) SELECT letter_id, lang, ? FROM units WHERE letter_id = ? AND lang = ? AND created_at >= ?")
-      .bind(now.toISOString(), letterId, lang, jstDayStartIso(now)),
-    db.prepare("DELETE FROM units WHERE letter_id = ? AND lang = ?").bind(letterId, lang),
+      .bind(at, u.letterId, u.lang, jstDayStartIso(now)),
+    db
+      .prepare(
+        `INSERT INTO units (letter_id, lang, intro, after, verified, audio_ready, created_at) VALUES (?, ?, ?, ?, 1, 0, ?)
+         ON CONFLICT(letter_id, lang) DO UPDATE SET intro = excluded.intro, after = excluded.after, verified = 1, audio_ready = 0, created_at = excluded.created_at`,
+      )
+      .bind(u.letterId, u.lang, u.intro, u.after, at),
   ]);
 }

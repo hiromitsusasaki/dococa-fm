@@ -2,7 +2,7 @@ import { env } from "cloudflare:workers";
 import { beforeEach, describe, expect, it } from "vitest";
 import { insertItem } from "../../../src/worker/db/items";
 import { insertLetter } from "../../../src/worker/db/letters";
-import { clearUnit, countUnitsToday, getUnits, listLettersWithoutUnit, listLikedUnits, listUnits, listUnitsWithoutAudio, setUnitAudioReady, setUnitLiked, upsertUnit } from "../../../src/worker/db/units";
+import { countUnitsToday, getUnits, listLettersWithoutUnit, listLikedUnits, listUnits, listUnitsWithoutAudio, setUnitAudioReady, replaceUnit, setUnitLiked, upsertUnit } from "../../../src/worker/db/units";
 import { resetDb } from "../../helpers/db";
 import { itemDraft, letterDraft } from "./helpers";
 
@@ -170,29 +170,28 @@ describe("the units feedback loop", () => {
     expect((await listUnits(env.DB, { lang: "ja", limit: 50 })).map((u) => u.letterId)).toEqual([shown.id]);
   });
 
-  it("clearUnit counts a unit made today toward the day's units, so a remake spends the cap", async () => {
+  it("replaceUnit counts a unit made today toward the day's units, so a remake spends the cap", async () => {
     const item = await insertItem(env.DB, itemDraft());
     const today = await insertLetter(env.DB, letterDraft(item.id));
     const old = await insertLetter(env.DB, letterDraft(item.id));
     await upsertUnit(env.DB, unit(today.id));
     await upsertUnit(env.DB, unit(old.id, { createdAt: "2026-01-01T00:00:00.000Z" }));
     expect(await countUnitsToday(env.DB)).toBe(1);
-    await clearUnit(env.DB, today.id, "ja");
-    expect(await countUnitsToday(env.DB)).toBe(1);
-    // A unit from an earlier day was not counted today; its remake is counted when the new unit is stored.
-    await clearUnit(env.DB, old.id, "ja");
-    expect(await countUnitsToday(env.DB)).toBe(1);
-    await upsertUnit(env.DB, unit(today.id));
+    // Today's unit is noted before it is replaced: the old call and the new one both count.
+    await replaceUnit(env.DB, { letterId: today.id, lang: "ja", intro: "新しい紹介", after: "新しい感想" });
     expect(await countUnitsToday(env.DB)).toBe(2);
+    // A unit from an earlier day was not counted today; its replacement is.
+    await replaceUnit(env.DB, { letterId: old.id, lang: "ja", intro: "新しい紹介", after: "新しい感想" });
+    expect(await countUnitsToday(env.DB)).toBe(3);
   });
 
-  it("clearUnit deletes the one unit row of the letter and language", async () => {
+  it("replaceUnit replaces the one unit row of the letter and language, even a verified one, and leaves it unvoiced", async () => {
     const item = await insertItem(env.DB, itemDraft());
     const l = await insertLetter(env.DB, letterDraft(item.id));
     await upsertUnit(env.DB, unit(l.id, { audioReady: true }));
     await upsertUnit(env.DB, unit(l.id, { lang: "en" }));
-    await clearUnit(env.DB, l.id, "ja");
-    expect((await getUnits(env.DB, [l.id], "ja")).size).toBe(0);
-    expect((await getUnits(env.DB, [l.id], "en")).size).toBe(1);
+    await replaceUnit(env.DB, { letterId: l.id, lang: "ja", intro: "新しい紹介", after: "新しい感想" });
+    expect((await getUnits(env.DB, [l.id], "ja")).get(l.id)).toMatchObject({ intro: "新しい紹介", after: "新しい感想", verified: true, audioReady: false });
+    expect((await getUnits(env.DB, [l.id], "en")).get(l.id)?.intro).toBe("静かな一曲です。");
   });
 });
