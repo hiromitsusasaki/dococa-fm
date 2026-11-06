@@ -137,7 +137,7 @@ Spotify 連携は開発モードのため、許可リストに入っているア
 
 ### 守りと制限
 
-書き込みの `POST` は同一オリジンのみ、好きなものの登録・お便り・マイページはサインイン必須、`/admin/*` は `ADMIN_TOKEN` 必須、レート制限は IP とリスナーごとに 1 分 20 回です。詳しくは [SECURITY.md](SECURITY.md) にあります。レート制限のカウンタは Worker の isolate ごとのメモリにあるため、isolate をまたぐ厳密な上限ではありません。番組の作成は D1 を数える 1 日の枠の上限（`EPISODE_DAILY_LIMIT` 既定 60 枠、`EPISODE_GLOBAL_DAILY_LIMIT` 既定 1800 枠。1 回が 1 枠）が、クラウドの声は 1 日に合成する行数の上限（`CLOUD_TTS_GLOBAL_DAILY_LIMIT`、既定 3000）が、DJ の語り（単位）は 1 日に作る数の上限（`UNIT_DAILY_LIMIT`、既定 1000）が、お便りと一言は全員で 1 日に受け付ける数の上限（`LETTER_GLOBAL_DAILY_LIMIT`、既定 500。判定と翻訳で Claude を呼ぶため。「私も」は止めない）が最後の歯止めです（`0` は停止）。単位が上限に当たった日は、新しいお便りを定型の手渡しだけで読みます。同じ行の音声は全員で共有し、上限を超えると `GET /tts` は 503 を返してブラウザの音声に切り替わります。ただし判定は原子的ではなく同時実行で数回超えることがあり、cookie を捨てる 1 人に全体の上限を使い切られうることも、[SECURITY.md](SECURITY.md) の既知の制限に書いています。
+書き込みの `POST` は同一オリジンのみ、好きなものの登録・お便り・マイページはサインイン必須、`/admin/*` は `ADMIN_TOKEN` 必須（スクリプトは Bearer、管理画面はブラウザの Basic 認証）、レート制限は IP とリスナーごとに 1 分 20 回です。詳しくは [SECURITY.md](SECURITY.md) にあります。レート制限のカウンタは Worker の isolate ごとのメモリにあるため、isolate をまたぐ厳密な上限ではありません。番組の作成は D1 を数える 1 日の枠の上限（`EPISODE_DAILY_LIMIT` 既定 60 枠、`EPISODE_GLOBAL_DAILY_LIMIT` 既定 1800 枠。1 回が 1 枠）が、クラウドの声は 1 日に合成する行数の上限（`CLOUD_TTS_GLOBAL_DAILY_LIMIT`、既定 3000）が、DJ の語り（単位）は 1 日に作る数の上限（`UNIT_DAILY_LIMIT`、既定 1000）が、お便りと一言は全員で 1 日に受け付ける数の上限（`LETTER_GLOBAL_DAILY_LIMIT`、既定 500。判定と翻訳で Claude を呼ぶため。「私も」は止めない）が最後の歯止めです（`0` は停止）。単位が上限に当たった日は、新しいお便りを定型の手渡しだけで読みます。同じ行の音声は全員で共有し、上限を超えると `GET /tts` は 503 を返してブラウザの音声に切り替わります。ただし判定は原子的ではなく同時実行で数回超えることがあり、cookie を捨てる 1 人に全体の上限を使い切られうることも、[SECURITY.md](SECURITY.md) の既知の制限に書いています。
 
 ### public 化前チェックリスト（本人）
 
@@ -186,6 +186,18 @@ curl -s -X POST "$DOCOCA_ORIGIN/admin/prepare" -H "authorization: Bearer $ADMIN_
 ```
 
 `GOOGLE_TTS_SA_JSON` が空のあいだは単位だけ作り、音声は `remaining.audio` に残ります。クラウドの声の 1 日の上限（`CLOUD_TTS_GLOBAL_DAILY_LIMIT`、既定 3000 行/日）に当たると音声はそこで止まり、翌日（日本時間）の Cron が続きを作ります。お便り 1 通で音声はおよそ 8 行（日本語と英語）、単位は 1 言語で Claude を 2〜4 回呼ぶので、大量にシードするならデモの前日に入れるか、その日だけ上限を上げます。
+
+### 単位の見直し（運用）
+
+DJ の語り（単位）は、本人が見直して育てます。管理画面 `/admin/units` で単位を一覧し、良い intro に 👍 を付けると、その言語の 👍 付き・検証済みの intro が新しい順に 5 件、次に作る単位の指示文に「良い例」として入ります（intro だけで、お便りの本文は入れません）。👎（作り直す）はその単位を消して、その場で作り直します（音声も作り直します。別の処理が作っている最中なら 409）。数が多いときは `pnpm eval:units` で Claude に 5 点満点で採点させ、`docs/eval/units-<日付>.md` の低い 10 件と「指示文への提案」を読んで、採る提案だけ手で指示文に入れます。`--remake` を付けると 2 点以下を作り直します。読み方は [docs/eval/units.md](docs/eval/units.md) にあります。
+
+管理画面はブラウザで開きます。ユーザー名 `admin`、パスワードに `ADMIN_TOKEN` を入れる Basic 認証です（トークンを URL に入れないでください）。
+
+```bash
+open "https://dococafm.app/admin/units?lang=ja"          # ユーザー名 admin、パスワード ADMIN_TOKEN
+pnpm eval:units --origin https://dococafm.app --token "$ADMIN_TOKEN" --lang ja --limit 40 [--remake]
+# ANTHROPIC_API_KEY が要る（.dev.vars から読む）。出すのは件数だけで、お便りの本文は出さない
+```
 
 ## 後で
 

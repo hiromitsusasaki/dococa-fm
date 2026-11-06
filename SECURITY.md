@@ -17,7 +17,7 @@
 
 ## 守りの範囲
 
-- `/admin/*` は `ADMIN_TOKEN`（Bearer）が必須です。
+- `/admin/*` は `ADMIN_TOKEN` が必須です。スクリプトは `Authorization: Bearer`、本人がブラウザで開く管理画面（`/admin/units`）は Basic 認証（ユーザー名 `admin`、パスワード `ADMIN_TOKEN`）で送ります。トークンは SHA-256 の値を定数時間で比べます。トークンを URL（クエリや `https://admin:…@` の形）に入れないでください（履歴やログに残るため）。ブラウザは Basic の資格を自動で送り直すので、Basic で来た書き込み（👍 と作り直し）は `Origin` が `PUBLIC_ORIGIN` と一致するか、`Origin` が無ければ `Sec-Fetch-Site: same-origin` のときだけ通し、それ以外は 403 にします（よそのページのフォームから押させないため）。Bearer はブラウザが自動では送らないので、この確かめはしません。
 - 書き込みの `POST` は同一オリジンのみです。`Origin` があれば `PUBLIC_ORIGIN` と一致が必要で、無いときは `Sec-Fetch-Site` が `same-origin` か `none` のときだけ通します（curl などブラウザ以外は通ります。Cookie を持たないため）。
 - レート制限: `POST /letters`、`/settings`、`/auth/signout`、`/episodes`、`/episodes/:id/next`、`/stations/:key/next`、`/start`、`/put/register`、`/takedown`、お便りの通報、`GET /auth/google`、`GET /put?itemId=|url=` は、IP（`CF-Connecting-IP`）とリスナーのそれぞれで 1 分 20 回までです。`GET /tts` はリスナーごとに 1 分 60 回、IP ごとに 120 回です。`POST /listens`（プレイヤーがお便りの行を読み始めるたびに送る）は、ほかと別の枠で、リスナーごとに 1 分 120 回、IP ごとに 240 回です（会場の Wi-Fi で何人も聴いても、`next` やお便りの枠を使い切らないため）。題名検索 `GET /put?q=` は外部の検索 API を最大 4 つ同時に呼ぶので、ほかと別の枠で、サインイン済みのリスナーごとに 1 分 20 回です（匿名の訪問者は検索しないので数えません）。超えると 429 を返します。
 - リクエストの本文は、`/admin/*` 以外 64 KB まで、`/admin/*` は 1 MB までです（超えると 413）。

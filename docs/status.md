@@ -14,9 +14,10 @@
 | Task 6 | 送る画面（並び・お気に入りから選ぶ・検索・ブックマークレット） | 完了（`/put` を 3 枚のパネル（作品を決める・お便りを書く・ブックマークレット）にした。好きなものは `?pick=` でサーバー側でしぼる。`?q=` の題名検索はサインイン済みだけで、`searchByText` が iTunes・Google Books・TMDB と鍵があるときの YouTube を交互に 10 件まで並べ、`searchRateLimit`（リスナーごと 1 分 20 回）で守る。検索結果のリンク先で別の種類に化けないよう、TMDB と Google Books の URL は ID で引き直す。`/api/resolve`・`/api/search` は撤去。スクリーンショットは `docs/screenshots/2026-11-06-put-*.png`） |
 | Task 7 | マイページの並び | 完了（`/me` を 4 枚のパネル（好きなもの・聴いたお便り・届いた反応・公開ラジオ）にした。好きなものは 96px の絵の箱つきの小さなカードのグリッドで、`ItemCard` の `art` で出す。ページ内のサインアウトのフォームは外した（ヘッダに残る）。データと文言は変えていない。スクリーンショットは `docs/screenshots/2026-11-06-me-*.png`） |
 | Task 8 | モデレーションの理由と再判定 | 完了（理由に `obscene`（公序良俗）と `negative`（作品や作り手をけなすのが主体）を足した。悲しい一通・そっけない一通・辛口の一言は通す。`POST /admin/rejudge`（`limit` 1〜100 既定 20、`after` は `letters.id` のカーソル）が公開中の `letter`・`found`・`reply` を id 順に今の基準で判定し直し、断られたものを `rejected` にする。私も・既に `rejected` のものは対象外、判定が投げたものは `skipped` で公開のまま。`pnpm rejudge` が `next` が null になるまで回し、id・理由・件数だけを出す） |
-| Task 9 | 単位のフィードバックの輪（管理画面・良い例・採点スクリプト） | 未着手 |
+| Task 9 | 単位のフィードバックの輪（管理画面・良い例・採点スクリプト） | 完了（`units.liked`（0018）。`/admin/units` で単位を一覧し、👍（`liked` を立てる）と 👎（行を消して、その場で `prepareLetter` で作り直す。別の処理が作っている最中は 409、鍵が無い・その日の上限なら消さずに 503/429）。`adminAuth` は Basic（`admin:ADMIN_TOKEN`）も受け、ページだけ 401 で Basic を求める。Basic の書き込みは `PUBLIC_ORIGIN` からに限る。単位の指示文の末尾に、👍 付き・検証済みの intro を新しい順に 5 件（intro だけ）。単位 1 件の D1 の文は 6 → 7。`pnpm eval:units` が `/admin/units.json` を採点し `docs/eval/units-<日付>.md` を書く。`--remake` で 2 点以下を作り直す） |
 | Task 10 | 締めのドキュメント | 未着手 |
 
+決定: 単位は本人の 👍 と 👎 で育てる（Task 9。👍 した intro が指示文の良い例になり、👎 は作り直す。採点スクリプトの提案は本人が読んで手で反映する）。
 決定: モデレーションの理由は 6 つ（Task 8。`obscene` と `negative` を足した）。悲しい一通・そっけない一通・辛口の一言は引き続き通す（`negative` は、けなす・嫌いと言うのが主体のものだけ）。
 決定: MCP は Phase 4 で外した（事前生成で役目を終えた）。列 `mcp_token` は残して使わない。
 決定: 回は 1 枠（Task 3。リスナーの回は `makeEpisode` の既定 `size: 1`。eval だけは `POST /admin/episodes` に `size: 6` を送り、1 回 6 枠で測る。`selectProgram` の `size` はそのためとテストのために残す）。
@@ -34,6 +35,8 @@ Phase 2（ラジオ中心の体験への作り替え）と Phase 3（単位・�
 
 ### 本人作業
 
+- [ ] `pnpm db:migrate` で 0018（units_liked）を当てる（Phase 4 Task 9）。
+- [ ] 単位の輪を回す（Phase 4 Task 9）: ブラウザで `https://dococafm.app/admin/units?lang=ja` を開き（ユーザー名 `admin`、パスワード `ADMIN_TOKEN`）、良い intro に 👍、だめなものは 👎。数が多ければ `pnpm eval:units --origin https://dococafm.app --token "$ADMIN_TOKEN" --lang ja --limit 40` で採点し、`docs/eval/units-<日付>.md` の提案を読んで採るものを指示文に入れる。英語は `--lang en`。
 - [ ] Phase 4 のデプロイ後、`pnpm rejudge --origin https://dococafm.app --token "$ADMIN_TOKEN"` を一度実行する（Phase 4 Task 8。公開済みのお便りを新しい基準 `obscene`・`negative` で判定し直す。断られたものは `rejected` になる。`skipped` が出たらもう一度実行する）。
 - [ ] 開発機で `pnpm wrangler login` を済ませておく（Phase 4 Task 4 から `pnpm dev` がリモートの Workers AI に繋ぐ。使った分はそのアカウントに課金される。テストは繋がない）。
 - [ ] Workers AI を使えるようにする（Phase 4 Task 4。Workers Paid のアカウントで有効。`wrangler.jsonc` に `ai` バインディング `AI` を入れてある。無くても動き、そのときダイヤルは枠の順を決めるだけ）。
