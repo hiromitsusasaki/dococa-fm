@@ -14,7 +14,7 @@
 | Task 6 | 送る画面（並び・お気に入りから選ぶ・検索・ブックマークレット） | 完了（`/put` を 3 枚のパネル（作品を決める・お便りを書く・ブックマークレット）にした。好きなものは `?pick=` でサーバー側でしぼる。`?q=` の題名検索はサインイン済みだけで、`searchByText` が iTunes・Google Books・TMDB と鍵があるときの YouTube を交互に 10 件まで並べ、`searchRateLimit`（リスナーごと 1 分 20 回）で守る。検索結果のリンク先で別の種類に化けないよう、TMDB と Google Books の URL は ID で引き直す。`/api/resolve`・`/api/search` は撤去。スクリーンショットは `docs/screenshots/2026-11-06-put-*.png`） |
 | Task 7 | マイページの並び | 完了（`/me` を 4 枚のパネル（好きなもの・聴いたお便り・届いた反応・公開ラジオ）にした。好きなものは 96px の絵の箱つきの小さなカードのグリッドで、`ItemCard` の `art` で出す。ページ内のサインアウトのフォームは外した（ヘッダに残る）。データと文言は変えていない。スクリーンショットは `docs/screenshots/2026-11-06-me-*.png`） |
 | Task 8 | モデレーションの理由と再判定 | 完了（理由に `obscene`（公序良俗）と `negative`（作品や作り手をけなすのが主体）を足した。悲しい一通・そっけない一通・辛口の一言は通す。`POST /admin/rejudge`（`limit` 1〜50 既定 20、`after` は `letters.id` のカーソル）が公開中の `letter`・`found`・`reply` を id 順に今の基準で判定し直し、断られたものを `rejected` にする。私も・既に `rejected` のものは対象外、判定が投げたものは `skipped` で公開のまま。`pnpm rejudge` が `next` が null になるまで回し、id・理由・件数だけを出す） |
-| Task 9 | 単位のフィードバックの輪（管理画面・良い例・採点スクリプト） | 完了（`units.liked`（0018）。`/admin/units` で単位を一覧し、👍（`liked` を立てる）と 👎（行を消して、その場で `prepareLetter` で作り直す。別の処理が作っている最中は 409、鍵が無い・その日の上限なら消さずに 503/429。今日作った単位の作り直しは `unit_remakes`（0019）に残して上限に数える）。一覧と JSON は公開中のお便りの単位だけで、未検証の行には 👍 を出さない。`adminAuth` は Basic（`admin:ADMIN_TOKEN`）も受け、ページだけ 401 で Basic を求める。Basic の書き込みは `PUBLIC_ORIGIN` からに限る。単位の指示文の末尾に、👍 付き・検証済みの intro を新しい順に 5 件（intro だけ）。単位 1 件の D1 の文は 6 → 7。`pnpm eval:units` が `/admin/units.json` を採点し `docs/eval/units-<日付>.md` を書く。`--remake` で 2 点以下を作り直す） |
+| Task 9 | 単位のフィードバックの輪（管理画面・良い例・採点スクリプト） | 完了（`units.liked`（0018）。`/admin/units` で単位を一覧し、👍（`liked` を立てる）と 👎（その場で作り直し、新しい単位が検証を通って保存できたときだけ前の単位と置き換えて音声を作る（最終修正）。別の処理が作っている最中は 409、鍵が無い・その日の上限なら 503/429、作れなかったら前の単位を残して 503。今日作った単位の作り直しは `unit_remakes`（0019）に残して上限に数える）。一覧と JSON は公開中のお便りの単位だけで、未検証の行には 👍 を出さない。`adminAuth` は Basic（`admin:ADMIN_TOKEN`）も受け、ページだけ 401 で Basic を求める。Basic の書き込みは `PUBLIC_ORIGIN` からに限る。単位の指示文の末尾に、👍 付き・検証済みの intro を新しい順に 5 件（intro だけ）。単位 1 件の D1 の文は 6 → 7。`pnpm eval:units` が `/admin/units.json` を採点し `docs/eval/units-<日付>.md` を書く。`--remake` で 2 点以下を作り直す） |
 | Task 10 | 締めのドキュメント | 完了（README・SECURITY.md・DESIGN.md・`.dev.vars.example`・`wrangler.jsonc` のコメントをコードに合わせた。「土地」を「お住まい」に直し、マイグレーションは 0001〜0018（Task 9 の修正で 0019 を足した）、レート制限は題名検索の別枠まで書いた） |
 
 決定: 単位は本人の 👍 と 👎 で育てる（Task 9。👍 した intro が指示文の良い例になり、👎 は作り直す。採点スクリプトの提案は本人が読んで手で反映する）。
@@ -28,10 +28,17 @@
 決定: 送るページは URL・好きなもの・題名検索の 3 本（検索はサインイン済みだけ、YouTube は鍵があるとき）。
 決定: Spotify をつなぐのは設定だけ。
 決定: 上限は枠の数（Task 3。`EPISODE_DAILY_LIMIT` 既定 60、`EPISODE_GLOBAL_DAILY_LIMIT` 既定 1800。数えるのは従来どおり回の行で、1 回が 1 枠）。
+決定: 同じ作品を続けて流さない（最終レビュー。どの局でも、そのリスナーのその局の直近の回の作品を避ける。世界と公開局は 10 回、自分のラジオは 30 回と 7 日以内に聴いた作品。候補が尽きたら外すが、直前の回の作品はほかに候補が無いときだけ）。
+決定: 別の端末で再開すると、まだ聴いていない作り置きの回を挨拶なしで頭から流すことがある（最終レビュー M7）。受け入れて直さない。
+決定: 捨てた古い作り置きの要求が遅れて届くと、保存したダイヤルを古い値に戻すことがある（Codex M1）。影響は別の端末のつまみの初期値だけなので、見送る。
+決定: 同じ作品のベクトルを同時に 2 回作りうる（Codex I2）。1 回の費用はごく小さく、上書きも同じ値なので、受け入れた制限として SECURITY.md に書いた。
+決定: ベクトルに作品の説明は入れない（Codex I3 の後半）。作品は説明の欄を持たず、確かな説明を返す検索先も無いので、題名・作者・年・種類で作る（設計書の追記 L を改めた）。
+決定: 題名検索の音楽は iTunes（Codex I4）。Spotify の検索はアプリの client secret が要り、この app は PKCE だけで secret を持たないため。iTunes は鍵なしで曲を引ける（設計書の追記 L を改めた）。
+決定: ラジオ面の最初の回（begin）が答えたら、ダイヤルが回った後でも、聴きに来たお便りの指定を外す（最終修正の item 1 の後半を見送り）。begin の回はダイヤルに関係なく流すので、指定を残すと次の回が同じお便りをもう一度読むため。
 
-## 2026-11-06 Phase 4 完了（最終レビュー前・ローカル）。次は本人作業 → デプロイ → public 化
+## 2026-11-06 Phase 4 完了（最終レビューの修正まで・ローカル）。次は本人作業 → デプロイ → public 化
 
-Phase 4（お住まい・MCP の撤去・ラジオ面のダイヤル・遠さ・ホームのお便り・送る画面・マイページ・モデレーション・単位の見直し・締めのドキュメント）の Task 1〜10 は main にコミット済み（push していない）。全体レビューはこれから。本番は Phase 1 の状態のままなので、下を上から順に済ませる。
+Phase 4（お住まい・MCP の撤去・ラジオ面のダイヤル・遠さ・ホームのお便り・送る画面・マイページ・モデレーション・単位の見直し・締めのドキュメント）の Task 1〜10 と、全体レビュー（Claude と Codex）の修正は main にコミット済み（push していない）。修正は、ホームのお便りのカードが新しい訪問者でも鳴る、同じ作品を続けて流さない、作り直しで前の単位を消さない、等距離の作品を同じ遠さにする、再聴ページで新しい回を作らない、`/episodes` は聴いた回だけ、題名検索の YouTube に 1 日の上限（0020）、ベクトルの埋め戻しで失敗する作品を飛ばす、管理画面の位置を保つ、ほか細かい直し。本番は Phase 1 の状態のままなので、下を上から順に済ませる。
 
 ### 本人作業（Phase 4 のデプロイ。この順）
 
@@ -40,8 +47,8 @@ Phase 4（お住まい・MCP の撤去・ラジオ面のダイヤル・遠さ・
 - [ ] 題名検索の YouTube の 1 日の上限 `YOUTUBE_SEARCH_DAILY_LIMIT`（任意。既定 80 回/日。全員合計で、1 回 100 ユニット）。見つけた声の収集バッチに枠を多く残したいなら下げ、YouTube を検索に使わないなら `0`。`wrangler.jsonc` の `vars` か `pnpm wrangler secret put` で入れる（入れなければ 80）。
 - [ ] Workers AI を使えるようにする（Workers Paid のアカウント。`wrangler.jsonc` に `ai` バインディング `AI` を入れてある。新しい鍵は無い。無くても動き、そのときダイヤルは枠の順を決めるだけ）。開発機は `pnpm wrangler login` を済ませておく（`pnpm dev` がリモートの Workers AI に繋ぐ。使った分はそのアカウントに課金される。テストは繋がない）。
 - [ ] `pnpm run deploy`。
-- [ ] デプロイ後、`POST /admin/prepare`（`Authorization: Bearer $ADMIN_TOKEN`、`{"limit":20}`）を、`remaining`（`vectors`・`units`・`audio`）が全部 0 になるか `failed` が変わらなくなるまで繰り返す。作品のベクトル、日本語と英語の単位、手渡しと音声が揃う。音声の上限（既定 3000 行/日）に当たったら翌日（JST）に続く（Cron は 15 分ごとに 20 件ずつ埋める）。
-- [ ] `ADMIN_TOKEN="$PROD_ADMIN_TOKEN" pnpm rejudge --origin https://dococafm.app`（先に `read -rs PROD_ADMIN_TOKEN`） を一度実行する。公開済みのお便りを新しい基準（`obscene`・`negative`）で判定し直し、断られたものは `rejected` になる。`skipped` が出たらもう一度。
+- [ ] デプロイしたらすぐ `ADMIN_TOKEN="$PROD_ADMIN_TOKEN" pnpm rejudge --origin https://dococafm.app`（先に `read -rs PROD_ADMIN_TOKEN`）を一度実行する。公開済みのお便りを新しい基準（`obscene`・`negative`）で判定し直し、断られたものは `rejected` になる。`skipped` が出たらもう一度。先に済ませるのは、次の `/admin/prepare`（と 15 分ごとの Cron）が、断られるお便りの単位と音声を作らないため。
+- [ ] rejudge のあと、`POST /admin/prepare`（`Authorization: Bearer $ADMIN_TOKEN`、`{"limit":20}`）を、`remaining`（`vectors`・`units`・`audio`）が全部 0 になるか `failed` が変わらなくなるまで繰り返す。作品のベクトル、日本語と英語の単位、手渡しと音声が揃う。`AI` バインディング（Workers AI）が無いあいだは `remaining.vectors` は作品の数のまま減らないので、そのときは `failed` が変わらなくなったところで止める。音声の上限（既定 3000 行/日）に当たったら翌日（JST）に続く（Cron は 15 分ごとに 20 件ずつ埋める）。
 - [ ] 最初の `ADMIN_TOKEN="$PROD_ADMIN_TOKEN" pnpm eval:units --origin https://dococafm.app --lang ja --limit 40`。`docs/eval/units-<日付>.md` の低い 10 件と「指示文への提案」を読み、採るものを指示文に入れる。英語は `--lang en`。良い intro は `https://dococafm.app/admin/units?lang=ja`（ユーザー名 `admin`、パスワード `ADMIN_TOKEN`）で 👍、だめなものは 👎。
 - [ ] 画面を確かめる: ホームの「いま届いているお便り」のカード、ラジオの面のセレンディピティ（回すと次の回から効く）、送る画面（`/put`）の題名検索、マイページ（`/me`）。ライトとダーク、PC 幅とスマホ幅。
 

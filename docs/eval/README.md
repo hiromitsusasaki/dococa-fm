@@ -7,7 +7,7 @@
 ## 走らせ方
 
 1. Worker を起こす（`pnpm dev`、またはデプロイ先）。`ADMIN_TOKEN` と `ANTHROPIC_API_KEY` を入れておく。
-2. 1 日の上限（1 リスナー 10 回）に当たるので、eval のあいだだけ `EPISODE_DAILY_LIMIT=25` のように上げる（ローカルは `.dev.vars`、本番は `wrangler secret put EPISODE_DAILY_LIMIT`）。終わったら戻す。
+2. 1 日の上限は 1 リスナー既定 60 枠（`EPISODE_DAILY_LIMIT`。数えるのは回の行で、1 回が 1 枠）。eval は 1 回ごとに 6 作品（`size: 6`）を頼みますが、数えるのは 1 回 = 1 枠なので、20 回なら既定のままで足ります。その日そのリスナーで聴いた分と合わせて 60 を超えそうなときだけ、eval のあいだ上げる（ローカルは `.dev.vars`、本番は `wrangler secret put EPISODE_DAILY_LIMIT`）。終わったら戻す。
 3. 本人のリスナー ID を `/settings` の末尾の「リスナー ID」の行で確かめる。
 
 ```bash
