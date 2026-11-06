@@ -96,11 +96,9 @@ describe("rate limit", () => {
     expect((await post("203.0.113.2")).status).not.toBe(429);
   });
 
-  it("shares one IP bucket over letters, start, episodes and the resolvers", async () => {
+  it("shares one IP bucket over letters, start, episodes and the resolver", async () => {
     for (let i = 0; i < 20; i++) await post("203.0.113.3", ["/letters", "/start", "/episodes"][i % 3]);
     expect((await post("203.0.113.3", "/episodes")).status).toBe(429);
-    const resolve = await app.request("/api/resolve?url=x", { headers: { "cf-connecting-ip": "203.0.113.3" } }, e);
-    expect(resolve.status).toBe(429);
     const put = await app.request("/put?itemId=x", { headers: { "cf-connecting-ip": "203.0.113.3" } }, e);
     expect(put.status).toBe(429);
   });
@@ -266,6 +264,13 @@ describe("session exemptions", () => {
       expect(res.headers.get("set-cookie"), path).toBeNull();
     }
     expect((await env.DB.prepare("SELECT COUNT(*) AS n FROM listeners").first<{ n: number }>())!.n).toBe(0);
+  });
+});
+
+describe("the temporary /api routes", () => {
+  it("are gone", async () => {
+    expect(app.routes.some((r) => r.path.startsWith("/api"))).toBe(false);
+    for (const path of ["/api/search?q=x", "/api/resolve?url=https%3A%2F%2Fexample.com%2F"]) expect((await app.request(path, {}, e)).status, path).toBe(404);
   });
 });
 

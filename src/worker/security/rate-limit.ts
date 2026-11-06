@@ -113,8 +113,12 @@ export const listenerRateLimit = limiter((c) => {
 export const TTS_LISTENER_LIMIT_PER_WINDOW = 60;
 export const TTS_IP_LIMIT_PER_WINDOW = 120;
 
-/** A route's own buckets, apart from the shared ones, answering 429 in JSON. */
-function routeLimiter(perWindow: number, keyOf: (c: Context<AppEnv>) => string | null): MiddlewareHandler<AppEnv> {
+/** A route's own buckets, apart from the shared ones, answering 429 in JSON unless the route renders its own page. */
+function routeLimiter(
+  perWindow: number,
+  keyOf: (c: Context<AppEnv>) => string | null,
+  handler: (c: Context<AppEnv>) => Response | Promise<Response> = (c) => c.json({ error: "rate_limited" }, 429),
+): MiddlewareHandler<AppEnv> {
   return rateLimiter<AppEnv>({
     windowMs: WINDOW_MS,
     limit: (c) => limitOf(c) * (perWindow / LIMIT_PER_WINDOW),
@@ -122,7 +126,7 @@ function routeLimiter(perWindow: number, keyOf: (c: Context<AppEnv>) => string |
     store: new WindowStore(),
     keyGenerator: (c) => keyOf(c) ?? "",
     skip: (c) => keyOf(c) === null,
-    handler: (c) => c.json({ error: "rate_limited" }, 429),
+    handler,
   });
 }
 
@@ -151,3 +155,20 @@ export const listensListenerRateLimit = routeLimiter(LISTENS_LISTENER_LIMIT_PER_
   const listener = c.get("listener");
   return listener ? `listener:${listener.id}` : null;
 });
+
+/**
+ * `GET /put?q=` asks up to four outside search APIs at once: its own bucket, 20 a minute per signed-in listener
+ * (scaled with RATE_LIMIT_PER_MINUTE). Anonymous visitors and requests without `q` are not counted (they search nothing).
+ * Made once by the route, which renders its own 429 page.
+ */
+export const SEARCH_LISTENER_LIMIT_PER_WINDOW = 20;
+
+export const searchRateLimit = (onLimited: (c: Context<AppEnv>) => Response | Promise<Response>): MiddlewareHandler<AppEnv> =>
+  routeLimiter(
+    SEARCH_LISTENER_LIMIT_PER_WINDOW,
+    (c) => {
+      const listener = c.get("listener");
+      return listener && listener.googleSub !== null && c.req.query("q")?.trim() ? `listener:${listener.id}` : null;
+    },
+    onLimited,
+  );

@@ -307,6 +307,22 @@ describe("resolveUrl", () => {
   });
 });
 
+describe("resolveUrl for a search result's own link", () => {
+  it("tmdb: looks the film up by id, so the chosen film stays a film", async () => {
+    const { calls } = stubFetch([["https://api.themoviedb.org/3/movie/496243", () => json({ id: 496243, title: "パラサイト 半地下の家族", release_date: "2019-05-30" })]]);
+    const draft = await resolveUrl("https://www.themoviedb.org/movie/496243", testEnv);
+    expect(draft).toMatchObject({ kind: "film", title: "パラサイト 半地下の家族", year: 2019, externalIds: { tmdb: "496243" } });
+    expect(calls()).toEqual(["https://api.themoviedb.org/3/movie/496243?language=ja-JP"]);
+  });
+
+  it("google books: looks the volume up by id, so the chosen book stays a book", async () => {
+    const { calls } = stubFetch([["https://www.googleapis.com/books/v1/volumes/abcDEF_1", () => json(volume("abcDEF_1", "こころ"))]]);
+    const draft = await resolveUrl("https://books.google.co.jp/books?id=abcDEF_1&dq=x&hl=&source=gbs_api", testEnv);
+    expect(draft).toMatchObject({ kind: "book", title: "こころ", creator: "夏目漱石", externalIds: { "google-books": "abcDEF_1" } });
+    expect(calls()).toEqual(["https://www.googleapis.com/books/v1/volumes/abcDEF_1"]);
+  });
+});
+
 describe("searchByText", () => {
   const routes: Array<[string, () => Response]> = [
     ["https://itunes.apple.com/search", () => json({ results: [1, 2, 3].map((i) => itunesTrack(i, `Song ${i}`)) })],
@@ -322,9 +338,20 @@ describe("searchByText", () => {
     expect(calls().map((u) => new URL(u).host)).toEqual(["itunes.apple.com", "www.googleapis.com", "api.themoviedb.org"]);
   });
 
-  it("any: itunes, then books, then tmdb, concatenated and cut to 5", async () => {
+  it("any: takes one from itunes, books and tmdb in turn, cut to the limit (5 by default)", async () => {
     stubFetch(routes);
-    expect((await searchByText("q", "any", testEnv)).map((d) => d.title)).toEqual(["Song 1", "Song 2", "Song 3", "Book A", "Book B"]);
+    expect((await searchByText("q", "any", testEnv)).map((d) => d.title)).toEqual(["Song 1", "Book A", "Film 7", "Song 2", "Book B"]);
+    expect((await searchByText("q", "any", testEnv, 10)).map((d) => d.title)).toEqual(["Song 1", "Book A", "Film 7", "Song 2", "Book B", "Song 3", "Book C"]);
+  });
+
+  it("any asks YouTube only when YOUTUBE_API_KEY is set, and a music search never does", async () => {
+    const youtube: [string, () => Response] = ["https://www.googleapis.com/youtube/", () => json({ items: [{ id: { videoId: "v1" }, snippet: { title: "Video 1" } }] })];
+    const { calls } = stubFetch([youtube, ...routes]);
+    expect((await searchByText("q", "any", testEnv, 10)).map((d) => d.title)).not.toContain("Video 1");
+    expect(calls().some((u) => u.includes("/youtube/"))).toBe(false);
+    const keyed = { ...testEnv, YOUTUBE_API_KEY: "YT" } as Env;
+    expect((await searchByText("q", "any", keyed, 10)).map((d) => d.title)).toEqual(["Song 1", "Book A", "Film 7", "Video 1", "Song 2", "Book B", "Song 3", "Book C"]);
+    expect((await searchByText("q", "music", keyed)).map((d) => d.title)).toEqual(["Song 1", "Song 2", "Song 3"]);
   });
 
   it("film search and any skip tmdb without a key, and a failing provider does not sink the others", async () => {
@@ -336,7 +363,7 @@ describe("searchByText", () => {
       ...routes.slice(1),
     ]);
     const any = await searchByText("q", "any", testEnv);
-    expect(any.map((d) => d.title)).toEqual(["Book A", "Book B", "Book C", "Film 7"]);
+    expect(any.map((d) => d.title)).toEqual(["Book A", "Film 7", "Book B", "Book C"]);
   });
 });
 

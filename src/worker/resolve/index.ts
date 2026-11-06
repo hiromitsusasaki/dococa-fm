@@ -1,17 +1,18 @@
 import { findItemsByExternalIds, insertItems, newItem } from "../db/items";
 import type { Env } from "../env";
 import type { Item, ItemKind } from "../types";
-import { searchBooks } from "./books";
+import { lookupBook, searchBooks } from "./books";
 import { lookupItunes, searchItunes } from "./itunes";
 import { fetchOembed } from "./oembed";
 import { cleanOgpTitle, fetchOgp } from "./ogp";
-import { searchTmdb } from "./tmdb";
+import { lookupTmdb, searchTmdb } from "./tmdb";
 import { isFetchableUrl, parseKnownUrl, type ParsedUrl, type Provider } from "./url";
+import { searchYouTube } from "./youtube";
 
 export type ItemDraft = Omit<Item, "id" | "createdAt">;
 
 const MAX_RESULTS = 5;
-const FILM_PROVIDERS: ReadonlySet<string> = new Set<Provider>(["filmarks", "letterboxd", "netflix"]);
+const FILM_PROVIDERS: ReadonlySet<string> = new Set<Provider>(["filmarks", "letterboxd", "netflix", "tmdb"]);
 const OUT_LINK_KEY: Record<Provider, string> = {
   spotify: "spotify",
   youtube: "youtube",
@@ -20,6 +21,8 @@ const OUT_LINK_KEY: Record<Provider, string> = {
   filmarks: "filmarks",
   letterboxd: "letterboxd",
   netflix: "netflix",
+  tmdb: "tmdb",
+  "google-books": "google-books",
 };
 
 /** One provider failing (network, timeout) must not take the others down. */
@@ -37,11 +40,20 @@ const searchers = (q: string, env: Env): Record<ItemKind, () => Promise<ItemDraf
   film: () => searchTmdb(q, env.TMDB_API_KEY),
 });
 
-export async function searchByText(q: string, kind: ItemKind | "any", env: Env): Promise<ItemDraft[]> {
+/** Takes the first of each list in turn, then the second of each, so no one provider fills the page. */
+function interleave<T>(lists: T[][]): T[] {
+  const out: T[] = [];
+  for (let i = 0; lists.some((l) => i < l.length); i++) for (const l of lists) if (i < l.length) out.push(l[i]!);
+  return out;
+}
+
+/** "any" also asks YouTube when a key is set. The first result is always the best guess of the first provider that has one. */
+export async function searchByText(q: string, kind: ItemKind | "any", env: Env, limit = MAX_RESULTS): Promise<ItemDraft[]> {
   const by = searchers(q, env);
-  if (kind !== "any") return (await orEmpty(by[kind]())).slice(0, MAX_RESULTS);
-  const results = await Promise.all([by.music, by.book, by.film].map((search) => orEmpty(search())));
-  return results.flat().slice(0, MAX_RESULTS);
+  if (kind !== "any") return (await orEmpty(by[kind]())).slice(0, limit);
+  const youtube = env.YOUTUBE_API_KEY ? [() => searchYouTube(q, env.YOUTUBE_API_KEY)] : [];
+  const results = await Promise.all([by.music, by.book, by.film, ...youtube].map((search) => orEmpty(search())));
+  return interleave(results).slice(0, limit);
 }
 
 async function orNull<T>(op: Promise<T>): Promise<T | null> {
@@ -135,6 +147,14 @@ async function resolveKnown(url: string, env: Env): Promise<ItemDraft | null> {
   const parsed = parseKnownUrl(url);
   if ((parsed.provider === "spotify" || parsed.provider === "youtube") && parsed.id) {
     return resolveOembed(parsed.provider, parsed, url);
+  }
+  if (parsed.provider === "tmdb" && parsed.id) {
+    const film = await orNull(lookupTmdb(parsed.id, env.TMDB_API_KEY));
+    if (film) return withOrigin(film, parsed, url);
+  }
+  if (parsed.provider === "google-books" && parsed.id) {
+    const book = await orNull(lookupBook(parsed.id, env.GOOGLE_BOOKS_API_KEY));
+    if (book) return withOrigin(book, parsed, url);
   }
   if (parsed.provider === "apple-music" && parsed.id) {
     const track = await orNull(lookupItunes(parsed.id));

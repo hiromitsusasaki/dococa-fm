@@ -15,6 +15,10 @@ describe("parseKnownUrl", () => {
     ["https://letterboxd.com/film/parasite-2019/", { provider: "letterboxd", id: "parasite-2019" }],
     ["https://www.netflix.com/title/81091393", { provider: "netflix", id: "81091393" }],
     ["https://www.netflix.com/jp/title/81091393", { provider: "netflix", id: "81091393" }],
+    ["https://www.themoviedb.org/movie/496243", { provider: "tmdb", id: "496243" }],
+    ["https://www.themoviedb.org/movie/496243-parasite", { provider: "tmdb", id: "496243" }],
+    ["https://books.google.co.jp/books?id=abcDEF_1&dq=x", { provider: "google-books", id: "abcDEF_1" }],
+    ["https://books.google.com/books?id=zyx-9", { provider: "google-books", id: "zyx-9" }],
   ])("parses %s", (url, expected) => {
     expect(parseKnownUrl(url)).toEqual(expected);
   });

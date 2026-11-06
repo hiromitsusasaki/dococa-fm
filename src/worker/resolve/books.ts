@@ -43,3 +43,10 @@ export async function searchBooks(text: string, key?: string): Promise<ItemDraft
   );
   return (body?.items ?? []).flatMap((v) => toDraft(v) ?? []);
 }
+
+/** One volume by its Google Books id (a search result's link comes back here). */
+export async function lookupBook(id: string, key?: string): Promise<ItemDraft | null> {
+  if (!/^[\w-]+$/.test(id)) return null;
+  const body = await fetchJson<Volume>(`https://www.googleapis.com/books/v1/volumes/${id}`, key ? { "X-Goog-Api-Key": key } : undefined);
+  return body ? toDraft(body) : null;
+}

@@ -6,7 +6,6 @@ import { prepareBatch } from "./program/prepare";
 import { admin } from "./routes/admin";
 import { auth } from "./routes/auth";
 import { authGoogle } from "./routes/auth-google";
-import { api } from "./routes/api";
 import { episodes } from "./routes/episodes";
 import { home } from "./routes/home";
 import { items } from "./routes/items";
@@ -41,7 +40,6 @@ app.use("*", listenerRateLimit);
 app.get("/healthz", (c) => c.json({ ok: true }));
 
 app.route("/", admin);
-app.route("/", api);
 app.route("/", auth);
 app.route("/", authGoogle);
 app.route("/", settings);

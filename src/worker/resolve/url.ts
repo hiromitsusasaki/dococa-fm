@@ -1,4 +1,4 @@
-export type Provider = "spotify" | "youtube" | "apple-music" | "amazon" | "filmarks" | "letterboxd" | "netflix";
+export type Provider = "spotify" | "youtube" | "apple-music" | "amazon" | "filmarks" | "letterboxd" | "netflix" | "tmdb" | "google-books";
 export type ParsedUrl = { provider: Provider | "unknown"; id?: string };
 
 const host = (h: string, domain: string) => h === domain || h.endsWith(`.${domain}`);
@@ -37,6 +37,12 @@ export function parseKnownUrl(raw: string): ParsedUrl {
   } else if (host(h, "netflix.com")) {
     const m = /\/title\/(\d+)/.exec(path);
     if (m) return { provider: "netflix", id: m[1] };
+  } else if (host(h, "themoviedb.org")) {
+    const m = /^\/movie\/(\d+)/.exec(path);
+    if (m) return { provider: "tmdb", id: m[1] };
+  } else if (/^books\.google\.[a-z.]+$/.test(h)) {
+    const id = u.searchParams.get("id");
+    if (id && /^[\w-]+$/.test(id)) return { provider: "google-books", id };
   }
   return { provider: "unknown" };
 }
