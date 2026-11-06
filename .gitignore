@@ -11,3 +11,6 @@ dist/
 .env
 .env.*
 .playwright-cli/
+
+# playwright MCP の出力（スクリーンショット・スナップショット）
+.playwright-mcp/
