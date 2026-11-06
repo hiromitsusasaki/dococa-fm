@@ -39,7 +39,10 @@ async function run(env: Env, db: D1Database, letterId: string, lang: Unit["lang"
       out.unitHalted = true;
       return out;
     }
-    unit = await makeUnit(env, db, letter, item, lang);
+    const made = await makeUnit(env, db, letter, item, lang);
+    // Another run is making this unit: skipped, neither a failure nor a miss.
+    if (made === "busy") return out;
+    unit = made;
     if (!unit) {
       out.failed++;
       out.unitFailed = true;

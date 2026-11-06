@@ -47,6 +47,15 @@ describe("units", () => {
     expect((await getUnits(env.DB, [a.id], "ja")).get(a.id)).toMatchObject({ intro: "二度目", verified: true });
   });
 
+  it("keeps a verified unit over a later unverified or verified upsert", async () => {
+    const item = await insertItem(env.DB, itemDraft());
+    const a = await insertLetter(env.DB, letterDraft(item.id));
+    await upsertUnit(env.DB, unit(a.id, { audioReady: true }));
+    await upsertUnit(env.DB, unit(a.id, { intro: "あとから", verified: false }));
+    await upsertUnit(env.DB, unit(a.id, { intro: "もう一度", verified: true }));
+    expect((await getUnits(env.DB, [a.id], "ja")).get(a.id)).toMatchObject({ intro: "静かな一曲です。", verified: true, audioReady: true });
+  });
+
   it("reads more letter ids than one statement binds", async () => {
     const item = await insertItem(env.DB, itemDraft());
     const a = await insertLetter(env.DB, letterDraft(item.id));

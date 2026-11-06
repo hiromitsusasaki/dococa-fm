@@ -31,11 +31,20 @@ export async function getUnits(db: D1Database, letterIds: Iterable<string>, lang
   return out;
 }
 
-/** Stores the unit, replacing any earlier one for the same letter and language. One statement. */
+/**
+ * Stores the unit, replacing an earlier unverified one for the same letter and language. A verified unit is
+ * final: a later write for its key is dropped, so its clips are never re-made. Returns the unit as written;
+ * read the row back to learn what is stored. One statement.
+ */
 export async function upsertUnit(db: D1Database, u: Omit<Unit, "createdAt"> & { createdAt?: string }): Promise<Unit> {
   const unit: Unit = { ...u, createdAt: u.createdAt ?? new Date().toISOString() };
   await db
-    .prepare("INSERT OR REPLACE INTO units (letter_id, lang, intro, after, verified, audio_ready, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)")
+    .prepare(
+      `INSERT INTO units (letter_id, lang, intro, after, verified, audio_ready, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(letter_id, lang) DO UPDATE SET intro = excluded.intro, after = excluded.after, verified = excluded.verified,
+         audio_ready = excluded.audio_ready, created_at = excluded.created_at
+       WHERE units.verified = 0`,
+    )
     .bind(unit.letterId, unit.lang, unit.intro, unit.after, unit.verified ? 1 : 0, unit.audioReady ? 1 : 0, unit.createdAt)
     .run();
   return unit;

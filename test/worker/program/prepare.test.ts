@@ -8,6 +8,7 @@ import { prepareBatch, prepareLetter } from "../../../src/worker/program/prepare
 import type { Item, Letter } from "../../../src/worker/types";
 import { stubAnthropic, toolUse } from "../../helpers/anthropic";
 import { resetBucket } from "../../helpers/bucket";
+import { claimTts } from "../../../src/worker/tts/claim";
 import { resetDb } from "../../helpers/db";
 import { json } from "../../helpers/fetch";
 import { makeServiceAccount, primeToken } from "../../helpers/service-account";
@@ -127,7 +128,7 @@ describe("prepareLetter", () => {
     expect(logged).not.toContain("D1_ERROR");
   });
 
-  it("does not flag a unit that was replaced while its clips were made", async () => {
+  it("keeps a verified unit that another run tries to replace while its clips are made, and flags it", async () => {
     const { letters } = await seed();
     const id = letters[0]!.id;
     let calls = 0;
@@ -136,10 +137,16 @@ describe("prepareLetter", () => {
       return json({ audioContent: audio });
     });
     await prepareLetter(keyed, env.DB, id, "ja");
-    expect(await unitOf(id)).toMatchObject({ intro: "別の紹介です。", audioReady: false });
-    // The next run voices the new text and then flags it.
-    await prepareLetter(keyed, env.DB, id, "ja");
-    expect(await unitOf(id)).toMatchObject({ audioReady: true });
+    expect(await unitOf(id)).toMatchObject({ intro: "静かな一曲です。", audioReady: true });
+  });
+
+  it("skips a letter whose unit another run is making, without counting a failure", async () => {
+    const { letters } = await seed();
+    const id = letters[0]!.id;
+    await claimTts(env.DB, `unit:${id}:ja`);
+    expect(await prepareLetter(keyed, env.DB, id, "ja")).toEqual({ units: 0, audio: 0, failed: 0 });
+    expect(create).not.toHaveBeenCalled();
+    expect(google).not.toHaveBeenCalled();
   });
 });
 
@@ -199,6 +206,14 @@ describe("prepareBatch", () => {
     const r = await prepareBatch({ ...keyed, CLOUD_TTS_GLOBAL_DAILY_LIMIT: "2" } as Env, env.DB, 20);
     expect(r).toMatchObject({ units: 4, audio: 2, failed: 0, remaining: { units: { ja: 0, en: 0 }, audio: { ja: 2, en: 2 } } });
     expect(google).toHaveBeenCalledTimes(2);
+  });
+
+  it("skips busy letters without counting them toward the outage stop", async () => {
+    const { letters } = await seed(5);
+    for (const l of letters.slice(0, 4)) await claimTts(env.DB, `unit:${l.id}:ja`);
+    const r = await prepareBatch(keylessTts, env.DB, 20);
+    expect(r).toMatchObject({ units: 6, failed: 0, remaining: { units: { ja: 4, en: 0 } } });
+    expect(await unitOf(letters[4]!.id)).toBeDefined();
   });
 
   it("halts the unit phase at UNIT_DAILY_LIMIT without counting a failure, and still voices stored units", async () => {

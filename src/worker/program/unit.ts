@@ -2,6 +2,7 @@ import { claude, hasClaude, model } from "../claude/client";
 import { countUnitsToday, getUnits, upsertUnit } from "../db/units";
 import type { Env } from "../env";
 import { limitFrom } from "../limits";
+import { claimTts, releaseTts } from "../tts/claim";
 import type { Item, Letter, Segment, Unit } from "../types";
 import { letterLines, type UnitLines } from "./compose";
 import { DJ_SYSTEM, DJ_SYSTEM_EN, letterTag, retryNote, workTag } from "./script";
@@ -129,13 +130,25 @@ function verifyUnit(lines: UnitLines, letter: Letter, item: Item, lang: Unit["la
 }
 
 /**
- * write → unitSegment → verifyEpisode; one retry with the retryable details; stores verified 0/1. Null when
- * Claude is unavailable (no key, an API error, or replies out of shape) or today's units are at
- * `UNIT_DAILY_LIMIT`: nothing is stored, so a later run makes it.
+ * write → unitSegment → verifyEpisode; one retry with the retryable details; stores verified 0/1 and returns
+ * the stored row (a verified unit already stored is kept over the new lines). Null when Claude is unavailable
+ * (no key, an API error, or replies out of shape) or today's units are at `UNIT_DAILY_LIMIT`: nothing is
+ * stored, so a later run makes it. `"busy"` when another run holds the claim on `unit:<letterId>:<lang>`
+ * (`tts_claims`, same TTL): one maker per unit.
  */
-export async function makeUnit(env: Env, db: D1Database, letter: Letter, item: Item, lang: Unit["lang"]): Promise<Unit | null> {
+export async function makeUnit(env: Env, db: D1Database, letter: Letter, item: Item, lang: Unit["lang"]): Promise<Unit | null | "busy"> {
   if (!hasClaude(env)) return null;
   if (await unitCapReached(env, db)) return null;
+  const claim = `unit:${letter.id}:${lang}`;
+  if (!(await claimTts(db, claim))) return "busy";
+  try {
+    return await writeAndStore(env, db, letter, item, lang);
+  } finally {
+    await releaseTts(db, claim);
+  }
+}
+
+async function writeAndStore(env: Env, db: D1Database, letter: Letter, item: Item, lang: Unit["lang"]): Promise<Unit | null> {
   let lines: UnitLines;
   let ok: boolean;
   try {
@@ -152,16 +165,18 @@ export async function makeUnit(env: Env, db: D1Database, letter: Letter, item: I
     }
     ok = check.ok;
   } catch (e) {
+    // The name and status only: an API error's message can echo the request, which carries the letter.
     const status = (e as { status?: unknown } | null)?.status;
     console.warn(
       "[dococa] dj unit unavailable; reading the letter with fixed lines",
       typeof status === "number" ? `status ${status}` : "no status",
-      e instanceof Error ? e.message : "unknown error",
+      e instanceof Error ? e.name : "unknown error",
     );
     return null;
   }
   try {
-    return await upsertUnit(db, { letterId: letter.id, lang, intro: lines.intro, after: lines.after, verified: ok, audioReady: false });
+    await upsertUnit(db, { letterId: letter.id, lang, intro: lines.intro, after: lines.after, verified: ok, audioReady: false });
+    return (await getUnits(db, [letter.id], lang)).get(letter.id) ?? null;
   } catch (e) {
     // The name only: a D1 error message can quote the statement and its bound values, which carry the lines.
     console.warn("[dococa] dj unit could not be stored", e instanceof Error ? e.name : "unknown error");
@@ -171,7 +186,8 @@ export async function makeUnit(env: Env, db: D1Database, letter: Letter, item: I
 
 /**
  * Stored units for the letters, making the missing ones (concurrency 3) when `hasClaude(env)`. Once Claude
- * turns out unavailable, the rest are not tried in this run. Reactions have no unit and are skipped.
+ * turns out unavailable, the rest are not tried in this run. A letter another run is making a unit for is
+ * read again after the batch, and goes without one if it is still missing. Reactions have no unit and are skipped.
  */
 export async function ensureUnits(env: Env, db: D1Database, letters: Letter[], items: ReadonlyMap<string, Item>, lang: Unit["lang"]): Promise<Map<string, Unit>> {
   const units = await getUnits(db, letters.map((l) => l.id), lang);
@@ -183,14 +199,17 @@ export async function ensureUnits(env: Env, db: D1Database, letters: Letter[], i
   }
   let unavailable = false;
   let next = 0;
+  const busy: string[] = [];
   const worker = async () => {
     while (!unavailable && next < missing.length) {
       const l = missing[next++]!;
       const unit = await makeUnit(env, db, l, items.get(l.itemId)!, lang);
-      if (unit) units.set(l.id, unit);
+      if (unit === "busy") busy.push(l.id);
+      else if (unit) units.set(l.id, unit);
       else unavailable = true;
     }
   };
   await Promise.all(Array.from({ length: Math.min(CONCURRENCY, missing.length) }, worker));
+  if (busy.length > 0) for (const [id, u] of await getUnits(db, busy, lang)) units.set(id, u);
   return units;
 }

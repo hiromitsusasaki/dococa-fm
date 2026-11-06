@@ -7,6 +7,7 @@ import type { Env } from "../../../src/worker/env";
 import { t } from "../../../src/worker/i18n/t";
 import { DJ_SYSTEM_EN } from "../../../src/worker/program/script";
 import { ensureUnits, makeUnit, unitSegment, writeUnitLines } from "../../../src/worker/program/unit";
+import { claimTts, releaseTts } from "../../../src/worker/tts/claim";
 import type { Item, Letter } from "../../../src/worker/types";
 import { expectInstructedTool, stubAnthropic, toolUse } from "../../helpers/anthropic";
 import { resetDb } from "../../helpers/db";
@@ -245,6 +246,41 @@ describe("makeUnit", () => {
   });
 });
 
+describe("makeUnit with one maker per unit", () => {
+  it("answers busy without calling Claude while another run holds the unit's claim, and works once it is released", async () => {
+    const f = await stored();
+    create.mockResolvedValue(lines());
+    await claimTts(env.DB, `unit:${f.letter.id}:ja`);
+    expect(await makeUnit(keyed, env.DB, f.letter, f.item, "ja")).toBe("busy");
+    expect(create).not.toHaveBeenCalled();
+    // The claim is per language.
+    expect(await makeUnit(keyed, env.DB, f.letter, f.item, "en")).toMatchObject({ lang: "en" });
+    await releaseTts(env.DB, `unit:${f.letter.id}:ja`);
+    expect(await makeUnit(keyed, env.DB, f.letter, f.item, "ja")).toMatchObject({ verified: true });
+    expect(await env.DB.prepare("SELECT COUNT(*) AS n FROM tts_claims").first<{ n: number }>()).toEqual({ n: 0 });
+  });
+
+  it("returns the stored unit: a verified one already stored is kept over new lines", async () => {
+    const f = await stored();
+    await upsertUnit(env.DB, { letterId: f.letter.id, lang: "ja", intro: "先に検証済み。", after: "残ります。", verified: true, audioReady: true });
+    create.mockResolvedValue(lines("お聴きください。"));
+    const u = await makeUnit(keyed, env.DB, f.letter, f.item, "ja");
+    expect(u).toMatchObject({ intro: "先に検証済み。", verified: true, audioReady: true });
+    expect((await getUnits(env.DB, [f.letter.id], "ja")).get(f.letter.id)).toEqual(u);
+  });
+
+  it("logs an API failure by name and status only, never its message", async () => {
+    const f = await stored();
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    create.mockRejectedValue(new Error("upstream echoed 雨の日に聴きました。"));
+    expect(await makeUnit(keyed, env.DB, f.letter, f.item, "ja")).toBeNull();
+    const logged = warn.mock.calls.map((c) => c.join(" ")).join("\n");
+    expect(logged).toContain("dj unit unavailable");
+    expect(logged).not.toContain("雨の日");
+    expect(logged).not.toContain("upstream echoed");
+  });
+});
+
 describe("makeUnit when the unit cannot be stored", () => {
   it("returns null and logs its own message, name only", async () => {
     const f = await stored();
@@ -252,9 +288,10 @@ describe("makeUnit when the unit cannot be stored", () => {
     // A D1 error can quote the statement with its values, so the message here carries the intro. Reads still work.
     const broken = {
       prepare: (sql: string) => {
-        if (sql.startsWith("INSERT")) throw new Error("D1_ERROR: INSERT INTO units ... 静かな一曲です。");
+        if (sql.startsWith("INSERT INTO units")) throw new Error("D1_ERROR: INSERT INTO units ... 静かな一曲です。");
         return env.DB.prepare(sql);
       },
+      batch: (stmts: D1PreparedStatement[]) => env.DB.batch(stmts),
     } as unknown as D1Database;
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     expect(await makeUnit(keyed, broken, f.letter, f.item, "ja")).toBeNull();
@@ -304,6 +341,24 @@ describe("ensureUnits", () => {
     expect(create).toHaveBeenCalledTimes(7);
     expect(peak).toBeLessThanOrEqual(3);
     expect(peak).toBeGreaterThan(1);
+  });
+
+  it("reads a unit another run is making after the batch, and goes on without one that is still missing", async () => {
+    const f = await stored();
+    const other = await insertLetter(env.DB, letterDraft(f.item.id, { body: "二通目。", bodyJa: "二通目。" }));
+    const third = await insertLetter(env.DB, letterDraft(f.item.id, { body: "三通目。", bodyJa: "三通目。" }));
+    await claimTts(env.DB, `unit:${other.id}:ja`);
+    await claimTts(env.DB, `unit:${third.id}:ja`);
+    create.mockImplementation(async () => {
+      // The other run stores its unit for `other` while this batch is under way.
+      await upsertUnit(env.DB, { letterId: other.id, lang: "ja", intro: "別の回が作った。", after: "感想。", verified: true, audioReady: false });
+      return lines();
+    });
+    const units = await ensureUnits(keyed, env.DB, [f.letter, other, third], new Map([[f.item.id, f.item]]), "ja");
+    expect(create).toHaveBeenCalledTimes(1);
+    expect(units.get(f.letter.id)).toMatchObject({ verified: true });
+    expect(units.get(other.id)).toMatchObject({ intro: "別の回が作った。" });
+    expect(units.has(third.id)).toBe(false);
   });
 
   it("stops asking once Claude is unavailable", async () => {
