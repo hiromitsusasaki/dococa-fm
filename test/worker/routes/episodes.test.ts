@@ -372,12 +372,14 @@ describe("POST /episodes/:id/next", () => {
 
   it("answers 429 json at the limit and 503 json when unverifiable", async () => {
     const cookie = await newSession();
-    const { me, near, mine } = await seed(cookie);
+    const { me, near, far1, far2, mine } = await seed(cookie);
     const first = locationId(await postForm("/episodes", cookie, {}));
     const limited = await post(`/episodes/${first}/next`, cookie, { ...env, EPISODE_DAILY_LIMIT: "1" });
     expect(limited.status).toBe(429);
     expect(await limited.json()).toEqual({ error: "limit" });
     await insertLetter(env.DB, letterDraft(near.id, { kind: "watashimo", listenerId: null, radioName: me, place: "", parentLetterId: mine.id, body: "私も", bodyJa: "私も" }));
+    // The near work just aired, so it airs again only as the one work left.
+    await env.DB.prepare("UPDATE letters SET status = 'rejected' WHERE item_id IN (?, ?)").bind(far1.id, far2.id).run();
     const broken = await post(`/episodes/${first}/next`, cookie);
     expect(broken.status).toBe(503);
     expect(await broken.json()).toEqual({ error: "unavailable" });

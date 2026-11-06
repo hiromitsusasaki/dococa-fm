@@ -1,8 +1,8 @@
 import { getItemVecs } from "../db/items";
 import { getLetter } from "../db/letters";
 import type { Listener } from "../types";
-import { ECHO_SQL, EXCLUDED_SQL, FAR_SQL, letterIdsSql, NEAR_SQL, NEIGHBOR_SQL, OWNER_FAVORITES_SQL } from "./select-sql";
-import type { StationKey } from "./station";
+import { ECHO_SQL, EXCLUDED_SQL, FAR_SQL, letterIdsSql, NEAR_SQL, NEIGHBOR_SQL, OWNER_FAVORITES_SQL, STATION_EXCLUDED_SQL } from "./select-sql";
+import { type StationKey, stationColumn } from "./station";
 import { farness, pickByDial, tasteOf } from "./taste";
 
 export type Slot = "near" | "neighbor" | "far";
@@ -50,14 +50,44 @@ async function echoItem(db: D1Database, listener: Listener, rng: () => number): 
   return candidates.length === 0 ? null : (shuffle(candidates, rng)[0] ?? null);
 }
 
-/** Readable letter ids of every chosen item, in one query; each item's list is ordered by id, as the shuffle expects. */
+/** Items per letter query: D1 binds at most 100 parameters, and the listener id takes one. */
+const LETTER_QUERY_ITEMS = 90;
+
+/** Readable letter ids of every chosen item, one query per 90 items; each item's list is ordered by id, as the shuffle expects. */
 async function letterIdsByItem(db: D1Database, listenerId: string, itemIds: string[]): Promise<Map<string, string[]>> {
   const out = new Map<string, string[]>();
-  if (itemIds.length === 0) return out;
-  const { results } = await db.prepare(letterIdsSql(itemIds.length)).bind(listenerId, ...itemIds).all<{ id: string; item_id: string }>();
-  for (const r of results) out.set(r.item_id, [...(out.get(r.item_id) ?? []), r.id]);
+  for (let i = 0; i < itemIds.length; i += LETTER_QUERY_ITEMS) {
+    const chunk = itemIds.slice(i, i + LETTER_QUERY_ITEMS);
+    const { results } = await db.prepare(letterIdsSql(chunk.length)).bind(listenerId, ...chunk).all<{ id: string; item_id: string }>();
+    for (const r of results) out.set(r.item_id, [...(out.get(r.item_id) ?? []), r.id]);
+  }
   return out;
 }
+
+/** What the listener met lately on a station: works heard (own station only), works of the last episodes there, and the latest episode's work. */
+type Recent = { heard: ReadonlySet<string>; aired: ReadonlySet<string>; latest: ReadonlySet<string> };
+
+async function recentOn(db: D1Database, sql: string, ...binds: unknown[]): Promise<Recent> {
+  const { results } = await db.prepare(sql).bind(...binds).all<{ item_id: string; why: "heard" | "aired" | "latest" }>();
+  const of = (why: string) => new Set(results.filter((r) => r.why === why).map((r) => r.item_id));
+  return { heard: of("heard"), aired: of("aired"), latest: of("latest") };
+}
+
+/** 0: not met lately; 1: heard lately; 2: aired in the last episodes; 3: the latest episode's work. The lower is tried first. */
+function staleness(r: Recent, id: string): number {
+  return r.latest.has(id) ? 3 : r.aired.has(id) ? 2 : r.heard.has(id) ? 1 : 0;
+}
+
+/**
+ * The candidates in the order they are tried: the exclusions are lifted one at a time when nothing fresher is left, and
+ * the latest episode's work comes last, so it airs again only when it is the only one. The sort is stable: the shuffle
+ * still decides within each rank.
+ */
+function freshestFirst<T>(xs: readonly T[], r: Recent, idOf: (x: T) => string): T[] {
+  return [...xs].sort((a, b) => staleness(r, idOf(a)) - staleness(r, idOf(b)));
+}
+
+const self = (id: string) => id;
 
 /** Take items round-robin across the lists so no kind is front-loaded. */
 function interleave(lists: Selection[][]): Selection[] {
@@ -75,16 +105,21 @@ async function withLetters(db: D1Database, listener: Listener, itemIds: string[]
   return itemIds.map((itemId) => ({ itemId, slot, letterIds: shuffle(readable.get(itemId) ?? [], rng).slice(0, MAX_LETTERS_PER_SEGMENT) }));
 }
 
-/** The world station: far only, for anyone. No echo: nothing here is the listener's own. */
+/** The world station: far only, for anyone. No echo: nothing here is the listener's own. The works of the listener's last episodes here wait. */
 async function worldProgram(db: D1Database, listener: Listener, size: number, rng: () => number): Promise<Selection[]> {
-  const pool = shuffle(await ids(db, FAR_SQL, listener.id), rng).slice(0, size);
+  const recent = await recentOn(db, STATION_EXCLUDED_SQL, listener.id, stationColumn({ kind: "world" }));
+  const pool = freshestFirst(shuffle(await ids(db, FAR_SQL, listener.id), rng), recent, self).slice(0, size);
   return withLetters(db, listener, pool, "far", rng);
 }
 
-/** A public station: the owner's favourites that someone has written about. The rest wait until a letter arrives. */
+/**
+ * A public station: the owner's favourites that someone has written about. The rest wait until a letter arrives. The
+ * works of the listener's last episodes here wait too; a favourite without a letter never takes a seat from one with.
+ */
 async function publicProgram(db: D1Database, listener: Listener, ownerId: string, size: number, rng: () => number): Promise<Selection[]> {
-  const pool = shuffle(await ids(db, OWNER_FAVORITES_SQL, ownerId), rng).slice(0, size);
-  return (await withLetters(db, listener, pool, "near", rng)).filter(hasLetters);
+  const recent = await recentOn(db, STATION_EXCLUDED_SQL, listener.id, stationColumn({ kind: "public", ownerId }));
+  const lettered = (await withLetters(db, listener, shuffle(await ids(db, OWNER_FAVORITES_SQL, ownerId), rng), "near", rng)).filter(hasLetters);
+  return freshestFirst(lettered, recent, (s) => s.itemId).slice(0, size);
 }
 
 /**
@@ -115,25 +150,20 @@ const MAX_SCORED = 300;
 /**
  * The one seat by distance: among the pool items that have a vector, minus the works heard in the last 7 days and
  * those of the last 30 episodes on this station (the first exclusion is lifted when nothing is left, then the
- * second), the dial's band of the listener's taste. Null when the listener has no taste yet or no candidate has a
- * vector: the pools then choose as before. The distance only chooses; it is not returned. The slot (what the bridge
- * says) follows the listener's own pools: a work of their near pool is near however far its vector lies; any other
- * is neighbor below the 2/3 percentile, far above.
+ * second; the latest episode's work only when it is the only one), the dial's band of the listener's taste. Null when
+ * the listener has no taste yet or no candidate has a vector: the pools then choose as before. The distance only
+ * chooses; it is not returned. The slot (what the bridge says) follows the listener's own pools: a work of their near
+ * pool is near however far its vector lies; any other is neighbor below the 2/3 percentile, far above.
  */
-async function pickByDistance(db: D1Database, listener: Listener, pool: string[], near: ReadonlySet<string>, dial: number, rng: () => number): Promise<{ id: string; slot: Slot } | null> {
+async function pickByDistance(db: D1Database, listener: Listener, pool: string[], near: ReadonlySet<string>, recent: Recent, dial: number, rng: () => number): Promise<{ id: string; slot: Slot } | null> {
   const taste = await tasteOf(db, listener);
   if (!taste) return null;
   // During a partial backfill only works that already have a vector can win the distance pick.
   const vecs = await getItemVecs(db, shuffle([...pool].sort(), rng).slice(0, MAX_SCORED));
   if (vecs.size === 0) return null;
-  const since = new Date(Date.now() - HEARD_WITHIN_MS).toISOString();
-  const { results } = await db.prepare(EXCLUDED_SQL).bind(listener.id, since).all<{ item_id: string; why: "heard" | "aired" }>();
-  const heard = new Set(results.filter((r) => r.why === "heard").map((r) => r.item_id));
-  const aired = new Set(results.filter((r) => r.why === "aired").map((r) => r.item_id));
   const all = [...vecs.keys()].sort();
-  const fresh = all.filter((id) => !heard.has(id) && !aired.has(id));
-  const notAired = all.filter((id) => !aired.has(id));
-  const cands = fresh.length > 0 ? fresh : notAired.length > 0 ? notAired : all;
+  const least = Math.min(...all.map((id) => staleness(recent, id)));
+  const cands = all.filter((id) => staleness(recent, id) === least);
   const picked = pickByDial(cands, farness(taste, new Map(cands.map((id) => [id, vecs.get(id) as Float32Array]))), dial, rng);
   if (!picked) return null;
   return { id: picked.id, slot: near.has(picked.id) ? "near" : picked.slot === "far" ? "far" : "neighbor" };
@@ -175,10 +205,17 @@ export async function selectProgram(
 
   const chosen: Record<Slot, string[]> = { near: echo ? [echo] : [], neighbor: [], far: [] };
   const count = () => chosen.near.length + chosen.neighbor.length + chosen.far.length;
-  if (room === 1) {
-    const byDistance = echo ? null : await pickByDistance(db, listener, [...pools.near, ...pools.neighbor, ...pools.far], new Set(raw.near), dial, rng);
+  if (room === 1 && !echo) {
+    const since = new Date(Date.now() - HEARD_WITHIN_MS).toISOString();
+    const recent = await recentOn(db, EXCLUDED_SQL, listener.id, since);
+    const byDistance = await pickByDistance(db, listener, [...pools.near, ...pools.neighbor, ...pools.far], new Set(raw.near), recent, dial, rng);
     if (byDistance) chosen[byDistance.slot].push(byDistance.id);
-    for (const slot of seatOrder(dial)) if (count() < 1) chosen[slot].push(...pools[slot].splice(0, 1));
+    else {
+      // Without distances the dial's pool is tried first, but a fresher work of another pool wins over a stale one.
+      const seats = seatOrder(dial).flatMap((slot) => pools[slot].map((id) => ({ slot, id })));
+      const seat = freshestFirst(seats, recent, (x) => x.id)[0];
+      if (seat) chosen[seat.slot].push(seat.id);
+    }
   } else if (room > 1) {
     // The echo item uses one unit of the near quota; it never adds to the program size.
     const nearRoom = nearQuota - (echo ? 1 : 0);

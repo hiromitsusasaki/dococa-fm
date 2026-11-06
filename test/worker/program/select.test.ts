@@ -553,3 +553,96 @@ describe("selectProgram by distance", () => {
     expect(world.every((s) => s.slot === "far")).toBe(true);
   });
 });
+
+describe("selectProgram never airs the same work twice in a row", () => {
+  beforeEach(() => resetDb(env.DB));
+  const seeds = ["s", "t", "u", "v", "w", "x", "y", "z"];
+  const ago = (ms: number) => new Date(Date.now() - ms).toISOString();
+
+  /** Three works by others, each with a letter, on everyone's far shelf. */
+  async function threeFar() {
+    const writer = await createListener(env.DB);
+    const items: string[] = [];
+    for (let n = 0; n < 3; n++) {
+      const id = (await insertItem(env.DB, itemDraft({ title: `w-${n}` }))).id;
+      await insertLetter(env.DB, letterDraft(id, { listenerId: writer.id, body: `on ${n}` }));
+      items.push(id);
+    }
+    return items;
+  }
+
+  it("world: skips the works of the last episodes there; lifted, it still never repeats the latest one", async () => {
+    const [x, y, z] = await threeFar();
+    const me = await createListener(env.DB);
+    await episodeOf(me.id, ago(120_000), [y!], "world");
+    await episodeOf(me.id, ago(60_000), [x!], "world");
+    for (const seed of seeds) expect((await selectProgram(env.DB, me, { station: { kind: "world" }, size: 1, seed }))[0]?.itemId).toBe(z);
+    // Every work aired lately: the window lifts, but the work on air now does not come straight back.
+    await episodeOf(me.id, ago(90_000), [z!], "world");
+    for (const seed of seeds) expect((await selectProgram(env.DB, me, { station: { kind: "world" }, size: 1, seed }))[0]?.itemId).not.toBe(x);
+    // Another station's episodes do not count here.
+    const other = await createListener(env.DB);
+    await episodeOf(other.id, ago(30_000), [x!, y!], "mine");
+    const seen = new Set<string>();
+    for (const seed of seeds) seen.add((await selectProgram(env.DB, other, { station: { kind: "world" }, size: 1, seed }))[0]!.itemId);
+    expect(seen.size).toBeGreaterThan(1);
+  });
+
+  it("world: the latest work airs again only when it is the only one", async () => {
+    const writer = await createListener(env.DB);
+    const only = (await insertItem(env.DB, itemDraft({ title: "only" }))).id;
+    await insertLetter(env.DB, letterDraft(only, { listenerId: writer.id, body: "the one" }));
+    const me = await createListener(env.DB);
+    await episodeOf(me.id, ago(60_000), [only], "world");
+    expect((await selectProgram(env.DB, me, { station: { kind: "world" }, size: 1, seed: "s" }))[0]?.itemId).toBe(only);
+  });
+
+  it("public: the same rule, and a favourite nobody wrote about never takes the seat from one with a letter", async () => {
+    const owner = await createListener(env.DB);
+    const writer = await createListener(env.DB);
+    const guest = await createListener(env.DB);
+    const items: string[] = [];
+    for (let n = 0; n < 6; n++) items.push((await insertItem(env.DB, itemDraft({ title: `fav-${n}` }))).id);
+    await upsertHistory(env.DB, items.map((itemId, n) => ({ listenerId: owner.id, itemId, source: "manual" as const, occurredAt: null, rank: n + 1 })));
+    // Only fav-0..2 have letters.
+    for (const n of [0, 1, 2]) await insertLetter(env.DB, letterDraft(items[n]!, { listenerId: writer.id, body: `on fav ${n}` }));
+    const station = { kind: "public" as const, ownerId: owner.id };
+    const column = `public:${owner.id}`;
+    await episodeOf(guest.id, ago(120_000), [items[1]!], column);
+    await episodeOf(guest.id, ago(60_000), [items[0]!], column);
+    for (const seed of seeds) expect((await selectProgram(env.DB, guest, { station, size: 1, seed }))[0]?.itemId).toBe(items[2]);
+    await episodeOf(guest.id, ago(90_000), [items[2]!], column);
+    for (const seed of seeds) {
+      const p = await selectProgram(env.DB, guest, { station, size: 1, seed });
+      expect(p).toHaveLength(1);
+      expect(p[0]?.itemId).not.toBe(items[0]);
+    }
+  });
+
+  it("mine without distances: skips the works of the last episodes, and never repeats the latest when that is lifted", async () => {
+    const f = await buildFixture();
+    const far = f.items.slice(5, 12);
+    // i5..i10 aired lately: at the far end only i11 is fresh.
+    await episodeOf(f.a.id, ago(60_000), far.slice(0, 6));
+    for (const seed of seeds) expect((await selectProgram(env.DB, f.a, { size: 1, seed, dial: 1 }))[0]?.itemId).toBe(f.items[11]);
+    // Every work of every pool aired lately; the latest episode holds i11.
+    await episodeOf(f.a.id, ago(50_000), [f.items[0]!, f.items[1]!, f.items[2]!, f.items[4]!]);
+    await episodeOf(f.a.id, ago(30_000), [f.items[11]!]);
+    for (const seed of seeds) for (const dial of [0, 0.5, 1]) {
+      const p = await selectProgram(env.DB, f.a, { size: 1, seed, dial });
+      expect(p).toHaveLength(1);
+      expect(p[0]?.itemId).not.toBe(f.items[11]);
+    }
+  });
+
+  it("mine by distance: with every candidate aired, the latest is still not picked", async () => {
+    const f = await buildFixture();
+    await setItemVec(env.DB, f.items[3]!, angled(0));
+    await setItemVec(env.DB, f.items[1]!, angled(0.1));
+    await setItemVec(env.DB, f.items[9]!, angled(1.5));
+    await env.DB.prepare("UPDATE letters SET created_at = '2020-01-01T00:00:00Z' WHERE id = ?").bind(f.letters.watashimo[0]!).run();
+    await episodeOf(f.a.id, ago(120_000), [f.items[1]!]);
+    await episodeOf(f.a.id, ago(60_000), [f.items[9]!]);
+    for (const seed of seeds) expect((await selectProgram(env.DB, f.a, { size: 1, seed, dial: 1 }))[0]?.itemId).toBe(f.items[1]);
+  });
+});

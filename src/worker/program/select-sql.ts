@@ -65,15 +65,27 @@ export const ECHO_SQL = `SELECT DISTINCT r.item_id FROM letters r
 export const HEARD_RECENTLY_SQL = `SELECT DISTINCT l.item_id FROM listens s JOIN letters l ON l.id = s.letter_id
   WHERE s.listener_id = ?1 AND s.heard_at > ?2`;
 
-/** Items of the listener's last 30 verified episodes on their own station. */
-export const RECENT_EPISODE_ITEMS_SQL = `SELECT DISTINCT json_extract(seg.value, '$.itemId') AS item_id FROM
-    (SELECT segments FROM episodes WHERE listener_id = ?1 AND station = 'mine' AND verified = 1 ORDER BY created_at DESC, id DESC LIMIT 30) e,
+/** Items of the listener's last `limit` verified episodes on the station `station` (an SQL expression: a literal or a parameter). */
+const episodeItemsSql = (station: string, limit: number): string => `SELECT DISTINCT json_extract(seg.value, '$.itemId') AS item_id FROM
+    (SELECT segments FROM episodes WHERE listener_id = ?1 AND station = ${station} AND verified = 1 ORDER BY created_at DESC, id DESC LIMIT ${limit}) e,
     json_each(e.segments) seg
   WHERE json_extract(seg.value, '$.itemId') IS NOT NULL`;
 
-/** Both exclusions in one statement, each row tagged with why. */
+/** Episodes whose works the listener's own station leaves out; the world and public stations leave out fewer. */
+export const MINE_RECENT_EPISODES = 30;
+export const STATION_RECENT_EPISODES = 10;
+
+/**
+ * The listener's own station: works heard since ?2, works of the last 30 episodes there, and the work of the latest one
+ * (on air now, or fetched ahead), each row tagged with why.
+ */
 export const EXCLUDED_SQL = `SELECT item_id, 'heard' AS why FROM (${HEARD_RECENTLY_SQL})
-  UNION ALL SELECT item_id, 'aired' AS why FROM (${RECENT_EPISODE_ITEMS_SQL})`;
+  UNION ALL SELECT item_id, 'aired' AS why FROM (${episodeItemsSql("'mine'", MINE_RECENT_EPISODES)})
+  UNION ALL SELECT item_id, 'latest' AS why FROM (${episodeItemsSql("'mine'", 1)})`;
+
+/** The world or a public station (?2 = its `episodes.station` value): works of the listener's last 10 episodes there, and of the latest one. */
+export const STATION_EXCLUDED_SQL = `SELECT item_id, 'aired' AS why FROM (${episodeItemsSql("?2", STATION_RECENT_EPISODES)})
+  UNION ALL SELECT item_id, 'latest' AS why FROM (${episodeItemsSql("?2", 1)})`;
 
 /** The vectors of up to 50 favourites, in `listFavorites`' order (keep the predicate and ORDER in step). */
 export const TASTE_FAVORITES_SQL = `SELECT i.vec FROM
