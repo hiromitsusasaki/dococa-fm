@@ -1,10 +1,11 @@
 import { env } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { upsertHistory } from "../../../src/worker/db/history";
-import { insertItem } from "../../../src/worker/db/items";
+import { getItemVecs, insertItem, setItemVec } from "../../../src/worker/db/items";
 import { insertLetter } from "../../../src/worker/db/letters";
 import { createListener, getListener, updateListener } from "../../../src/worker/db/listeners";
 import app from "../../../src/worker/index";
+import { angled } from "../../helpers/ai";
 import { resetDb } from "../../helpers/db";
 import { itemDraft, letterDraft } from "../db/helpers";
 import { newSession, signedInSession } from "./helpers";
@@ -127,6 +128,25 @@ describe("POST /stations/:key/next with the dial, first and a letter", () => {
     await insertLetter(env.DB, letterDraft(near.id, { listenerId: other.id, body: "近くの手紙", bodyJa: "近くの手紙" }));
     return { me, near, mine, other };
   }
+
+  /** Every key of a JSON value, at any depth. */
+  const keysOf = (v: unknown): string[] =>
+    Array.isArray(v) ? v.flatMap(keysOf) : v && typeof v === "object" ? Object.entries(v).flatMap(([k, x]) => [k, ...keysOf(x)]) : [];
+
+  it("picks by distance and never says how far: no vec, farness or distance anywhere in the answer", async () => {
+    const cookie = await newSession();
+    const { near } = await seedMine(cookie);
+    const { results } = await env.DB.prepare("SELECT id FROM items ORDER BY title").all<{ id: string }>();
+    for (const [i, r] of results.entries()) await setItemVec(env.DB, r.id, angled(r.id === near.id ? 0 : 0.3 + i * 0.2));
+    expect((await getItemVecs(env.DB, results.map((r) => r.id))).size).toBe(results.length);
+    for (const dial of [0, 0.5, 1]) {
+      const res = await send("mine", cookie, { dial });
+      expect(res.status).toBe(200);
+      const text = await res.text();
+      const keys = keysOf(JSON.parse(text)).map((k) => k.toLowerCase());
+      for (const banned of ["vec", "farness", "distance", "percentile"]) expect(keys.filter((k) => k.includes(banned))).toEqual([]);
+    }
+  });
 
   it("first: one segment that opens with the open bridge", async () => {
     const cookie = await newSession();

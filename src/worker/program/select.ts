@@ -1,7 +1,9 @@
+import { getItemVecs } from "../db/items";
 import { getLetter } from "../db/letters";
 import type { Listener } from "../types";
-import { ECHO_SQL, FAR_SQL, letterIdsSql, NEAR_SQL, NEIGHBOR_SQL, OWNER_FAVORITES_SQL } from "./select-sql";
+import { ECHO_SQL, EXCLUDED_SQL, FAR_SQL, letterIdsSql, NEAR_SQL, NEIGHBOR_SQL, OWNER_FAVORITES_SQL } from "./select-sql";
 import type { StationKey } from "./station";
+import { farness, pickByDial, tasteOf } from "./taste";
 
 export type Slot = "near" | "neighbor" | "far";
 export type Selection = { itemId: string; slot: Slot; letterIds: string[] };
@@ -100,10 +102,34 @@ async function askedLetter(db: D1Database, listener: Listener, letterId: string,
   return { itemId: l.itemId, letterIds: [l.id, ...others].slice(0, MAX_LETTERS_PER_SEGMENT) };
 }
 
-/** A one-seat programme: the dial picks which pool is tried first; the rest follow far, near, neighbor. */
+/** A one-seat programme without distances: the dial picks which pool is tried first; the rest follow far, near, neighbor. */
 function seatOrder(dial: number): Slot[] {
   const primary: Slot = dial >= 2 / 3 ? "far" : dial >= 1 / 3 ? "neighbor" : "near";
   return [primary, ...(["far", "near", "neighbor"] as const).filter((s) => s !== primary)];
+}
+
+const HEARD_WITHIN_MS = 7 * 24 * 60 * 60 * 1000;
+
+/**
+ * The one seat by distance: among the pool items that have a vector, minus the works heard in the last 7 days and
+ * those of the last 30 episodes on this station (the first exclusion is lifted when nothing is left, then the
+ * second), the dial's band of the listener's taste. Null when the listener has no taste yet or no candidate has a
+ * vector: the pools then choose as before. The distance only chooses; it is not returned.
+ */
+async function pickByDistance(db: D1Database, listener: Listener, pool: string[], dial: number, rng: () => number): Promise<{ id: string; slot: Slot } | null> {
+  const taste = await tasteOf(db, listener);
+  if (!taste) return null;
+  const vecs = await getItemVecs(db, pool);
+  if (vecs.size === 0) return null;
+  const since = new Date(Date.now() - HEARD_WITHIN_MS).toISOString();
+  const { results } = await db.prepare(EXCLUDED_SQL).bind(listener.id, since).all<{ item_id: string; why: "heard" | "aired" }>();
+  const heard = new Set(results.filter((r) => r.why === "heard").map((r) => r.item_id));
+  const aired = new Set(results.filter((r) => r.why === "aired").map((r) => r.item_id));
+  const all = [...vecs.keys()].sort();
+  const fresh = all.filter((id) => !heard.has(id) && !aired.has(id));
+  const notAired = all.filter((id) => !aired.has(id));
+  const cands = fresh.length > 0 ? fresh : notAired.length > 0 ? notAired : all;
+  return pickByDial(cands, farness(taste, new Map(cands.map((id) => [id, vecs.get(id) as Float32Array]))), dial, rng);
 }
 
 export async function selectProgram(
@@ -143,6 +169,8 @@ export async function selectProgram(
   const chosen: Record<Slot, string[]> = { near: echo ? [echo] : [], neighbor: [], far: [] };
   const count = () => chosen.near.length + chosen.neighbor.length + chosen.far.length;
   if (room === 1) {
+    const byDistance = echo ? null : await pickByDistance(db, listener, [...pools.near, ...pools.neighbor, ...pools.far], dial, rng);
+    if (byDistance) chosen[byDistance.slot].push(byDistance.id);
     for (const slot of seatOrder(dial)) if (count() < 1) chosen[slot].push(...pools[slot].splice(0, 1));
   } else if (room > 1) {
     // The echo item uses one unit of the near quota; it never adds to the program size.

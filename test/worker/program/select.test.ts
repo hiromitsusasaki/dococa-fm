@@ -2,11 +2,13 @@ import { env } from "cloudflare:workers";
 import { beforeEach, describe, expect, it } from "vitest";
 import { insertEpisode } from "../../../src/worker/db/episodes";
 import { upsertHistory } from "../../../src/worker/db/history";
-import { insertItem } from "../../../src/worker/db/items";
+import { insertItem, setItemVec } from "../../../src/worker/db/items";
 import { insertLetter, setLetterStatus } from "../../../src/worker/db/letters";
 import { createListener } from "../../../src/worker/db/listeners";
+import { recordListen } from "../../../src/worker/db/listens";
 import { seededRng, selectProgram, shuffle } from "../../../src/worker/program/select";
 import type { Letter, Listener } from "../../../src/worker/types";
+import { angled } from "../../helpers/ai";
 import { resetDb } from "../../helpers/db";
 import { itemDraft, letterDraft } from "../db/helpers";
 
@@ -56,6 +58,19 @@ async function buildFixture(): Promise<Fixture> {
 }
 
 const bySlot = (p: { slot: string }[], slot: string) => p.filter((s) => s.slot === slot).length;
+
+const REPORT = { verbatim: true, sources: true, topical: true, pii: true, details: [] };
+
+/** A `station` episode of the listener's, made at `at`, with one segment per item. */
+const episodeOf = (listenerId: string, at: string, itemIds: string[] = [], station = "mine") =>
+  insertEpisode(env.DB, { listenerId, segments: itemIds.map((itemId) => ({ itemId, slot: "near" as const, lines: [] })), verified: true, report: REPORT, station, createdAt: at });
+
+/** The listener heard someone else's letter (a new one by C on i5) at `at`, in an empty episode of `station` made then. */
+async function heardAt(f: Fixture, at: string, station = "mine") {
+  const ep = await episodeOf(f.a.id, at, [], station);
+  const letter = await insertLetter(env.DB, letterDraft(f.items[5]!, { listenerId: f.c.id, body: `C on 5, heard ${at}` }));
+  await recordListen(env.DB, { listenerId: f.a.id, episodeId: ep.id, letterId: letter.id, segmentIndex: 0, heardAt: at });
+}
 
 describe("selectProgram", () => {
   beforeEach(() => resetDb(env.DB));
@@ -190,42 +205,29 @@ describe("selectProgram", () => {
   });
 
   describe("反響", () => {
-    const addOwnLetterWithReaction = async (f: Fixture, episodeCreatedAt: string) => {
+    const addOwnLetterWithReaction = async (f: Fixture, heard: string) => {
       const x = await insertItem(env.DB, itemDraft({ title: "echo" }));
       const mine = await insertLetter(env.DB, letterDraft(x.id, { listenerId: f.a.id, body: "A on echo" }));
-      await insertEpisode(env.DB, {
-        listenerId: f.a.id,
-        segments: [],
-        verified: true,
-        report: { verbatim: true, sources: true, topical: true, pii: true, details: [] },
-        createdAt: episodeCreatedAt,
-      });
+      await heardAt(f, heard);
       return { x, mine };
     };
 
-    it("is not consumed by an episode of another station", async () => {
+    it("is not consumed by a letter heard on another station", async () => {
       const f = await buildFixture();
       const { x, mine } = await addOwnLetterWithReaction(f, new Date(Date.now() - 60_000).toISOString());
       await insertLetter(env.DB, letterDraft(x.id, { kind: "watashimo", listenerId: f.b.id, parentLetterId: mine.id }));
-      await insertEpisode(env.DB, {
-        listenerId: f.a.id,
-        segments: [],
-        verified: true,
-        report: { verbatim: true, sources: true, topical: true, pii: true, details: [] },
-        station: "world",
-        createdAt: new Date(Date.now() + 60_000).toISOString(),
-      });
+      await heardAt(f, new Date(Date.now() + 60_000).toISOString(), "world");
       for (const seed of ["s", "t", "u", "v", "w", "x", "y", "z"]) {
         const p = await selectProgram(env.DB, { ...f.a, dial: 0.3 }, { seed });
         expect([x.id, f.items[0]]).toContain(p[0]?.itemId);
       }
     });
 
-    it("puts the item that got a reaction since the last episode first, as near", async () => {
+    it("puts the item that got a reaction since the last letter heard first, as near", async () => {
       const f = await buildFixture();
       const { x, mine } = await addOwnLetterWithReaction(f, new Date(Date.now() - 60_000).toISOString());
       await insertLetter(env.DB, letterDraft(x.id, { kind: "watashimo", listenerId: f.b.id, parentLetterId: mine.id }));
-      // The fixture's own watashimo on item 0 is also newer than the episode, so either may lead.
+      // The fixture's own watashimo on item 0 is also newer than what was heard, so either may lead.
       const leaders = new Set<string>();
       for (const seed of ["s", "t", "u", "v", "w", "x", "y", "z"]) {
         const p = await selectProgram(env.DB, { ...f.a, dial: 0.3 }, { seed });
@@ -264,20 +266,43 @@ describe("selectProgram", () => {
       }
     });
 
-    it("ignores a reaction older than the last episode", async () => {
+    it("ignores a reaction older than the last letter heard on the listener's own station", async () => {
       const f = await buildFixture();
       const x = await insertItem(env.DB, itemDraft({ title: "echo" }));
       const mine = await insertLetter(env.DB, letterDraft(x.id, { listenerId: f.a.id, body: "A on echo" }));
       await insertLetter(env.DB, letterDraft(x.id, { kind: "watashimo", listenerId: f.b.id, parentLetterId: mine.id }));
-      await insertEpisode(env.DB, {
-        listenerId: f.a.id,
-        segments: [],
-        verified: true,
-        report: { verbatim: true, sources: true, topical: true, pii: true, details: [] },
-        createdAt: new Date(Date.now() + 60_000).toISOString(),
-      });
+      await heardAt(f, new Date(Date.now() + 60_000).toISOString());
       const p = await selectProgram(env.DB, { ...f.a, dial: 0.3 }, { seed: "s" });
       expect(p.some((s) => s.itemId === x.id)).toBe(false);
+    });
+
+    it("draws none before the listener has heard anything on their own station", async () => {
+      const f = await buildFixture();
+      const x = await insertItem(env.DB, itemDraft({ title: "echo" }));
+      const mine = await insertLetter(env.DB, letterDraft(x.id, { listenerId: f.a.id, body: "A on echo" }));
+      await insertLetter(env.DB, letterDraft(x.id, { kind: "watashimo", listenerId: f.b.id, parentLetterId: mine.id }));
+      await episodeOf(f.a.id, new Date(Date.now() - 60_000).toISOString());
+      for (const seed of ["s", "t", "u"]) expect((await selectProgram(env.DB, f.a, { size: 1, seed, dial: 0 })).map((s) => s.itemId)).not.toContain(x.id);
+    });
+
+    it("is not used up by an episode fetched ahead and dropped: only what was heard counts", async () => {
+      const f = await buildFixture();
+      const { x, mine } = await addOwnLetterWithReaction(f, new Date(Date.now() - 60_000).toISOString());
+      await insertLetter(env.DB, letterDraft(x.id, { kind: "watashimo", listenerId: f.b.id, parentLetterId: mine.id }));
+      // The echo was fetched ahead, then dropped (the knob turned): nobody heard it, and another episode came after.
+      await episodeOf(f.a.id, new Date(Date.now() + 30_000).toISOString(), [x.id]);
+      await episodeOf(f.a.id, new Date(Date.now() + 40_000).toISOString(), [f.items[5]!]);
+      await env.DB.prepare("UPDATE letters SET created_at = '2020-01-01T00:00:00Z' WHERE id = ?").bind(f.letters.watashimo[0]!).run();
+      for (const seed of ["s", "t", "u"]) expect((await selectProgram(env.DB, f.a, { size: 1, seed, dial: 0 }))[0]?.itemId).toBe(x.id);
+    });
+
+    it("is not repeated by the episode fetched ahead of the one carrying it", async () => {
+      const f = await buildFixture();
+      const { x, mine } = await addOwnLetterWithReaction(f, new Date(Date.now() - 60_000).toISOString());
+      await insertLetter(env.DB, letterDraft(x.id, { kind: "watashimo", listenerId: f.b.id, parentLetterId: mine.id }));
+      await env.DB.prepare("UPDATE letters SET created_at = '2020-01-01T00:00:00Z' WHERE id = ?").bind(f.letters.watashimo[0]!).run();
+      await episodeOf(f.a.id, new Date(Date.now() + 30_000).toISOString(), [x.id]);
+      for (const seed of ["s", "t", "u"]) expect((await selectProgram(env.DB, f.a, { size: 1, seed, dial: 0 })).map((s) => s.itemId)).not.toContain(x.id);
     });
   });
 });
@@ -359,11 +384,11 @@ describe("selectProgram with one seat", () => {
     expect(p.map((s) => s.slot)).toEqual(["far"]);
   });
 
-  /** An own work of A's that got a 私も after A's last episode: the echo. */
+  /** An own work of A's that got a 私も after the last letter A heard: the echo. */
   async function withEcho(f: Fixture) {
     const x = await insertItem(env.DB, itemDraft({ title: "echo" }));
     const mine = await insertLetter(env.DB, letterDraft(x.id, { listenerId: f.a.id, body: "A on echo" }));
-    await insertEpisode(env.DB, { listenerId: f.a.id, segments: [], verified: true, report: { verbatim: true, sources: true, topical: true, pii: true, details: [] }, createdAt: new Date(Date.now() - 60_000).toISOString() });
+    await heardAt(f, new Date(Date.now() - 60_000).toISOString());
     await insertLetter(env.DB, letterDraft(x.id, { kind: "watashimo", listenerId: f.b.id, parentLetterId: mine.id }));
     return x;
   }
@@ -425,5 +450,95 @@ describe("selectProgram with one seat", () => {
       expect(p[0]?.slot).toBe("near");
       expect(p[0]!.letterIds).not.toContain(id);
     }
+  });
+});
+
+describe("selectProgram by distance", () => {
+  beforeEach(() => resetDb(env.DB));
+  const seeds = ["s", "t", "u", "v", "w"];
+  const DAY = 24 * 60 * 60 * 1000;
+
+  /** A's taste is i3 (a favourite nobody else wrote on); i1 lies close to it, i9 far; no other work has a vector. */
+  async function withVectors() {
+    const f = await buildFixture();
+    await setItemVec(env.DB, f.items[3]!, angled(0));
+    await setItemVec(env.DB, f.items[1]!, angled(0.1));
+    await setItemVec(env.DB, f.items[9]!, angled(1.5));
+    // The fixture's 私も on A's i0 is older than anything heard here: no echo takes the seat.
+    await env.DB.prepare("UPDATE letters SET created_at = '2020-01-01T00:00:00Z' WHERE id = ?").bind(f.letters.watashimo[0]!).run();
+    return f;
+  }
+
+  it("dial 0 picks the close work as near, dial 1 the far one as far", async () => {
+    const f = await withVectors();
+    for (const seed of seeds) {
+      expect(await selectProgram(env.DB, f.a, { size: 1, seed, dial: 0 })).toMatchObject([{ itemId: f.items[1], slot: "near" }]);
+      expect(await selectProgram(env.DB, f.a, { size: 1, seed, dial: 1 })).toMatchObject([{ itemId: f.items[9], slot: "far" }]);
+    }
+  });
+
+  it("skips a work heard yesterday unless it is the only one", async () => {
+    const f = await withVectors();
+    const ep = await episodeOf(f.a.id, new Date(Date.now() - 2 * DAY).toISOString());
+    const onI1 = await insertLetter(env.DB, letterDraft(f.items[1]!, { listenerId: f.c.id, body: "C on 1" }));
+    await recordListen(env.DB, { listenerId: f.a.id, episodeId: ep.id, letterId: onI1.id, segmentIndex: 0, heardAt: new Date(Date.now() - DAY).toISOString() });
+    for (const seed of seeds) expect((await selectProgram(env.DB, f.a, { size: 1, seed, dial: 0 }))[0]?.itemId).toBe(f.items[9]);
+    // i9's only letter is taken down: i1 is the one work with a vector left, so it airs again.
+    await env.DB.prepare("UPDATE letters SET status = 'rejected' WHERE item_id = ?").bind(f.items[9]!).run();
+    for (const seed of seeds) expect((await selectProgram(env.DB, f.a, { size: 1, seed, dial: 1 }))[0]?.itemId).toBe(f.items[1]);
+  });
+
+  it("hears a work again after 7 days", async () => {
+    const f = await withVectors();
+    const ep = await episodeOf(f.a.id, new Date(Date.now() - 9 * DAY).toISOString());
+    const onI1 = await insertLetter(env.DB, letterDraft(f.items[1]!, { listenerId: f.c.id, body: "C on 1" }));
+    await recordListen(env.DB, { listenerId: f.a.id, episodeId: ep.id, letterId: onI1.id, segmentIndex: 0, heardAt: new Date(Date.now() - 8 * DAY).toISOString() });
+    expect((await selectProgram(env.DB, f.a, { size: 1, seed: "s", dial: 0 }))[0]?.itemId).toBe(f.items[1]);
+  });
+
+  it("skips the works of the last episodes on this station, and lifts the 7-day rule before that one", async () => {
+    const f = await withVectors();
+    await episodeOf(f.a.id, new Date(Date.now() - 60_000).toISOString(), [f.items[1]!]);
+    for (const seed of seeds) expect((await selectProgram(env.DB, f.a, { size: 1, seed, dial: 0 }))[0]?.itemId).toBe(f.items[9]);
+    // An episode of another station does not count.
+    await resetDb(env.DB);
+    const g = await withVectors();
+    await episodeOf(g.a.id, new Date(Date.now() - 60_000).toISOString(), [g.items[1]!], "world");
+    expect((await selectProgram(env.DB, g.a, { size: 1, seed: "s", dial: 0 }))[0]?.itemId).toBe(g.items[1]);
+    // i1 heard yesterday, i9 aired lately: the 7-day rule goes first, so i1 comes back even at dial 1.
+    const ep = await episodeOf(g.a.id, new Date(Date.now() - 2 * DAY).toISOString(), [], "world");
+    const onI1 = await insertLetter(env.DB, letterDraft(g.items[1]!, { listenerId: g.c.id, body: "C on 1" }));
+    await recordListen(env.DB, { listenerId: g.a.id, episodeId: ep.id, letterId: onI1.id, segmentIndex: 0, heardAt: new Date(Date.now() - DAY).toISOString() });
+    await episodeOf(g.a.id, new Date(Date.now() - 30_000).toISOString(), [g.items[9]!]);
+    for (const seed of seeds) expect((await selectProgram(env.DB, g.a, { size: 1, seed, dial: 1 }))[0]?.itemId).toBe(g.items[1]);
+  });
+
+  it("chooses by pools as before when the listener has no taste or no candidate has a vector", async () => {
+    const f = await buildFixture();
+    // A taste but no candidate with a vector.
+    await setItemVec(env.DB, f.items[3]!, angled(0));
+    for (const seed of seeds) expect((await selectProgram(env.DB, f.a, { size: 1, seed, dial: 0.5 })).map((s) => s.slot)).toEqual(["neighbor"]);
+    // Candidates with vectors but no taste: B has no favourites and has heard nothing.
+    await setItemVec(env.DB, f.items[9]!, angled(1.5));
+    await setItemVec(env.DB, f.items[1]!, angled(0.1));
+    const fresh = await createListener(env.DB);
+    for (const seed of seeds) expect((await selectProgram(env.DB, fresh, { size: 1, seed, dial: 1 })).map((s) => s.slot)).toEqual(["far"]);
+  });
+
+  it("keeps the echo and the asked letter ahead of the distance", async () => {
+    const f = await withVectors();
+    const x = await insertItem(env.DB, itemDraft({ title: "echo" }));
+    const mine = await insertLetter(env.DB, letterDraft(x.id, { listenerId: f.a.id, body: "A on echo" }));
+    await heardAt(f, new Date(Date.now() - 60_000).toISOString());
+    await insertLetter(env.DB, letterDraft(x.id, { kind: "watashimo", listenerId: f.b.id, parentLetterId: mine.id }));
+    expect((await selectProgram(env.DB, f.a, { size: 1, seed: "s", dial: 0.5 }))[0]?.itemId).toBe(x.id);
+    const asked = await insertLetter(env.DB, letterDraft(f.items[10]!, { listenerId: f.c.id, body: "C again on 10" }));
+    expect((await selectProgram(env.DB, f.a, { size: 1, seed: "s", dial: 0, letterId: asked.id }))[0]?.itemId).toBe(f.items[10]);
+  });
+
+  it("world and public stations ignore the distance", async () => {
+    const f = await withVectors();
+    const world = await selectProgram(env.DB, f.a, { size: 6, seed: "s", station: { kind: "world" } });
+    expect(world.every((s) => s.slot === "far")).toBe(true);
   });
 });

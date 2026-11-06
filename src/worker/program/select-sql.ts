@@ -42,13 +42,50 @@ export const FAR_SQL = `WITH ${OWN},
     AND l.item_id NOT IN (SELECT item_id FROM neighbor)
   ORDER BY l.item_id`;
 
-/** Own items whose letter got a reaction from someone else since the listener's last episode of their own station; none before the first. */
+/** Item ids of the listener's latest `mine` episode (one-seat episodes: the one airing, or the one fetched ahead). */
+const LATEST_MINE_ITEMS = `SELECT json_extract(seg.value, '$.itemId') FROM
+    (SELECT segments FROM episodes WHERE listener_id = ?1 AND station = 'mine' ORDER BY created_at DESC, id DESC LIMIT 1) e,
+    json_each(e.segments) seg
+  WHERE json_extract(seg.value, '$.itemId') IS NOT NULL`;
+
+/**
+ * Own items whose letter got a reaction from someone else since the listener last heard a letter on their own station
+ * (what they heard, not what was made: an episode fetched ahead and dropped does not use the reaction up); none before
+ * the first. The item of the latest episode is left out, so the episode fetched ahead does not repeat it.
+ */
 export const ECHO_SQL = `SELECT DISTINCT r.item_id FROM letters r
   JOIN letters p ON p.id = r.parent_letter_id
   WHERE p.listener_id = ?1 AND p.status = 'public' AND r.status = 'public' AND r.kind IN ('watashimo', 'reply')
     AND (r.listener_id IS NULL OR r.listener_id != ?1)
-    AND r.created_at > (SELECT MAX(created_at) FROM episodes WHERE listener_id = ?1 AND station = 'mine')
+    AND r.created_at > (SELECT MAX(s.heard_at) FROM listens s JOIN episodes e ON e.id = s.episode_id WHERE s.listener_id = ?1 AND e.station = 'mine')
+    AND r.item_id NOT IN (${LATEST_MINE_ITEMS})
   ORDER BY r.item_id`;
+
+/** Items whose letter the listener heard since ?2 (an ISO time). */
+export const HEARD_RECENTLY_SQL = `SELECT DISTINCT l.item_id FROM listens s JOIN letters l ON l.id = s.letter_id
+  WHERE s.listener_id = ?1 AND s.heard_at > ?2`;
+
+/** Items of the listener's last 30 verified episodes on their own station. */
+export const RECENT_EPISODE_ITEMS_SQL = `SELECT DISTINCT json_extract(seg.value, '$.itemId') AS item_id FROM
+    (SELECT segments FROM episodes WHERE listener_id = ?1 AND station = 'mine' AND verified = 1 ORDER BY created_at DESC, id DESC LIMIT 30) e,
+    json_each(e.segments) seg
+  WHERE json_extract(seg.value, '$.itemId') IS NOT NULL`;
+
+/** Both exclusions in one statement, each row tagged with why. */
+export const EXCLUDED_SQL = `SELECT item_id, 'heard' AS why FROM (${HEARD_RECENTLY_SQL})
+  UNION ALL SELECT item_id, 'aired' AS why FROM (${RECENT_EPISODE_ITEMS_SQL})`;
+
+/** The vectors of up to 50 favourites, in `listFavorites`' order (keep the predicate and ORDER in step). */
+export const TASTE_FAVORITES_SQL = `SELECT i.vec FROM
+    (SELECT h.item_id FROM history h WHERE h.listener_id = ?1 AND h.source IN ('manual', 'url')
+     ORDER BY h.rank IS NULL, h.rank ASC, h.occurred_at DESC, h.item_id LIMIT 50) f
+  JOIN items i ON i.id = f.item_id WHERE i.vec IS NOT NULL`;
+
+/** The vectors of up to 20 works whose letters the listener heard most recently. */
+export const TASTE_HEARD_SQL = `SELECT i.vec FROM
+    (SELECT l.item_id, MAX(s.heard_at) AS at FROM listens s JOIN letters l ON l.id = s.letter_id
+     WHERE s.listener_id = ?1 GROUP BY l.item_id ORDER BY at DESC, l.item_id LIMIT 20) h
+  JOIN items i ON i.id = h.item_id WHERE i.vec IS NOT NULL`;
 
 /** Letters the DJ may read for the chosen items (?2…): other people's text, never reactions. */
 export const letterIdsSql = (items: number): string => `SELECT l.id, l.item_id FROM letters l
