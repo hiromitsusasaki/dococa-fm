@@ -370,4 +370,17 @@ describe("rate-limit allowlist covers every write route", () => {
     expect(byIp.slice(0, 12).every((s) => s === 404)).toBe(true);
     expect(byIp[12]).toBe(429);
   });
+
+  it("refuses a cookie-less /listens flood by IP before the session, minting no listener row", async () => {
+    const slow = { ...e, RATE_LIMIT_PER_MINUTE: "1" };
+    const bare = () =>
+      app.request("/listens", { method: "POST", headers: { "cf-connecting-ip": "203.0.113.72", "content-type": "application/json" }, body: JSON.stringify({ episodeId: "x", letterId: "y" }) }, slow);
+    for (let i = 0; i < 12; i++) await bare();
+    const rows = async () => (await env.DB.prepare("SELECT COUNT(*) AS n FROM listeners").first<{ n: number }>())!.n;
+    const before = await rows();
+    const refused = await bare();
+    expect(refused.status).toBe(429);
+    expect(refused.headers.get("set-cookie")).toBeNull();
+    expect(await rows()).toBe(before);
+  });
 });

@@ -5,7 +5,7 @@ import { getVerifiedEpisode } from "../db/episodes";
 import { recordListen } from "../db/listens";
 import type { Env } from "../env";
 import { loadPublicEpisode, segmentReading } from "../program/stored";
-import { listensIpRateLimit, listensListenerRateLimit } from "../security/rate-limit";
+import { listensListenerRateLimit } from "../security/rate-limit";
 
 export const listens = new Hono<{ Bindings: Env; Variables: Variables }>();
 
@@ -16,7 +16,8 @@ const bodySchema = z.object({ episodeId: z.string().min(1).max(100), letterId: z
  * The player calls this when a letter line starts. Only a public letter the listener's own episode reads is
  * recorded, with the public-view segment that reads it now.
  */
-listens.post("/listens", listensIpRateLimit, listensListenerRateLimit, async (c) => {
+// The IP bucket (`listensIpRateLimit`) is mounted in index.ts before the session middleware.
+listens.post("/listens", listensListenerRateLimit, async (c) => {
   let raw: unknown;
   try {
     raw = await c.req.json();

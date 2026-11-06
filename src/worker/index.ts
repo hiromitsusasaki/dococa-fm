@@ -21,7 +21,7 @@ import { stations } from "./routes/stations";
 import { tts } from "./routes/tts";
 import { limitBodies } from "./security/body-limit";
 import { canonicalHost, requirePublicOrigin, sameOriginOnly } from "./security/origin";
-import { ipRateLimit, listenerRateLimit } from "./security/rate-limit";
+import { ipRateLimit, listenerRateLimit, listensIpRateLimit } from "./security/rate-limit";
 
 const app = new Hono<{ Bindings: Env; Variables: Variables }>();
 
@@ -33,6 +33,8 @@ app.use("*", canonicalHost);
 app.use("*", limitBodies);
 app.use("*", sameOriginOnly);
 app.use("*", ipRateLimit);
+// `/listens` has its own buckets; its IP one also runs before the session, so a cookie-less flood mints no rows.
+app.use("/listens", listensIpRateLimit);
 app.use("*", requireSessionSecret);
 app.use("*", sessionMiddleware);
 app.use("*", listenerRateLimit);
