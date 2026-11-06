@@ -8,7 +8,8 @@
 2. `docs/superpowers/specs/2026-11-03-dococa-fm-design.md` — 設計書（承認済み。設計の正本）
 3. `docs/superpowers/plans/2026-11-03-dococa-fm.md` — 実装計画（Task 1〜16。各タスクにテストとコミットがある）
 4. `docs/superpowers/plans/2026-11-05-dococa-fm-phase2.md` — Phase 2 の計画（局・識別・公開局・見た目。2026-11-05 の本人フィードバックから）
-5. `docs/DESIGN.md` — 見た目と文言の正本。画面を作る・直すときは必ずこれと `docs/design/station-mock.html` に合わせる
+5. `docs/superpowers/plans/2026-11-06-dococa-fm-phase3.md` — Phase 3 の計画（単位・音声の鍵・つなぎ・事前生成・聴いた記録・土地コード・英語 DJ。設計書の追記 K が正本）
+6. `docs/DESIGN.md` — 見た目と文言の正本。画面を作る・直すときは必ずこれと `docs/design/station-mock.html` に合わせる
 
 ブレストと調査の経緯は、このリポには置かない（公開リポになるため）。main-mac / ops-mac の `~/agent_workspace/workspace/2026-11-02-built-with-claude-hackathon/`（private）にある。`outputs/2026-11-03-handoff.md` が引き継ぎ資料、`notes/30-session-log.md` がセッション全文の記録。
 

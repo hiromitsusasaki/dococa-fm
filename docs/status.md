@@ -59,6 +59,19 @@ Phase 2（ラジオ中心の体験への作り替え）の実装は、すべて 
   - テスト: `select` / `compose` / `verify` / `build` / `station` の fallback・workOnly の fixture。
 - `letters.place` は日本語のラベルで持つ（DJ が日本語で読むため。英語の画面でも「島根」と出る。設計書 Addendum H に明記。英語表示はコードから引き直す Phase 3）。
 
+## Phase 3 の進み（計画: `docs/superpowers/plans/2026-11-06-dococa-fm-phase3.md`、設計: 追記 K）
+
+| Task | 内容 | 状態 |
+|---|---|---|
+| Task 1 | お便りの無い作品を枠から外す | 未着手 |
+| Task 2 | 行の本文を鍵にした音声キャッシュ。クラウドの声を全員に | 未着手 |
+| Task 3 | つなぎの定型 | 未着手 |
+| Task 4 | 単位（お便りごとの DJ の語り） | 未着手 |
+| Task 5 | 事前生成（投稿後・15 分ごと・手動） | 未着手 |
+| Task 6 | 聴いた記録 | 未着手 |
+| Task 7 | お便りの土地コード | 未着手 |
+| Task 8 | 英語の DJ | 未着手 |
+
 ## Phase 2 の進み
 
 | タスク | 内容 | 状態 |
