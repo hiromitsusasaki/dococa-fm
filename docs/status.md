@@ -2,6 +2,21 @@
 
 > 新しいセッションはまずここを読む。更新はタスクの区切りごと（最新を上に）。
 
+## Phase 4 の進み（計画: `docs/superpowers/plans/2026-11-06-dococa-fm-phase4.md`、設計: 追記 L）
+
+| Task | 内容 | 状態 |
+|---|---|---|
+| Task 1 | お住まい（画面と手渡しの言い方） | 完了 |
+| Task 2 | MCP の撤去 | 未着手 |
+| Task 3 | ラジオ面のダイヤル（要求ごとに 1 目盛り） | 未着手 |
+| Task 4 | 遠さ（埋め込みと距離の帯） | 未着手 |
+| Task 5 | ホームに今届いているお便り | 未着手 |
+| Task 6 | 送る画面（並び・お気に入りから選ぶ・検索・ブックマークレット） | 未着手 |
+| Task 7 | マイページの並び | 未着手 |
+| Task 8 | モデレーションの理由と再判定 | 未着手 |
+| Task 9 | 単位のフィードバックの輪（管理画面・良い例・採点スクリプト） | 未着手 |
+| Task 10 | 締めのドキュメント | 未着手 |
+
 ## 2026-11-06 Phase 3 完了（最終レビュー済み・ローカル）。次は本人作業 → デプロイ → public 化
 
 Phase 2（ラジオ中心の体験への作り替え）と Phase 3（単位・音声の鍵・つなぎ・事前生成・聴いた記録・土地コード・英語の DJ）の実装は、最終レビューの修正まで含めてすべて main にコミット済み。本番は Phase 1 の状態のままなので、下の本人作業を上から順に済ませてデプロイする（migrate → deploy → `/admin/prepare`）。本番 URL は `https://dococafm.app`、再デプロイは `pnpm run deploy`。
@@ -14,7 +29,7 @@ Phase 2（ラジオ中心の体験への作り替え）と Phase 3（単位・�
 - [ ] `pnpm wrangler secret put GOOGLE_OAUTH_CLIENT_ID` と `pnpm wrangler secret put GOOGLE_OAUTH_CLIENT_SECRET` を実行し、`.dev.vars` にも同じ値を写す。
 - [ ] OAuth の同意画面を「本番」に公開する（テスト中のままだと、登録したテストユーザーしか入れない）。
 - [ ] Google Cloud で Books API を有効化し、キーを `.dev.vars` の `GOOGLE_BOOKS_API_KEY` と `pnpm wrangler secret put GOOGLE_BOOKS_API_KEY` に入れる（YouTube のキーに Books API を足して同じ値でもよい）。入ったら本のデモを追加投入する（`pnpm seed --items <file> --personas 30 --reuse --origin https://dococafm.app`）。
-- [x] `pnpm db:migrate` で本番に 0005〜0014 を当てた（2026-11-06）。**0015（tts_v3）はまだ**: 音声の鍵を v3 に変え、`tts_audio` を空にして `units.audio_ready` を戻す。当てたら `pnpm run deploy` → `/admin/prepare` をやり直す。R2 の `tts/v2/` は手で消してよい（残っても害はない）。
+- [x] `pnpm db:migrate` で本番に 0005〜0014 を当てた（2026-11-06）。**0015（tts_v3）と 0016（revoice_handover: 手渡しの言い方が変わるので単位の音声を作り直す）はまだ**: 音声の鍵を v3 に変え、`tts_audio` を空にして `units.audio_ready` を戻す。当てたら `pnpm run deploy` → `/admin/prepare` をやり直す。R2 の `tts/v2/` は手で消してよい（残っても害はない）。
 - [ ] `pnpm run deploy`。
 - [ ] デプロイ後、`POST /admin/prepare`（`Authorization: Bearer $ADMIN_TOKEN`）で、デモデータの日本語と英語の単位と音声を先に作っておく。1 回の実行は単位と音声を合わせて最大 `limit` 件なので、`remaining` が 0 になるか `failed` が変わらなくなるまで繰り返す。音声の上限（既定 3000 行/日）に当たったら翌日（JST）に続く（Cron は 15 分ごとに 20 件ずつ埋める）。
 - [ ] 本番のデモデータは土地コードなしでシードしてある（`/admin/listeners` がコードを受け取るのは最終修正から）。英語の画面と英語の DJ では、コードの無いペルソナのお便りに日本語の土地（`place`）が出る。直すにはペルソナを作り直して再シードする（`pnpm seed --reuse` はペルソナの国名からコードを付けて送る）。するかどうかは本人が決める。
