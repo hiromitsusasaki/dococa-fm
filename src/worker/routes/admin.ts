@@ -243,6 +243,43 @@ admin.post("/admin/letters", async (c) => {
   return c.json({ letterId: made.letter.id, itemId: made.itemId });
 });
 
+const rejudgeSchema = z.object({ limit: z.number().int().min(1).max(100).default(20), after: z.string().min(1).max(100).optional() });
+
+/**
+ * Judges stored public letters again with the current moderation, in id order after the `after` cursor.
+ * A letter the judge turns down becomes `rejected`; a judgement that cannot be made leaves it public and
+ * counts as skipped. 私も is never judged, and a rejected letter never comes back. The answer carries ids
+ * and reasons only, never text.
+ */
+admin.post("/admin/rejudge", async (c) => {
+  const parsed = rejudgeSchema.safeParse((await readJson(c)) ?? {});
+  if (!parsed.success) return invalid(c, parsed.error);
+  const { limit, after } = parsed.data;
+  const { results } = await c.env.DB.prepare(
+    `SELECT letters.id, letters.body, items.title, items.creator FROM letters JOIN items ON items.id = letters.item_id
+     WHERE letters.status = 'public' AND letters.kind IN ('letter', 'found', 'reply') AND letters.id > ?
+     ORDER BY letters.id ASC LIMIT ?`,
+  )
+    .bind(after ?? "", limit)
+    .all<{ id: string; body: string; title: string; creator: string }>();
+  const rejected: { id: string; reason: string }[] = [];
+  let judged = 0;
+  let skipped = 0;
+  for (const row of results) {
+    try {
+      const verdict = await moderateLetter(c.env, row.body, { title: row.title, creator: row.creator });
+      judged++;
+      if (!verdict.ok) {
+        await setLetterStatus(c.env.DB, row.id, "rejected");
+        rejected.push({ id: row.id, reason: verdict.reason });
+      }
+    } catch {
+      skipped++;
+    }
+  }
+  return c.json({ judged, rejected, skipped, next: results.length === limit ? results[results.length - 1]!.id : null });
+});
+
 const prepareSchema = z.object({ limit: z.number().int().min(1).max(50).default(20) });
 
 /** The cron's work by hand: up to `limit` units and the audio that is still missing (use after seeding). */

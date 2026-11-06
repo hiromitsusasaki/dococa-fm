@@ -310,6 +310,89 @@ describe("POST /admin/episodes", () => {
   });
 });
 
+describe("POST /admin/rejudge", () => {
+  const keyed = { ...e, ANTHROPIC_API_KEY: "sk-test" };
+  const rejudge = (body?: unknown) => call("POST", "/admin/rejudge", body ?? {}, undefined, keyed);
+  const verdictFor = (bad: Record<string, string>) => (req: any) => {
+    const user = String(req.messages[0].content);
+    const hit = Object.keys(bad).find((b) => user.includes(`<letter>${b}</letter>`));
+    return toolUse("judge_letter", hit ? { ok: false, reason: bad[hit] } : { ok: true });
+  };
+  const status = async (id: string) => (await env.DB.prepare("SELECT status FROM letters WHERE id = ?").bind(id).first<{ status: string }>())?.status;
+
+  it("judges only letters, found voices and replies, and rejects what the judge turns down", async () => {
+    const create = stubAnthropic();
+    create.mockImplementation(verdictFor({ けなす: "negative", わいせつ: "obscene" }));
+    const item = await insertItem(env.DB, itemDraft({ title: "題名X", creator: "作者Y" }));
+    const bad = await insertLetter(env.DB, letterDraft(item.id, { body: "けなす" }));
+    const bad2 = await insertLetter(env.DB, letterDraft(item.id, { kind: "found", body: "わいせつ", sourceUrl: "https://example.com/1", sourceAuthor: "a" }));
+    const fine = await insertLetter(env.DB, letterDraft(item.id, { kind: "reply", body: "いい" }));
+    const watashimo = await insertLetter(env.DB, letterDraft(item.id, { kind: "watashimo", body: "けなす" }));
+    const res = await rejudge();
+    expect(res.status).toBe(200);
+    const out = (await res.json()) as { judged: number; rejected: { id: string; reason: string }[]; skipped: number; next: string | null };
+    expect(out.judged).toBe(3);
+    expect(out.skipped).toBe(0);
+    expect(out.next).toBeNull();
+    expect(out.rejected.sort((a, b) => a.id.localeCompare(b.id))).toEqual(
+      [
+        { id: bad.id, reason: "negative" },
+        { id: bad2.id, reason: "obscene" },
+      ].sort((a, b) => a.id.localeCompare(b.id)),
+    );
+    expect(await status(bad.id)).toBe("rejected");
+    expect(await status(bad2.id)).toBe("rejected");
+    expect(await status(fine.id)).toBe("public");
+    expect(await status(watashimo.id)).toBe("public");
+    expect(create).toHaveBeenCalledTimes(3);
+    const sent = create.mock.calls.map((c) => String(c[0].messages[0].content)).join("\n");
+    expect(sent).toContain("題名: 題名X");
+    expect(sent).toContain("作者: 作者Y");
+  });
+
+  it("never judges a letter that is already rejected", async () => {
+    const create = stubAnthropic();
+    create.mockImplementation(verdictFor({}));
+    const item = await insertItem(env.DB, itemDraft());
+    await insertLetter(env.DB, letterDraft(item.id, { status: "rejected" }));
+    const out = (await (await rejudge()).json()) as { judged: number };
+    expect(out.judged).toBe(0);
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it("skips a letter whose judgement throws and leaves it public", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const create = stubAnthropic();
+    create.mockResolvedValue({ content: [{ type: "text", text: "hmm" }] });
+    const item = await insertItem(env.DB, itemDraft());
+    const l = await insertLetter(env.DB, letterDraft(item.id));
+    const out = (await (await rejudge()).json()) as { judged: number; skipped: number; rejected: unknown[] };
+    expect(out).toMatchObject({ judged: 0, skipped: 1, rejected: [] });
+    expect(await status(l.id)).toBe("public");
+  });
+
+  it("paginates by the id cursor", async () => {
+    const create = stubAnthropic();
+    create.mockImplementation(verdictFor({}));
+    const item = await insertItem(env.DB, itemDraft());
+    const ids: string[] = [];
+    for (let n = 0; n < 5; n++) ids.push((await insertLetter(env.DB, letterDraft(item.id, { body: `b${n}` }))).id);
+    ids.sort();
+    const first = (await (await rejudge({ limit: 2 })).json()) as { judged: number; next: string | null };
+    expect(first).toMatchObject({ judged: 2, next: ids[1] });
+    const second = (await (await rejudge({ limit: 2, after: first.next })).json()) as { judged: number; next: string | null };
+    expect(second).toMatchObject({ judged: 2, next: ids[3] });
+    const third = (await (await rejudge({ limit: 2, after: second.next })).json()) as { judged: number; next: string | null };
+    expect(third).toMatchObject({ judged: 1, next: null });
+    expect(create).toHaveBeenCalledTimes(5);
+  });
+
+  it("answers 422 for a limit outside 1-100, and 401 without the token", async () => {
+    for (const limit of [0, 101, 1.5]) expect((await rejudge({ limit })).status).toBe(422);
+    expect((await call("POST", "/admin/rejudge", {}, {}, keyed)).status).toBe(401);
+  });
+});
+
 describe("GET /admin/episodes/:id", () => {
   it("returns the stored episode with its report for the operator", async () => {
     vi.spyOn(console, "warn").mockImplementation(() => {});
