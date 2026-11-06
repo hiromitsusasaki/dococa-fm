@@ -58,6 +58,8 @@ describe("GET /me", () => {
     expect(main).not.toContain('action="/auth/signout"');
     expect(main).toMatch(/<img src="https:\/\/example\.com\/a\.jpg"[^>]*width="96"[^>]*height="96"/);
     expect(main.match(/<img /g)).toHaveLength(1);
+    // The art box stays, empty, for the favourite without an image.
+    expect(main.match(/class="item-card-box"/g)).toHaveLength(2);
     expect(main).toContain(`href="/put?itemId=${noArt.id}"`);
   });
 
@@ -117,6 +119,7 @@ describe("GET /me", () => {
     expect(html).not.toContain("那覇");
     expect(html).toContain(`href="/episodes/${ep.id}?letter=${lb.id}"`);
     expect(html).toContain(`name="parentLetterId" value="${lb.id}"`);
+    expect(html).toContain(`<a class="me-card-link" href="/items/${b.id}">`);
     expect(html).not.toMatch(/\d+ ?件/);
     expect(html).not.toMatch(/\d+ letters/);
   });

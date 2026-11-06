@@ -875,6 +875,7 @@ a.button,
 .put button,
 .takedown button,
 .start-form button,
+.letter-actions button,
 .player button,
 .player a.button {
   display: inline-flex;
@@ -896,6 +897,12 @@ a.button,
 .player button,
 .player a.button {
   padding: var(--sp-2) var(--sp-6);
+}
+
+/* 私も / 一言 under a letter: the small pill (13px), still a 44px tap. The quiet 通報 stays quiet. */
+.letter-actions button {
+  padding: var(--sp-1) var(--sp-4);
+  font-size: 13px;
 }
 
 .settings button,

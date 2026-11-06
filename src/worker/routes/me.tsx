@@ -58,7 +58,7 @@ me.get("/me", requireSignin, async (c) => {
             <ul class="me-list">
               {heard.map((h) => (
                 <li>
-                  <a href={`/items/${h.item.id}`}>
+                  <a class="me-card-link" href={`/items/${h.item.id}`}>
                     <ItemCard item={h.item} heading="h3" lang={lang} />
                   </a>
                   <LetterText letter={h.letter} lang={lang} />
