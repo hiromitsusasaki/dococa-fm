@@ -9,7 +9,7 @@
 | Task 1 | お住まい（画面と手渡しの言い方） | 完了 |
 | Task 2 | MCP の撤去 | 完了（`/mcp`・`/settings/mcp-token`・MCP の依存 2 つ・レート制限と session の例外を外した。`/settings` の末尾にリスナー ID の行を残す） |
 | Task 3 | ラジオ面のダイヤル（要求ごとに 1 目盛り） | 完了（`next` は毎回 1 枠。本文 `{dial, first, letterId}` を zod で検査し、形が違えば 400。ダイヤルは `localStorage["dfm.dial"]` に置き、回すと 300 ms 待って作り置きを捨てて頼み直す。`/settings` のダイヤルと `POST /settings/dial` を外した。サインイン済みなら `listeners.dial` を値が変わったときだけ 1 回の UPDATE で書く。`/stations/mine?letter=` は最初の `next` に `letterId` を載せる。上限の既定は 60 枠と 1800 枠） |
-| Task 4 | 遠さ（埋め込みと距離の帯） | 未着手 |
+| Task 4 | 遠さ（埋め込みと距離の帯） | 完了（作品の公開情報だけを Workers AI `@cf/baai/bge-m3` でベクトルにし、Int8 で `items.vec`（0017）に置く。作品を作る経路（`/start`・`POST /letters`・Spotify 取り込み・`/admin/items`・`/admin/letters`）は応答のあとで作り、Cron と `/admin/prepare` が残りを埋める（20 作品で 1 件分の枠、`remaining.vectors`）。自分のラジオの 1 枠は、好みのベクトル（お気に入り 50、無ければ最近聴いた 20 作品の平均）からの遠さの百分位で、ダイヤル ±0.2 の帯から無作為に選ぶ。7 日以内に聴いた作品と直近 30 回の作品を外し、尽きたら前者から戻す。好みかベクトルが無ければ従来の枠の順。反響は「最後に聴いたお便り」より新しい反応に変え、直前の回の作品は外す） |
 | Task 5 | ホームに今届いているお便り | 未着手 |
 | Task 6 | 送る画面（並び・お気に入りから選ぶ・検索・ブックマークレット） | 未着手 |
 | Task 7 | マイページの並び | 未着手 |
@@ -20,6 +20,8 @@
 決定: MCP は Phase 4 で外した（事前生成で役目を終えた）。列 `mcp_token` は残して使わない。
 決定: 回は 1 枠（Task 3。リスナーの回は `makeEpisode` の既定 `size: 1`。eval だけは `POST /admin/episodes` に `size: 6` を送り、1 回 6 枠で測る。`selectProgram` の `size` はそのためとテストのために残す）。
 決定: 終わりのつなぎは言わない（Task 3。`bridge.close` は出さないが、保存済みの回を描くためにキーと `BRIDGE_KEYS` は残す。`bridge.open` は訪問の最初の回だけ）。
+決定: 遠さは選ぶためだけに使い、応答・画面・ログ・DJ の言葉には出さない（Task 4。`next` の JSON にベクトルや遠さのキーが無いことをテストで確かめる）。
+決定: 反響の基準は「このラジオで最後にお便りを聴いた時刻」（Task 4。作り置きの回が捨てられても反響は消えない。作り置きが同じ反響を繰り返さないよう、直前の回の作品は反響にしない）。
 決定: 上限は枠の数（Task 3。`EPISODE_DAILY_LIMIT` 既定 60、`EPISODE_GLOBAL_DAILY_LIMIT` 既定 1800。数えるのは従来どおり回の行で、1 回が 1 枠）。
 
 ## 2026-11-06 Phase 3 完了（最終レビュー済み・ローカル）。次は本人作業 → デプロイ → public 化
@@ -28,6 +30,8 @@ Phase 2（ラジオ中心の体験への作り替え）と Phase 3（単位・�
 
 ### 本人作業
 
+- [ ] Workers AI を使えるようにする（Phase 4 Task 4。Workers Paid のアカウントで有効。`wrangler.jsonc` に `ai` バインディング `AI` を入れてある。無くても動き、そのときダイヤルは枠の順を決めるだけ）。
+- [ ] `pnpm db:migrate` で 0016（revoice_handover）と 0017（items_vec）を当てる。デプロイ後、`/admin/prepare` を一度回して既存の作品のベクトルを作る（`remaining.vectors` が 0 になるまで。20 作品で 1 件分の枠）。
 - [ ] 本番の `EPISODE_DAILY_LIMIT` を 30 にしてあれば、Task 3 のデプロイ前に消す（既定 60 枠）か 180 にする。
 - [ ] 任意: 単位（お便りごとの DJ の語り）の 1 日の上限 `UNIT_DAILY_LIMIT`（既定 1000、`0` で停止）を変えるときは `pnpm wrangler secret put UNIT_DAILY_LIMIT`（Cloudflare の secret か var。既定でよければ設定しない）。
 - [ ] 任意: お便りと一言の全体の 1 日の上限 `LETTER_GLOBAL_DAILY_LIMIT`（既定 500、`0` で停止。数えるのはお便りと一言だけで、「私も」と見つけた声は数えず止めない）を変えるときは `pnpm wrangler secret put LETTER_GLOBAL_DAILY_LIMIT`。`/admin/letters` のシードもこの上限に従うので、大量に投入する日は先に上げる。
