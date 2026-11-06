@@ -24,9 +24,6 @@ function rowToListener(r: Row): Listener {
   };
 }
 
-/** What `newMcpToken` makes: 24 random bytes as 48 lower-case hex digits. */
-export const isWellFormedMcpToken = (token: string): boolean => /^[0-9a-f]{48}$/.test(token);
-
 export function newMcpToken(): string {
   const bytes = crypto.getRandomValues(new Uint8Array(24));
   return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
@@ -80,11 +77,6 @@ export async function getListener(db: D1Database, id: string): Promise<Listener 
   return row ? rowToListener(row) : null;
 }
 
-export async function getListenerByMcpToken(db: D1Database, token: string): Promise<Listener | null> {
-  const row = await db.prepare("SELECT * FROM listeners WHERE mcp_token = ?").bind(token).first<Row>();
-  return row ? rowToListener(row) : null;
-}
-
 export async function getListenerByGoogleSub(db: D1Database, sub: string): Promise<Listener | null> {
   const row = await db.prepare("SELECT * FROM listeners WHERE google_sub = ?").bind(sub).first<Row>();
   return row ? rowToListener(row) : null;
@@ -104,6 +96,7 @@ const COLUMNS = {
   voice: "voice",
   dial: "dial",
   lang: "lang",
+  // Column kept, unused since Phase 4 (NOT NULL UNIQUE; written on insert only).
   mcpToken: "mcp_token",
   spotifyRefreshToken: "spotify_refresh_token",
   cloudTtsUsed: "cloud_tts_used",

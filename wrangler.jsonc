@@ -17,6 +17,6 @@
   // Pre-generates units and audio for letters that missed the post-insert hook (src/worker/program/prepare.ts).
   "triggers": { "crons": ["*/15 * * * *"] },
   // Must match the custom domain above: it drives the same-origin check, the Secure cookie, the Spotify
-  // redirect and the MCP url. Empty refuses every request with 500. Local dev sets it in .dev.vars.
+  // redirect and the station url. Empty refuses every request with 500. Local dev sets it in .dev.vars.
   "vars": { "PUBLIC_ORIGIN": "https://dococafm.app" }
 }

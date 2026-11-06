@@ -24,12 +24,6 @@ function postForm(path: string, cookie: string, body: Record<string, string>) {
   });
 }
 
-async function mcpUrlIn(html: string): Promise<string> {
-  const m = html.match(/\/mcp\/[0-9a-f]{48}/);
-  if (!m) throw new Error("no mcp url");
-  return m[0];
-}
-
 describe("session cookie", () => {
   it("issues dfm_sid on the first page request but not on /healthz", async () => {
     const first = await SELF.fetch(`${BASE}/settings`);
@@ -209,21 +203,12 @@ describe("settings", () => {
     expect(html).toContain("&lt;b&gt;");
   });
 
-  it("shows the listener id in the MCP section", async () => {
+  it("shows the listener id at the end of the page, and no MCP url", async () => {
     const cookie = cookieOf(await SELF.fetch(`${BASE}/settings`));
     const html = await (await SELF.fetch(`${BASE}/settings`, { headers: { cookie } })).text();
+    expect(html).not.toContain("/mcp/");
     expect(html).toContain("リスナー ID");
     expect(html).toContain(cookie.split("=")[1]!.split(".")[0]!);
-  });
-
-  it("regenerates the MCP token", async () => {
-    const cookie = cookieOf(await SELF.fetch(`${BASE}/settings`));
-    const before = await mcpUrlIn(await (await SELF.fetch(`${BASE}/settings`, { headers: { cookie } })).text());
-    const post = await postForm("/settings/mcp-token", cookie, {});
-    expect(post.status).toBe(303);
-    expect(post.headers.get("location")).toBe("/settings");
-    const after = await mcpUrlIn(await (await SELF.fetch(`${BASE}/settings`, { headers: { cookie } })).text());
-    expect(after).not.toBe(before);
   });
 });
 

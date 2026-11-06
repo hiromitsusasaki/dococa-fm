@@ -2,7 +2,7 @@ import type { Context, MiddlewareHandler } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import type { Env } from "../env";
 
-/** A letter is 200 characters; forms and MCP calls are far below this. */
+/** A letter is 200 characters; forms are far below this. */
 export const PUBLIC_BODY_MAX = 64 * 1024;
 /** `/admin/found` takes a batch of found voices. */
 export const ADMIN_BODY_MAX = 1024 * 1024;

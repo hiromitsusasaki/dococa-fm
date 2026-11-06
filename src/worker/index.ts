@@ -12,7 +12,6 @@ import { home } from "./routes/home";
 import { items } from "./routes/items";
 import { letters } from "./routes/letters";
 import { listens } from "./routes/listens";
-import { mcp } from "./routes/mcp";
 import { me } from "./routes/me";
 import { put } from "./routes/put";
 import { settings } from "./routes/settings";
@@ -56,7 +55,6 @@ app.route("/", stations);
 app.route("/", listens);
 app.route("/", tts);
 app.route("/", home);
-app.route("/", mcp);
 
 // A copy, because the headers of an assets response are immutable and secureHeaders() sets its own.
 app.get("*", async (c) => {

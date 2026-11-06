@@ -802,8 +802,7 @@ button.pill {
   padding: var(--sp-8) var(--sp-4);
 }
 
-.settings-form,
-.settings-mcp {
+.settings-form {
   display: grid;
   gap: var(--sp-4);
   margin-top: var(--sp-6);

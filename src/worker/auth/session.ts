@@ -36,7 +36,7 @@ export async function verifySession(cookie: string | undefined, secret: string):
   return diff === 0 ? id : null;
 }
 
-const EXEMPT_PREFIXES = ["/admin", "/mcp", "/api", "/assets", "/src"];
+const EXEMPT_PREFIXES = ["/admin", "/api", "/assets", "/src"];
 const EXEMPT_PATHS = new Set(["/healthz", "/app.css", "/favicon.ico", "/manifest.webmanifest", "/icon.svg", "/bed.mp3"]);
 
 /** Token-authenticated routes and static assets must not mint a listener per request. */

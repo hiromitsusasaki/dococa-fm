@@ -2,10 +2,8 @@ import { env } from "cloudflare:workers";
 import { SELF } from "cloudflare:test";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import app from "../../src/worker/index";
-import { createListener, updateListener } from "../../src/worker/db/listeners";
 import { t } from "../../src/worker/i18n/t";
 import { WindowStore, isRateLimited } from "../../src/worker/security/rate-limit";
-import { countingD1 } from "../helpers/d1-count";
 import { resetDb } from "../helpers/db";
 import { newSession } from "./routes/helpers";
 
@@ -56,8 +54,8 @@ describe("origin check", () => {
     expect((await form({ "sec-fetch-site": "same-site" })).status).toBe(403);
   });
 
-  it("covers every write route outside /admin and /mcp, and does not mint a listener for a refused one", async () => {
-    for (const path of ["/start", "/episodes", "/settings", "/settings/mcp-token", "/settings/dial", "/takedown", "/listens"]) {
+  it("covers every write route outside /admin, and does not mint a listener for a refused one", async () => {
+    for (const path of ["/start", "/episodes", "/settings", "/settings/dial", "/takedown", "/listens"]) {
       const res = await form({ origin: "https://evil.example" }, path);
       expect(res.status, path).toBe(403);
       expect(res.headers.get("set-cookie")).toBeNull();
@@ -110,64 +108,6 @@ describe("rate limit", () => {
   it("counts POST /settings in the IP bucket, since it writes", async () => {
     for (let i = 0; i < 20; i++) await post("203.0.113.9", "/settings");
     expect((await post("203.0.113.9", "/settings")).status).toBe(429);
-  });
-
-  it("limits unknown /mcp tokens by IP (20), and answers 429 in JSON", async () => {
-    const hit = () => app.request("/mcp/guess", { method: "POST", headers: { "cf-connecting-ip": "203.0.113.4" } }, e);
-    for (let i = 0; i < 20; i++) expect((await hit()).status).toBe(401);
-    const res = await hit();
-    expect(res.status).toBe(429);
-    expect(await res.json()).toEqual({ error: "rate_limited" });
-    for (let i = 0; i < 25; i++) expect((await app.request("/healthz", { headers: { "cf-connecting-ip": "203.0.113.4" } }, e)).status).toBe(200);
-  });
-
-  it("refuses a malformed token without a D1 read once its IP has had 20 unknown-token answers", async () => {
-    const counted = countingD1(env.DB);
-    const ce = { ...e, DB: counted.db };
-    const hit = () => app.request("/mcp/not-a-token", { method: "POST", headers: { "cf-connecting-ip": "203.0.113.40" } }, ce);
-    for (let i = 0; i < 20; i++) expect((await hit()).status).toBe(401);
-    expect((await hit()).status).toBe(429);
-    expect((await hit()).status).toBe(429);
-    // A token that cannot exist is never looked up.
-    expect(counted.count()).toBe(0);
-  });
-
-  it("looks a well-formed unknown token up, answers 401 and spends the IP bucket", async () => {
-    const counted = countingD1(env.DB);
-    const ce = { ...e, DB: counted.db };
-    const guess = (n: number) => app.request(`/mcp/${n.toString(16).padStart(48, "0")}`, { method: "POST", headers: { "cf-connecting-ip": "203.0.113.41" } }, ce);
-    for (let i = 0; i < 20; i++) expect((await guess(i)).status).toBe(401);
-    expect(counted.count()).toBe(20);
-    expect((await guess(20)).status).toBe(429);
-    // The bucket it spent now also stops malformed tokens from that IP before any lookup.
-    expect((await app.request("/mcp/x", { method: "POST", headers: { "cf-connecting-ip": "203.0.113.41" } }, ce)).status).toBe(429);
-    expect(counted.count()).toBe(21);
-  });
-
-  it("lets a valid token through from an IP whose unknown-token bucket is full", async () => {
-    const a = await createListener(env.DB);
-    const ip = { "cf-connecting-ip": "203.0.113.42" };
-    for (let i = 0; i < 21; i++) await app.request("/mcp/guess", { method: "POST", headers: ip }, e);
-    expect((await app.request("/mcp/guess", { method: "POST", headers: ip }, e)).status).toBe(429);
-    const res = await app.request(
-      `/mcp/${a.mcpToken}`,
-      { method: "POST", headers: { ...ip, "content-type": "application/json", accept: "application/json, text/event-stream" }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list", params: {} }) },
-      e,
-    );
-    expect(res.status).toBe(200);
-  });
-
-  it("limits a valid /mcp token by the token (60), not by the shared IP", async () => {
-    const a = await createListener(env.DB);
-    const b = await createListener(env.DB);
-    await updateListener(env.DB, a.id, { mcpToken: "a".repeat(48) });
-    await updateListener(env.DB, b.id, { mcpToken: "b".repeat(48) });
-    const hit = (token: string) => app.request(`/mcp/${token}`, { method: "POST", headers: { "cf-connecting-ip": "203.0.113.6", "content-type": "application/json", accept: "application/json, text/event-stream" }, body: "{}" }, e);
-    for (let i = 0; i < 60; i++) expect((await hit("a".repeat(48))).status, String(i)).not.toBe(429);
-    expect((await hit("a".repeat(48))).status).toBe(429);
-    // Another token behind the same IP is unaffected, and so is a guess from that IP.
-    expect((await hit("b".repeat(48))).status).not.toBe(429);
-    expect((await hit("nope")).status).toBe(401);
   });
 
   it("answers a form route's 429 with a small HTML page", async () => {
@@ -340,9 +280,9 @@ describe("isRateLimited for /put/register", () => {
 const OWN_LIMITER: Record<string, string> = { "/listens": "own limiter" };
 
 describe("rate-limit allowlist covers every write route", () => {
-  it("counts every registered POST route outside /admin and /mcp, except the ones with their own limiter", () => {
+  it("counts every registered POST route outside /admin, except the ones with their own limiter", () => {
     const posts = [...new Set(app.routes.filter((r) => r.method === "POST" || r.method === "ALL").map((r) => r.path))]
-      .filter((p) => !p.startsWith("/admin") && !p.startsWith("/mcp") && p !== "*" && !p.includes("*"))
+      .filter((p) => !p.startsWith("/admin") && p !== "*" && !p.includes("*"))
       .map((p) => p.replace(/:[A-Za-z]+/g, "x"));
     expect(posts).toContain("/settings/dial");
     expect(posts).toContain("/listens");

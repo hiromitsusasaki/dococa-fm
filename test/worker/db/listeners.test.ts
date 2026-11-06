@@ -4,7 +4,6 @@ import {
   createListener,
   getListener,
   getListenerByGoogleSub,
-  getListenerByMcpToken,
   getListenerBySlug,
   updateListener,
 } from "../../../src/worker/db/listeners";
@@ -26,13 +25,6 @@ describe("listeners", () => {
     });
     expect(l.mcpToken).toMatch(/^[0-9a-f]{48}$/);
     expect(await getListener(env.DB, l.id)).toEqual(l);
-  });
-
-  it("getListenerByMcpToken finds the listener", async () => {
-    const l = await createListener(env.DB);
-    await createListener(env.DB);
-    expect((await getListenerByMcpToken(env.DB, l.mcpToken))?.id).toBe(l.id);
-    expect(await getListenerByMcpToken(env.DB, "nope")).toBeNull();
   });
 
   it("updateListener patches only given fields", async () => {

@@ -8,8 +8,6 @@ type AppEnv = { Bindings: Env; Variables: Variables };
 
 export const WINDOW_MS = 60_000;
 export const LIMIT_PER_WINDOW = 20;
-/** A valid MCP token is a known caller; hosted connectors share egress IPs and make several requests per session. */
-export const MCP_TOKEN_LIMIT_PER_WINDOW = 60;
 export const MAX_KEYS = 10_000;
 const SWEEP_EVERY_MS = 1_000;
 
@@ -61,12 +59,6 @@ export class WindowStore implements Store<AppEnv> {
     }
   }
 
-  /** Hits in the key's current window, without counting one. */
-  peek(key: string): number {
-    const entry = this.hits.get(key);
-    return entry && entry.resetTime.getTime() > Date.now() ? entry.totalHits : 0;
-  }
-
   decrement(key: string): void {
     const entry = this.hits.get(key);
     if (entry && entry.totalHits > 0) entry.totalHits -= 1;
@@ -79,7 +71,7 @@ export class WindowStore implements Store<AppEnv> {
 
 /**
  * Routes that write, or that spend a paid or external call. Everything here shares one bucket per IP and one
- * per listener. `/mcp/*`, `GET /tts` and `POST /listens` have their own buckets.
+ * per listener. `GET /tts` and `POST /listens` have their own buckets.
  */
 export function isRateLimited(method: string, path: string, query: URLSearchParams): boolean {
   if (path === "/api" || path.startsWith("/api/")) return true;
@@ -159,25 +151,3 @@ export const listensListenerRateLimit = routeLimiter(LISTENS_LISTENER_LIMIT_PER_
   const listener = c.get("listener");
   return listener ? `listener:${listener.id}` : null;
 });
-
-const mcpTokenStore = new WindowStore();
-const mcpIpStore = new WindowStore();
-
-/**
- * `/mcp/<token>` with a malformed token, before any lookup: an IP that has already had its 20 unknown-token answers
- * this minute is refused. Nothing is counted here. Well-formed tokens never pass through this check.
- */
-export function mcpIpBlocked(env: Env, ip: string | undefined): boolean {
-  return ip !== undefined && mcpIpStore.peek(`ip:${ip}`) >= limitOf({ env });
-}
-
-/** An unknown token counts against the caller's IP (20 a minute), which is what bounds guessing. True when over. */
-export function mcpUnauthorizedOver(env: Env, ip: string | undefined): boolean {
-  if (!ip) return false;
-  return mcpIpStore.increment(`ip:${ip}`).totalHits > limitOf({ env });
-}
-
-/** A valid token counts against that token (60 a minute), not the IP: hosted connectors share egress IPs. True when over. */
-export function mcpTokenOver(env: Env, token: string): boolean {
-  return mcpTokenStore.increment(`token:${token}`).totalHits > limitOf({ env }) * (MCP_TOKEN_LIMIT_PER_WINDOW / LIMIT_PER_WINDOW);
-}

@@ -3,7 +3,7 @@ import { type Context, Hono } from "hono";
 import { z } from "zod";
 import { Layout } from "../../views/layout";
 import type { Variables } from "../auth/session";
-import { newMcpToken, updateListener } from "../db/listeners";
+import { updateListener } from "../db/listeners";
 import { COUNTRIES, REGIONS } from "../geo/places";
 import { isValidRegion, placeLabel } from "../geo/place-label";
 import { looksLikeContact } from "../program/pii-patterns";
@@ -36,8 +36,8 @@ type StationView = { isPublic: boolean; slug: string; url: string | null; taken?
 
 type FormValues = Pick<Listener, "radioName" | "place" | "placeCountry" | "placeRegion" | "voice" | "dial" | "lang">;
 
-function SettingsPage(props: { values: FormValues; listener: Listener; path: string; listenerId: string; mcpUrl: string; spotifyConnected: boolean; spotifyFailed?: boolean; signinFailed?: boolean; saved?: boolean; invalid?: boolean; station?: StationView }) {
-  const { values, listener, path, listenerId, mcpUrl, spotifyConnected, spotifyFailed, signinFailed, saved, invalid, station } = props;
+function SettingsPage(props: { values: FormValues; listener: Listener; path: string; listenerId: string; spotifyConnected: boolean; spotifyFailed?: boolean; signinFailed?: boolean; saved?: boolean; invalid?: boolean; station?: StationView }) {
+  const { values, listener, path, listenerId, spotifyConnected, spotifyFailed, signinFailed, saved, invalid, station } = props;
   const t = tFor(values.lang);
   return (
     <Layout title={t("settings.title")} lang={values.lang} listener={listener} path={path}>
@@ -140,18 +140,9 @@ function SettingsPage(props: { values: FormValues; listener: Listener; path: str
           </p>
         </section>
 
-        <section class="settings-mcp">
-          <h2>{t("settings.mcp")}</h2>
-          <p>{t("settings.mcpHelp")}</p>
-          {listener.googleSub === null && <p class="muted">{t("settings.mcpAnonymous")}</p>}
-          <input type="text" readonly value={mcpUrl} aria-label={t("settings.mcp")} />
-          <form method="post" action="/settings/mcp-token">
-            <button type="submit">{t("settings.mcpRegenerate")}</button>
-          </form>
-          <p class="muted">
-            {t("settings.listenerId")}: <code>{listenerId}</code>
-          </p>
-        </section>
+        <p class="muted">
+          {t("settings.listenerId")}: <code>{listenerId}</code>
+        </p>
       </main>
     </Layout>
   );
@@ -166,14 +157,12 @@ const stationViewOf = (env: Env, listener: Listener, over: Partial<StationView> 
 
 const isUniqueViolation = (e: unknown) => String((e as Error)?.message ?? e).includes("station_slug");
 
-const mcpUrlOf = (env: Env, listener: Listener) => `${env.PUBLIC_ORIGIN}/mcp/${listener.mcpToken}`;
-
 export const settings = new Hono<{ Bindings: Env; Variables: Variables }>();
 
 settings.get("/settings", (c) => {
   const listener = c.get("listener");
   return c.html(
-    <SettingsPage values={listener} listener={listener} path={currentPath(c)} listenerId={listener.id} mcpUrl={mcpUrlOf(c.env, listener)} spotifyConnected={listener.spotifyRefreshToken !== null} spotifyFailed={c.req.query("spotify") === "failed"} signinFailed={c.req.query("signin") === "failed"} saved={c.req.query("saved") === "1"} station={stationViewOf(c.env, listener)} />,
+    <SettingsPage values={listener} listener={listener} path={currentPath(c)} listenerId={listener.id} spotifyConnected={listener.spotifyRefreshToken !== null} spotifyFailed={c.req.query("spotify") === "failed"} signinFailed={c.req.query("signin") === "failed"} saved={c.req.query("saved") === "1"} station={stationViewOf(c.env, listener)} />,
   );
 });
 
@@ -183,7 +172,7 @@ settings.post(
     if (result.success) return;
     const c = ctx as SettingsContext;
     const listener = c.get("listener");
-    return c.html(<SettingsPage values={listener} listener={listener} path={currentPath(c)} listenerId={listener.id} mcpUrl={mcpUrlOf(c.env, listener)} spotifyConnected={listener.spotifyRefreshToken !== null} invalid station={stationViewOf(c.env, listener)} />, 422);
+    return c.html(<SettingsPage values={listener} listener={listener} path={currentPath(c)} listenerId={listener.id} spotifyConnected={listener.spotifyRefreshToken !== null} invalid station={stationViewOf(c.env, listener)} />, 422);
   }),
   async (c) => {
     const listener = c.get("listener");
@@ -213,18 +202,13 @@ settings.post(
         if (!isUniqueViolation(e)) throw e;
         if (chosen || attempt > 0 || !slug) {
           const shown = { ...listener, ...rest, stationPublic: isPublic };
-          return c.html(<SettingsPage values={shown} listener={listener} path={currentPath(c)} listenerId={listener.id} mcpUrl={mcpUrlOf(c.env, listener)} spotifyConnected={listener.spotifyRefreshToken !== null} station={stationViewOf(c.env, listener, { isPublic, slug: slug ?? "", url: null, taken: true })} />, 422);
+          return c.html(<SettingsPage values={shown} listener={listener} path={currentPath(c)} listenerId={listener.id} spotifyConnected={listener.spotifyRefreshToken !== null} station={stationViewOf(c.env, listener, { isPublic, slug: slug ?? "", url: null, taken: true })} />, 422);
         }
         slug = `${slug.slice(0, 19).replace(/-+$/, "")}-${slugSuffix()}`;
       }
     }
   },
 );
-
-settings.post("/settings/mcp-token", async (c) => {
-  await updateListener(c.env.DB, c.get("listener").id, { mcpToken: newMcpToken() });
-  return c.redirect("/settings", 303);
-});
 
 /** The player's dial: saves only the dial, effective from the next episode. */
 settings.post("/settings/dial", zValidator("form", fields.pick({ dial: true }), (r, c) => (r.success ? undefined : c.body(null, 422))), async (c) => {
