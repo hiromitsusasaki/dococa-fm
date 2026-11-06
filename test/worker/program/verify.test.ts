@@ -411,3 +411,28 @@ describe("verifyEpisode intro names the sender", () => {
     expect(run([intro("海の見える部屋で聴きたい一曲です。", short.id), read(short)], "ja", short).details).toEqual([]);
   });
 });
+
+describe("verifyEpisode japanese gaps", () => {
+  const details = (text: string) => verifyEpisode(episode(dj(text), read(plain)), letters, me).details;
+
+  it.each([
+    ["measure", "二通のお便りです。"],
+    ["measure", "三通のお便りが届きました。"],
+    ["playback", "一緒に聴きましょう。"],
+    ["playback", "ゆっくり聞きましょう。"],
+    ["playback", "この映画を観ましょう。"],
+    ["playback", "ぜひ見ましょう。"],
+    ["playback", "聴いてみてね。"],
+    ["playback", "聞いてほしい一曲です。"],
+    ["playback", "観てみましょう。"],
+    ["playback", "見てね。"],
+    ["topical", "ただいまお届けするのは静かな一曲です。"],
+    ["topical", "只今お届けしているのは静かな曲です。"],
+  ])("fails with %s: %s", (check, text) => {
+    expect(details(text).some((d) => d.startsWith(`${check}: segment 1 line 1: `))).toBe(true);
+  });
+
+  it.each(["一通のお便りです。", "世界のどこかの一通を。", "ずっと聴いてきた人の一曲です。", "夜に聴いてきた歌です。"])("passes %s", (text) => {
+    expect(details(text)).toEqual([]);
+  });
+});

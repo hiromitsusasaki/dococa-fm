@@ -6,7 +6,7 @@ export const TOPICAL = new RegExp(
     // news and fashion
     "ニュース|速報|流行|トレンド|バズ|話題の|話題に",
     // what is on sale or on air right now
-    "公開中|上映中|発売中|配信中|放送中|配信開始|発売開始|新作|最新作",
+    "公開中|上映中|発売中|配信中|放送中|配信開始|発売開始|新作|最新作|ただいま|只今",
     // dates and eras
     "[0-9０-９]{4}年|(?:昭和|平成|令和)[0-9０-９元]+年|令和|平成[0-9]",
     // seasons and calendar events
