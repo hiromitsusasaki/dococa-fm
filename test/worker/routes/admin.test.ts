@@ -218,8 +218,9 @@ describe("POST /admin/prepare", () => {
     const create = stubAnthropic();
     create.mockResolvedValue(toolUse("write_unit", { intro: "静かな一曲です。", after: "いいお便りでした。" }));
     vi.spyOn(console, "warn").mockImplementation(() => {});
-    expect(await (await post({ limit: 1 })).json()).toMatchObject({ units: 2, remaining: { units: { ja: 2, en: 2 } } });
-    expect(await (await post()).json()).toMatchObject({ units: 4, remaining: { units: { ja: 0, en: 0 } } });
+    // The limit is the run's budget across both languages.
+    expect(await (await post({ limit: 1 })).json()).toMatchObject({ units: 1, remaining: { units: { ja: 2, en: 3 } } });
+    expect(await (await post()).json()).toMatchObject({ units: 5, remaining: { units: { ja: 0, en: 0 } } });
     for (const limit of [0, 51, 1.5, "5"]) expect((await post({ limit })).status).toBe(422);
   });
 });

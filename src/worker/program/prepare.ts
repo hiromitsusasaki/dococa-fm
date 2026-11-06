@@ -105,10 +105,11 @@ const OUTAGE_AFTER = 3;
 export type Remaining = { units: Record<Unit["lang"], number>; audio: Record<Unit["lang"], number> };
 
 /**
- * Per language, `ja` first then `en`: up to `limit` letters without a unit, then up to `limit` verified units
- * without audio. Stops making audio at the first `limit`/`unavailable` answer, units at `UNIT_DAILY_LIMIT`
- * (a halt, not a failure), and units after 3 letters in a row that cannot get one, in either language (a single bad letter is counted as failed and skipped, so newer
- * letters are still reached).
+ * `limit` is the whole run's budget of letter-language jobs, spent in order on ja units, en units, ja audio,
+ * en audio: each letter run consumes one, and every listing asks for the remaining budget only. Stops making
+ * audio at the first `limit`/`unavailable` answer, units at `UNIT_DAILY_LIMIT` (a halt, not a failure), and
+ * units after 3 letters in a row that cannot get one, in either language (a single bad letter is counted as
+ * failed and skipped, so newer letters are still reached).
  */
 export async function prepareBatch(env: Env, db: D1Database, limit = 20): Promise<Prepared & { remaining: Remaining }> {
   const total: Prepared = { units: 0, audio: 0, failed: 0 };
@@ -117,11 +118,13 @@ export async function prepareBatch(env: Env, db: D1Database, limit = 20): Promis
     total.audio += r.audio;
     total.failed += r.failed;
   };
+  let budget = limit;
   let audioHalted = false;
   let unitHalted = false;
   let unitMisses = 0;
   const done = new Set<string>();
   const one = async (id: string, lang: Unit["lang"]) => {
+    budget--;
     done.add(`${lang}:${id}`);
     try {
       const r = await run(env, db, id, lang, !audioHalted);
@@ -134,17 +137,19 @@ export async function prepareBatch(env: Env, db: D1Database, limit = 20): Promis
       total.failed++;
     }
   };
+  const unitsStopped = () => unitHalted || unitMisses >= OUTAGE_AFTER;
 
   for (const lang of LANGS) {
-    for (const id of await listLettersWithoutUnit(db, lang, limit)) {
-      if (unitHalted || unitMisses >= OUTAGE_AFTER) break;
+    if (budget <= 0 || unitsStopped()) break;
+    for (const id of await listLettersWithoutUnit(db, lang, budget)) {
+      if (budget <= 0 || unitsStopped()) break;
       await one(id, lang);
     }
   }
   for (const lang of LANGS) {
-    if (audioHalted) break;
-    for (const u of await listUnitsWithoutAudio(db, lang, limit)) {
-      if (audioHalted) break;
+    if (budget <= 0 || audioHalted) break;
+    for (const u of await listUnitsWithoutAudio(db, lang, budget)) {
+      if (budget <= 0 || audioHalted) break;
       if (!done.has(`${lang}:${u.letterId}`)) await one(u.letterId, lang);
     }
   }

@@ -151,7 +151,7 @@ describe("prepareLetter", () => {
 });
 
 describe("prepareBatch", () => {
-  it("makes at most `limit` units per language, ja first then en, and reports what remains of each", async () => {
+  it("spends `limit` across both languages, ja first then en, and reports what remains of each", async () => {
     const { letters } = await seed(3);
     const order: string[] = [];
     create.mockImplementation((req: { system: string; messages: { content: string }[] }) => {
@@ -159,10 +159,32 @@ describe("prepareBatch", () => {
       order.push(`${lang}:${letters.findIndex((l) => req.messages[0]!.content.includes(l.body))}`);
       return toolUse("write_unit", { intro: "静かな一曲です。", after: "いいお便りでした。" });
     });
-    const r = await prepareBatch(keylessTts, env.DB, 2);
-    expect(r).toEqual({ units: 4, audio: 0, failed: 0, remaining: { units: { ja: 1, en: 1 }, audio: { ja: 2, en: 2 } } });
-    expect(order).toEqual(["ja:0", "ja:1", "en:0", "en:1"]);
-    expect((await getUnits(env.DB, letters.map((l) => l.id), "en")).size).toBe(2);
+    const r = await prepareBatch(keylessTts, env.DB, 4);
+    expect(r).toEqual({ units: 4, audio: 0, failed: 0, remaining: { units: { ja: 0, en: 2 }, audio: { ja: 3, en: 1 } } });
+    expect(order).toEqual(["ja:0", "ja:1", "ja:2", "en:0"]);
+    expect((await getUnits(env.DB, letters.map((l) => l.id), "en")).size).toBe(1);
+  });
+
+  it("runs exactly `limit` jobs in one run: limit 3 with two letters lacking both units makes ja, ja, en", async () => {
+    const { letters } = await seed(2);
+    const order: string[] = [];
+    create.mockImplementation((req: { system: string; messages: { content: string }[] }) => {
+      const lang = req.system.startsWith("You are") ? "en" : "ja";
+      order.push(`${lang}:${letters.findIndex((l) => req.messages[0]!.content.includes(l.body))}`);
+      return toolUse("write_unit", { intro: "静かな一曲です。", after: "いいお便りでした。" });
+    });
+    const r = await prepareBatch(keyed, env.DB, 3);
+    expect(order).toEqual(["ja:0", "ja:1", "en:0"]);
+    expect(r).toMatchObject({ units: 3, failed: 0, remaining: { units: { ja: 0, en: 1 }, audio: { ja: 0, en: 0 } } });
+  });
+
+  it("spends the whole budget on audio when there is no unit work", async () => {
+    await seed(3);
+    await prepareBatch(keylessTts, env.DB, 20);
+    create.mockClear();
+    const r = await prepareBatch(keyed, env.DB, 4);
+    expect(create).not.toHaveBeenCalled();
+    expect(r).toMatchObject({ units: 0, failed: 0, remaining: { units: { ja: 0, en: 0 }, audio: { ja: 0, en: 2 } } });
   });
 
   it("goes on to newer letters when the oldest one cannot get a unit, and stops only after three misses in a row", async () => {
@@ -194,11 +216,11 @@ describe("prepareBatch", () => {
     expect(await unitOf(letters[1]!.id)).toMatchObject({ audioReady: true });
   });
 
-  it("voices at most `limit` units per language", async () => {
+  it("voices at most `limit` units in all, ja first", async () => {
     await seed(3);
     await prepareBatch(keylessTts, env.DB, 20);
     const r = await prepareBatch(keyed, env.DB, 1);
-    expect(r).toMatchObject({ units: 0, failed: 0, remaining: { units: { ja: 0, en: 0 }, audio: { ja: 2, en: 2 } } });
+    expect(r).toMatchObject({ units: 0, failed: 0, remaining: { units: { ja: 0, en: 0 }, audio: { ja: 2, en: 3 } } });
   });
 
   it("stops making audio at the first limit answer, while units are still made", async () => {

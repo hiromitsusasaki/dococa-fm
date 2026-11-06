@@ -169,10 +169,10 @@ pnpm seed --items items.txt --personas 30             # 投入して、作品ペ
 
 ### 事前生成（運用）
 
-お便りが保存されると（`POST /letters`、MCP の `post_letter`、`/admin/letters`、`/admin/found`）、Worker が応答のあとで、そのお便りの DJ の語り（単位）と音声を作っておきます。単位は日本語と英語の両方を作ります。15 分ごとの Cron（`wrangler.jsonc` の `triggers`）が、単位の無いお便りと音声の揃っていない単位を、日本語・英語の順に言語ごと 1 回 20 件まで埋めます。`waitUntil` の仕事は応答から 30 秒ほどで打ち切られるため、`/admin/found` で多数の声を入れたときに応答の直後に用意されるのは先頭の数件で、残りは Cron か `/admin/prepare` が拾います。シードで大量に投入した直後は、手で回します。
+お便りが保存されると（`POST /letters`、MCP の `post_letter`、`/admin/letters`、`/admin/found`）、Worker が応答のあとで、そのお便りの DJ の語り（単位）と音声を作っておきます。単位は日本語と英語の両方を作ります。15 分ごとの Cron（`wrangler.jsonc` の `triggers`）が、単位の無いお便りと音声の揃っていない単位を、日本語の単位・英語の単位・日本語の音声・英語の音声の順に埋めます。1 回の実行でするのは、単位と音声を合わせて最大 `limit` 件（お便り × 言語。Cron は 20 件）です。`waitUntil` の仕事は応答から 30 秒ほどで打ち切られるため、`/admin/found` で多数の声を入れたときに応答の直後に用意されるのは先頭の数件で、残りは Cron か `/admin/prepare` が拾います。シードで大量に投入した直後は、手で回します。
 
 ```bash
-# 言語ごとに 1 回 20 件（limit は 1〜50）。remaining の 4 つの数が 0 になるまで繰り返す
+# 1 回で単位と音声を合わせて最大 limit 件（1〜50）。remaining の 4 つの数が 0 になるまで繰り返す
 curl -s -X POST "$DOCOCA_ORIGIN/admin/prepare" -H "authorization: Bearer $ADMIN_TOKEN" -H 'content-type: application/json' -d '{"limit":20}'
 # => {"units":..,"audio":..,"failed":..,"remaining":{"units":{"ja":..,"en":..},"audio":{"ja":..,"en":..}}}
 ```
