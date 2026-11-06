@@ -22,7 +22,6 @@ const fields = z.object({
   placeCountry: z.string().trim().refine((v) => v === "" || COUNTRIES.some((c) => c.code === v)).default(""),
   placeRegion: z.string().trim().default(""),
   voice: z.string().max(200),
-  dial: z.coerce.number().min(0).max(1),
   lang: z.enum(["ja", "en"]).optional(),
   stationPublic: z.literal("1").optional(),
   /** Empty means "leave it as it is". */
@@ -34,7 +33,7 @@ const schema = fields.refine((v) => isValidRegion(v.placeCountry, v.placeRegion)
 /** What the station section shows. Absent for an anonymous listener, who cannot publish. */
 type StationView = { isPublic: boolean; slug: string; url: string | null; taken?: boolean };
 
-type FormValues = Pick<Listener, "radioName" | "place" | "placeCountry" | "placeRegion" | "voice" | "dial" | "lang">;
+type FormValues = Pick<Listener, "radioName" | "place" | "placeCountry" | "placeRegion" | "voice" | "lang">;
 
 function SettingsPage(props: { values: FormValues; listener: Listener; path: string; listenerId: string; spotifyConnected: boolean; spotifyFailed?: boolean; signinFailed?: boolean; saved?: boolean; invalid?: boolean; station?: StationView }) {
   const { values, listener, path, listenerId, spotifyConnected, spotifyFailed, signinFailed, saved, invalid, station } = props;
@@ -91,12 +90,6 @@ function SettingsPage(props: { values: FormValues; listener: Listener; path: str
           <label>
             <span>{t("settings.voice")}</span>
             <input type="text" name="voice" maxlength={200} value={values.voice} />
-          </label>
-          <label>
-            <span>{t("settings.dial")}</span>
-            <input type="range" name="dial" min="0" max="1" step="0.1" value={String(values.dial)} />
-            <output>{String(values.dial)}</output>
-            <small>{t("settings.dialHelp")}</small>
           </label>
           {station && (
             <fieldset class="settings-station">
@@ -209,9 +202,3 @@ settings.post(
     }
   },
 );
-
-/** The player's dial: saves only the dial, effective from the next episode. */
-settings.post("/settings/dial", zValidator("form", fields.pick({ dial: true }), (r, c) => (r.success ? undefined : c.body(null, 422))), async (c) => {
-  await updateListener(c.env.DB, c.get("listener").id, c.req.valid("form"));
-  return c.body(null, 204);
-});

@@ -170,10 +170,13 @@ export function resumeAt(view: Pick<PlayerEpisode, "segments">, stored: StoredPo
 
 export type NextReason = "limit" | "empty" | "failed";
 
+/** What a player sends with each ask: the dial as it is now, whether this is the visit's first, a letter asked for. */
+export type NextRequest = { dial?: number; first?: boolean; letterId?: string };
+
 /** Asks for the listener's next episode. The same mapping for both players: 429 is today's limit, 409 is a station with nothing to play. */
-export async function fetchNext(url: string): Promise<{ ok: true; body: Record<string, unknown> } | { ok: false; reason: NextReason }> {
+export async function fetchNext(url: string, request: NextRequest = {}): Promise<{ ok: true; body: Record<string, unknown> } | { ok: false; reason: NextReason }> {
   try {
-    const res = await fetch(url, { method: "POST" });
+    const res = await fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(request) });
     if (res.status === 429) return { ok: false, reason: "limit" };
     if (res.status === 409) return { ok: false, reason: "empty" };
     if (!res.ok) return { ok: false, reason: "failed" };

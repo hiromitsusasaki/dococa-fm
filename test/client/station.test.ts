@@ -89,6 +89,8 @@ let spoken: string[];
 let held: Array<{ onend: (() => void) | null }>;
 let autoEnd: boolean;
 let calls: string[];
+/** The JSON bodies sent to the next url, in order. */
+let bodies: Array<Record<string, unknown>>;
 let nextReplies: Array<() => Promise<Response>>;
 let resumeReply: () => Promise<Response>;
 let resumeByIdReply: (url: string) => Promise<Response>;
@@ -108,6 +110,7 @@ beforeEach(() => {
   held = [];
   autoEnd = true;
   calls = [];
+  bodies = [];
   nextReplies = [];
   resumeReply = none;
   resumeByIdReply = none;
@@ -134,7 +137,10 @@ beforeEach(() => {
       calls.push(`${method} ${url}`);
       if (url === "/stations/world.json") return resumeReply();
       if (url.startsWith("/stations/world.json?id=")) return resumeByIdReply(url);
-      if (url === "/stations/world/next") return (nextReplies.shift() ?? json(503, { error: "unavailable" }))();
+      if (url === "/stations/world/next") {
+        bodies.push(JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>);
+        return (nextReplies.shift() ?? json(503, { error: "unavailable" }))();
+      }
       return json(200, {})();
     }),
   );
@@ -684,5 +690,93 @@ describe("resumeAt", () => {
 
   it("treats the end marker of the last segment as played to its end", () => {
     expect(resumeAt(segs, { seg: 1, line: 2, letterId: "L2" })).toBeNull();
+  });
+});
+
+describe("station: the dial and the first ask", () => {
+  const one = (id: string) => view(id, [["a", [dj(`${id}-1`)]]]);
+  const turn = (value: string) => {
+    const input = el("dial") as HTMLInputElement;
+    input.value = value;
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+  };
+
+  it("sends first only with the first ask of a visit, and the dial with every ask", async () => {
+    nextReplies = [ok(one("e1")), ok(one("e2"))];
+    autoEnd = false;
+    const s = mountStation(root, opts({ stationKey: "mine", dial: 0.4 }));
+    await power();
+    await vi.waitFor(() => expect(s.state().queue.map((e) => e.id)).toEqual(["e2"]));
+    expect(bodies).toEqual([
+      { dial: 0.4, first: true },
+      { dial: 0.4, first: false },
+    ]);
+  });
+
+  it("does not open again after a resumed episode", async () => {
+    resumeReply = ok(one("r1"));
+    nextReplies = [ok(one("e2"))];
+    autoEnd = false;
+    mountStation(root, opts({ stationKey: "mine" }));
+    await power();
+    await vi.waitFor(() => expect(bodies).toHaveLength(1));
+    expect(bodies[0]!.first).toBe(false);
+  });
+
+  it("the browser's own dial wins over the page's", async () => {
+    localStorage.setItem("dfm.dial", "0.8");
+    nextReplies = [ok(one("e1"))];
+    mountStation(root, opts({ stationKey: "mine", dial: 0.2 }));
+    expect((el("dial") as HTMLInputElement).value).toBe("0.8");
+    await power();
+    expect(bodies[0]!.dial).toBe(0.8);
+  });
+
+  it("turning the knob keeps the value, drops the queued episode and asks again with it, once it rests", async () => {
+    nextReplies = [ok(one("e1")), ok(one("e2")), ok(one("e3"))];
+    autoEnd = false;
+    const s = mountStation(root, opts({ stationKey: "mine", dial: 0.3 }));
+    await power();
+    await vi.waitFor(() => expect(s.state().queue.map((e) => e.id)).toEqual(["e2"]));
+    turn("0.6");
+    turn("0.9");
+    expect(localStorage.getItem("dfm.dial")).toBe("0.9");
+    expect(posts()).toBe(2);
+    await vi.waitFor(() => expect(s.state().queue.map((e) => e.id)).toEqual(["e3"]));
+    expect(posts()).toBe(3);
+    expect(bodies[2]).toEqual({ dial: 0.9, first: false });
+    expect(calls.some((c) => c.includes("/settings/dial"))).toBe(false);
+  });
+
+  it("drops an answer asked for with the old dial that arrives after the turn", async () => {
+    let release!: () => void;
+    const late = () => new Promise<Response>((r) => (release = () => void ok(one("old"))().then(r)));
+    nextReplies = [ok(one("e1")), late, ok(one("new"))];
+    autoEnd = false;
+    const s = mountStation(root, opts({ stationKey: "mine" }));
+    await power();
+    await vi.waitFor(() => expect(posts()).toBe(2));
+    turn("1");
+    await vi.waitFor(() => expect(posts()).toBe(3));
+    release();
+    await vi.waitFor(() => expect(s.state().queue.map((e) => e.id)).toEqual(["new"]));
+    await flush();
+    expect(s.state().queue.map((e) => e.id)).toEqual(["new"]);
+  });
+
+  it("carries the letter asked for on the first ask only", async () => {
+    nextReplies = [ok(one("e1")), ok(one("e2"))];
+    autoEnd = false;
+    const s = mountStation(root, opts({ stationKey: "mine", letterId: "L9" }));
+    await power();
+    await vi.waitFor(() => expect(s.state().queue).toHaveLength(1));
+    expect(bodies[0]!.letterId).toBe("L9");
+    expect(bodies[1]).not.toHaveProperty("letterId");
+  });
+
+  it("shows no dial on a public station", async () => {
+    mountStation(root, opts({ stationKey: "s:hiro", dial: 0.5 }));
+    await flush();
+    expect(root.querySelector(".knob-dial")).toBeNull();
   });
 });

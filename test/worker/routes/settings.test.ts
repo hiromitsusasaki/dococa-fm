@@ -93,7 +93,7 @@ describe("settings", () => {
     expect(html).not.toContain("土地");
   });
 
-  it("saves radio name, place and dial, then shows them", async () => {
+  it("saves radio name and place, then shows them", async () => {
     const cookie = cookieOf(await SELF.fetch(`${BASE}/settings`));
     const post = await postForm("/settings", cookie, { radioName: "ヒロ", placeCountry: "JP", placeRegion: "32", voice: "", dial: "0.8" });
     expect(post.status).toBe(303);
@@ -103,7 +103,6 @@ describe("settings", () => {
     expect(html).toContain('value="ヒロ"');
     expect(html).toMatch(/<option value="JP" selected/);
     expect(html).toMatch(/<option value="32" selected/);
-    expect(html).toContain('value="0.8"');
     expect(html).toContain("保存しました");
     const row = await env.DB.prepare("SELECT place, place_country, place_region FROM listeners").first();
     expect(row).toEqual({ place: "島根", place_country: "JP", place_region: "32" });
@@ -145,29 +144,16 @@ describe("settings", () => {
     expect(await env.DB.prepare("SELECT radio_name, place_country FROM listeners").first()).toEqual({ radio_name: "", place_country: null });
   });
 
-  it("rejects dial=1.5 with 422 and the error message, saving nothing", async () => {
+  it("has no dial: the screen shows none, a dial in the form is not saved, and the player's old route is gone", async () => {
     const cookie = cookieOf(await SELF.fetch(`${BASE}/settings`));
-    const res = await postForm("/settings", cookie, { radioName: "ヒロ", voice: "", dial: "1.5" });
-    expect(res.status).toBe(422);
-    expect(await res.text()).toContain("入力を確認してください");
+    const html = await (await SELF.fetch(`${BASE}/settings`, { headers: { cookie } })).text();
+    expect(html).not.toContain('name="dial"');
+    expect(html).not.toContain("セレンディピティ");
+    const res = await postForm("/settings", cookie, { radioName: "ヒロ", voice: "", dial: "0.9" });
+    expect(res.status).toBe(303);
     const row = await env.DB.prepare("SELECT radio_name, dial FROM listeners").first<{ radio_name: string; dial: number }>();
-    expect(row).toEqual({ radio_name: "", dial: 0.3 });
-  });
-
-  it("saves only the dial from the player with 204", async () => {
-    const cookie = cookieOf(await SELF.fetch(`${BASE}/settings`));
-    await postForm("/settings", cookie, { radioName: "ヒロ", placeCountry: "", placeRegion: "", voice: "v", dial: "0.2" });
-    const res = await postForm("/settings/dial", cookie, { dial: "0.9" });
-    expect(res.status).toBe(204);
-    const row = await env.DB.prepare("SELECT radio_name, voice, dial FROM listeners").first();
-    expect(row).toEqual({ radio_name: "ヒロ", voice: "v", dial: 0.9 });
-  });
-
-  it("rejects a dial outside 0 to 1 from the player", async () => {
-    const cookie = cookieOf(await SELF.fetch(`${BASE}/settings`));
-    for (const dial of ["1.5", "-0.1", "x"]) expect((await postForm("/settings/dial", cookie, { dial })).status).toBe(422);
-    const row = await env.DB.prepare("SELECT dial FROM listeners").first<{ dial: number }>();
-    expect(row!.dial).toBe(0.3);
+    expect(row).toEqual({ radio_name: "ヒロ", dial: 0.3 });
+    expect((await postForm("/settings/dial", cookie, { dial: "0.9" })).status).toBe(404);
   });
 
   it("rejects a radio name over 20 characters", async () => {

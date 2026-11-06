@@ -2,7 +2,7 @@
 import { flushSync } from "hono/jsx/dom";
 import { createRoot } from "hono/jsx/dom/client";
 import { bindMediaSession, createLinePlayer, fetchNext, type LetterLine, type PlayerEpisode, type PlayerItem, reportListen, resumeAt, type StoredPosition, syncMediaSession, whoOf } from "./playback";
-import { postLetter, reactionOf, saveDial } from "./reactions";
+import { loadDial, postLetter, reactionOf, storeDial } from "./reactions";
 import { StationScreen, type UpNextRow } from "./station-view";
 
 export type StationOptions = {
@@ -15,8 +15,10 @@ export type StationOptions = {
   /** Where a letter that starts playing is reported (`POST`, JSON); absent means nothing is recorded. */
   listensUrl?: string;
   voiceURI: string;
-  /** The listener's dial; the world station has none and shows no dial. */
+  /** The dial the page suggests (the signed-in listener's); the browser's own value wins. World and public stations show no dial. */
   dial?: number;
+  /** A letter the listener came to hear: the first ask of this visit carries it, and only that one. */
+  letterId?: string;
   /** A station with no history yet: show how to start, and do not fetch anything. */
   grow?: boolean;
   strings: Record<string, string>;
@@ -39,6 +41,8 @@ type Fetched = { ok: true; view: PlayerEpisode } | { ok: false; reason: Reason }
 const VOLUME_KEY = "dfm.volume";
 const POS_KEY = "dfm.pos:";
 const DEFAULT_VOLUME = 0.8;
+/** A turn of the dial is sent once it rests this long, so a sweep is one new ask, not many. */
+const DIAL_SETTLE_MS = 300;
 
 function loadVolume(): number {
   try {
@@ -83,6 +87,13 @@ export function mountStation(root: HTMLElement, opts: StationOptions) {
   let aheadFail: Reason | null = null;
   let resumeTried = false;
   let starting = false;
+  let dial = loadDial(opts.dial);
+  let dialTimer: ReturnType<typeof setTimeout> | undefined;
+  /** Bumped when the dial turns: an ask made before that no longer fits and its answer is dropped. */
+  let generation = 0;
+  /** Something has played or been resumed on this visit, so the DJ does not open again. */
+  let heard = false;
+  let letterId = opts.letterId;
   player.setVolume(state.volume);
 
   const itemOf = (ep: PlayerEpisode | null, seg: number): PlayerItem | undefined => {
@@ -103,7 +114,9 @@ export function mountStation(root: HTMLElement, opts: StationOptions) {
   }
 
   async function requestNext(): Promise<Fetched> {
-    const r = await fetchNext(opts.nextUrl);
+    const asked = letterId;
+    letterId = undefined;
+    const r = await fetchNext(opts.nextUrl, { dial, first: !heard, ...(asked ? { letterId: asked } : {}) });
     if (!r.ok) return r;
     const episode = r.body.episode;
     return playable(episode) ? { ok: true, view: episode } : { ok: false, reason: "failed" };
@@ -144,12 +157,32 @@ export function mountStation(root: HTMLElement, opts: StationOptions) {
     if (ahead) return ahead;
     if (state.queue.length > 0 || aheadFail === "limit") return Promise.resolve();
     aheadFail = null;
-    ahead = requestNext().then((r) => {
+    const asked = generation;
+    const p = requestNext().then((r) => {
+      if (asked !== generation) return;
       ahead = null;
       if (r.ok) setState({ queue: [...state.queue, r.view] });
       else aheadFail = r.reason;
     });
-    return ahead;
+    ahead = p;
+    return p;
+  }
+
+  /** The dial turned: keep it, and once it rests, forget the episode made with the old value and ask again. */
+  function turnDial(value: string) {
+    const v = storeDial(value);
+    if (v === null) return;
+    dial = v;
+    setState({});
+    clearTimeout(dialTimer);
+    dialTimer = setTimeout(() => {
+      if (!mounted) return;
+      generation++;
+      ahead = null;
+      if (aheadFail !== "limit") aheadFail = null;
+      setState({ queue: [] });
+      if (state.power === "on") void ensureAhead();
+    }, DIAL_SETTLE_MS);
   }
 
   /** The current episode is done: go on with the queued one, or stop with the reason there is none. */
@@ -157,8 +190,11 @@ export function mountStation(root: HTMLElement, opts: StationOptions) {
     player.stopBed();
     if (state.queue.length === 0) {
       setState({ loading: true });
-      await ensureAhead();
-      if (signal.aborted) return false;
+      // A turn of the dial drops the ask being awaited and starts another: wait for that one instead.
+      do {
+        await ensureAhead();
+        if (signal.aborted) return false;
+      } while (state.queue.length === 0 && ahead !== null);
     }
     const [head, ...rest] = state.queue;
     if (head) {
@@ -209,6 +245,7 @@ export function mountStation(root: HTMLElement, opts: StationOptions) {
       if (r.ok) view = r.view;
       else reason = r.reason;
     }
+    if (view) heard = true;
     starting = false;
     if (!view) {
       if (state.power !== "off") setState({ power: reason === "limit" ? "limit" : "failed", reason });
@@ -308,7 +345,7 @@ export function mountStation(root: HTMLElement, opts: StationOptions) {
       reason: state.reason,
       sendFailed: state.sendFailed,
       volume: state.volume,
-      dial: opts.stationKey === "world" ? null : (opts.dial ?? 0.3),
+      dial: opts.stationKey === "mine" ? dial : null,
       grow: opts.grow === true,
       item: itemOf(state.current, state.seg),
       itemId: state.current?.segments[state.seg]?.itemId,
@@ -321,7 +358,7 @@ export function mountStation(root: HTMLElement, opts: StationOptions) {
       on: {
         power: () => (state.power === "on" || state.power === "tuning" ? turnOff() : turnOn()),
         volume: setVolume,
-        dial: saveDial,
+        dial: turnDial,
         toggleReply: () => setState({ replyOpen: !state.replyOpen }),
         watashimo: () => react("watashimo"),
         reply: (body: string) => react("reply", body),
@@ -336,6 +373,7 @@ export function mountStation(root: HTMLElement, opts: StationOptions) {
     state: (): StationState => state,
     unmount() {
       mounted = false;
+      clearTimeout(dialTimer);
       abort.abort();
       player.stopBed();
       reactRoot.unmount();
@@ -357,6 +395,7 @@ function boot() {
     ...(el.dataset.listensUrl ? { listensUrl: el.dataset.listensUrl } : {}),
     voiceURI: el.dataset.voice ?? "",
     ...(Number.isFinite(dial) ? { dial } : {}),
+    ...(el.dataset.letter ? { letterId: el.dataset.letter } : {}),
     grow: el.dataset.grow === "1",
     strings,
   });

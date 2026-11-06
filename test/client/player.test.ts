@@ -133,6 +133,7 @@ let root: HTMLElement;
 const respond = (status: number, body: unknown = {}) => Promise.resolve(new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } }));
 
 beforeEach(() => {
+  localStorage.clear();
   log = [];
   spoken = [];
   audios = [];
@@ -396,7 +397,7 @@ describe("player", () => {
     await tap("toggle");
     await vi.waitFor(() => expect(navigate).toHaveBeenCalledWith("/episodes/next-ep"));
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(fetchMock).toHaveBeenCalledWith("/episodes/ep/next", { method: "POST" });
+    expect(fetchMock).toHaveBeenCalledWith("/episodes/ep/next", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ dial: 0.3, first: false }) });
   });
 
   it("starts the next episode when the second-to-last segment begins, not earlier", async () => {
@@ -525,18 +526,20 @@ describe("player", () => {
     expect(Object.fromEntries(new URLSearchParams(String(init.body)))).toEqual({ kind: "reply", body: "いい曲", itemId: "a", parentLetterId: "L1" });
   });
 
-  it("posts the dial to /settings/dial when it changes", async () => {
+  it("keeps the dial in this browser and sends it with the next ask, posting nothing when it turns", async () => {
     mountPlayer(root, one, opts({ dial: 0.3 }));
     const dial = root.querySelector<HTMLInputElement>("input[type=range]")!;
     expect(dial.value).toBe("0.3");
     dial.value = "0.7";
     dial.dispatchEvent(new Event("change", { bubbles: true }));
     await flush();
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(localStorage.getItem("dfm.dial")).toBe("0.7");
+    await tap("toggle");
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
     const [url, init] = fetchMock.mock.calls[0]!;
-    expect(url).toBe("/settings/dial");
-    expect(init.method).toBe("POST");
-    expect(init.headers).toEqual({ "content-type": "application/x-www-form-urlencoded" });
-    expect(String(init.body)).toBe("dial=0.7");
+    expect(url).toBe("/episodes/ep/next");
+    expect(JSON.parse(String(init.body))).toEqual({ dial: 0.7, first: false });
   });
 
   it("registers media session metadata and handlers when available", async () => {

@@ -16,7 +16,7 @@ import {
   reportListen,
   syncMediaSession,
 } from "./playback";
-import { onReleased, postLetter, reactionOf, saveDial } from "./reactions";
+import { loadDial, onReleased, postLetter, reactionOf, storeDial } from "./reactions";
 
 export type { PlayerEpisode, PlayerItem, PlayerOriginals };
 export type PlayerOptions = {
@@ -73,7 +73,7 @@ export function mountPlayer(root: HTMLElement, episode: PlayerEpisode, opts: Pla
   const sync = () => syncMediaSession(itemOf(state.seg), state.status === "playing");
 
   function ensureNext(): Promise<Next> {
-    prefetch ??= fetchNext(opts.nextUrl).then((r): Next => {
+    prefetch ??= fetchNext(opts.nextUrl, { dial: loadDial(opts.dial), first: false }).then((r): Next => {
       if (!r.ok) return { ok: false, reason: r.reason === "limit" ? "limit" : "failed" };
       return typeof r.body.id === "string" && r.body.id !== "" ? { ok: true, id: r.body.id } : { ok: false, reason: "failed" };
     });
@@ -157,8 +157,8 @@ export function mountPlayer(root: HTMLElement, episode: PlayerEpisode, opts: Pla
     toggleReply: () => setState({ replyOpen: !state.replyOpen }),
     watashimo: () => react("watashimo"),
     reply: (body) => react("reply", body),
-    saveDial,
-    dial: opts.dial ?? 0.3,
+    saveDial: (value) => void storeDial(value),
+    dial: loadDial(opts.dial),
     item: (seg) => itemOf(seg),
     itemId: (seg) => segments[seg]?.itemId,
     line: (seg, line) => lineOf(seg, line),

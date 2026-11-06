@@ -70,7 +70,7 @@ export function StationScreen(p: StationScreenProps) {
             <span class="control-label">{str("station.volume")}</span>
           </label>
           {p.dial !== null && (
-            <label class="knob knob-dial">
+            <label class="knob knob-dial" title={str("station.dialHelp")}>
               <span class="knob-body" style={{ "--angle": angle(p.dial) }}>
                 <i></i>
                 <input

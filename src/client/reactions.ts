@@ -1,4 +1,4 @@
-/** Listener reactions sent from a player: 私も / 一言 as letters, and the dial setting. */
+/** Listener reactions sent from a player: 私も / 一言 as letters, and the dial kept in this browser. */
 
 const FORM = { "content-type": "application/x-www-form-urlencoded" };
 
@@ -20,8 +20,31 @@ export function reactionOf(kind: "watashimo" | "reply", itemId: string | undefin
   return body.trim() === "" ? null : { fields: { kind, body, itemId, parentLetterId: letterId }, key: `r:${letterId}` };
 }
 
-export function saveDial(value: string): void {
-  void fetch("/settings/dial", { method: "POST", headers: FORM, body: new URLSearchParams({ dial: value }).toString() }).catch(() => {});
+const DIAL_KEY = "dfm.dial";
+const DEFAULT_DIAL = 0.3;
+
+const dialOf = (v: unknown): number | null => {
+  const n = typeof v === "number" ? v : Number.parseFloat(String(v ?? ""));
+  return Number.isFinite(n) && n >= 0 && n <= 1 ? n : null;
+};
+
+/** The dial lives in the browser and goes out with every request: the stored value, else the page's, else 0.3. */
+export function loadDial(fallback?: number): number {
+  try {
+    const stored = dialOf(localStorage.getItem(DIAL_KEY));
+    if (stored !== null) return stored;
+  } catch {}
+  return dialOf(fallback) ?? DEFAULT_DIAL;
+}
+
+/** Keeps a dial value; anything outside 0..1 is ignored. Returns the value kept, or null. */
+export function storeDial(value: string | number): number | null {
+  const v = dialOf(value);
+  if (v === null) return null;
+  try {
+    localStorage.setItem(DIAL_KEY, String(v));
+  } catch {}
+  return v;
 }
 
 /** Hono maps onChange to the `input` event, which fires all through a drag; the dial is saved once, on release. */
