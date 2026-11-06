@@ -43,7 +43,7 @@ function MessagePage({ message, start, listener, path }: { message: string; star
 export const jsonForScript = (value: unknown): string => JSON.stringify(value).replace(/</g, "\\u003c");
 
 /** What the client player needs to know: the labels it shows, as `t()` values, since `t()` is server-only. */
-const PLAYER_KEY = /^(player\.|out\.|letter\.(who|whoPlace|whoDemo|showOriginal)|lang\.code$|station\.(dial|limit|failed)$|listener\.(?:anonymous|demo)$)/;
+const PLAYER_KEY = /^(player\.|out\.|letter\.(who|whoPlace|whoDemo|showOriginal)|lang\.code$|station\.(dial|limit|failed)$|episode\.continueOnStation$|listener\.(?:anonymous|demo)$)/;
 const playerStrings = (lang: Lang): Record<string, string> =>
   Object.fromEntries(Object.keys(ja).filter((k) => PLAYER_KEY.test(k)).map((k) => [k, tFor(lang)(k as keyof typeof ja)]));
 
@@ -135,7 +135,7 @@ episodes.get("/episodes/:id", async (c) => {
   return c.html(
     <Layout title={t("episode.title")} script="player" lang={lang} listener={listener} path={currentPath(c)}>
       <main class="episode-page">
-        <div id="player" data-episode-id={episode.id} data-voice={listener.voice} data-next-url={`/episodes/${episode.id}/next`} data-tts-url={episode.cloudTts ? "/tts" : ""} data-listens-url="/listens" data-dial={String(listener.dial)} data-start-seg={String(startSeg)}></div>
+        <div id="player" data-episode-id={episode.id} data-voice={listener.voice} data-tts-url={episode.cloudTts ? "/tts" : ""} data-listens-url="/listens" data-dial={String(listener.dial)} data-start-seg={String(startSeg)}></div>
         <ol class="program">
           {rows.map((r) => (
             <li>

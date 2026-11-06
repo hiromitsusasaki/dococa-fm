@@ -210,7 +210,9 @@ describe("GET /episodes/:id", () => {
     const ep = (await getEpisode(env.DB, id))!;
     expect(html).toContain('id="player"');
     expect(html).toContain(`data-episode-id="${id}"`);
-    expect(html).toContain(`data-next-url="/episodes/${id}/next"`);
+    // A replay makes no new episode: the page carries no next url, and the player has the link to the station.
+    expect(html).not.toContain("data-next-url");
+    expect(html).toContain("あなたのラジオで続きを聴く");
     expect(html).toContain('data-dial="0.3"');
     expect(html).toContain('id="episode-json"');
     expect(html).toContain("しずく");

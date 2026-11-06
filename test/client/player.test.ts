@@ -19,6 +19,7 @@ const strings: Record<string, string> = {
   "player.loading": "読み込み中",
   "station.failed": "電波が届きませんでした",
   "station.limit": "今日の分はここまで。また明日",
+  "episode.continueOnStation": "あなたのラジオで続きを聴く",
   "letter.who": "{name}さん",
   "letter.whoPlace": "{who}（{place}）",
   "listener.anonymous": "名無しのリスナー",
@@ -126,7 +127,6 @@ const flush = async () => {
   for (let i = 0; i < 20; i++) await Promise.resolve();
 };
 
-let navigate: ReturnType<typeof vi.fn>;
 let fetchMock: ReturnType<typeof vi.fn>;
 let root: HTMLElement;
 
@@ -144,7 +144,6 @@ beforeEach(() => {
   unlockSpeaks = 0;
   audioCtor = 0;
   speak.mockClear();
-  navigate = vi.fn();
   fetchMock = vi.fn(() => respond(200, { id: "next-ep" }));
   vi.stubGlobal("Audio", class extends FakeAudio { constructor(src?: string) { super(src); audioCtor++; } });
   vi.stubGlobal("SpeechSynthesisUtterance", FakeUtterance);
@@ -168,7 +167,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-const opts = (over: Record<string, unknown> = {}) => ({ voiceURI: "mine", nextUrl: "/episodes/ep/next", ttsUrl: null, strings, navigate, ...over });
+const opts = (over: Record<string, unknown> = {}) => ({ voiceURI: "mine", ttsUrl: null, strings, ...over });
 const btn = (action: string) => root.querySelector<HTMLElement>(`[data-action="${action}"]`)!;
 const tap = async (action: string) => {
   btn(action).click();
@@ -392,44 +391,48 @@ describe("player", () => {
     expect(utterances[0]!.voice).toBeFalsy();
   });
 
-  it("after the last line, posts to nextUrl once and goes to the new episode", async () => {
+  it("after the last line, asks for no new episode and shows a link to keep listening on the listener's radio", async () => {
     mountPlayer(root, one, opts());
     await tap("toggle");
-    await vi.waitFor(() => expect(navigate).toHaveBeenCalledWith("/episodes/next-ep"));
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(fetchMock).toHaveBeenCalledWith("/episodes/ep/next", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ dial: 0.3, first: false }) });
+    await vi.waitFor(() => expect(btn("continue")).not.toBeNull());
+    expect(btn("continue").getAttribute("href")).toBe("/stations/mine");
+    expect(btn("continue").textContent).toBe("あなたのラジオで続きを聴く");
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(btn("toggle").textContent).toContain("再生");
   });
 
-  it("starts the next episode when the second-to-last segment begins, not earlier", async () => {
+  it("never asks for a new episode while replaying, whatever segment plays", async () => {
     autoEnd = false;
     mountPlayer(root, three, opts());
     await tap("toggle");
     await vi.waitFor(() => expect(spoken).toEqual(["a1"]));
-    expect(fetchMock).not.toHaveBeenCalled();
     await tap("next");
     await vi.waitFor(() => expect(spoken).toEqual(["a1", "b1"]));
-    expect(fetchMock).toHaveBeenCalledTimes(1);
     await tap("next");
     await vi.waitFor(() => expect(spoken).toEqual(["a1", "b1", "c1"]));
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(navigate).not.toHaveBeenCalled();
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(btn("continue")).toBeNull();
   });
 
-  it("shows the limit message and stops on 429", async () => {
-    fetchMock.mockImplementation(() => respond(429, { error: "limit" }));
-    mountPlayer(root, { ...one, segments: [{ ...one.segments[0]!, lines: [{ type: "dj", text: "only" }] }] }, opts());
+  it("次の作品 on the last segment ends the replay with the link, without asking", async () => {
+    autoEnd = false;
+    mountPlayer(root, one, opts());
     await tap("toggle");
-    await vi.waitFor(() => expect(root.textContent).toContain("今日の分はここまで"));
-    expect(navigate).not.toHaveBeenCalled();
-    expect(btn("toggle").textContent).toContain("再生");
+    await vi.waitFor(() => expect(spoken).toEqual(["d1"]));
+    await tap("next");
+    await vi.waitFor(() => expect(btn("continue")).not.toBeNull());
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it("shows the failure message on 503", async () => {
-    fetchMock.mockImplementation(() => respond(503, { error: "unavailable" }));
+  it("plays again from the start after the end, and the link goes when it plays", async () => {
     mountPlayer(root, { ...one, segments: [{ ...one.segments[0]!, lines: [{ type: "dj", text: "only" }] }] }, opts());
     await tap("toggle");
-    await vi.waitFor(() => expect(root.textContent).toContain("電波が届きませんでした"));
-    expect(navigate).not.toHaveBeenCalled();
+    await vi.waitFor(() => expect(btn("continue")).not.toBeNull());
+    autoEnd = false;
+    await tap("toggle");
+    await vi.waitFor(() => expect(spoken).toEqual(["only", "only"]));
+    expect(btn("continue")).toBeNull();
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it("plays dj and letter lines from ttsUrl as audio instead of speech", async () => {
@@ -526,69 +529,55 @@ describe("player", () => {
     expect(Object.fromEntries(new URLSearchParams(String(init.body)))).toEqual({ kind: "reply", body: "いい曲", itemId: "a", parentLetterId: "L1" });
   });
 
-  it("keeps the dial in this browser and sends it with the next ask, posting nothing when it turns", async () => {
+  it("keeps the dial in this browser for the station, posting nothing when it turns or when the replay ends", async () => {
     mountPlayer(root, one, opts({ dial: 0.3 }));
     const dial = root.querySelector<HTMLInputElement>("input[type=range]")!;
     expect(dial.value).toBe("0.3");
     dial.value = "0.7";
     dial.dispatchEvent(new Event("change", { bubbles: true }));
     await flush();
-    expect(fetchMock).not.toHaveBeenCalled();
     expect(localStorage.getItem("dfm.dial")).toBe("0.7");
     await tap("toggle");
-    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
-    const [url, init] = fetchMock.mock.calls[0]!;
-    expect(url).toBe("/episodes/ep/next");
-    expect(JSON.parse(String(init.body))).toEqual({ dial: 0.7, first: false });
+    await vi.waitFor(() => expect(btn("continue")).not.toBeNull());
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it("drops the next episode asked for with the old dial when the knob turns, and goes to the one asked for with the new", async () => {
-    let release!: () => void;
-    fetchMock.mockImplementationOnce(() => new Promise<Response>((r) => (release = () => void respond(200, { id: "old" }).then(r))));
-    fetchMock.mockImplementation(() => respond(200, { id: "new" }));
-    mountPlayer(root, one, opts({ dial: 0.3 }));
-    await tap("toggle");
-    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
-    const dial = root.querySelector<HTMLInputElement>("input[type=range]")!;
-    dial.value = "0.9";
-    dial.dispatchEvent(new Event("change", { bubbles: true }));
-    release();
-    await vi.waitFor(() => expect(navigate).toHaveBeenCalled());
-    expect(navigate).toHaveBeenCalledTimes(1);
-    expect(navigate).toHaveBeenCalledWith("/episodes/new");
-    expect(fetchMock).toHaveBeenCalledTimes(2);
-    expect(JSON.parse(String(fetchMock.mock.calls[0]![1].body))).toEqual({ dial: 0.3, first: false });
-    expect(JSON.parse(String(fetchMock.mock.calls[1]![1].body))).toEqual({ dial: 0.9, first: false });
-  });
-
-  it("a dropped ask that answers late asks again only when someone waits for it", async () => {
+  it("turning the knob while a segment plays asks for nothing", async () => {
     autoEnd = false;
-    let release!: () => void;
-    fetchMock.mockImplementationOnce(() => new Promise<Response>((r) => (release = () => void respond(200, { id: "old" }).then(r))));
-    fetchMock.mockImplementation(() => respond(200, { id: "new" }));
     mountPlayer(root, three, opts({ dial: 0.3 }));
     await tap("toggle");
     await tap("next");
     await vi.waitFor(() => expect(spoken).toEqual(["a1", "b1"]));
-    expect(fetchMock).toHaveBeenCalledTimes(1);
     const dial = root.querySelector<HTMLInputElement>("input[type=range]")!;
     dial.value = "0.9";
     dial.dispatchEvent(new Event("change", { bubbles: true }));
-    release();
     await flush();
-    // Nobody waits yet (segment b is still playing): no new ask, so no 枠 is spent.
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(navigate).not.toHaveBeenCalled();
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it("keeps the prefetch when the knob comes back to the same value", async () => {
+  it("a knob turned back to the same value asks for nothing either, and the replay still ends with the link", async () => {
     mountPlayer(root, one, opts({ dial: 0.3 }));
     const dial = root.querySelector<HTMLInputElement>("input[type=range]")!;
     await tap("toggle");
     dial.value = "0.3";
     dial.dispatchEvent(new Event("change", { bubbles: true }));
-    await vi.waitFor(() => expect(navigate).toHaveBeenCalledWith("/episodes/next-ep"));
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    await vi.waitFor(() => expect(btn("continue")).not.toBeNull());
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("shows the link only once the last segment is done", async () => {
+    autoEnd = false;
+    mountPlayer(root, three, opts());
+    await tap("toggle");
+    await tap("next");
+    await tap("next");
+    await vi.waitFor(() => expect(spoken).toEqual(["a1", "b1", "c1"]));
+    expect(btn("continue")).toBeNull();
+    speak.mock.calls.at(-1)![0].onend?.();
+    await vi.waitFor(() => expect(spoken).toEqual(["a1", "b1", "c1", "c2"]));
+    expect(btn("continue")).toBeNull();
+    speak.mock.calls.at(-1)![0].onend?.();
+    await vi.waitFor(() => expect(btn("continue")).not.toBeNull());
   });
 
   it("registers media session metadata and handlers when available", async () => {

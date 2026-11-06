@@ -6,7 +6,6 @@ import { LetterQuote } from "./letter-quote";
 import {
   bindMediaSession,
   createLinePlayer,
-  fetchNext,
   isHttpUrl,
   type LetterLine,
   outLabel,
@@ -19,18 +18,21 @@ import {
 import { loadDial, onReleased, postLetter, reactionOf, storeDial } from "./reactions";
 
 export type { PlayerEpisode, PlayerItem, PlayerOriginals };
+/**
+ * The episode page: plays one stored episode again (a link from my page or the archive). It makes no new episode, so
+ * replaying spends none of the day's 枠; at the end it links to the listener's own radio to go on.
+ */
 export type PlayerOptions = {
   voiceURI: string;
-  nextUrl: string;
   /** When set, dj and letter lines are mp3s from `${ttsUrl}?episode=&line=` instead of Web Speech. */
   ttsUrl: string | null;
   /** Where a letter that starts playing is reported (`POST`, JSON); absent means nothing is recorded. */
   listensUrl?: string;
+  /** The dial shown; a turn is kept in this browser for the station page. */
   dial?: number;
   /** Segment to start from (line 0), for "listen again" links; out of range means 0. */
   startSeg?: number;
   strings?: Record<string, string>;
-  navigate?: (url: string) => void;
 };
 
 type Status = "idle" | "playing" | "paused" | "ended";
@@ -38,29 +40,19 @@ type State = {
   status: Status;
   seg: number;
   line: number;
-  /** True while the last line is done and the next episode is still being made. */
-  loading: boolean;
   message: string | null;
   replyOpen: boolean;
   sent: Record<string, true>;
 };
-type Next = { ok: true; id: string } | { ok: false; reason: "limit" | "failed" };
-
 export function mountPlayer(root: HTMLElement, episode: PlayerEpisode, opts: PlayerOptions) {
   const str = (key: string) => opts.strings?.[key] ?? key;
-  const navigate = opts.navigate ?? ((url: string) => location.assign(url));
   const segments = episode.segments;
   const player = createLinePlayer({ voiceURI: opts.voiceURI, ttsUrl: opts.ttsUrl });
   const reactRoot = createRoot(root);
 
   const startSeg = Number.isInteger(opts.startSeg) && opts.startSeg! >= 0 && opts.startSeg! < segments.length ? opts.startSeg! : 0;
-  let state: State = { status: "idle", seg: startSeg, line: 0, loading: false, message: null, replyOpen: false, sent: {} };
+  let state: State = { status: "idle", seg: startSeg, line: 0, message: null, replyOpen: false, sent: {} };
   let abort = new AbortController();
-  let prefetch: Promise<Next> | null = null;
-  /** Bumped when the dial turns: the next episode asked for before that is dropped, and its answer ignored. */
-  let generation = 0;
-  /** The last line is done and the next episode is awaited. */
-  let waiting = false;
   const lineOf = (seg: number, line: number): ScriptLine | undefined => segments[seg]?.lines[line];
   const itemOf = (seg: number): PlayerItem | undefined => {
     const id = segments[seg]?.itemId;
@@ -76,48 +68,14 @@ export function mountPlayer(root: HTMLElement, episode: PlayerEpisode, opts: Pla
 
   const sync = () => syncMediaSession(itemOf(state.seg), state.status === "playing");
 
-  function ensureNext(): Promise<Next> {
-    if (prefetch) return prefetch;
-    const asked = generation;
-    prefetch = fetchNext(opts.nextUrl, { dial: loadDial(opts.dial), first: false })
-      .then((r): Next => {
-        if (!r.ok) return { ok: false, reason: r.reason === "limit" ? "limit" : "failed" };
-        return typeof r.body.id === "string" && r.body.id !== "" ? { ok: true, id: r.body.id } : { ok: false, reason: "failed" };
-      })
-      // Made with a dial that has since turned: whoever waits gets the episode asked for with the new one. Nobody
-      // waiting, nothing is asked yet: an ask spends one of the day's 枠, so it waits until the episode is needed.
-      .then((next) => (asked === generation || !waiting ? next : ensureNext()));
-    return prefetch;
-  }
-
-  /** Keeps the dial; when it changed, the next episode already asked for no longer fits and is asked for again when needed. */
-  function turnDial(value: string) {
-    const before = loadDial(opts.dial);
-    const kept = storeDial(value);
-    if (kept === null || kept === before) return;
-    generation++;
-    prefetch = null;
-  }
-
-  /** The last line is done: hand over to the next episode, which has been made in the background since the second-to-last segment. */
-  async function finish(signal: AbortSignal) {
+  /** The last line is done (or skipped): stop here and offer the listener's own radio. */
+  function finish() {
     player.stopBed();
-    setState({ loading: true });
-    waiting = true;
-    let next: Next;
-    try {
-      next = await ensureNext();
-    } finally {
-      waiting = false;
-    }
-    if (signal.aborted) return;
-    if (next.ok) return navigate(`/episodes/${encodeURIComponent(next.id)}`);
-    setState({ status: "ended", loading: false, message: str(next.reason === "limit" ? "station.limit" : "station.failed") });
+    setState({ status: "ended", message: null });
   }
 
   async function run(fromSeg: number, fromLine: number, signal: AbortSignal) {
     for (let i = fromSeg; i < segments.length; i++) {
-      if (i >= Math.max(0, segments.length - 2)) void ensureNext();
       const lines = segments[i]!.lines;
       for (let j = i === fromSeg ? fromLine : 0; j < lines.length; j++) {
         if (signal.aborted) return;
@@ -127,7 +85,7 @@ export function mountPlayer(root: HTMLElement, episode: PlayerEpisode, opts: Pla
         await player.play(episode, i, j, signal);
       }
     }
-    if (!signal.aborted) await finish(signal);
+    if (!signal.aborted) finish();
   }
 
   /** Cancels whatever is sounding and starts reading from (seg, line). Called from a tap, so audio may start. */
@@ -135,7 +93,7 @@ export function mountPlayer(root: HTMLElement, episode: PlayerEpisode, opts: Pla
     player.unlock();
     abort.abort();
     abort = new AbortController();
-    setState({ status: "playing", seg, line, loading: false, message: null, replyOpen: false });
+    setState({ status: "playing", seg, line, message: null, replyOpen: false });
     void run(seg, line, abort.signal);
   }
 
@@ -156,8 +114,8 @@ export function mountPlayer(root: HTMLElement, episode: PlayerEpisode, opts: Pla
     if (state.seg + 1 < segments.length) return startAt(state.seg + 1, 0);
     abort.abort();
     abort = new AbortController();
-    setState({ status: "playing", message: null, replyOpen: false });
-    void finish(abort.signal);
+    setState({ replyOpen: false });
+    finish();
   }
 
   async function send(fields: Record<string, string>, key: string) {
@@ -182,7 +140,7 @@ export function mountPlayer(root: HTMLElement, episode: PlayerEpisode, opts: Pla
     toggleReply: () => setState({ replyOpen: !state.replyOpen }),
     watashimo: () => react("watashimo"),
     reply: (body) => react("reply", body),
-    saveDial: turnDial,
+    saveDial: (value: string) => void storeDial(value),
     dial: loadDial(opts.dial),
     item: (seg) => itemOf(seg),
     itemId: (seg) => segments[seg]?.itemId,
@@ -242,13 +200,17 @@ function Screen({ s, view }: { s: State; view: View }) {
         </section>
       )}
       <div class="player-line" aria-live="polite">
-        {s.loading && <p class="muted">{str("player.loading")}</p>}
         {line?.type === "dj" && <p class="player-dj">{line.text}</p>}
         {letter && (
           <LetterQuote letter={letter} original={original} str={str} toggleKey="letter.showOriginal" />
         )}
       </div>
       {s.message && <p class="player-message" role="alert">{s.message}</p>}
+      {s.status === "ended" && (
+        <a class="button" data-action="continue" href="/stations/mine">
+          {str("episode.continueOnStation")}
+        </a>
+      )}
       <div class="player-controls">
         <button type="button" class="primary" data-action="toggle" onClick={view.toggle}>
           {str(s.status === "playing" ? "player.pause" : "player.play")}
@@ -313,7 +275,6 @@ function boot() {
   const startSeg = Number.parseInt(el.dataset.startSeg ?? "", 10);
   mountPlayer(el, JSON.parse(json.textContent ?? "") as PlayerEpisode, {
     voiceURI: el.dataset.voice ?? "",
-    nextUrl: el.dataset.nextUrl ?? "",
     ttsUrl: el.dataset.ttsUrl ? el.dataset.ttsUrl : null,
     ...(el.dataset.listensUrl ? { listensUrl: el.dataset.listensUrl } : {}),
     ...(Number.isFinite(dial) ? { dial } : {}),
