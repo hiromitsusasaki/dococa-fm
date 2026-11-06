@@ -310,15 +310,35 @@ describe("resolveUrl", () => {
 describe("resolveUrl for a search result's own link", () => {
   it("tmdb: looks the film up by id, so the chosen film stays a film", async () => {
     const { calls } = stubFetch([["https://api.themoviedb.org/3/movie/496243", () => json({ id: 496243, title: "パラサイト 半地下の家族", release_date: "2019-05-30" })]]);
-    const draft = await resolveUrl("https://www.themoviedb.org/movie/496243", testEnv);
+    const draft = await resolveUrl("http://www.themoviedb.org/movie/496243?utm=x", testEnv);
     expect(draft).toMatchObject({ kind: "film", title: "パラサイト 半地下の家族", year: 2019, externalIds: { tmdb: "496243" } });
+    // The canonical link, never the pasted one.
+    expect(draft?.outLinks).toEqual({ tmdb: "https://www.themoviedb.org/movie/496243" });
     expect(calls()).toEqual(["https://api.themoviedb.org/3/movie/496243?language=ja-JP"]);
+  });
+
+  it("tmdb and google books: an unknown id resolves to nothing, and the page itself is never read", async () => {
+    const { calls } = stubFetch([]);
+    expect(await resolveUrl("https://www.themoviedb.org/movie/1", testEnv)).toBeNull();
+    expect(await resolveUrl("https://books.google.com/books?id=nope", testEnv)).toBeNull();
+    expect(calls()).toEqual(["https://api.themoviedb.org/3/movie/1?language=ja-JP", "https://www.googleapis.com/books/v1/volumes/nope"]);
+  });
+
+  it("a look-alike books host is not google books: its url never becomes a google-books link", async () => {
+    stubFetch([
+      ["https://books.google.evil.com/", () => meta({ "og:title": "Blue in Green" })],
+      ["https://itunes.apple.com/search", () => json({ results: [itunesTrack(10, "Blue in Green")] })],
+    ]);
+    const draft = await resolveUrl("https://books.google.evil.com/books?id=abcDEF_1", testEnv);
+    expect(draft?.outLinks["google-books"]).toBeUndefined();
+    expect(draft?.externalIds["google-books"]).toBeUndefined();
   });
 
   it("google books: looks the volume up by id, so the chosen book stays a book", async () => {
     const { calls } = stubFetch([["https://www.googleapis.com/books/v1/volumes/abcDEF_1", () => json(volume("abcDEF_1", "こころ"))]]);
     const draft = await resolveUrl("https://books.google.co.jp/books?id=abcDEF_1&dq=x&hl=&source=gbs_api", testEnv);
     expect(draft).toMatchObject({ kind: "book", title: "こころ", creator: "夏目漱石", externalIds: { "google-books": "abcDEF_1" } });
+    expect(draft?.outLinks).toEqual({ "google-books": "https://books.google.com/books?id=abcDEF_1" });
     expect(calls()).toEqual(["https://www.googleapis.com/books/v1/volumes/abcDEF_1"]);
   });
 });

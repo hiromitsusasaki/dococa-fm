@@ -31,6 +31,8 @@ export const en: Record<keyof typeof ja, string> = {
   "out.filmarks": "View on Filmarks",
   "out.letterboxd": "View on Letterboxd",
   "out.netflix": "Watch on Netflix",
+  "out.google-books": "View on Google Books",
+  "out.tmdb": "View on TMDB",
   "out.google": "Search the web",
   "out.search.spotify": "Find on Spotify",
   "out.search.youtube": "Find on YouTube",

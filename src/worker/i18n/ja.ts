@@ -28,6 +28,8 @@ export const ja = {
   "out.filmarks": "Filmarks で見る",
   "out.letterboxd": "Letterboxd で見る",
   "out.netflix": "Netflix で観る",
+  "out.google-books": "Google ブックスで見る",
+  "out.tmdb": "TMDB で見る",
   "out.google": "検索して探す",
   "out.search.spotify": "Spotify で探す",
   "out.search.youtube": "YouTube で探す",

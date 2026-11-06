@@ -40,7 +40,7 @@ export function parseKnownUrl(raw: string): ParsedUrl {
   } else if (host(h, "themoviedb.org")) {
     const m = /^\/movie\/(\d+)/.exec(path);
     if (m) return { provider: "tmdb", id: m[1] };
-  } else if (/^books\.google\.[a-z.]+$/.test(h)) {
+  } else if (/^books\.google\.(com|co\.[a-z]{2}|com\.[a-z]{2}|[a-z]{2})$/.test(h)) {
     const id = u.searchParams.get("id");
     if (id && /^[\w-]+$/.test(id)) return { provider: "google-books", id };
   }

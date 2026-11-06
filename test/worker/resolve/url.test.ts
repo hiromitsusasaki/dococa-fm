@@ -19,6 +19,13 @@ describe("parseKnownUrl", () => {
     ["https://www.themoviedb.org/movie/496243-parasite", { provider: "tmdb", id: "496243" }],
     ["https://books.google.co.jp/books?id=abcDEF_1&dq=x", { provider: "google-books", id: "abcDEF_1" }],
     ["https://books.google.com/books?id=zyx-9", { provider: "google-books", id: "zyx-9" }],
+    ["https://books.google.de/books?id=zyx-9", { provider: "google-books", id: "zyx-9" }],
+    ["https://books.google.com.br/books?id=zyx-9", { provider: "google-books", id: "zyx-9" }],
+    ["https://books.google.evil.com/books?id=x", { provider: "unknown" }],
+    ["https://books.google.com.evil.com/books?id=x", { provider: "unknown" }],
+    ["https://books.google.co.jp.evil.com/books?id=x", { provider: "unknown" }],
+    ["https://themoviedb.org.evil.com/movie/1", { provider: "unknown" }],
+    ["https://evilthemoviedb.org/movie/1", { provider: "unknown" }],
   ])("parses %s", (url, expected) => {
     expect(parseKnownUrl(url)).toEqual(expected);
   });

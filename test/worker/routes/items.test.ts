@@ -31,6 +31,18 @@ describe("GET /items/:id", () => {
     expect(html).toContain(`/put?itemId=${item.id}`);
   });
 
+  it("shows a book's and a film's own link", async () => {
+    const book = await insertItem(env.DB, itemDraft({ kind: "book", title: "こころ", outLinks: { "google-books": "https://books.google.com/books?id=b1" }, externalIds: { "google-books": "b1" } }));
+    const film = await insertItem(env.DB, itemDraft({ kind: "film", title: "Parasite", outLinks: { tmdb: "https://www.themoviedb.org/movie/7" }, externalIds: { tmdb: "7" } }));
+    const cookie = await newSession();
+    const bookHtml = await (await get(`/items/${book.id}`, cookie)).text();
+    expect(bookHtml).toContain("https://books.google.com/books?id=b1");
+    expect(bookHtml).toContain(t("out.google-books"));
+    const filmHtml = await (await get(`/items/${film.id}`, cookie)).text();
+    expect(filmHtml).toContain("https://www.themoviedb.org/movie/7");
+    expect(filmHtml).toContain(t("out.tmdb"));
+  });
+
   it("letter_body_is_escaped_in_item_page", async () => {
     const item = await insertItem(env.DB, itemDraft());
     await insertLetter(env.DB, letterDraft(item.id, { body: "<script>alert(1)</script>", bodyJa: "<script>alert(1)</script>", radioName: "<b>x</b>" }));

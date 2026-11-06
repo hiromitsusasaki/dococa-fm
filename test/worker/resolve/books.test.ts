@@ -63,7 +63,7 @@ describe("searchBooks", () => {
   it("handles sparse volumes and missing items", async () => {
     stubFetch([["https://www.googleapis.com/books/v1/volumes", () => json({ items: [{ id: "x", volumeInfo: { title: "T" } }] })]]);
     expect(await searchBooks("t")).toEqual([
-      { kind: "book", title: "T", creator: "", year: null, imageUrl: null, previewUrl: null, outLinks: {}, externalIds: { "google-books": "x" } },
+      { kind: "book", title: "T", creator: "", year: null, imageUrl: null, previewUrl: null, outLinks: { "google-books": "https://books.google.com/books?id=x" }, externalIds: { "google-books": "x" } },
     ]);
     stubFetch([["https://www.googleapis.com/books/v1/volumes", () => json({ totalItems: 0 })]]);
     expect(await searchBooks("t")).toEqual([]);

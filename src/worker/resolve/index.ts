@@ -12,7 +12,9 @@ import { searchYouTube } from "./youtube";
 export type ItemDraft = Omit<Item, "id" | "createdAt">;
 
 const MAX_RESULTS = 5;
-const FILM_PROVIDERS: ReadonlySet<string> = new Set<Provider>(["filmarks", "letterboxd", "netflix", "tmdb"]);
+const FILM_PROVIDERS: ReadonlySet<string> = new Set<Provider>(["filmarks", "letterboxd", "netflix"]);
+/** Providers whose draft already carries the canonical link built from the id: the pasted URL never replaces it. */
+const CANONICAL_LINK: ReadonlySet<string> = new Set<Provider>(["tmdb", "google-books"]);
 const OUT_LINK_KEY: Record<Provider, string> = {
   spotify: "spotify",
   youtube: "youtube",
@@ -93,7 +95,7 @@ function withOrigin(draft: ItemDraft, parsed: ParsedUrl, url: string): ItemDraft
   if (parsed.provider === "unknown") return draft;
   return {
     ...draft,
-    outLinks: { ...draft.outLinks, [OUT_LINK_KEY[parsed.provider]]: url },
+    outLinks: CANONICAL_LINK.has(parsed.provider) ? draft.outLinks : { ...draft.outLinks, [OUT_LINK_KEY[parsed.provider]]: url },
     // The pasted provider's own id goes first: resolveOrCreate dedupes in this order, so it outranks an iTunes guess.
     externalIds: { ...(parsed.id ? { [parsed.provider]: parsed.id } : {}), ...draft.externalIds },
   };
@@ -148,13 +150,14 @@ async function resolveKnown(url: string, env: Env): Promise<ItemDraft | null> {
   if ((parsed.provider === "spotify" || parsed.provider === "youtube") && parsed.id) {
     return resolveOembed(parsed.provider, parsed, url);
   }
+  // Only the id decides what these are; their pages are never read, so a look-alike page cannot name the work.
   if (parsed.provider === "tmdb" && parsed.id) {
     const film = await orNull(lookupTmdb(parsed.id, env.TMDB_API_KEY));
-    if (film) return withOrigin(film, parsed, url);
+    return film && withOrigin(film, parsed, url);
   }
   if (parsed.provider === "google-books" && parsed.id) {
     const book = await orNull(lookupBook(parsed.id, env.GOOGLE_BOOKS_API_KEY));
-    if (book) return withOrigin(book, parsed, url);
+    return book && withOrigin(book, parsed, url);
   }
   if (parsed.provider === "apple-music" && parsed.id) {
     const track = await orNull(lookupItunes(parsed.id));

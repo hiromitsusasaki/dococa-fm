@@ -9,7 +9,6 @@ type Volume = {
     publishedDate?: string;
     imageLinks?: { thumbnail?: string };
     industryIdentifiers?: Array<{ type?: string; identifier?: string }>;
-    infoLink?: string;
   };
 };
 
@@ -27,7 +26,8 @@ function toDraft(v: Volume): ItemDraft | null {
     year: yearOf(info.publishedDate),
     imageUrl: info.imageLinks?.thumbnail?.replace(/^http:/, "https:") ?? null,
     previewUrl: null,
-    outLinks: info.infoLink ? { "google-books": info.infoLink.replace(/^http:/, "https:") } : {},
+    // Built from the id, not infoLink: that can point at Google Play, which no resolver reads back as this book.
+    outLinks: { "google-books": `https://books.google.com/books?id=${encodeURIComponent(v.id)}` },
     externalIds: { "google-books": v.id, ...(isbn ? { isbn } : {}) },
   };
 }
