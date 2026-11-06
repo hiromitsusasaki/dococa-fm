@@ -113,6 +113,8 @@ export const ja = {
   "letters.reason.ad": "宣伝や勧誘にみえます。",
   "letters.reason.pii": "個人を特定できる情報が含まれています。",
   "letters.reason.offtopic": "作品の話から離れているようです。",
+  "letters.reason.obscene": "公序良俗に反する内容は載せられません。",
+  "letters.reason.negative": "このラジオは好きなものについてのお便りを読みます。作品や作り手をけなすお便りは載せられません。",
   "letters.watashimoDuplicate": "この一通にはもう「私も」を送っています。",
   "letters.badParent": "反応を送る一通が見つかりません。",
   "item.letters": "この番組へのお便り",

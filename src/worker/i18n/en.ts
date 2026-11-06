@@ -116,6 +116,8 @@ export const en: Record<keyof typeof ja, string> = {
   "letters.reason.ad": "It looks like an ad or a pitch.",
   "letters.reason.pii": "It contains details that could identify a person.",
   "letters.reason.offtopic": "It seems to drift away from the work.",
+  "letters.reason.obscene": "We cannot carry content that offends public decency.",
+  "letters.reason.negative": "This radio reads letters about things people love. A letter that runs down a work or its maker cannot go out.",
   "letters.watashimoDuplicate": "You've already sent \"Me too\" to this letter.",
   "letters.badParent": "We can't find the letter you're answering.",
   "item.letters": "Letters about this work",

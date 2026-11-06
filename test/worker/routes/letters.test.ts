@@ -157,6 +157,21 @@ describe("POST /letters", () => {
     expect(await res.text()).toContain(t("put.notFound"));
   });
 
+  it("shows the new copy for a rejected negative or obscene letter", async () => {
+    const item = await seedItem();
+    for (const reason of ["negative", "obscene"] as const) {
+      create.mockResolvedValue(verdict({ ok: false, reason }));
+      const res = await postForm("/letters", await signedInSession(), { itemId: item.id, body: "つまらない" });
+      expect(res.status).toBe(422);
+      const html = await res.text();
+      expect(html).toContain(t(`letters.reason.${reason}`));
+      expect(t(`letters.reason.${reason}`)).not.toBe(t("letters.reason.offtopic"));
+    }
+    expect(t("letters.reason.negative")).toBe("このラジオは好きなものについてのお便りを読みます。作品や作り手をけなすお便りは載せられません。");
+    expect(t("letters.reason.obscene", undefined, "en")).toBe("We cannot carry content that offends public decency.");
+    expect(await listLettersForItem(env.DB, item.id)).toHaveLength(0);
+  });
+
   it("returns 422 with the reason when moderation rejects", async () => {
     const item = await seedItem();
     create.mockResolvedValue(verdict({ ok: false, reason: "ad" }));
