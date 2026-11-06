@@ -68,7 +68,6 @@ export async function buildEpisode(
   for (const s of selection) {
     const item = stored.get(s.itemId);
     if (!item) continue;
-    items.set(item.id, item);
     const read: Letter[] = [];
     for (const id of s.letterIds) {
       const l = candidates.get(id);
@@ -85,6 +84,7 @@ export async function buildEpisode(
       skippedSegments++;
       continue;
     }
+    items.set(item.id, item);
     for (const r of reactions) letters.set(r.id, r);
     plan.push({ ...s, letterIds: read.map((l) => l.id), reactionIds: reactions.map((r) => r.id) });
     input.segments.push({ item, slot: s.slot, letters: read, reactions });
@@ -92,7 +92,7 @@ export async function buildEpisode(
 
   if (sourceless > 0) console.warn(`[dococa] skipped ${sourceless} found voice(s) without a source; fix the data`);
 
-  if (skippedSegments > 0) console.warn(`[dococa] skipped ${skippedSegments} segment(s) with no readable letter`);
+  if (skippedSegments > 0) console.warn(`[dococa] skipped ${skippedSegments} segment(s) with nothing to read`);
 
   const finish = (segments: Episode["segments"]): Episode => {
     const report = verifyEpisode(segments, letters, listener, items);

@@ -72,7 +72,6 @@ function reactionTag(l: Letter): string {
   return `<reaction kind="${l.kind === "reply" ? "一言" : "私も"}"${attr("from", l.radioName)}${attr("place", l.place)}/>`;
 }
 
-
 /** A segment that carries only reactions has no letter to hand over to. */
 const REACTIONS_ONLY_NOTE = "この作品にはお便りの読み上げはありません。反応だけが伝えられます。手渡しの言い回しは使わず、作品の紹介と反応への一言にしてください。";
 
