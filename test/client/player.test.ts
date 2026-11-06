@@ -16,7 +16,6 @@ const strings: Record<string, string> = {
   "player.again": "この作品を聴く・観る",
   "player.put": "お便りを送る",
   "station.dial": "セレンディピティ",
-  "player.loading": "読み込み中",
   "station.failed": "電波が届きませんでした",
   "station.limit": "今日の分はここまで。また明日",
   "episode.continueOnStation": "あなたのラジオで続きを聴く",

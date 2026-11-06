@@ -43,7 +43,7 @@ function MessagePage({ message, start, listener, path }: { message: string; star
 export const jsonForScript = (value: unknown): string => JSON.stringify(value).replace(/</g, "\\u003c");
 
 /** What the client player needs to know: the labels it shows, as `t()` values, since `t()` is server-only. */
-const PLAYER_KEY = /^(player\.|out\.|letter\.(who|whoPlace|whoDemo|showOriginal)|lang\.code$|station\.(dial|limit|failed)$|episode\.continueOnStation$|listener\.(?:anonymous|demo)$)/;
+const PLAYER_KEY = /^(player\.|out\.|letter\.(who|whoPlace|whoDemo|showOriginal)|lang\.code$|station\.dial$|episode\.continueOnStation$|listener\.(?:anonymous|demo)$)/;
 const playerStrings = (lang: Lang): Record<string, string> =>
   Object.fromEntries(Object.keys(ja).filter((k) => PLAYER_KEY.test(k)).map((k) => [k, tFor(lang)(k as keyof typeof ja)]));
 

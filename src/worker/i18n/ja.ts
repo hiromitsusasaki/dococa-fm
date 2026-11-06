@@ -81,7 +81,6 @@ export const ja = {
   "player.sendFailed": "送れませんでした",
   "player.again": "この作品を聴く・観る",
   "player.put": "お便りを送る",
-  "player.loading": "読み込み中",
   "slot.near": "近く",
   "slot.neighbor": "隣",
   "slot.far": "遠く",

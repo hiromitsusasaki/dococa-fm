@@ -84,7 +84,6 @@ export const en: Record<keyof typeof ja, string> = {
   "player.sendFailed": "Couldn't send it",
   "player.again": "Listen or watch",
   "player.put": "Send a letter",
-  "player.loading": "Loading",
   "slot.near": "Near",
   "slot.neighbor": "Next door",
   "slot.far": "Far away",
