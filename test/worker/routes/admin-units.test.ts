@@ -128,6 +128,24 @@ describe("POST /admin/units/:letterId/:lang/like", () => {
     expect((await listUnits(env.DB, { lang: "ja", limit: 10 }))[0]!.liked).toBe(false);
   });
 
+  it("keeps the page's place: the forms carry after and limit, and the 303 goes back to that page", async () => {
+    const first = await seed();
+    const second = await seed();
+    const [a, b] = [first.id, second.id].sort();
+    const html = await (await getPage(`/admin/units?lang=ja&limit=1&after=${a}`, basic())).text();
+    expect(html).toContain(`action="/admin/units/${b}/ja/like"`);
+    expect(html).toContain(`<input type="hidden" name="after" value="${a}"/>`);
+    expect(html).toContain('<input type="hidden" name="limit" value="1"/>');
+    const res = await postForm(`/admin/units/${b}/ja/like`, { liked: "1", after: a!, limit: "1" });
+    expect(res.status).toBe(303);
+    expect(res.headers.get("location")).toBe(`/admin/units?lang=ja&limit=1&after=${encodeURIComponent(a!)}`);
+    stubAnthropic().mockResolvedValue(toolUse("write_unit", { intro: "雨の夜に似合う一曲です。", after: "素敵なお便りでした。" }));
+    const remade = await postForm(`/admin/units/${b}/ja/remake`, { after: a!, limit: "1" });
+    expect(remade.status).toBe(303);
+    expect(remade.headers.get("location")).toBe(`/admin/units?lang=ja&limit=1&after=${encodeURIComponent(a!)}`);
+    expect((await postForm(`/admin/units/${b}/ja/like`, { liked: "1", limit: "0" })).status).toBe(422);
+  });
+
   it("answers 404 for a unit that does not exist and 422 for a bad language or value", async () => {
     const letter = await seed();
     expect((await postForm(`/admin/units/missing/ja/like`, { liked: "1" })).status).toBe(404);

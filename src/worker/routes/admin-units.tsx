@@ -45,11 +45,16 @@ const excerpt = (body: string) => {
 };
 
 const lang = z.enum(["ja", "en"]);
+const limitField = z.coerce.number().int().min(1).max(100);
+const afterField = z.string().min(1).max(100);
 const listSchema = z.object({
   lang: lang.default("ja"),
-  limit: z.coerce.number().int().min(1).max(100).default(50),
-  after: z.string().min(1).max(100).optional(),
+  limit: limitField.default(50),
+  after: afterField.optional(),
 });
+/** Where on the list a 👍 or 作り直す was pressed: the forms carry it, so the answer goes back to that page. */
+const placeSchema = z.object({ limit: limitField.optional(), after: afterField.optional() });
+type Place = z.infer<typeof placeSchema>;
 
 async function readList(c: Context<AppEnv>) {
   const parsed = listSchema.safeParse(c.req.query());
@@ -69,7 +74,17 @@ const STYLE = `body{font-family:system-ui,sans-serif;margin:16px;line-height:1.5
 th{white-space:nowrap}td,th{border-bottom:1px solid #ccc;padding:8px;vertical-align:top;text-align:left}form{display:inline}button{margin:2px}
 .liked{background:#fff7d6}.muted{color:#666}`;
 
-function Row({ u }: { u: UnitRow }) {
+/** The page's place as hidden fields of a form. */
+function PlaceFields({ place }: { place: Place }) {
+  return (
+    <>
+      {place.limit !== undefined ? <input type="hidden" name="limit" value={String(place.limit)} /> : null}
+      {place.after !== undefined ? <input type="hidden" name="after" value={place.after} /> : null}
+    </>
+  );
+}
+
+function Row({ u, place }: { u: UnitRow; place: Place }) {
   return (
     <tr class={u.liked ? "liked" : undefined}>
       <td>{u.title}</td>
@@ -82,10 +97,12 @@ function Row({ u }: { u: UnitRow }) {
         {u.verified ? (
           <form method="post" action={`/admin/units/${u.letterId}/${u.lang}/like`}>
             <input type="hidden" name="liked" value={u.liked ? "0" : "1"} />
+            <PlaceFields place={place} />
             <button type="submit">{u.liked ? L.unlike : L.like}</button>
           </form>
         ) : null}
         <form method="post" action={`/admin/units/${u.letterId}/${u.lang}/remake`} onsubmit={`return confirm(${JSON.stringify(L.confirmRemake)})`}>
+          <PlaceFields place={place} />
           <button type="submit">{L.remake}</button>
         </form>
       </td>
@@ -132,7 +149,7 @@ adminUnits.get("/admin/units", async (c) => {
                   </thead>
                   <tbody>
                     {rows.map((u) => (
-                      <Row u={u} />
+                      <Row u={u} place={{ limit: query.limit, ...(query.after ? { after: query.after } : {}) }} />
                     ))}
                   </tbody>
                 </table>
@@ -149,18 +166,21 @@ adminUnits.get("/admin/units", async (c) => {
   );
 });
 
-const back = (l: string) => `/admin/units?lang=${l}`;
+const back = (l: string, place: Place = {}) =>
+  `/admin/units?lang=${l}${place.limit !== undefined ? `&limit=${place.limit}` : ""}${place.after !== undefined ? `&after=${encodeURIComponent(place.after)}` : ""}`;
 
 adminUnits.post("/admin/units/:letterId/:lang/like", async (c) => {
   const l = lang.safeParse(c.req.param("lang"));
   const form = await c.req.parseBody();
   const liked = z.enum(["0", "1"]).safeParse(form.liked);
+  const place = placeSchema.safeParse({ limit: form.limit, after: form.after });
   if (!l.success) return invalid(c, l.error);
   if (!liked.success) return invalid(c, liked.error);
+  if (!place.success) return invalid(c, place.error);
   const letterId = c.req.param("letterId");
   if (!(await getUnits(c.env.DB, [letterId], l.data)).has(letterId)) return c.text(L.notFound, 404);
   await setUnitLiked(c.env.DB, letterId, l.data, liked.data === "1");
-  return c.redirect(back(l.data), 303);
+  return c.redirect(back(l.data, place.data), 303);
 });
 
 /**
@@ -171,6 +191,9 @@ adminUnits.post("/admin/units/:letterId/:lang/like", async (c) => {
 adminUnits.post("/admin/units/:letterId/:lang/remake", async (c) => {
   const l = lang.safeParse(c.req.param("lang"));
   if (!l.success) return invalid(c, l.error);
+  const form = await c.req.parseBody();
+  const place = placeSchema.safeParse({ limit: form.limit, after: form.after });
+  if (!place.success) return invalid(c, place.error);
   const letterId = c.req.param("letterId");
   const db = c.env.DB;
   const letter = await getLetter(db, letterId);
@@ -183,5 +206,5 @@ adminUnits.post("/admin/units/:letterId/:lang/remake", async (c) => {
   if (remade === "capped") return c.text(L.capped, 429);
   if (remade === "failed") return c.text(L.failed, 503);
   await prepareLetter(c.env, db, letterId, l.data);
-  return c.redirect(back(l.data), 303);
+  return c.redirect(back(l.data, place.data), 303);
 });
