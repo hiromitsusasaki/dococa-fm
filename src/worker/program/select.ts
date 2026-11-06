@@ -109,17 +109,22 @@ function seatOrder(dial: number): Slot[] {
 }
 
 const HEARD_WITHIN_MS = 7 * 24 * 60 * 60 * 1000;
+/** Candidates scored per pick, drawn at random from the pools, so a large catalogue does not thrash the vector cache. */
+const MAX_SCORED = 300;
 
 /**
  * The one seat by distance: among the pool items that have a vector, minus the works heard in the last 7 days and
  * those of the last 30 episodes on this station (the first exclusion is lifted when nothing is left, then the
  * second), the dial's band of the listener's taste. Null when the listener has no taste yet or no candidate has a
- * vector: the pools then choose as before. The distance only chooses; it is not returned.
+ * vector: the pools then choose as before. The distance only chooses; it is not returned. The slot (what the bridge
+ * says) follows the listener's own pools: a work of their near pool is near however far its vector lies; any other
+ * is neighbor below the 2/3 percentile, far above.
  */
-async function pickByDistance(db: D1Database, listener: Listener, pool: string[], dial: number, rng: () => number): Promise<{ id: string; slot: Slot } | null> {
+async function pickByDistance(db: D1Database, listener: Listener, pool: string[], near: ReadonlySet<string>, dial: number, rng: () => number): Promise<{ id: string; slot: Slot } | null> {
   const taste = await tasteOf(db, listener);
   if (!taste) return null;
-  const vecs = await getItemVecs(db, pool);
+  // During a partial backfill only works that already have a vector can win the distance pick.
+  const vecs = await getItemVecs(db, shuffle([...pool].sort(), rng).slice(0, MAX_SCORED));
   if (vecs.size === 0) return null;
   const since = new Date(Date.now() - HEARD_WITHIN_MS).toISOString();
   const { results } = await db.prepare(EXCLUDED_SQL).bind(listener.id, since).all<{ item_id: string; why: "heard" | "aired" }>();
@@ -129,7 +134,9 @@ async function pickByDistance(db: D1Database, listener: Listener, pool: string[]
   const fresh = all.filter((id) => !heard.has(id) && !aired.has(id));
   const notAired = all.filter((id) => !aired.has(id));
   const cands = fresh.length > 0 ? fresh : notAired.length > 0 ? notAired : all;
-  return pickByDial(cands, farness(taste, new Map(cands.map((id) => [id, vecs.get(id) as Float32Array]))), dial, rng);
+  const picked = pickByDial(cands, farness(taste, new Map(cands.map((id) => [id, vecs.get(id) as Float32Array]))), dial, rng);
+  if (!picked) return null;
+  return { id: picked.id, slot: near.has(picked.id) ? "near" : picked.slot === "far" ? "far" : "neighbor" };
 }
 
 export async function selectProgram(
@@ -169,7 +176,7 @@ export async function selectProgram(
   const chosen: Record<Slot, string[]> = { near: echo ? [echo] : [], neighbor: [], far: [] };
   const count = () => chosen.near.length + chosen.neighbor.length + chosen.far.length;
   if (room === 1) {
-    const byDistance = echo ? null : await pickByDistance(db, listener, [...pools.near, ...pools.neighbor, ...pools.far], dial, rng);
+    const byDistance = echo ? null : await pickByDistance(db, listener, [...pools.near, ...pools.neighbor, ...pools.far], new Set(raw.near), dial, rng);
     if (byDistance) chosen[byDistance.slot].push(byDistance.id);
     for (const slot of seatOrder(dial)) if (count() < 1) chosen[slot].push(...pools[slot].splice(0, 1));
   } else if (room > 1) {

@@ -477,6 +477,17 @@ describe("selectProgram by distance", () => {
     }
   });
 
+  it("labels the slot by the listener's own pools: a far-pool work is never near, an own near work is never far", async () => {
+    const f = await withVectors();
+    // Swap the vectors: i9 (far pool) now lies close to the taste, i1 (A's own near pool) far from it.
+    await setItemVec(env.DB, f.items[9]!, angled(0.05));
+    await setItemVec(env.DB, f.items[1]!, angled(1.5));
+    for (const seed of seeds) {
+      expect(await selectProgram(env.DB, f.a, { size: 1, seed, dial: 0 })).toMatchObject([{ itemId: f.items[9], slot: "neighbor" }]);
+      expect(await selectProgram(env.DB, f.a, { size: 1, seed, dial: 1 })).toMatchObject([{ itemId: f.items[1], slot: "near" }]);
+    }
+  });
+
   it("skips a work heard yesterday unless it is the only one", async () => {
     const f = await withVectors();
     const ep = await episodeOf(f.a.id, new Date(Date.now() - 2 * DAY).toISOString());
