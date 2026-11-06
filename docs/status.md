@@ -13,10 +13,11 @@
 | Task 5 | ホームに今届いているお便り | 完了（`listRecentPublicLetters` が最新の公開のお便り 6 通（通常のお便りと出典つきの見つけた声）を作品つきで 1 クエリで返し、`LetterCard` が `/stations/mine?letter=<id>` へのカードにする。`listRecentItems` は撤去） |
 | Task 6 | 送る画面（並び・お気に入りから選ぶ・検索・ブックマークレット） | 完了（`/put` を 3 枚のパネル（作品を決める・お便りを書く・ブックマークレット）にした。好きなものは `?pick=` でサーバー側でしぼる。`?q=` の題名検索はサインイン済みだけで、`searchByText` が iTunes・Google Books・TMDB と鍵があるときの YouTube を交互に 10 件まで並べ、`searchRateLimit`（リスナーごと 1 分 20 回）で守る。検索結果のリンク先で別の種類に化けないよう、TMDB と Google Books の URL は ID で引き直す。`/api/resolve`・`/api/search` は撤去。スクリーンショットは `docs/screenshots/2026-11-06-put-*.png`） |
 | Task 7 | マイページの並び | 完了（`/me` を 4 枚のパネル（好きなもの・聴いたお便り・届いた反応・公開ラジオ）にした。好きなものは 96px の絵の箱つきの小さなカードのグリッドで、`ItemCard` の `art` で出す。ページ内のサインアウトのフォームは外した（ヘッダに残る）。データと文言は変えていない。スクリーンショットは `docs/screenshots/2026-11-06-me-*.png`） |
-| Task 8 | モデレーションの理由と再判定 | 未着手 |
+| Task 8 | モデレーションの理由と再判定 | 完了（理由に `obscene`（公序良俗）と `negative`（作品や作り手をけなすのが主体）を足した。悲しい一通・そっけない一通・辛口の一言は通す。`POST /admin/rejudge`（`limit` 1〜100 既定 20、`after` は `letters.id` のカーソル）が公開中の `letter`・`found`・`reply` を id 順に今の基準で判定し直し、断られたものを `rejected` にする。私も・既に `rejected` のものは対象外、判定が投げたものは `skipped` で公開のまま。`pnpm rejudge` が `next` が null になるまで回し、id・理由・件数だけを出す） |
 | Task 9 | 単位のフィードバックの輪（管理画面・良い例・採点スクリプト） | 未着手 |
 | Task 10 | 締めのドキュメント | 未着手 |
 
+決定: モデレーションの理由は 6 つ（Task 8。`obscene` と `negative` を足した）。悲しい一通・そっけない一通・辛口の一言は引き続き通す（`negative` は、けなす・嫌いと言うのが主体のものだけ）。
 決定: MCP は Phase 4 で外した（事前生成で役目を終えた）。列 `mcp_token` は残して使わない。
 決定: 回は 1 枠（Task 3。リスナーの回は `makeEpisode` の既定 `size: 1`。eval だけは `POST /admin/episodes` に `size: 6` を送り、1 回 6 枠で測る。`selectProgram` の `size` はそのためとテストのために残す）。
 決定: 終わりのつなぎは言わない（Task 3。`bridge.close` は出さないが、保存済みの回を描くためにキーと `BRIDGE_KEYS` は残す。`bridge.open` は訪問の最初の回だけ）。
@@ -33,6 +34,7 @@ Phase 2（ラジオ中心の体験への作り替え）と Phase 3（単位・�
 
 ### 本人作業
 
+- [ ] Phase 4 のデプロイ後、`pnpm rejudge --origin https://dococafm.app --token "$ADMIN_TOKEN"` を一度実行する（Phase 4 Task 8。公開済みのお便りを新しい基準 `obscene`・`negative` で判定し直す。断られたものは `rejected` になる。`skipped` が出たらもう一度実行する）。
 - [ ] 開発機で `pnpm wrangler login` を済ませておく（Phase 4 Task 4 から `pnpm dev` がリモートの Workers AI に繋ぐ。使った分はそのアカウントに課金される。テストは繋がない）。
 - [ ] Workers AI を使えるようにする（Phase 4 Task 4。Workers Paid のアカウントで有効。`wrangler.jsonc` に `ai` バインディング `AI` を入れてある。無くても動き、そのときダイヤルは枠の順を決めるだけ）。
 - [ ] `pnpm db:migrate` で 0016（revoice_handover）と 0017（items_vec）を当てる。デプロイ後、`/admin/prepare` を一度回して既存の作品のベクトルを作る（`remaining.vectors` が 0 になるまで。20 作品で 1 件分の枠）。
