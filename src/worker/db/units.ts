@@ -40,8 +40,15 @@ export async function upsertUnit(db: D1Database, u: Omit<Unit, "createdAt"> & { 
   return unit;
 }
 
-export async function setUnitAudioReady(db: D1Database, letterId: string, lang: Unit["lang"], ready: boolean): Promise<void> {
-  await db.prepare("UPDATE units SET audio_ready = ? WHERE letter_id = ? AND lang = ?").bind(ready ? 1 : 0, letterId, lang).run();
+/**
+ * Flags the unit only while it still has the texts whose clips the caller made: a unit replaced meanwhile
+ * (two runs made one for the same letter) is left alone, and the next run voices the new text.
+ */
+export async function setUnitAudioReady(db: D1Database, letterId: string, lang: Unit["lang"], ready: boolean, voiced: Pick<Unit, "intro" | "after">): Promise<void> {
+  await db
+    .prepare("UPDATE units SET audio_ready = ? WHERE letter_id = ? AND lang = ? AND intro = ? AND after = ?")
+    .bind(ready ? 1 : 0, letterId, lang, voiced.intro, voiced.after)
+    .run();
 }
 
 /** A found voice without a source can never be verified, so it never gets a unit (it would be re-made on every run). */

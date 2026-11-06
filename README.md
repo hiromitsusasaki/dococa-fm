@@ -169,7 +169,7 @@ pnpm seed --items items.txt --personas 30             # 投入して、作品ペ
 
 ### 事前生成（運用）
 
-お便りが保存されると（`POST /letters`、MCP の `post_letter`、`/admin/letters`、`/admin/found`）、Worker が応答のあとで、そのお便りの DJ の語り（単位）と音声を作っておきます。15 分ごとの Cron（`wrangler.jsonc` の `triggers`）が、単位の無いお便りと音声の揃っていない単位を 1 回 20 件まで埋めます。シードで大量に投入した直後は、手で回します。
+お便りが保存されると（`POST /letters`、MCP の `post_letter`、`/admin/letters`、`/admin/found`）、Worker が応答のあとで、そのお便りの DJ の語り（単位）と音声を作っておきます。15 分ごとの Cron（`wrangler.jsonc` の `triggers`）が、単位の無いお便りと音声の揃っていない単位を 1 回 20 件まで埋めます。`waitUntil` の仕事は応答から 30 秒ほどで打ち切られるため、`/admin/found` で多数の声を入れたときに応答の直後に用意されるのは先頭の数件で、残りは Cron か `/admin/prepare` が拾います。シードで大量に投入した直後は、手で回します。
 
 ```bash
 # 1 回 20 件（limit は 1〜50）。remaining が 0 になるまで繰り返す

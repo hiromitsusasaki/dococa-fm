@@ -49,7 +49,7 @@ async function itemPageWithNotice(db: D1Database, itemId: string, notice: string
 }
 
 /** Exactly four tools: the DJ side never gets write access beyond placing a letter or a reaction as the listener. */
-export function createMcpServer(env: Env, db: D1Database, listener: Listener, waitUntil: (work: Promise<unknown>) => void = () => {}): McpServer {
+export function createMcpServer(env: Env, db: D1Database, listener: Listener, waitUntil: (work: Promise<unknown>) => void): McpServer {
   const server = new McpServer({ name: "dococa-fm", version: "0.1.0" });
   const lang = listener.lang;
   const t = tFor(lang);

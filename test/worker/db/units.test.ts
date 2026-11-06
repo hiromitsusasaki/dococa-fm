@@ -58,9 +58,19 @@ describe("units", () => {
   it("marks a unit's audio ready", async () => {
     const item = await insertItem(env.DB, itemDraft());
     const a = await insertLetter(env.DB, letterDraft(item.id));
-    await upsertUnit(env.DB, unit(a.id));
-    await setUnitAudioReady(env.DB, a.id, "ja", true);
+    const u = unit(a.id);
+    await upsertUnit(env.DB, u);
+    await setUnitAudioReady(env.DB, a.id, "ja", true, u);
     expect((await getUnits(env.DB, [a.id], "ja")).get(a.id)!.audioReady).toBe(true);
+  });
+
+  it("does not mark a unit whose texts are no longer the ones that were voiced", async () => {
+    const item = await insertItem(env.DB, itemDraft());
+    const a = await insertLetter(env.DB, letterDraft(item.id));
+    const u = unit(a.id);
+    await upsertUnit(env.DB, { ...u, intro: "別の紹介" });
+    await setUnitAudioReady(env.DB, a.id, "ja", true, u);
+    expect((await getUnits(env.DB, [a.id], "ja")).get(a.id)!.audioReady).toBe(false);
   });
 
   it("lists public letters and found voices with no unit in the language, oldest first", async () => {

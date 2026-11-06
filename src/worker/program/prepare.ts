@@ -12,11 +12,11 @@ export type Prepared = { units: number; audio: number; failed: number };
 type Run = Prepared & {
   /** The cloud voice is over its cap or has no key: further clips would be refused too. */
   audioHalted: boolean;
-  /** Claude could not make a unit: further units would fail the same way. */
-  unitsHalted: boolean;
+  /** No unit could be made for this letter (malformed replies, an outage or a store failure). */
+  unitFailed: boolean;
 };
 
-const none = (): Run => ({ units: 0, audio: 0, failed: 0, audioHalted: false, unitsHalted: false });
+const none = (): Run => ({ units: 0, audio: 0, failed: 0, audioHalted: false, unitFailed: false });
 
 /** Names and counts only: a letter's text never reaches the log. */
 function logFailure(e: unknown): void {
@@ -36,7 +36,7 @@ async function run(env: Env, db: D1Database, letterId: string, lang: Unit["lang"
     unit = await makeUnit(env, db, letter, item, lang);
     if (!unit) {
       out.failed++;
-      out.unitsHalted = true;
+      out.unitFailed = true;
       return out;
     }
     out.units++;
@@ -60,7 +60,7 @@ async function run(env: Env, db: D1Database, letterId: string, lang: Unit["lang"
     }
     out.failed++;
   }
-  if (complete && unit.verified) await setUnitAudioReady(db, letter.id, lang, true);
+  if (complete && unit.verified) await setUnitAudioReady(db, letter.id, lang, true, unit);
   return out;
 }
 
@@ -79,9 +79,13 @@ export async function prepareLetter(env: Env, db: D1Database, letterId: string, 
   }
 }
 
+/** Letters in a row whose unit could not be made before the unit phase is taken for an outage and stops. */
+const OUTAGE_AFTER = 3;
+
 /**
  * Up to `limit` letters without a unit, then up to `limit` verified units without audio. Stops making audio
- * at the first `limit`/`unavailable` answer and units at the first Claude failure.
+ * at the first `limit`/`unavailable` answer and units after 3 letters in a row that cannot get one (a single bad
+ * letter is counted as failed and skipped, so newer letters are still reached).
  */
 export async function prepareBatch(env: Env, db: D1Database, limit = 20): Promise<Prepared & { remaining: { units: number; audio: number } }> {
   const total: Prepared = { units: 0, audio: 0, failed: 0 };
@@ -92,14 +96,14 @@ export async function prepareBatch(env: Env, db: D1Database, limit = 20): Promis
   };
   const lang = "ja" as const;
   let audioHalted = false;
-  let unitsHalted = false;
+  let unitMisses = 0;
   const done = new Set<string>();
   const one = async (id: string) => {
     done.add(id);
     try {
       const r = await run(env, db, id, lang, !audioHalted);
       audioHalted ||= r.audioHalted;
-      unitsHalted ||= r.unitsHalted;
+      unitMisses = r.unitFailed ? unitMisses + 1 : r.units > 0 ? 0 : unitMisses;
       add(r);
     } catch (e) {
       logFailure(e);
@@ -108,7 +112,7 @@ export async function prepareBatch(env: Env, db: D1Database, limit = 20): Promis
   };
 
   for (const id of await listLettersWithoutUnit(db, lang, limit)) {
-    if (unitsHalted) break;
+    if (unitMisses >= OUTAGE_AFTER) break;
     await one(id);
   }
   if (!audioHalted) {

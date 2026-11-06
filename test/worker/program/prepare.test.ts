@@ -20,13 +20,13 @@ const keylessTts = { ...keyed, GOOGLE_TTS_SA_JSON: "" } as Env;
 const audio = btoa(String.fromCharCode(1, 2, 3));
 
 let create: ReturnType<typeof stubAnthropic>;
-let google: Mock<() => Response>;
+let google: Mock<() => Response | Promise<Response>>;
 /** Claude is stubbed by the helper; Google is added in front of it. */
-function stubBoth(googleReply: () => Response = () => json({ audioContent: audio })) {
+function stubBoth(googleReply: () => Response | Promise<Response> = () => json({ audioContent: audio })) {
   create = stubAnthropic();
   create.mockResolvedValue(toolUse("write_unit", { intro: "静かな一曲です。", after: "いいお便りでした。" }));
   const claudeFetch = globalThis.fetch;
-  google = vi.fn<() => Response>(googleReply);
+  google = vi.fn<() => Response | Promise<Response>>(googleReply);
   vi.stubGlobal("fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
     return url.startsWith(GOOGLE) ? google() : claudeFetch(input, init);
@@ -101,8 +101,33 @@ describe("prepareLetter", () => {
     expect(await prepareLetter({ ...keyed, ANTHROPIC_API_KEY: "" } as Env, env.DB, letters[0]!.id)).toEqual({ units: 0, audio: 0, failed: 0 });
     create.mockRejectedValue(new Error("down"));
     const r = await prepareLetter(keyed, env.DB, letters[0]!.id);
-    expect(r).toMatchObject({ units: 0, audio: 0 });
+    expect(r).toEqual({ units: 0, audio: 0, failed: 1 });
     expect(await unitOf(letters[0]!.id)).toBeUndefined();
+  });
+
+  it("resolves when something inside throws, and logs the error name only", async () => {
+    const broken = { prepare: () => { throw new Error("D1_ERROR: 雨の日に聴きました"); } } as unknown as D1Database;
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    expect(await prepareLetter(keyed, broken, "any")).toEqual({ units: 0, audio: 0, failed: 1 });
+    const logged = error.mock.calls.map((c) => c.join(" ")).join("\n");
+    expect(logged).toContain("prepare failed: Error");
+    expect(logged).not.toContain("雨の日");
+    expect(logged).not.toContain("D1_ERROR");
+  });
+
+  it("does not flag a unit that was replaced while its clips were made", async () => {
+    const { letters } = await seed();
+    const id = letters[0]!.id;
+    let calls = 0;
+    stubBoth(async () => {
+      if (++calls === 4) await upsertUnit(env.DB, { letterId: id, lang: "ja", intro: "別の紹介です。", after: "別の感想です。", verified: true, audioReady: false });
+      return json({ audioContent: audio });
+    });
+    await prepareLetter(keyed, env.DB, id);
+    expect(await unitOf(id)).toMatchObject({ intro: "別の紹介です。", audioReady: false });
+    // The next run voices the new text and then flags it.
+    await prepareLetter(keyed, env.DB, id);
+    expect(await unitOf(id)).toMatchObject({ audioReady: true });
   });
 });
 
@@ -112,6 +137,24 @@ describe("prepareBatch", () => {
     const r = await prepareBatch(keylessTts, env.DB, 2);
     expect(r).toEqual({ units: 2, audio: 0, failed: 0, remaining: { units: 1, audio: 2 } });
     expect(create).toHaveBeenCalledTimes(2);
+  });
+
+  it("goes on to newer letters when the oldest one cannot get a unit, and stops only after three misses in a row", async () => {
+    const { letters } = await seed(2);
+    await env.DB.prepare("UPDATE letters SET created_at = '2020-01-01T00:00:00Z' WHERE id = ?").bind(letters[0]!.id).run();
+    const bad = letters[0]!.bodyJa;
+    create.mockImplementation((req: any) => (String(req.messages[0].content).includes(bad) ? toolUse("write_unit", { intro: 1 }) : toolUse("write_unit", { intro: "静かな一曲です。", after: "いいお便りでした。" })));
+    const r = await prepareBatch(keylessTts, env.DB, 20);
+    expect(r).toMatchObject({ units: 1, failed: 1, remaining: { units: 1, audio: 1 } });
+    expect(await unitOf(letters[1]!.id)).toBeDefined();
+    expect(await unitOf(letters[0]!.id)).toBeUndefined();
+
+    await resetDb(env.DB);
+    const many = await seed(5);
+    create.mockRejectedValue(new Error("down"));
+    const out = await prepareBatch(keylessTts, env.DB, 20);
+    expect(out).toMatchObject({ units: 0, failed: 3, remaining: { units: 5 } });
+    expect(many.letters).toHaveLength(5);
   });
 
   it("voices units that still lack audio, once the key exists", async () => {
