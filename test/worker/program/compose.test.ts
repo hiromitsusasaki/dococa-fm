@@ -37,7 +37,7 @@ describe("composeEpisode", () => {
     );
     expect(seg).toMatchObject({ itemId: "i1", slot: "near" });
     expect(seg!.lines).toEqual([
-      { type: "dj", text: "Dococa FM。世界のどこかにいる誰かの好きなものを、お届けします。", fixed: true, bridge: "bridge.open" },
+      { type: "dj", text: "Dococa FM。世界のどこかにいる誰かの好きなものへのお便りを、お届けします。", fixed: true, bridge: "bridge.open" },
       { type: "dj", text: "はじめ", unit: { letterId: "a", part: "intro" } },
       { type: "dj", text: "みなとさん（函館）からのお便りです。", fixed: true },
       { type: "letter", letterId: "a", text: plain.bodyJa, radioName: "みなと", place: "函館", kind: "letter", sourceUrl: null, sourceAuthor: null },
@@ -50,7 +50,7 @@ describe("composeEpisode", () => {
       { type: "dj", text: "あおいさん（那覇）から『私も』が届いています", fixed: true },
       { type: "dj", text: "そらさん（熊本）から一言が届いています", fixed: true },
       { type: "letter", letterId: "r", text: "わかります", radioName: "そら", place: "熊本", kind: "reply", sourceUrl: null, sourceAuthor: null },
-      { type: "dj", text: "ここで一息。このあとも、お便りは続きます。", fixed: true, bridge: "bridge.close" },
+      { type: "dj", text: "ここで一息。", fixed: true, bridge: "bridge.close" },
     ]);
   });
 

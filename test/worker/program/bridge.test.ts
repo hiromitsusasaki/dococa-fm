@@ -19,6 +19,13 @@ describe("bridgeBefore", () => {
     expect(bridgeBefore(1, slot, "public")).toBe("bridge.next");
   });
 
+  it("opens and closes without promising what follows", () => {
+    expect(t("bridge.open")).toBe("Dococa FM。世界のどこかにいる誰かの好きなものへのお便りを、お届けします。");
+    expect(t("bridge.open", undefined, "en")).toBe("Dococa FM. Letters about the things someone, somewhere, loves.");
+    expect(t("bridge.close")).toBe("ここで一息。");
+    expect(t("bridge.close", undefined, "en")).toBe("A moment's pause.");
+  });
+
   it("words the neutral next without saying whose favourite it is", () => {
     expect(t("bridge.next")).toBe("続いてのお便りです。");
     expect(t("bridge.next", undefined, "en")).toBe("The next letter.");
