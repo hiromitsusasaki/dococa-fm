@@ -79,9 +79,12 @@ function artistFromDescription(description: string | null | undefined): string |
 
 const normalizeName = (s: string) => s.toLowerCase().trim().replace(/\s+/g, " ");
 
+/** A song title shorter than this (code points, normalised) is found inside too many video titles ("So" in "Sometimes"). */
+const MIN_TITLE_IN_VIDEO = 4;
+
 const titleWithin = (song: string, video: string): boolean => {
   const s = normalizeName(song);
-  return s !== "" && normalizeName(video).includes(s);
+  return [...s].length >= MIN_TITLE_IN_VIDEO && normalizeName(video).includes(s);
 };
 
 export function sameArtist(a: string, b: string): boolean {

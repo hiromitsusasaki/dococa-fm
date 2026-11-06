@@ -96,6 +96,17 @@ describe("resolveUrl", () => {
     expect(draft!.externalIds.itunes).toBeUndefined();
   });
 
+  it("youtube: a title shorter than 4 code points is not matched inside the video's title", async () => {
+    const url = "https://www.youtube.com/watch?v=abcdefghijk";
+    stubFetch([
+      ["https://www.youtube.com/oembed", () => json({ title: "Someone - Sometimes (Live)", author_name: "SomeoneVEVO", thumbnail_url: "https://i.ytimg.com/x.jpg" })],
+      ["https://itunes.apple.com/search", () => json({ results: [itunesTrack(40, "So"), itunesTrack(41, " S o ")] })],
+    ]);
+    const draft = await resolveUrl(url, testEnv);
+    expect(draft).toMatchObject({ title: "Someone - Sometimes (Live)", externalIds: { youtube: "abcdefghijk" } });
+    expect(draft!.externalIds.itunes).toBeUndefined();
+  });
+
   it("youtube: falls back to oembed data when itunes finds nothing", async () => {
     stubFetch([
       ["https://www.youtube.com/oembed", () => json({ title: "Song", author_name: "Artist", thumbnail_url: "https://i.ytimg.com/x.jpg" })],

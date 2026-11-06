@@ -41,6 +41,8 @@ export function parseKnownUrl(raw: string): ParsedUrl {
     const m = /^\/movie\/(\d+)/.exec(path);
     if (m) return { provider: "tmdb", id: m[1] };
   } else if (/^books\.google\.(com|co\.[a-z]{2}|com\.[a-z]{2}|[a-z]{2})$/.test(h)) {
+    // `[a-z]{2}` is looser than the real country domains, which is harmless: only the id is kept, and the out link
+    // is the API's canonical one, never this host.
     const id = u.searchParams.get("id");
     if (id && /^[\w-]+$/.test(id)) return { provider: "google-books", id };
   }
