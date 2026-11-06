@@ -42,13 +42,13 @@ Phase 4（お住まい・MCP の撤去・ラジオ面のダイヤル・遠さ・
 
 ### 本人作業（Phase 4 のデプロイ。この順）
 
-- [ ] `pnpm db:migrate` で 0015 以降の当てていない分を順に当てる。本番には 0005〜0014 まで当て済み（2026-11-06）。残りは 0015（tts_v3: 音声の鍵を v3 に変え、`tts_audio` を空にして `units.audio_ready` を戻す）、0016（revoice_handover: 手渡しの言い方が変わるので単位の音声を作り直す）、0017（items_vec: 作品のベクトル）、0018（units_liked）、0019（unit_remakes: 作り直した単位を 1 日の上限に数える）、0020（youtube_searches: 題名検索の YouTube を 1 日に数える）。R2 の `tts/v2/` は手で消してよい（残っても害はない）。
+- [x] （2026-11-07 済み。0016〜0020 を本番に適用）`pnpm db:migrate` で 0015 以降の当てていない分を順に当てる。本番には 0005〜0014 まで当て済み（2026-11-06）。残りは 0015（tts_v3: 音声の鍵を v3 に変え、`tts_audio` を空にして `units.audio_ready` を戻す）、0016（revoice_handover: 手渡しの言い方が変わるので単位の音声を作り直す）、0017（items_vec: 作品のベクトル）、0018（units_liked）、0019（unit_remakes: 作り直した単位を 1 日の上限に数える）、0020（youtube_searches: 題名検索の YouTube を 1 日に数える）。R2 の `tts/v2/` は手で消してよい（残っても害はない）。
 - [ ] 本番の `EPISODE_DAILY_LIMIT` を 30 などにしてあれば、消す（既定 60 枠）か上げる。1 回が 1 枠なので、以前の「30 回」と数え方は同じだが、既定は 60 になった。
 - [ ] 題名検索の YouTube の 1 日の上限 `YOUTUBE_SEARCH_DAILY_LIMIT`（任意。既定 80 回/日。全員合計で、1 回 100 ユニット）。見つけた声の収集バッチに枠を多く残したいなら下げ、YouTube を検索に使わないなら `0`。`wrangler.jsonc` の `vars` か `pnpm wrangler secret put` で入れる（入れなければ 80）。
 - [ ] Workers AI を使えるようにする（Workers Paid のアカウント。`wrangler.jsonc` に `ai` バインディング `AI` を入れてある。新しい鍵は無い。無くても動き、そのときダイヤルは枠の順を決めるだけ）。開発機は `pnpm wrangler login` を済ませておく（`pnpm dev` がリモートの Workers AI に繋ぐ。使った分はそのアカウントに課金される。テストは繋がない）。
-- [ ] `pnpm run deploy`。
-- [ ] デプロイしたらすぐ `ADMIN_TOKEN="$PROD_ADMIN_TOKEN" pnpm rejudge --origin https://dococafm.app`（先に `read -rs PROD_ADMIN_TOKEN`）を一度実行する。公開済みのお便りを新しい基準（`obscene`・`negative`）で判定し直し、断られたものは `rejected` になる。`skipped` が出たらもう一度。先に済ませるのは、次の `/admin/prepare`（と 15 分ごとの Cron）が、断られるお便りの単位と音声を作らないため。
-- [ ] rejudge のあと、`POST /admin/prepare`（`Authorization: Bearer $ADMIN_TOKEN`、`{"limit":20}`）を、`remaining`（`vectors`・`units`・`audio`）が全部 0 になるか `failed` が変わらなくなるまで繰り返す。作品のベクトル、日本語と英語の単位、手渡しと音声が揃う。`AI` バインディング（Workers AI）が無いあいだは `remaining.vectors` は作品の数のまま減らないので、そのときは `failed` が変わらなくなったところで止める。音声の上限（既定 3000 行/日）に当たったら翌日（JST）に続く（Cron は 15 分ごとに 20 件ずつ埋める）。
+- [x] （2026-11-07 済み。version 7430aaad、`env.AI` 付き）`pnpm run deploy`。
+- [x] （2026-11-07 済み。判定 97 件、断られたもの 0）デプロイしたらすぐ `ADMIN_TOKEN="$PROD_ADMIN_TOKEN" pnpm rejudge --origin https://dococafm.app`（先に `read -rs PROD_ADMIN_TOKEN`）を一度実行する。公開済みのお便りを新しい基準（`obscene`・`negative`）で判定し直し、断られたものは `rejected` になる。`skipped` が出たらもう一度。先に済ませるのは、次の `/admin/prepare`（と 15 分ごとの Cron）が、断られるお便りの単位と音声を作らないため。
+- [x] （2026-11-07 済み。20 回で vectors・units・audio がすべて 0、failed 0）rejudge のあと、`POST /admin/prepare`（`Authorization: Bearer $ADMIN_TOKEN`、`{"limit":20}`）を、`remaining`（`vectors`・`units`・`audio`）が全部 0 になるか `failed` が変わらなくなるまで繰り返す。作品のベクトル、日本語と英語の単位、手渡しと音声が揃う。`AI` バインディング（Workers AI）が無いあいだは `remaining.vectors` は作品の数のまま減らないので、そのときは `failed` が変わらなくなったところで止める。音声の上限（既定 3000 行/日）に当たったら翌日（JST）に続く（Cron は 15 分ごとに 20 件ずつ埋める）。
 - [ ] 最初の `ADMIN_TOKEN="$PROD_ADMIN_TOKEN" pnpm eval:units --origin https://dococafm.app --lang ja --limit 40`。`docs/eval/units-<日付>.md` の低い 10 件と「指示文への提案」を読み、採るものを指示文に入れる。英語は `--lang en`。良い intro は `https://dococafm.app/admin/units?lang=ja`（ユーザー名 `admin`、パスワード `ADMIN_TOKEN`）で 👍、だめなものは 👎。
 - [ ] 画面を確かめる: ホームの「いま届いているお便り」のカード、ラジオの面のセレンディピティ（回すと次の回から効く）、送る画面（`/put`）の題名検索、マイページ（`/me`）。ライトとダーク、PC 幅とスマホ幅。
 
