@@ -20,9 +20,14 @@ describe("farness", () => {
     expect(far).toEqual(new Map([["a", 0], ["b", 0.5], ["c", 1]]));
   });
 
-  it("puts a single candidate at 0 and breaks ties by id", () => {
+  it("puts a single candidate at 0, and equal distances at the same percentile (their mid-rank)", () => {
     expect(farness(angled(0), new Map([["x", angled(1)]]))).toEqual(new Map([["x", 0]]));
-    expect(farness(angled(0), new Map([["b", angled(1)], ["a", angled(1)]]))).toEqual(new Map([["a", 0], ["b", 1]]));
+    // Two identical vectors never land on opposite ends of the dial.
+    expect(farness(angled(0), new Map([["b", angled(1)], ["a", angled(1)]]))).toEqual(new Map([["a", 0.5], ["b", 0.5]]));
+    const tied = farness(angled(0), new Map([["c", angled(1.5)], ["b", angled(0.7)], ["a", angled(0.1)], ["d", angled(0.7)], ["e", angled(0.7)]]));
+    expect(tied).toEqual(new Map([["a", 0], ["b", 0.5], ["d", 0.5], ["e", 0.5], ["c", 1]]));
+    // The ids only keep the order stable.
+    expect([...tied.keys()]).toEqual(["a", "b", "d", "e", "c"]);
   });
 });
 

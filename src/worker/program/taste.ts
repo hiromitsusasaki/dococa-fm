@@ -26,7 +26,9 @@ export async function tasteOf(db: D1Database, listener: Pick<Listener, "id">): P
 
 /**
  * How far each candidate lies from the taste, as a percentile of the candidates (0 the nearest, 1 the farthest):
- * ranked by cosine distance, ties by id; one candidate is at 0. Used to choose only: it never leaves the worker.
+ * ranked by cosine distance; equal distances share their mid-rank, so two identical works never land on opposite
+ * ends of the dial; the ids only keep the output order stable. One candidate is at 0. Used to choose only: it never
+ * leaves the worker.
  */
 export function farness(taste: Float32Array, cands: Map<string, Float32Array>): Map<string, number> {
   const dist = [...cands].map(([id, v]) => {
@@ -36,7 +38,15 @@ export function farness(taste: Float32Array, cands: Map<string, Float32Array>): 
   });
   dist.sort((a, b) => a.d - b.d || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
   const n = dist.length;
-  return new Map(dist.map(({ id }, rank) => [id, n === 1 ? 0 : rank / (n - 1)]));
+  const out = new Map<string, number>();
+  for (let start = 0; start < n; ) {
+    let end = start;
+    while (end + 1 < n && (dist[end + 1] as { d: number }).d === (dist[start] as { d: number }).d) end++;
+    const mid = (start + end) / 2;
+    for (let i = start; i <= end; i++) out.set((dist[i] as { id: string }).id, n === 1 ? 0 : mid / (n - 1));
+    start = end + 1;
+  }
+  return out;
 }
 
 /** The band around the dial starts at ±0.2 and widens by 0.1 until it holds a candidate. */
