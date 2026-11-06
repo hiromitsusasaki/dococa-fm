@@ -70,6 +70,44 @@ describe("embedItems", () => {
     expect((await getItemVecs(env.DB, [item.id])).size).toBe(0);
   });
 
+  it("retries a failing batch one by one, skips the work that fails alone (logging its id and the error name), and moves on", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const items = [];
+    for (let n = 0; n < 25; n++) items.push(await insertItem(env.DB, itemDraft({ title: n === 3 ? "毒の題名" : `曲${n}` })));
+    const poison = items[3]!;
+    const ok = fakeAi().AI;
+    const { AI, calls } = fakeAi(async (model, input) => {
+      if (input.text.some((t) => t.includes("毒"))) throw new TypeError("refused");
+      return ok.run(model as Parameters<Ai["run"]>[0], input as never);
+    });
+    expect(await embedItems({ AI }, env.DB, items.map((i) => i.id))).toBe(24);
+    const vecs = await getItemVecs(env.DB, items.map((i) => i.id));
+    expect(vecs.size).toBe(24);
+    expect(vecs.has(poison.id)).toBe(false);
+    const logged = warn.mock.calls.map((c) => c.join(" "));
+    expect(logged).toContain(`[dococa] embed skipped ${poison.id} TypeError`);
+    expect(logged.join("\n")).not.toContain("毒");
+    // The failing batch is retried one by one; the other batch is one call.
+    const failed = calls.find((c) => c.text.length > 1 && c.text.some((t) => t.includes("毒")))!;
+    expect(calls.filter((c) => c.text.length === 1)).toHaveLength(failed.text.length);
+    expect(calls.filter((c) => c.text.length > 1).map((c) => c.text.length).sort()).toEqual([20, 5]);
+    // The backfill no longer stalls on it: only the skipped work is left.
+    expect(await ensureItemVectors({ AI }, env.DB, 5)).toMatchObject({ remaining: 1 });
+  });
+
+  it("stops when every work of a failing batch fails alone too: Workers AI is down, not one work", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const items = [];
+    for (let n = 0; n < 25; n++) items.push(await insertItem(env.DB, itemDraft({ title: `曲${n}` })));
+    const { AI, calls } = fakeAi(async () => {
+      throw new Error("down");
+    });
+    expect(await embedItems({ AI }, env.DB, items.map((i) => i.id))).toBe(0);
+    expect(calls).toHaveLength(21);
+  });
+
   it("itemText is title, creator, year and kind", () => {
     expect(itemText({ title: "T", creator: "C", year: 1999, kind: "book" })).toBe("T — C (1999) [book]");
   });
