@@ -3,11 +3,11 @@ export const CLAIM_TTL_MS = 60_000;
 
 /**
  * Claims `key` for synthesis: true for the one caller that may call the paid API, false while someone else
- * holds it. A stale claim is cleared first, in the same batch.
+ * holds it. A claim older than `ttlMs` is stale and cleared first, in the same batch.
  */
-export async function claimTts(db: D1Database, key: string, now = Date.now()): Promise<boolean> {
+export async function claimTts(db: D1Database, key: string, now = Date.now(), ttlMs = CLAIM_TTL_MS): Promise<boolean> {
   const [, insert] = await db.batch([
-    db.prepare("DELETE FROM tts_claims WHERE key = ? AND created_at < ?").bind(key, now - CLAIM_TTL_MS),
+    db.prepare("DELETE FROM tts_claims WHERE key = ? AND created_at < ?").bind(key, now - ttlMs),
     db.prepare("INSERT OR IGNORE INTO tts_claims (key, created_at) VALUES (?, ?)").bind(key, now),
   ]);
   return (insert?.meta.changes ?? 0) === 1;

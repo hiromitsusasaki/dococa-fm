@@ -6,7 +6,7 @@ import { getUnits, upsertUnit } from "../../../src/worker/db/units";
 import type { Env } from "../../../src/worker/env";
 import { t } from "../../../src/worker/i18n/t";
 import { DJ_SYSTEM_EN } from "../../../src/worker/program/script";
-import { ensureUnits, makeUnit, unitSegment, writeUnitLines } from "../../../src/worker/program/unit";
+import { ensureUnits, makeUnit, UNIT_CLAIM_TTL_MS, unitSegment, writeUnitLines } from "../../../src/worker/program/unit";
 import { claimTts, releaseTts } from "../../../src/worker/tts/claim";
 import type { Item, Letter } from "../../../src/worker/types";
 import { expectInstructedTool, stubAnthropic, toolUse } from "../../helpers/anthropic";
@@ -289,6 +289,23 @@ describe("makeUnit with one maker per unit", () => {
     await releaseTts(env.DB, `unit:${f.letter.id}:ja`);
     expect(await makeUnit(keyed, env.DB, f.letter, f.item, "ja")).toMatchObject({ verified: true });
     expect(await env.DB.prepare("SELECT COUNT(*) AS n FROM tts_claims").first<{ n: number }>()).toEqual({ n: 0 });
+  });
+
+  it("holds the unit claim for 180 s, not the 60 s of a clip's claim", async () => {
+    const f = await stored();
+    create.mockResolvedValue(lines());
+    const key = `unit:${f.letter.id}:ja`;
+    const held = (msAgo: number) => env.DB.prepare("INSERT OR REPLACE INTO tts_claims (key, created_at) VALUES (?, ?)").bind(key, Date.now() - msAgo).run();
+    await held(179_000);
+    expect(await makeUnit(keyed, env.DB, f.letter, f.item, "ja")).toBe("busy");
+    expect(create).not.toHaveBeenCalled();
+    await held(181_000);
+    expect(await makeUnit(keyed, env.DB, f.letter, f.item, "ja")).toMatchObject({ verified: true });
+    // A clip's claim keeps its 60 s.
+    const now = Date.now();
+    expect(await claimTts(env.DB, "tts/k", now - 61_000)).toBe(true);
+    expect(await claimTts(env.DB, "tts/k", now)).toBe(true);
+    expect(await claimTts(env.DB, "tts/k", now, UNIT_CLAIM_TTL_MS)).toBe(false);
   });
 
   it("returns the stored unit: a verified one already stored is kept over new lines", async () => {

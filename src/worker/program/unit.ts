@@ -20,6 +20,8 @@ const RETRYABLE = /^(?:topical|measure|pii|announce|playback|intro): /;
 const CONCURRENCY = 3;
 /** A unit is for everyone, so it is checked against no listener's account. */
 const NOBODY = { id: "", mcpToken: "" };
+/** A unit's claim outlives a clip's: two writes of up to 3 attempts each can pass a minute. */
+export const UNIT_CLAIM_TTL_MS = 180_000;
 /** Units made per JST day when `UNIT_DAILY_LIMIT` is unset. */
 export const DEFAULT_UNIT_DAILY_LIMIT = 1000;
 
@@ -135,13 +137,13 @@ function verifyUnit(lines: UnitLines, letter: Letter, item: Item, lang: Unit["la
  * the stored row (a verified unit already stored is kept over the new lines). Null when Claude is unavailable
  * (no key, an API error, or replies out of shape) or today's units are at `UNIT_DAILY_LIMIT`: nothing is
  * stored, so a later run makes it. `"busy"` when another run holds the claim on `unit:<letterId>:<lang>`
- * (`tts_claims`, same TTL): one maker per unit.
+ * (`tts_claims`, held for `UNIT_CLAIM_TTL_MS`): one maker per unit.
  */
 export async function makeUnit(env: Env, db: D1Database, letter: Letter, item: Item, lang: Unit["lang"]): Promise<Unit | null | "busy"> {
   if (!hasClaude(env)) return null;
   if (await unitCapReached(env, db)) return null;
   const claim = `unit:${letter.id}:${lang}`;
-  if (!(await claimTts(db, claim))) return "busy";
+  if (!(await claimTts(db, claim, Date.now(), UNIT_CLAIM_TTL_MS))) return "busy";
   try {
     return await writeAndStore(env, db, letter, item, lang);
   } finally {
