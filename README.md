@@ -172,12 +172,12 @@ pnpm seed --items items.txt --personas 30             # 投入して、作品ペ
 お便りが保存されると（`POST /letters`、MCP の `post_letter`、`/admin/letters`、`/admin/found`）、Worker が応答のあとで、そのお便りの DJ の語り（単位）と音声を作っておきます。単位は日本語と英語の両方を作ります。15 分ごとの Cron（`wrangler.jsonc` の `triggers`）が、単位の無いお便りと音声の揃っていない単位を、日本語の単位・英語の単位・日本語の音声・英語の音声の順に埋めます。1 回の実行でするのは、単位と音声を合わせて最大 `limit` 件（お便り × 言語。Cron は 20 件）です。`waitUntil` の仕事は応答から 30 秒ほどで打ち切られるため、`/admin/found` で多数の声を入れたときに応答の直後に用意されるのは先頭の数件で、残りは Cron か `/admin/prepare` が拾います。シードで大量に投入した直後は、手で回します。
 
 ```bash
-# 1 回で単位と音声を合わせて最大 limit 件（1〜50）。remaining の 4 つの数が 0 になるまで繰り返す
+# 1 回で単位と音声を合わせて最大 limit 件（1〜50）。remaining が 0 になるか failed が変わらなくなるまで繰り返す
 curl -s -X POST "$DOCOCA_ORIGIN/admin/prepare" -H "authorization: Bearer $ADMIN_TOKEN" -H 'content-type: application/json' -d '{"limit":20}'
 # => {"units":..,"audio":..,"failed":..,"remaining":{"units":{"ja":..,"en":..},"audio":{"ja":..,"en":..}}}
 ```
 
-`GOOGLE_TTS_SA_JSON` が空のあいだは単位だけ作り、音声は `remaining.audio` に残ります。クラウドの声の 1 日の上限（`CLOUD_TTS_GLOBAL_DAILY_LIMIT`）に当たると音声はそこで止まり、翌日の Cron が続きを作ります。
+`GOOGLE_TTS_SA_JSON` が空のあいだは単位だけ作り、音声は `remaining.audio` に残ります。クラウドの声の 1 日の上限（`CLOUD_TTS_GLOBAL_DAILY_LIMIT`、既定 3000 行/日）に当たると音声はそこで止まり、翌日（日本時間）の Cron が続きを作ります。お便り 1 通で音声はおよそ 8 行（日本語と英語）、単位は 1 言語で Claude を 2〜4 回呼ぶので、大量にシードするならデモの前日に入れるか、その日だけ上限を上げます。
 
 ## 後で
 
