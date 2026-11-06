@@ -62,6 +62,7 @@ CSS 変数は `:root` にライト、`@media (prefers-color-scheme: dark)` と `
 | `.scale`（目盛り） | 12px の高さの縦線の繰り返し + 針 | 針の位置は飾り（再生位置ではない） |
 | `.switch` | 72×36 のトグル。`aria-pressed` | OFF: `--haze` と枠線。ON: `--lemon` に点灯 + `box-shadow` のゆるい明滅（`prefers-reduced-motion` で止める） |
 | `.knob` | 52px の円、`--knob`、針は coral | 音量とセレンディピティの 2 つ。`input[type=range]` を置き換え、キーボードでも動く |
+| `.letter-card`（ホームの「いま届いているお便り」） | `a` 全体がリンク（`/stations/mine?letter=<id>`）。`--panel`、枠線 1px `--line`、丸角 12px、影。左に 96px の絵の箱（`--haze`、丸角 12px、絵が無ければ空の箱）、右に本文（120 字で切り、切れたときだけ「…」。全文は作品ページ）、薄い行 `作品名 · 送り主（お住まい）`、`このお便りから聴く`（magenta）。見つけた声は送り主の代わりに出典の作者 | 最新 6 通。PC 幅（> 760px）は 2 列、スマホ幅は 1 列。数字は付けない |
 | お便り `blockquote` | 左線 3px `--lemon`、`--haze` の地、丸角 `0 12px 12px 0` | 主文 → 原文トグル（`<details>`）→ 送り主（`〇〇さん（お住まい、国）［デモ用］`） |
 | `.pill` | 枠線 1px coral、丸、13px | 主ボタン `.pill.hot` は magenta 塗り・白文字・700 |
 | このあと流れるもの | 種別ラベル（magenta、11px）と作品名・作者の行。上罫 1px `--line` | 数字（順番）を付けない |
