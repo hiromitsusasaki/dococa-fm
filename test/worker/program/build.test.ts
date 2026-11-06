@@ -314,4 +314,21 @@ describe("buildEpisode", () => {
     expect(ep.segments[0]?.lines.filter((l) => l.type === "letter")).toHaveLength(1);
   });
 
+  it("a public station bridges its later segments with the neutral next line", async () => {
+    const owner = await createListener(env.DB);
+    const guest = await createListener(env.DB);
+    const writer = await createListener(env.DB);
+    const ids: string[] = [];
+    for (const title of ["一つ目", "二つ目"]) {
+      const id = (await insertItem(env.DB, itemDraft({ title }))).id;
+      ids.push(id);
+      await insertLetter(env.DB, letterDraft(id, { listenerId: writer.id, body: `${title}が好きです。`, bodyJa: `${title}が好きです。` }));
+    }
+    await upsertHistory(env.DB, ids.map((itemId, i) => ({ listenerId: owner.id, itemId, source: "manual" as const, occurredAt: null, rank: i + 1 })));
+    const ep = await buildEpisode(keyless, env.DB, guest, { station: { kind: "public", ownerId: owner.id }, seed: "t" });
+    expect(ep.verified).toBe(true);
+    expect(ep.segments).toHaveLength(2);
+    expect(ep.segments[1]!.lines[0]).toMatchObject({ bridge: "bridge.next" });
+    expect(ep.segments.flatMap((s) => s.lines).some((l) => l.type === "dj" && l.bridge === "bridge.near")).toBe(false);
+  });
 });

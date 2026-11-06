@@ -232,6 +232,16 @@ describe("bridges", () => {
     expect(segs[2]!.lines[0]).toEqual({ type: "dj", text: t("bridge.far"), fixed: true, bridge: "bridge.far" });
   });
 
+  it("on a public station, bridges every later segment with the neutral next, never the near one", () => {
+    const segs = composeEpisode([seg("i1", "near", ["a"]), seg("i2", "near", ["a"]), seg("i1", "near", ["a"])], null, letters, items, "ja", "public");
+    expect(segs[0]!.lines[0]).toMatchObject({ bridge: "bridge.open" });
+    expect(segs.slice(1).map((s) => s.lines[0])).toEqual([1, 2].map(() => ({ type: "dj", text: t("bridge.next"), fixed: true, bridge: "bridge.next" })));
+    const [, enSeg] = composeEpisode([seg("i1", "near", ["a"]), seg("i2", "near", ["a"])], null, letters, items, "en", "public");
+    expect(enSeg!.lines[0]).toMatchObject({ text: "The next letter.", bridge: "bridge.next" });
+    // Mine stays by slot.
+    expect(composeEpisode([seg("i1", "near", ["a"]), seg("i2", "near", ["a"])], null, letters, items, "ja", "mine")[1]!.lines[0]).toMatchObject({ bridge: "bridge.near" });
+  });
+
   it("puts sameWork between the letters of a segment, not before the first", () => {
     const b = letter({ id: "b", radioName: "そら", place: "" });
     const [s] = composeEpisode([seg("i1", "near", ["a", "b"])], unitsOf(unit("a", "紹介", "感想a"), unit("b", "紹介b", "感想b")), byId([plain, b]), items);

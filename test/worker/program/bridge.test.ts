@@ -4,13 +4,24 @@ import { BRIDGE_KEYS, bridgeBefore, bridgeLine } from "../../../src/worker/progr
 import { TOPICAL } from "../../../src/worker/program/topical-words";
 
 describe("bridgeBefore", () => {
-  it("is open for the first segment whatever its slot", () => {
-    expect(bridgeBefore(0, "far")).toBe("bridge.open");
-    expect(bridgeBefore(0, "near")).toBe("bridge.open");
+  it("is open for the first segment whatever its slot and station", () => {
+    expect(bridgeBefore(0, "far", "mine")).toBe("bridge.open");
+    expect(bridgeBefore(0, "near", "world")).toBe("bridge.open");
+    expect(bridgeBefore(0, "near", "public")).toBe("bridge.open");
   });
 
-  it.each(["near", "neighbor", "far"] as const)("follows the slot %s after the first", (slot) => {
-    expect(bridgeBefore(2, slot)).toBe(`bridge.${slot}`);
+  it.each(["near", "neighbor", "far"] as const)("follows the slot %s after the first, on mine and world", (slot) => {
+    expect(bridgeBefore(2, slot, "mine")).toBe(`bridge.${slot}`);
+    expect(bridgeBefore(2, slot, "world")).toBe(`bridge.${slot}`);
+  });
+
+  it.each(["near", "neighbor", "far"] as const)("is the neutral next on a public station whatever the slot (%s)", (slot) => {
+    expect(bridgeBefore(1, slot, "public")).toBe("bridge.next");
+  });
+
+  it("words the neutral next without saying whose favourite it is", () => {
+    expect(t("bridge.next")).toBe("続いてのお便りです。");
+    expect(t("bridge.next", undefined, "en")).toBe("The next letter.");
   });
 });
 

@@ -5,6 +5,7 @@ import { siteLabel } from "../letters/label";
 import type { Item, Letter, ScriptLine, Segment, Unit } from "../types";
 import { BRIDGE_KEYS, bridgeBefore, bridgeLine } from "./bridge";
 import type { Selection } from "./select";
+import type { StationKey } from "./station";
 
 export type SegmentPlan = Selection & { reactionIds: string[] };
 
@@ -86,6 +87,8 @@ export function composeEpisode(
   letters: ReadonlyMap<string, Letter>,
   items: ReadonlyMap<string, Item>,
   lang: Lang = "ja",
+  /** The station the programme airs on: a public one bridges with neutral lines. */
+  station: StationKey["kind"] = "mine",
 ): Segment[] {
   const spoken = (l: Letter): Unit | null => {
     const u = units?.get(l.id);
@@ -96,7 +99,7 @@ export function composeEpisode(
     if (!item) throw new Error(`item missing: ${p.itemId}`);
     if (p.letterIds.length === 0 && p.reactionIds.length === 0) throw new Error("segment without letters");
     const present = p.letterIds.flatMap((id) => letters.get(id) ?? []);
-    const lines: ScriptLine[] = [bridgeLine(bridgeBefore(i, p.slot), lang)];
+    const lines: ScriptLine[] = [bridgeLine(bridgeBefore(i, p.slot, station), lang)];
     const introBy = present.find((l) => (spoken(l)?.intro ?? "") !== "");
     if (introBy) lines.push(unitLine(spoken(introBy)!.intro, introBy.id, "intro"));
     present.forEach((l, n) => {

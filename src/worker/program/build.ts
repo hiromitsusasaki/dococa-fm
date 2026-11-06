@@ -97,7 +97,7 @@ export async function buildEpisode(
 
   const readLetters = plan.flatMap((p) => p.letterIds.map((id) => letters.get(id)!));
   const units = readLetters.length > 0 ? await ensureUnits(env, db, readLetters, items, lang) : new Map<string, Unit>();
-  const compose = (u: ReadonlyMap<string, Unit> | null) => finish(composeEpisode(plan, u, letters, items, lang));
+  const compose = (u: ReadonlyMap<string, Unit> | null) => finish(composeEpisode(plan, u, letters, items, lang, opts.station?.kind ?? "mine"));
 
   const usable = (u: ReadonlyMap<string, Unit>) => [...u.values()].some((x) => x.verified);
   if (usable(units)) {

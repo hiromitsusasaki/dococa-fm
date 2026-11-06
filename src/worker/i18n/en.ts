@@ -161,6 +161,7 @@ export const en: Record<keyof typeof ja, string> = {
   "bridge.near": "Next, a letter that reached something you love.",
   "bridge.neighbor": "Next, a letter from a shelf nearby.",
   "bridge.far": "Next, a letter from a little farther away.",
+  "bridge.next": "The next letter.",
   "bridge.sameWork": "Another letter about the same work.",
   "bridge.close": "A short pause here. More letters are still to come.",
   "mcp.instruction": "Read each letter word for word. Do not read aloud the lines of the form `<!-- ... -->`.",
