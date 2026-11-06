@@ -109,7 +109,7 @@ describe("composeEpisode", () => {
 
   it("composes a reaction-only segment as just the reaction lines between the dj's", () => {
     const [seg] = composeEpisode([{ itemId: "i1", slot: "near", letterIds: [], reactionIds: ["w1", "r"] }], [{ sayBefore: "は", sayAfter: "お" }], letters, items);
-    expect(seg!.lines.map((l) => (l.type === "letter" ? `letter:${l.letterId}` : l.text))).toEqual([
+    expect(seg!.lines.map((l) => (l.type === "letter" ? `letter:${l.letterId}` : l.type === "dj" ? l.text : l.type))).toEqual([
       "は",
       "あおいさん（那覇）から『私も』が届いています",
       "そらさん（熊本）から一言が届いています",
