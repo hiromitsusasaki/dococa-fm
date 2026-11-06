@@ -142,6 +142,17 @@ describe("unverified episodes", () => {
   });
 });
 
+describe("tts url on the episode page", () => {
+  it("is /tts for an episode made with a key and empty for one made without", async () => {
+    const cookie = await newSession();
+    await seed(cookie);
+    const withKey = locationId(await post("/episodes", cookie, { ...env, GOOGLE_TTS_SA_JSON: "sa-test" }));
+    const without = locationId(await post("/episodes", cookie, { ...env, GOOGLE_TTS_SA_JSON: "" }));
+    expect(await (await get(`/episodes/${withKey}`, cookie)).text()).toContain('data-tts-url="/tts"');
+    expect(await (await get(`/episodes/${without}`, cookie)).text()).toContain('data-tts-url=""');
+  });
+});
+
 describe("GET /episodes/:id", () => {
   async function make() {
     const cookie = await newSession();

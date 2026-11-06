@@ -3,9 +3,9 @@ import type { Env } from "../env";
 import { limitFrom } from "../limits";
 import { claimTts, releaseTts } from "./claim";
 import { synthesize } from "./google";
+import type { AudioLang, AudioVoice } from "./types";
 
-export type AudioLang = "ja" | "en";
-export type AudioVoice = "male" | "female";
+export type { AudioLang, AudioVoice } from "./types";
 
 /** Lines synthesized per JST day when `CLOUD_TTS_GLOBAL_DAILY_LIMIT` is unset. */
 export const DEFAULT_SYNTH_DAILY_LIMIT = 3000;
@@ -46,6 +46,7 @@ export async function ensureAudio(
   line: { text: string; lang: AudioLang; voice: AudioVoice },
   opts: { waitMs?: number } = {},
 ): Promise<Ensured> {
+  if (line.text.trim() === "") return { ok: false, reason: "failed" };
   const key = await audioKey(line.lang, line.voice, line.text);
   if (await env.BUCKET.head(key)) return { ok: true, key, made: false };
 
@@ -63,11 +64,12 @@ export async function ensureAudio(
     // The winner of an earlier claim may have stored the clip and released between our R2 miss and this claim.
     if (await env.BUCKET.head(key)) return { ok: true, key, made: false };
     const audio = await synthesize(env, line.text, line.voice, line.lang);
-    await env.BUCKET.put(key, audio, { httpMetadata: { contentType: "audio/mpeg" } });
+    // Counted as soon as the paid call returns, so a failed put still uses up the cap.
     await db
       .prepare("INSERT OR REPLACE INTO tts_audio (key, lang, voice, bytes, created_at) VALUES (?, ?, ?, ?, ?)")
       .bind(key, line.lang, line.voice, audio.byteLength, new Date().toISOString())
       .run();
+    await env.BUCKET.put(key, audio, { httpMetadata: { contentType: "audio/mpeg" } });
     return { ok: true, key, made: true };
   } catch (e) {
     // Name and our own fixed messages only: a fetch TypeError can quote the request URL, and the body can carry the line.

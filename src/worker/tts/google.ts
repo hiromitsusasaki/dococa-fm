@@ -1,6 +1,6 @@
 import type { Env } from "../env";
 import { accessToken, parseServiceAccount, type ServiceAccount } from "./google-auth";
-import type { AudioLang, AudioVoice } from "./audio";
+import type { AudioLang, AudioVoice } from "./types";
 import { DJ_STYLE_PROMPT, DJ_STYLE_PROMPT_EN } from "./style";
 
 const ENDPOINT = "https://texttospeech.googleapis.com/v1/text:synthesize";

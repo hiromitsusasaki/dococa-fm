@@ -110,6 +110,31 @@ describe("ensureAudio", () => {
     errorSpy.mockRestore();
   });
 
+  it("counts a paid synthesis even when storing fails, and a later request may synthesize again", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const failing = new Proxy(env.BUCKET, {
+      get(target, prop) {
+        if (prop === "put") return async () => { throw new Error("r2 down"); };
+        return (Reflect.get(target, prop) as (...a: unknown[]) => unknown).bind(target);
+      },
+    });
+    const { fn } = stubFetch([[GOOGLE, () => json({ audioContent: audio })]]);
+    expect(await ensureAudio({ ...keyed, BUCKET: failing }, env.DB, line)).toEqual({ ok: false, reason: "failed" });
+    expect(await rowCount()).toBe(1);
+    expect(await env.DB.prepare("SELECT COUNT(*) AS n FROM tts_claims").first<{ n: number }>()).toEqual({ n: 0 });
+    expect(await ensureAudio(keyed, env.DB, line)).toMatchObject({ ok: true, made: true });
+    expect(fn).toHaveBeenCalledTimes(2);
+    expect(await rowCount()).toBe(1);
+  });
+
+  it("answers failed for empty or whitespace text without touching the cap or Google", async () => {
+    const { fn } = stubFetch([[GOOGLE, () => json({ audioContent: audio })]]);
+    for (const text of ["", "  \n\u3000"]) {
+      expect(await ensureAudio({ ...keyed, CLOUD_TTS_GLOBAL_DAILY_LIMIT: "0" }, env.DB, { ...line, text })).toEqual({ ok: false, reason: "failed" });
+    }
+    expect(fn).not.toHaveBeenCalled();
+  });
+
   it("sends the English voice for lang en", async () => {
     const { fn } = stubFetch([[GOOGLE, () => json({ audioContent: audio })]]);
     await ensureAudio(keyed, env.DB, { text: "Good evening", lang: "en", voice: "female" });

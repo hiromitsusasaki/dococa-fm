@@ -129,7 +129,7 @@ Spotify 連携は開発モードのため、許可リストに入っているア
 
 ### 守りと制限
 
-書き込みの `POST` は同一オリジンのみ、好きなものの登録・お便り・マイページはサインイン必須、`/admin/*` は `ADMIN_TOKEN` 必須、レート制限は IP とリスナーごとに 1 分 20 回です。詳しくは [SECURITY.md](SECURITY.md) にあります。レート制限のカウンタは Worker の isolate ごとのメモリにあるため、isolate をまたぐ厳密な上限ではありません。番組の作成は D1 を数える 1 日の上限（`EPISODE_DAILY_LIMIT`、`EPISODE_GLOBAL_DAILY_LIMIT`、`CLOUD_TTS_GLOBAL_DAILY_LIMIT`。`0` は停止）。クラウドの声は全員の番組に付き、`CLOUD_TTS_GLOBAL_DAILY_LIMIT` は 1 日に合成する行数（既定 3000）です。同じ行は本文の SHA-256 を鍵に 1 回だけ合成して共有し、上限を超えると `GET /tts` は 503 を返してブラウザの音声に切り替わりますが最後の歯止めです。ただし判定は原子的ではなく同時実行で数回超えることがあり、cookie を捨てる 1 人に全体の上限を使い切られうることも、[SECURITY.md](SECURITY.md) の既知の制限に書いています。
+書き込みの `POST` は同一オリジンのみ、好きなものの登録・お便り・マイページはサインイン必須、`/admin/*` は `ADMIN_TOKEN` 必須、レート制限は IP とリスナーごとに 1 分 20 回です。詳しくは [SECURITY.md](SECURITY.md) にあります。レート制限のカウンタは Worker の isolate ごとのメモリにあるため、isolate をまたぐ厳密な上限ではありません。番組の作成は D1 を数える 1 日の上限（`EPISODE_DAILY_LIMIT`、`EPISODE_GLOBAL_DAILY_LIMIT`）が、クラウドの声は 1 日に合成する行数の上限（`CLOUD_TTS_GLOBAL_DAILY_LIMIT`、既定 3000）が最後の歯止めです（`0` は停止）。同じ行の音声は全員で共有し、上限を超えると `GET /tts` は 503 を返してブラウザの音声に切り替わります。ただし判定は原子的ではなく同時実行で数回超えることがあり、cookie を捨てる 1 人に全体の上限を使い切られうることも、[SECURITY.md](SECURITY.md) の既知の制限に書いています。
 
 ### public 化前チェックリスト（本人）
 
