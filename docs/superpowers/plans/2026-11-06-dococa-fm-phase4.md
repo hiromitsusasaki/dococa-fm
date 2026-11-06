@@ -36,14 +36,14 @@
 ### Task 1: お住まい (place wording on screens and in the hand-over)
 
 **Files:**
-- Modify: `src/worker/i18n/ja.ts`, `src/worker/i18n/en.ts`, `src/worker/program/compose.ts` (`who` for spoken lines), `docs/DESIGN.md` (§6 word table and the blockquote row), `migrations/0016_revoice_handover.sql`, `docs/status.md`
+- Modify: `src/worker/i18n/ja.ts`, `src/worker/i18n/en.ts`, `src/worker/program/compose.ts` (`who` for spoken lines), `src/worker/program/verify.ts` (the `{who}` capture of a fixed line is re-split through `script.whoPlace` so our own wording is never a quote), `docs/DESIGN.md` (§6 word table and the blockquote row), `migrations/0016_revoice_handover.sql`, `docs/status.md`
 - Test: `test/worker/program/compose.test.ts`, `test/worker/program/verify.test.ts`, `test/worker/routes/settings.test.ts`, `test/worker/i18n.test.ts`
 
 **Interfaces:**
 - Produces: i18n key `script.whoPlace` (ja 「{place}にお住まいの、{who}」, en "{who}, who lives in {place}"); `settings.place` ja 「お住まい」 en "Where you live"; `settings.placeHelp` ja 「お便りに添える、お住まいの地域。都道府県や国まで。」 en "The area that goes with your letters: a prefecture, a state or a country."; `put.fromHelp` ja 「設定のラジオネームとお住まいで届きます。」 en "It goes out under the radio name and the place in your settings."
 - Spoken lines use `script.whoPlace`; screens keep `letter.whoPlace` 「{who}（{place}）」.
 
-- [ ] **Step 1: Failing tests.** In `compose.test.ts`: `handOver` of a letter with radioName みなと and place 東京 (ja) has text 「東京にお住まいの、みなとさんからのお便りです。」; en reads "A letter from Minato, who lives in Tokyo." (place label from codes); a letter with no place keeps 「みなとさんからのお便りです。」; `reaction` lines use the same phrase. In `settings.test.ts`: the settings page contains お住まい and not 土地. In `verify.test.ts`: a fixed hand-over with the new phrasing passes (filled values only are quote-checked).
+- [ ] **Step 1: Failing tests.** In `compose.test.ts`: `handOver` of a letter with radioName みなと and place 東京 (ja) has text 「東京にお住まいの、みなとさんからのお便りです。」; en reads "A letter from みなと, who lives in Tokyo, Japan." (place label from codes; radio names are not translated); a letter with no place keeps 「みなとさんからのお便りです。」; `reaction` lines use the same phrase. In `settings.test.ts`: the settings page contains お住まい and not 土地. In `verify.test.ts`: a fixed hand-over with the new phrasing passes (filled values only are quote-checked).
 - [ ] **Step 2: Run them; expected FAIL.**
 - [ ] **Step 3: Implement.** `who(l, lang)` in `compose.ts`: when the place is non-empty return `t("script.whoPlace", { who: name, place }, lang)`. Change the i18n strings above (both languages; en `script.letterFrom` stays "A letter from {who}."). DESIGN.md: 「土地」→「お住まい」 in the blockquote row and the word table; add 「土地」 to the banned words line. Migration `0016_revoice_handover.sql`: `UPDATE units SET audio_ready = 0;` with a comment (the hand-over clip of every letter changes text; existing clips stay cache hits).
 - [ ] **Step 4: Run tests; expected PASS.**
