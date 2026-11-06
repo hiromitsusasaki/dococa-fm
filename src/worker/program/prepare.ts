@@ -64,19 +64,30 @@ async function run(env: Env, db: D1Database, letterId: string, lang: Unit["lang"
   return out;
 }
 
-const strip = ({ units, audio, failed }: Run): Prepared => ({ units, audio, failed });
+/** Every language a unit is made in: a letter airs in the Japanese and the English programme alike. */
+const LANGS: readonly Unit["lang"][] = ["ja", "en"];
 
 /**
- * The letter's unit in `lang` (made if missing) and the audio of every dj/letter line of `unitSegment`;
- * marks `audio_ready` when all clips exist. Non-public letters and reactions are ignored. Never throws.
+ * The letter's unit in `lang` (made if missing), or in every language when none is named, and the audio of
+ * every dj/letter line of `unitSegment`; marks `audio_ready` when all clips exist. Once the cloud voice
+ * refuses a clip, the next language makes its unit only. Non-public letters and reactions are ignored. Never throws.
  */
-export async function prepareLetter(env: Env, db: D1Database, letterId: string, lang: Unit["lang"] = "ja"): Promise<Prepared> {
-  try {
-    return strip(await run(env, db, letterId, lang, true));
-  } catch (e) {
-    logFailure(e);
-    return { units: 0, audio: 0, failed: 1 };
+export async function prepareLetter(env: Env, db: D1Database, letterId: string, lang?: Unit["lang"]): Promise<Prepared> {
+  const total: Prepared = { units: 0, audio: 0, failed: 0 };
+  let audioHalted = false;
+  for (const l of lang ? [lang] : LANGS) {
+    try {
+      const r = await run(env, db, letterId, l, !audioHalted);
+      audioHalted ||= r.audioHalted;
+      total.units += r.units;
+      total.audio += r.audio;
+      total.failed += r.failed;
+    } catch (e) {
+      logFailure(e);
+      total.failed++;
+    }
   }
+  return total;
 }
 
 /** Letters in a row whose unit could not be made before the unit phase is taken for an outage and stops. */

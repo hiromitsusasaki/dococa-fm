@@ -60,16 +60,28 @@ afterEach(() => {
 describe("prepareLetter", () => {
   it("makes the unit with one Claude call and voices intro, hand-over, letter and after", async () => {
     const { letters } = await seed();
-    expect(await prepareLetter(keyed, env.DB, letters[0]!.id)).toEqual({ units: 1, audio: 4, failed: 0 });
+    expect(await prepareLetter(keyed, env.DB, letters[0]!.id, "ja")).toEqual({ units: 1, audio: 4, failed: 0 });
     expect(create).toHaveBeenCalledTimes(1);
     expect(google).toHaveBeenCalledTimes(4);
     expect(await unitOf(letters[0]!.id)).toMatchObject({ verified: true, audioReady: true });
   });
 
+  it("with no language named, makes the ja and the en unit and voices both", async () => {
+    const { letters } = await seed(1, { bodyEn: "It rained the day I heard it." });
+    const id = letters[0]!.id;
+    create.mockImplementation((req: { system: string }) =>
+      toolUse("write_unit", req.system.startsWith("You are") ? { intro: "A quiet piece.", after: "A lovely letter." } : { intro: "静かな一曲です。", after: "いいお便りでした。" }),
+    );
+    expect(await prepareLetter(keyed, env.DB, id)).toEqual({ units: 2, audio: 8, failed: 0 });
+    expect(await unitOf(id)).toMatchObject({ intro: "静かな一曲です。", audioReady: true });
+    expect((await getUnits(env.DB, [id], "en")).get(id)).toMatchObject({ intro: "A quiet piece.", verified: true, audioReady: true });
+    expect(google).toHaveBeenCalledTimes(8);
+  });
+
   it("does nothing more the second time", async () => {
     const { letters } = await seed();
-    await prepareLetter(keyed, env.DB, letters[0]!.id);
-    expect(await prepareLetter(keyed, env.DB, letters[0]!.id)).toEqual({ units: 0, audio: 0, failed: 0 });
+    await prepareLetter(keyed, env.DB, letters[0]!.id, "ja");
+    expect(await prepareLetter(keyed, env.DB, letters[0]!.id, "ja")).toEqual({ units: 0, audio: 0, failed: 0 });
     expect(create).toHaveBeenCalledTimes(1);
     expect(google).toHaveBeenCalledTimes(4);
   });
@@ -77,14 +89,14 @@ describe("prepareLetter", () => {
   it("ignores a rejected letter, a reaction and an unknown id", async () => {
     const { item, letters } = await seed(1, { status: "rejected" });
     const reply = await insertLetter(env.DB, letterDraft(item.id, { kind: "reply", parentLetterId: letters[0]!.id }));
-    for (const id of [letters[0]!.id, reply.id, "nope"]) expect(await prepareLetter(keyed, env.DB, id)).toEqual({ units: 0, audio: 0, failed: 0 });
+    for (const id of [letters[0]!.id, reply.id, "nope"]) expect(await prepareLetter(keyed, env.DB, id, "ja")).toEqual({ units: 0, audio: 0, failed: 0 });
     expect(create).not.toHaveBeenCalled();
     expect(google).not.toHaveBeenCalled();
   });
 
   it("makes the unit and skips audio when no cloud voice is configured", async () => {
     const { letters } = await seed();
-    expect(await prepareLetter(keylessTts, env.DB, letters[0]!.id)).toEqual({ units: 1, audio: 0, failed: 0 });
+    expect(await prepareLetter(keylessTts, env.DB, letters[0]!.id, "ja")).toEqual({ units: 1, audio: 0, failed: 0 });
     expect(google).not.toHaveBeenCalled();
     expect(await unitOf(letters[0]!.id)).toMatchObject({ verified: true, audioReady: false });
   });
@@ -92,15 +104,15 @@ describe("prepareLetter", () => {
   it("counts failed clips and leaves the unit not ready", async () => {
     stubBoth(() => json({ error: "x" }, 500));
     const { letters } = await seed();
-    expect(await prepareLetter(keyed, env.DB, letters[0]!.id)).toEqual({ units: 1, audio: 0, failed: 4 });
+    expect(await prepareLetter(keyed, env.DB, letters[0]!.id, "ja")).toEqual({ units: 1, audio: 0, failed: 4 });
     expect(await unitOf(letters[0]!.id)).toMatchObject({ audioReady: false });
   });
 
   it("makes nothing when Claude is unavailable and never throws", async () => {
     const { letters } = await seed();
-    expect(await prepareLetter({ ...keyed, ANTHROPIC_API_KEY: "" } as Env, env.DB, letters[0]!.id)).toEqual({ units: 0, audio: 0, failed: 0 });
+    expect(await prepareLetter({ ...keyed, ANTHROPIC_API_KEY: "" } as Env, env.DB, letters[0]!.id, "ja")).toEqual({ units: 0, audio: 0, failed: 0 });
     create.mockRejectedValue(new Error("down"));
-    const r = await prepareLetter(keyed, env.DB, letters[0]!.id);
+    const r = await prepareLetter(keyed, env.DB, letters[0]!.id, "ja");
     expect(r).toEqual({ units: 0, audio: 0, failed: 1 });
     expect(await unitOf(letters[0]!.id)).toBeUndefined();
   });
@@ -108,7 +120,7 @@ describe("prepareLetter", () => {
   it("resolves when something inside throws, and logs the error name only", async () => {
     const broken = { prepare: () => { throw new Error("D1_ERROR: 雨の日に聴きました"); } } as unknown as D1Database;
     const error = vi.spyOn(console, "error").mockImplementation(() => {});
-    expect(await prepareLetter(keyed, broken, "any")).toEqual({ units: 0, audio: 0, failed: 1 });
+    expect(await prepareLetter(keyed, broken, "any", "ja")).toEqual({ units: 0, audio: 0, failed: 1 });
     const logged = error.mock.calls.map((c) => c.join(" ")).join("\n");
     expect(logged).toContain("prepare failed: Error");
     expect(logged).not.toContain("雨の日");
@@ -123,10 +135,10 @@ describe("prepareLetter", () => {
       if (++calls === 4) await upsertUnit(env.DB, { letterId: id, lang: "ja", intro: "別の紹介です。", after: "別の感想です。", verified: true, audioReady: false });
       return json({ audioContent: audio });
     });
-    await prepareLetter(keyed, env.DB, id);
+    await prepareLetter(keyed, env.DB, id, "ja");
     expect(await unitOf(id)).toMatchObject({ intro: "別の紹介です。", audioReady: false });
     // The next run voices the new text and then flags it.
-    await prepareLetter(keyed, env.DB, id);
+    await prepareLetter(keyed, env.DB, id, "ja");
     expect(await unitOf(id)).toMatchObject({ audioReady: true });
   });
 });

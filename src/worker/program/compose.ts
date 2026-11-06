@@ -1,3 +1,4 @@
+import { placeLabel } from "../geo/place-label";
 import { t } from "../i18n/t";
 import type { Lang } from "../i18n/t";
 import { siteLabel } from "../letters/label";
@@ -19,13 +20,16 @@ const fixed = (text: string): ScriptLine => ({ type: "dj", text, fixed: true });
 export const FIXED_TEMPLATES = ["script.readingOnly", "script.letterFrom", "script.foundVoice", "script.reaction", "script.replyReaction", ...BRIDGE_KEYS] as const;
 
 /** Where a found voice was found, said aloud; the same label the screens show. */
-export const siteName = (sourceUrl: string | null): string => siteLabel(sourceUrl) || t("script.web");
+export const siteName = (sourceUrl: string | null, lang: Lang = "ja"): string => siteLabel(sourceUrl) || t("script.web", undefined, lang);
 
-/** The letter as stored: the reader reads `bodyJa`, word for word. */
-export const read = (l: Letter): ScriptLine => ({
+/** The place the DJ says: the Japanese label, or in English the label made from the codes when the letter has them. */
+export const placeSaid = (l: Letter, lang: Lang): string => (lang === "en" && l.placeCountry ? placeLabel(l.placeCountry, l.placeRegion, "en") || l.place : l.place);
+
+/** The letter as stored: the reader reads `bodyJa`, or in English `bodyEn` (the original when there is none), word for word. */
+export const read = (l: Letter, lang: Lang = "ja"): ScriptLine => ({
   type: "letter",
   letterId: l.id,
-  text: l.bodyJa,
+  text: lang === "en" ? (l.bodyEn ?? l.body) : l.bodyJa,
   radioName: l.radioName,
   place: l.place,
   ...(l.placeCountry ? { placeCountry: l.placeCountry } : {}),
@@ -36,21 +40,22 @@ export const read = (l: Letter): ScriptLine => ({
   ...(l.demo ? { demo: true as const } : {}),
 });
 
-function who(l: Letter): string {
-  if (l.radioName === "") return t("script.someone");
-  const name = t("letter.who", { name: l.radioName });
-  return l.place === "" ? name : t("letter.whoPlace", { who: name, place: l.place });
+function who(l: Letter, lang: Lang): string {
+  if (l.radioName === "") return t("script.someone", undefined, lang);
+  const name = t("letter.who", { name: l.radioName }, lang);
+  const place = placeSaid(l, lang);
+  return place === "" ? name : t("letter.whoPlace", { who: name, place }, lang);
 }
 
-function reaction(l: Letter): ScriptLine[] {
-  if (l.kind === "reply") return [fixed(t("script.replyReaction", { who: who(l) })), read(l)];
-  return [fixed(t("script.reaction", { who: who(l) }))];
+function reaction(l: Letter, lang: Lang): ScriptLine[] {
+  if (l.kind === "reply") return [fixed(t("script.replyReaction", { who: who(l, lang) }, lang)), read(l, lang)];
+  return [fixed(t("script.reaction", { who: who(l, lang) }, lang))];
 }
 
 /** The fixed line that hands over to the letter's reader: the sender, or the found voice's author and site. */
-export function handOver(l: Letter): ScriptLine {
-  if (l.kind === "found") return fixed(t("script.foundVoice", { author: l.sourceAuthor ?? "", site: siteName(l.sourceUrl) }));
-  return fixed(l.radioName === "" ? t("script.readingOnly") : t("script.letterFrom", { who: who(l) }));
+export function handOver(l: Letter, lang: Lang = "ja"): ScriptLine {
+  if (l.kind === "found") return fixed(t("script.foundVoice", { author: l.sourceAuthor ?? "", site: siteName(l.sourceUrl, lang) }, lang));
+  return fixed(l.radioName === "" ? t("script.readingOnly", undefined, lang) : t("script.letterFrom", { who: who(l, lang) }, lang));
 }
 
 /** The DJ's two lines for one letter, as a unit carries them. */
@@ -60,10 +65,10 @@ export type UnitLines = Pick<Unit, "intro" | "after">;
  * One letter as it airs: the unit's intro (when asked for), the fixed hand-over, the letter verbatim, the
  * unit's after. With no unit the DJ says the hand-over only.
  */
-export function letterLines(l: Letter, unit: UnitLines | null, withIntro: boolean): ScriptLine[] {
+export function letterLines(l: Letter, unit: UnitLines | null, withIntro: boolean, lang: Lang = "ja"): ScriptLine[] {
   const lines: ScriptLine[] = [];
   if (unit && withIntro && unit.intro !== "") lines.push(unitLine(unit.intro, l.id, "intro"));
-  lines.push(handOver(l), read(l));
+  lines.push(handOver(l, lang), read(l, lang));
   if (unit && unit.after !== "") lines.push(unitLine(unit.after, l.id, "after"));
   return lines;
 }
@@ -96,11 +101,11 @@ export function composeEpisode(
     if (introBy) lines.push(unitLine(spoken(introBy)!.intro, introBy.id, "intro"));
     present.forEach((l, n) => {
       if (n > 0) lines.push(bridgeLine("bridge.sameWork", lang));
-      lines.push(...letterLines(l, spoken(l), false));
+      lines.push(...letterLines(l, spoken(l), false, lang));
     });
     for (const id of p.reactionIds.slice(0, MAX_REACTIONS)) {
       const l = letters.get(id);
-      if (l) lines.push(...reaction(l));
+      if (l) lines.push(...reaction(l, lang));
     }
     return { itemId: p.itemId, slot: p.slot, lines };
   });

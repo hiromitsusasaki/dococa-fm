@@ -11,6 +11,7 @@ import { json, stubFetch } from "../../helpers/fetch";
 import { makeServiceAccount, primeToken } from "../../helpers/service-account";
 import { itemDraft, letterDraft } from "../db/helpers";
 import { audioKey } from "../../../src/worker/tts/audio";
+import { DJ_STYLE_PROMPT_EN } from "../../../src/worker/tts/style";
 import { newSession } from "./helpers";
 
 const idOf = (cookie: string) => cookie.split("=")[1]!.split(".")[0]!;
@@ -70,6 +71,17 @@ describe("GET /tts", () => {
     expect(second.status).toBe(200);
     expect([...new Uint8Array(await second.arrayBuffer())]).toEqual([1, 2, 3]);
     expect(fn).toHaveBeenCalledTimes(1);
+  });
+
+  it("synthesizes an english episode with en-US and the english style, under the en key", async () => {
+    const cookie = await newSession();
+    const ep = await insertEpisode(env.DB, { ...(await episodeFor(idOf(cookie), true)), id: undefined, lang: "en" });
+    const { fn } = stubFetch([[GOOGLE, () => json({ audioContent: audio })]]);
+    expect((await call(`/tts?episode=${ep.id}&line=3`, cookie)).status).toBe(200);
+    const body = JSON.parse(String(fn.mock.calls[0]![1]?.body));
+    expect(body.voice.languageCode).toBe("en-US");
+    expect(body.input.prompt).toBe(DJ_STYLE_PROMPT_EN);
+    expect(await env.BUCKET.get(await audioKey("en", "male", "つぎの曲です"))).not.toBeNull();
   });
 
   it("reads a letter line by its global index", async () => {

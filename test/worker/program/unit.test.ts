@@ -5,6 +5,7 @@ import { insertLetter } from "../../../src/worker/db/letters";
 import { getUnits, upsertUnit } from "../../../src/worker/db/units";
 import type { Env } from "../../../src/worker/env";
 import { t } from "../../../src/worker/i18n/t";
+import { DJ_SYSTEM_EN } from "../../../src/worker/program/script";
 import { ensureUnits, makeUnit, unitSegment, writeUnitLines } from "../../../src/worker/program/unit";
 import type { Item, Letter } from "../../../src/worker/types";
 import { expectInstructedTool, stubAnthropic, toolUse } from "../../helpers/anthropic";
@@ -87,7 +88,63 @@ describe("writeUnitLines", () => {
   });
 });
 
+describe("writeUnitLines in english", () => {
+  const placed = () => letter({ bodyEn: "I listened alone at midnight.", placeCountry: "JP", placeRegion: "01" });
+
+  it("sends DJ_SYSTEM_EN, english tool descriptions with the same limits, and the letter's english text", async () => {
+    create.mockResolvedValue(lines("A quiet piece.", "A lovely letter."));
+    expect(await writeUnitLines(keyed, { item: item(), letter: placed(), lang: "en" })).toEqual({ intro: "A quiet piece.", after: "A lovely letter." });
+    const req = create.mock.calls[0]![0];
+    expect(req.system).toBe(DJ_SYSTEM_EN);
+    expect(req.system).toContain("call the write_unit tool exactly once");
+    expect(req.tool_choice).toEqual({ type: "auto" });
+    expect(req.tools[0]).toMatchObject({ name: "write_unit", strict: true });
+    const props = req.tools[0].input_schema.properties;
+    expect(props.intro.description).toContain("at most 160 characters");
+    expect(props.after.description).toContain("at most 120 characters");
+    const sent = content(0);
+    for (const s of ["Title: Blue in Green", "Creator: Miles Davis", "Year: 1959", "Kind: music", "I listened alone at midnight.", 'from="みなと"', 'place="Hokkaido, Japan"']) expect(sent).toContain(s);
+    expect(sent).not.toContain(letter().bodyJa);
+    expect(sent).not.toMatch(/読み上げ役|定型文|題名/u);
+    expect(JSON.stringify({ system: req.system, tools: req.tools })).not.toMatch(/[ぁ-んァ-ヶ一-龠]/u);
+  });
+
+  it("reads the original when the letter has no english text, and keeps the japanese place without codes", async () => {
+    create.mockResolvedValue(lines("A quiet piece.", "A lovely letter."));
+    await writeUnitLines(keyed, { item: item(), letter: letter(), lang: "en" });
+    expect(content(0)).toContain(letter().body);
+    expect(content(0)).toContain('place="函館"');
+  });
+
+  it("tells an english retry what failed, in english", async () => {
+    create.mockResolvedValue(lines("A quiet piece.", "A lovely letter."));
+    await writeUnitLines(keyed, { item: item(), letter: placed(), lang: "en", retryNotes: ["playback: segment 1 line 1: let's play"] });
+    expect(content(0)).toContain("Please rephrase");
+    expect(content(0)).toContain("playback: segment 1 line 1: let's play");
+  });
+
+  it("stores an english unit, verified with the english rules, and asks again after a playback invitation", async () => {
+    const f = await stored();
+    create.mockResolvedValueOnce(lines("Let's play it.", "A lovely letter.")).mockResolvedValueOnce(lines("A quiet piece.", "A lovely letter."));
+    const u = await makeUnit(keyed, env.DB, f.letter, f.item, "en");
+    expect(u).toMatchObject({ lang: "en", intro: "A quiet piece.", verified: true });
+    expect(create).toHaveBeenCalledTimes(2);
+    expect(content(1)).toContain("playback: segment 1 line 1:");
+    expect((await getUnits(env.DB, [f.letter.id], "ja")).size).toBe(0);
+  });
+});
+
 describe("unitSegment", () => {
+  it("hands over in english and reads the english text for an english unit", () => {
+    const l = letter({ bodyEn: "I listened alone at midnight.", placeCountry: "JP", placeRegion: "01" });
+    expect(unitSegment({ intro: "A quiet piece.", after: "Lovely." }, l, item(), "en").lines).toEqual([
+      { type: "dj", text: "A quiet piece.", unit: { letterId: "l1", part: "intro" } },
+      { type: "dj", text: "A letter from みなと (Hokkaido, Japan).", fixed: true },
+      expect.objectContaining({ type: "letter", letterId: "l1", text: "I listened alone at midnight.", place: "函館", placeCountry: "JP", placeRegion: "01" }),
+      { type: "dj", text: "Lovely.", unit: { letterId: "l1", part: "after" } },
+    ]);
+  });
+
   it("is the hand-over and the letter when there is no unit", () => {
     const seg = unitSegment(null, letter(), item(), "ja");
     expect(seg.itemId).toBe("i1");

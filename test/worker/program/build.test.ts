@@ -72,6 +72,23 @@ describe("buildEpisode", () => {
     expect(typeof ep.id).toBe("string");
   });
 
+  it("for an english listener, makes english units, reads bodyEn and stores lang en", async () => {
+    const f = await fixture();
+    await upsertUnit(env.DB, { letterId: f.near.id, lang: "ja", intro: "近くの紹介です。", after: "近くの感想です。", verified: true, audioReady: false });
+    const near = await insertLetter(env.DB, letterDraft(f.i1, { listenerId: f.near.listenerId, radioName: "しずく", place: "松本", placeCountry: "JP", placeRegion: "20", body: "雪の朝に。", bodyJa: "雪の朝に。", bodyEn: "On a snowy morning." }));
+    create.mockResolvedValue(unitReply("A quiet piece.", "A lovely letter."));
+    const ep = await buildEpisode(keyed, env.DB, { ...f.a, lang: "en" }, { size: 2, seed: "s" });
+    expect(ep).toMatchObject({ lang: "en", verified: true });
+    expect(create.mock.calls.every((c) => String(c[0].system).startsWith("You are"))).toBe(true);
+    const all = ep.segments.flatMap((s) => s.lines);
+    expect(all).toContainEqual(expect.objectContaining({ type: "letter", letterId: near.id, text: "On a snowy morning." }));
+    expect(all).toContainEqual(expect.objectContaining({ type: "letter", letterId: f.near.id, text: f.near.body }));
+    expect(djTexts(all)).toContain("A letter from しずく (Nagano, Japan).");
+    expect(djTexts(all)).not.toContain("近くの紹介です。");
+    expect(djTexts(all)).toContain("A quiet piece.");
+    expect((await getUnits(env.DB, [f.near.id, near.id], "en")).size).toBe(2);
+  });
+
   it("with one unit missing, makes exactly that one with one call and stores it", async () => {
     const f = await fixture();
     await storeUnit(f.near.id, "近くの紹介です。", "近くの感想です。");

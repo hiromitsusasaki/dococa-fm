@@ -178,6 +178,40 @@ describe("composeEpisode", () => {
   });
 });
 
+describe("composeEpisode in english", () => {
+  const en = (letterId: string, intro: string, after: string): Unit => ({ ...unit(letterId, intro, after), lang: "en" });
+  const placed = letter({ id: "p", bodyEn: "I listened alone at midnight.", placeCountry: "JP", placeRegion: "32" });
+  const all = byId([placed, found, w("w1", "あおい"), reply, letter({ id: "n", radioName: "", place: "" })]);
+
+  it("says every fixed line in english, reads bodyEn or the original, and names the place in english", () => {
+    const [seg] = composeEpisode([{ itemId: "i1", slot: "near", letterIds: ["p", "f", "n"], reactionIds: ["w1", "r"] }], unitsOf(en("p", "A quiet piece.", "Lovely.")), all, items, "en");
+    const said = seg!.lines.map((l) => (l.type === "letter" ? `letter:${l.text}` : (l as { text: string }).text));
+    expect(said).toEqual([
+      t("bridge.open", undefined, "en"),
+      "A quiet piece.",
+      "A letter from みなと (Shimane, Japan).",
+      "letter:I listened alone at midnight.",
+      "Lovely.",
+      t("bridge.sameWork", undefined, "en"),
+      "A voice found online. @jazzcat, from a comment on YouTube.",
+      "letter:Reminds me of home.",
+      t("bridge.sameWork", undefined, "en"),
+      "Reading the letters.",
+      `letter:${plain.body}`,
+      'A "me too" from あおい (那覇)',
+      "A note from そら (熊本)",
+      "letter:わかります",
+      t("bridge.close", undefined, "en"),
+    ]);
+    const r = verifyEpisode([seg!], all, listener({ lang: "en" }), items, "en");
+    expect(r).toEqual({ verbatim: true, sources: true, topical: true, pii: true, details: [] });
+  });
+
+  it("calls an unknown site the web in english", () => {
+    expect(siteName("not a url", "en")).toBe("the web");
+  });
+});
+
 describe("fixed templates", () => {
   it.each(FIXED_TEMPLATES)("%s says nothing the dj checks would refuse, so a fixed line never needs them", (key) => {
     const text = t(key, { who: "みなとさん（函館）", author: "@jazzcat", site: "YouTube" });

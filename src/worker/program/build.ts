@@ -42,6 +42,8 @@ export async function buildEpisode(
   listener: Listener,
   opts: { size?: number; seed?: string; station?: StationKey } = {},
 ): Promise<Episode> {
+  // The programme is made in the listener's language: units, fixed lines, the letters' renderings and the checks.
+  const lang = listener.lang;
   const selection = await selectProgram(db, listener, opts);
   // Three reads for the whole plan, whatever its size: D1 counts queries per invocation.
   const itemIds = selection.map((s) => s.itemId);
@@ -88,14 +90,14 @@ export async function buildEpisode(
   if (skippedSegments > 0) console.warn(`[dococa] skipped ${skippedSegments} segment(s) with nothing to read`);
 
   const finish = (segments: Episode["segments"]): Episode => {
-    const report = verifyEpisode(segments, letters, listener, items);
+    const report = verifyEpisode(segments, letters, listener, items, lang);
     const verified = report.verbatim && report.sources && report.topical && report.pii;
-    return { id: crypto.randomUUID(), listenerId: listener.id, segments, verified, report, cloudTts: false, station: "mine", lang: listener.lang, createdAt: new Date().toISOString() };
+    return { id: crypto.randomUUID(), listenerId: listener.id, segments, verified, report, cloudTts: false, station: "mine", lang, createdAt: new Date().toISOString() };
   };
 
   const readLetters = plan.flatMap((p) => p.letterIds.map((id) => letters.get(id)!));
-  const units = readLetters.length > 0 ? await ensureUnits(env, db, readLetters, items, "ja") : new Map<string, Unit>();
-  const compose = (u: ReadonlyMap<string, Unit> | null) => finish(composeEpisode(plan, u, letters, items, "ja"));
+  const units = readLetters.length > 0 ? await ensureUnits(env, db, readLetters, items, lang) : new Map<string, Unit>();
+  const compose = (u: ReadonlyMap<string, Unit> | null) => finish(composeEpisode(plan, u, letters, items, lang));
 
   const usable = (u: ReadonlyMap<string, Unit>) => [...u.values()].some((x) => x.verified);
   if (usable(units)) {

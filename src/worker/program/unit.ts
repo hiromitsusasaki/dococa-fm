@@ -3,7 +3,7 @@ import { getUnits, upsertUnit } from "../db/units";
 import type { Env } from "../env";
 import type { Item, Letter, Segment, Unit } from "../types";
 import { letterLines, type UnitLines } from "./compose";
-import { DJ_SYSTEM, letterTag, retryNote, workTag } from "./script";
+import { DJ_SYSTEM, DJ_SYSTEM_EN, letterTag, retryNote, workTag } from "./script";
 import { verifyEpisode } from "./verify";
 
 export type { UnitLines } from "./compose";
@@ -41,8 +41,34 @@ const TOOL = {
   },
 };
 
-/** One work and one letter; no listener line, since a unit airs in everyone's programme. Japanese only until English units exist. */
-function userMessage(input: { item: Item; letter: Letter; retryNotes?: string[] }): string {
+/** `TOOL` for an English unit: the same name, shape and limits, described in English. */
+const TOOL_EN = {
+  ...TOOL,
+  description: "Return the introduction of the work said before this letter (intro) and a short reaction said after it (after)",
+  input_schema: {
+    ...TOOL.input_schema,
+    properties: {
+      intro: {
+        type: "string",
+        description: `Introduces the work, in English. Do not say the sender's name or place (a fixed line hands over). Do not quote or summarise the letter. Never invite anyone to play, listen or watch. Keep it to at most ${INTRO_MAX} characters`,
+      },
+      after: { type: "string", description: `A short reaction to the letter, in English. Do not touch on the next letter (a fixed line makes the transition). Keep it to at most ${AFTER_MAX} characters` },
+    },
+  },
+};
+
+/** One work and one letter; no listener line, since a unit airs in everyone's programme. */
+function userMessage(input: { item: Item; letter: Letter; lang: Unit["lang"]; retryNotes?: string[] }): string {
+  if (input.lang === "en") {
+    const head = [
+      "Write the intro and after for the next segment.",
+      "A separate reader reads the letters and found voices word for word. Before that, a fixed line says the sender's name and place.",
+      "You neither quote nor summarise: in intro you introduce the work, and in after you react briefly to what the letter says.",
+    ];
+    const retry = input.retryNotes?.length ? ["", retryNote(input.retryNotes, "en")] : [];
+    const segment = ["<segment>", workTag(input.item, "en"), letterTag(input.letter, "en"), "</segment>"].join("\n");
+    return [...head, ...retry, "", segment].join("\n");
+  }
   const head = [
     "次のセグメントに、intro と after を書いてください。",
     "お便りと見つけた声は、別の読み上げ役が原文のまま読みます。送り主の名前と土地は、その前に定型文が言います。",
@@ -71,8 +97,8 @@ export async function writeUnitLines(env: Env, input: { item: Item; letter: Lett
     const res = await client.messages.create({
       model: model(env),
       max_tokens: 1024,
-      system: DJ_SYSTEM,
-      tools: [TOOL],
+      system: input.lang === "en" ? DJ_SYSTEM_EN : DJ_SYSTEM,
+      tools: [input.lang === "en" ? TOOL_EN : TOOL],
       tool_choice: { type: "auto" },
       messages: [{ role: "user", content }],
     });
@@ -83,12 +109,12 @@ export async function writeUnitLines(env: Env, input: { item: Item; letter: Lett
 }
 
 /** The one-segment layout a unit is verified and voiced with: [intro?, hand-over(fixed), letter, after?]. No bridges. */
-export function unitSegment(unit: UnitLines | null, letter: Letter, item: Item, _lang: Unit["lang"]): Segment {
-  return { itemId: item.id, slot: "near", lines: letterLines(letter, unit, true) };
+export function unitSegment(unit: UnitLines | null, letter: Letter, item: Item, lang: Unit["lang"]): Segment {
+  return { itemId: item.id, slot: "near", lines: letterLines(letter, unit, true, lang) };
 }
 
 function verifyUnit(lines: UnitLines, letter: Letter, item: Item, lang: Unit["lang"]): { ok: boolean; details: string[] } {
-  const report = verifyEpisode([unitSegment(lines, letter, item, lang)], new Map([[letter.id, letter]]), NOBODY, new Map([[item.id, item]]));
+  const report = verifyEpisode([unitSegment(lines, letter, item, lang)], new Map([[letter.id, letter]]), NOBODY, new Map([[item.id, item]]), lang);
   return { ok: report.verbatim && report.sources && report.topical && report.pii, details: report.details };
 }
 
