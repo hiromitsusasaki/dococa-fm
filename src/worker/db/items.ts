@@ -118,19 +118,6 @@ export async function searchItems(db: D1Database, q: string, limit: number): Pro
   return results.map(rowToItem);
 }
 
-/** Newest first, only works with at least one public letter: a stored item alone has passed no judgement. */
-export async function listRecentItems(db: D1Database, limit: number): Promise<Item[]> {
-  const { results } = await db
-    .prepare(
-      `SELECT * FROM items
-       WHERE EXISTS (SELECT 1 FROM letters WHERE letters.item_id = items.id AND letters.status = 'public')
-       ORDER BY created_at DESC, id LIMIT ?`,
-    )
-    .bind(Math.max(0, Math.min(limit, 20)))
-    .all<Row>();
-  return results.map(rowToItem);
-}
-
 /** Dimensions of a work vector (bge-m3). */
 export const VEC_DIMS = 1024;
 

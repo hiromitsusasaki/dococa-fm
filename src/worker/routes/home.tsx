@@ -1,7 +1,7 @@
 import { Hono } from "hono";
-import { ItemCard } from "../../views/components";
+import { LetterCard } from "../../views/components";
 import type { Variables } from "../auth/session";
-import { listRecentItems } from "../db/items";
+import { listRecentPublicLetters } from "../db/letters";
 import { hasActivity } from "../db/listeners";
 import type { Env } from "../env";
 import { tFor } from "../i18n/t";
@@ -14,7 +14,7 @@ home.get("/", async (c) => {
   const listener = c.get("listener");
   const lang = listener.lang;
   const t = tFor(lang);
-  const [recent, active] = await Promise.all([listRecentItems(c.env.DB, 6), hasActivity(c.env.DB, listener.id)]);
+  const [recent, active] = await Promise.all([listRecentPublicLetters(c.env.DB, 6), hasActivity(c.env.DB, listener.id)]);
   const hero = (
     <section class="hero">
       <div class="copy">
@@ -40,12 +40,10 @@ home.get("/", async (c) => {
         {recent.length > 0 && (
           <section>
             <h2>{t("home.recent")}</h2>
-            <ul class="recent-items">
-              {recent.map((item) => (
+            <ul class="letter-cards">
+              {recent.map((l) => (
                 <li>
-                  <a href={`/items/${item.id}`}>
-                    <ItemCard item={item} heading="h2" lang={lang} />
-                  </a>
+                  <LetterCard letter={l} item={l.item} lang={lang} />
                 </li>
               ))}
             </ul>

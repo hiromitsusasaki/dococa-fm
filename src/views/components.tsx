@@ -148,7 +148,27 @@ export function LetterSource({ letter, lang }: { letter: Pick<Letter, "id" | "so
   );
 }
 
-function LetterCard({ letter, reactions, itemId, lang }: { letter: Letter; reactions: Letter[]; itemId: string; lang: Lang }) {
+const CARD_CHARS = 120;
+
+/** A letter on the home page: the work's picture, the text cut at 120 code points (the full text is on the work's page), and who sent it. */
+export function LetterCard({ letter, item, lang }: { letter: Letter; item: Item; lang: Lang }) {
+  const t = tFor(lang);
+  const chars = Array.from(displayText(letter, lang).main);
+  const text = chars.length > CARD_CHARS ? `${chars.slice(0, CARD_CHARS).join("")}…` : chars.join("");
+  const from = letter.kind === "found" ? `${t("item.source")}: ${letter.sourceAuthor ?? ""}` : whoOf(letter, lang);
+  return (
+    <a class="letter-card" href={`/stations/mine?letter=${letter.id}`}>
+      <span class="letter-card-art">{item.imageUrl && <img src={item.imageUrl} alt="" width="96" height="96" loading="lazy" />}</span>
+      <span class="letter-card-body">
+        <span class="letter-card-text">{text}</span>
+        <span class="letter-card-meta">{`${item.title} · ${from}`}</span>
+        <span class="letter-card-play">{t("home.playFrom")}</span>
+      </span>
+    </a>
+  );
+}
+
+function LetterRow({ letter, reactions, itemId, lang }: { letter: Letter; reactions: Letter[]; itemId: string; lang: Lang }) {
   const t = tFor(lang);
   return (
     <li class="letter" id={`letter-${letter.id}`}>
@@ -171,7 +191,7 @@ export function LetterList({ itemId, letters, lang }: { itemId: string; letters:
   const top = letters.filter((l) => l.parentLetterId === null);
   const mine = top.filter((l) => l.kind !== "found");
   const found = top.filter((l) => l.kind === "found");
-  const render = (l: Letter) => <LetterCard letter={l} reactions={reactionsOf(l.id)} itemId={itemId} lang={lang} />;
+  const render = (l: Letter) => <LetterRow letter={l} reactions={reactionsOf(l.id)} itemId={itemId} lang={lang} />;
   return (
     <>
       <section class="letters">

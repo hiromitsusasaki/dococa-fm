@@ -7,6 +7,7 @@ import {
   insertLetter,
   listLettersByListener,
   listLettersForItem,
+  listRecentPublicLetters,
   listReactionsForLetter,
   setLetterStatus,
 } from "../../../src/worker/db/letters";
@@ -94,5 +95,25 @@ describe("letters", () => {
     await setLetterStatus(env.DB, l.id, "rejected");
     expect((await getLetter(env.DB, l.id))?.status).toBe("rejected");
     expect(await listLettersForItem(env.DB, item.id)).toHaveLength(0);
+  });
+
+  it("listRecentPublicLetters: newest first, letters and sourced found voices only, public only, with the work", async () => {
+    const a = await insertItem(env.DB, itemDraft({ title: "A", externalIds: { itunes: "a" } }));
+    const b = await insertItem(env.DB, itemDraft({ title: "B", externalIds: { itunes: "b" } }));
+    const old = await insertLetter(env.DB, letterDraft(a.id, { body: "古い", bodyJa: "古い" }));
+    await tick();
+    await insertLetter(env.DB, letterDraft(a.id, { kind: "watashimo" }));
+    await insertLetter(env.DB, letterDraft(a.id, { kind: "reply" }));
+    await insertLetter(env.DB, letterDraft(a.id, { status: "rejected" }));
+    await insertLetter(env.DB, letterDraft(a.id, { kind: "found", sourceAuthor: null }));
+    await tick();
+    const found = await insertLetter(env.DB, letterDraft(b.id, { kind: "found", sourceAuthor: "誰か", sourceUrl: "https://x.example/p" }));
+    await tick();
+    const fresh = await insertLetter(env.DB, letterDraft(b.id, { body: "新しい", bodyJa: "新しい" }));
+    const got = await listRecentPublicLetters(env.DB, 6);
+    expect(got.map((l) => l.id)).toEqual([fresh.id, found.id, old.id]);
+    expect(got[0]!.item.title).toBe("B");
+    expect(got[2]!.item.title).toBe("A");
+    expect(await listRecentPublicLetters(env.DB, 2)).toHaveLength(2);
   });
 });

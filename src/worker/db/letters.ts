@@ -1,4 +1,5 @@
-import type { Letter, LetterKind } from "../types";
+import type { Item, Letter, LetterKind } from "../types";
+import { rowToItem } from "./items";
 import { jstDayStartIso } from "./episodes";
 
 type Row = Record<string, unknown>;
@@ -85,6 +86,30 @@ export async function getLettersByIds(db: D1Database, ids: Iterable<string>): Pr
     for (const r of results) out.set(r.id as string, rowToLetter(r));
   }
   return out;
+}
+
+/** The newest public letters (not 私も / 一言), each with its work; a found voice counts only with its source. One query. */
+export async function listRecentPublicLetters(db: D1Database, limit = 6): Promise<Array<Letter & { item: Item }>> {
+  const { results } = await db
+    .prepare(
+      `SELECT letters.*, COALESCE(listeners.demo, 0) AS demo,
+         items.id AS i_id, items.kind AS i_kind, items.title AS i_title, items.creator AS i_creator, items.year AS i_year,
+         items.image_url AS i_image_url, items.preview_url AS i_preview_url, items.out_links AS i_out_links,
+         items.external_ids AS i_external_ids, items.created_at AS i_created_at
+       FROM letters
+       JOIN items ON items.id = letters.item_id
+       LEFT JOIN listeners ON listeners.id = letters.listener_id
+       WHERE letters.status = 'public'
+         AND (letters.kind = 'letter' OR (letters.kind = 'found' AND letters.source_author IS NOT NULL))
+       ORDER BY letters.created_at DESC, letters.id
+       LIMIT ?`,
+    )
+    .bind(Math.max(0, Math.min(limit, 20)))
+    .all<Row>();
+  return results.map((r) => {
+    const item = rowToItem({ id: r.i_id, kind: r.i_kind, title: r.i_title, creator: r.i_creator, year: r.i_year, image_url: r.i_image_url, preview_url: r.i_preview_url, out_links: r.i_out_links, external_ids: r.i_external_ids, created_at: r.i_created_at });
+    return { ...rowToLetter(r), item };
+  });
 }
 
 export async function listLettersForItem(db: D1Database, itemId: string): Promise<Letter[]> {

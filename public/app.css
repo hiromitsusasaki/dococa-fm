@@ -1058,20 +1058,72 @@ button:disabled,
   border-radius: var(--r-md);
 }
 
-.recent-items {
+.letter-cards {
   display: grid;
   gap: var(--sp-3);
+  margin: 0;
   padding: 0;
   list-style: none;
 }
 
-.recent-items a {
+@media (min-width: 761px) {
+  .letter-cards {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.letter-card {
+  display: flex;
+  gap: var(--sp-3);
+  height: 100%;
+  padding: var(--sp-3);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel);
+  box-shadow: var(--shadow);
   color: inherit;
   text-decoration: none;
 }
 
-.recent-items a:hover .item-card h2 {
+.letter-card:hover .letter-card-play {
   text-decoration: underline;
+}
+
+.letter-card-art {
+  flex: none;
+  width: 96px;
+  height: 96px;
+  border-radius: 12px;
+  background: var(--haze);
+  overflow: hidden;
+}
+
+.letter-card-art img {
+  display: block;
+  max-width: 100%;
+  object-fit: cover;
+}
+
+.letter-card-body {
+  display: grid;
+  gap: var(--sp-1);
+  min-width: 0;
+  align-content: start;
+}
+
+.letter-card-text {
+  overflow-wrap: anywhere;
+}
+
+.letter-card-meta,
+.letter-card-play {
+  color: var(--ink-2);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.letter-card-play {
+  color: var(--magenta);
 }
 
 .program {

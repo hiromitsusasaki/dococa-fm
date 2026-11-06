@@ -130,10 +130,10 @@ describe("POST /start", () => {
     const cookie = await signedInSession();
     await postForm("/start", cookie, { fav1: "曲A" });
     // A listener who has started is no longer new, so the page is the plain home.
-    expect(await (await get("/", cookie)).text()).not.toContain("最近の作品");
+    expect(await (await get("/", cookie)).text()).not.toContain("いま届いているお便り");
     const [row] = await listHistory(env.DB, idOf(cookie), 1);
     await insertLetter(env.DB, letterDraft(row!.itemId));
-    expect(await (await get("/", cookie)).text()).toContain("最近の作品");
+    expect(await (await get("/", cookie)).text()).toContain("いま届いているお便り");
   });
 
   it("puts a one-liner through the letter pipeline, stored with only its outer spaces trimmed, and skips a rejected one", async () => {
