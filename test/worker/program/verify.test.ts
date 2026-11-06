@@ -214,6 +214,23 @@ describe("verifyEpisode", () => {
     expect(verifyEpisode(episode(fixedDj(`みなとさん（${plain.bodyJa}）から『私も』が届いています`)), letters, me).pii).toBe(false);
   });
 
+  describe("handing over in a segment with no letter", () => {
+    const wm = fixedDj("あおいさん（那覇）から『私も』が届いています");
+    it("fails a hand-over over a reaction-only segment", () => {
+      const r = verifyEpisode(episode(dj("しずくさんからのお便りです。"), wm), letters, me);
+      expect(r.topical).toBe(false);
+      expect(r.details).toEqual(["announce: segment 1 line 1: hands over to a letter in a segment with none"]);
+    });
+    it("lets the DJ say the listener's own letter got a reaction", () => {
+      expect(verifyEpisode(episode(dj("あなたのお便りに反応が届いています。"), wm), letters, me).details).toEqual([]);
+    });
+    it("does not apply once the segment reads a letter, a reply included", () => {
+      expect(verifyEpisode(episode(dj("しずくさんからのお便りです。"), read(plain)), letters, me).details).toEqual([]);
+      const reply = { ...plain, kind: "reply" as const };
+      expect(verifyEpisode(episode(dj("そらさんからのお便りです。"), read(reply)), new Map([[reply.id, reply]]), me).details).not.toContainEqual(expect.stringMatching(/^announce:/));
+    });
+  });
+
   describe("years from the data", () => {
     const items = byId([item({ id: "i1", year: 2016 })]);
     const withYear = letter({ id: "y", year: 2019, body: "高校のとき", bodyJa: "高校のとき" });

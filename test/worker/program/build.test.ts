@@ -1,5 +1,6 @@
 import { env } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { insertEpisode } from "../../../src/worker/db/episodes";
 import { upsertHistory } from "../../../src/worker/db/history";
 import { insertItem } from "../../../src/worker/db/items";
 import { insertLetter } from "../../../src/worker/db/letters";
@@ -207,6 +208,26 @@ describe("buildEpisode", () => {
     expect(seg.lines).toContainEqual(expect.objectContaining({ type: "letter", text: "届きました", kind: "reply" }));
     expect(seg.lines.some((l) => l.type === "letter" && l.letterId === own.id)).toBe(false);
     expect(ep.verified).toBe(true);
+  });
+
+  it("retries a hand-over said over an echo segment that reads no letter", async () => {
+    const f = await fixture();
+    const echo = (await insertItem(env.DB, itemDraft({ title: "返事のあった曲" }))).id;
+    const own = await insertLetter(env.DB, letterDraft(echo, { listenerId: f.a.id, body: "私の一通。", bodyJa: "私の一通。" }));
+    // Only this work's reaction is newer than the last episode, so it is the one echo.
+    await env.DB.prepare("UPDATE letters SET created_at = '2000-01-01T00:00:00.000Z'").run();
+    await insertEpisode(env.DB, { listenerId: f.a.id, segments: [], verified: true, report: { verbatim: true, sources: true, topical: true, pii: true, details: [] }, createdAt: "2020-01-01T00:00:00.000Z" });
+    await insertLetter(env.DB, letterDraft(echo, { kind: "watashimo", listenerId: (await createListener(env.DB)).id, radioName: "あおい", place: "那覇", parentLetterId: own.id, body: "私も", bodyJa: "私も" }));
+    create
+      .mockImplementationOnce(async (req) => script(segCount(req), "しずくさんからのお便りです。"))
+      .mockImplementationOnce(async (req) => script(segCount(req), "落ち着いた一曲です。"));
+    const ep = await buildEpisode(keyed, env.DB, f.a, { size: 3, seed: "s" });
+    expect(create).toHaveBeenCalledTimes(2);
+    const second = String((create.mock.calls[1]![0] as any).messages[0].content);
+    expect(second).toContain("announce: segment");
+    expect(second).toContain("この作品にはお便りの読み上げはありません");
+    expect(ep.verified).toBe(true);
+    expect(ep.segments.find((s) => s.itemId === echo)!.lines.some((l) => l.type === "dj" && !l.fixed && l.text.includes("お便りです"))).toBe(false);
   });
 
   it("an episode can end up with no segment at all when every letter is sourceless", async () => {

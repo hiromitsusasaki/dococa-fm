@@ -85,6 +85,17 @@ describe("writeDjLines", () => {
     }
   });
 
+  it("adds the reactions-only note to a segment without letters, and only to those", async () => {
+    create.mockResolvedValue(lines(2));
+    const reactionOnly = { ...segments[1]!, reactions: [letter({ id: "w2", kind: "watashimo", body: "私も", bodyJa: "私も", radioName: "いつき", place: "松本" })] };
+    await writeDjLines(keyed, { ...input, segments: [segments[0]!, reactionOnly] });
+    const blocks = (create.mock.calls[0]![0].messages[0].content as string).split("<segment ").slice(1);
+    const note = "この作品にはお便りの読み上げはありません。反応だけが伝えられます。";
+    expect(blocks[0]).not.toContain(note);
+    expect(blocks[1]).toContain(note);
+    expect(blocks[1]).toContain("<reaction");
+  });
+
   it("tells a retry which rules the previous script broke", async () => {
     create.mockResolvedValue(lines(6));
     await writeDjLines(keyed, { ...input, retryNotes: ["topical: segment 1 line 1 「今年」 in 「今年の一曲」"] });

@@ -99,6 +99,8 @@ export function verifyEpisode(
       if (y != null) years.add(y);
     }
 
+    const hasLetter = seg.lines.some((l) => l.type === "letter");
+
     seg.lines.forEach((line, li) => {
       const at = `segment ${si + 1} line ${li + 1}`;
       if (line.type === "letter") {
@@ -142,6 +144,11 @@ export function verifyEpisode(
       if (play) {
         topical = false;
         details.push(`playback: ${at}: ${play[0]}`);
+      }
+      // A segment that reads no letter (a reply counts as one) must not hand over to a reader with nothing to read.
+      if (!line.fixed && !hasLetter && /からのお便りです|お便りを読み|読み上げ/u.test(text)) {
+        topical = false;
+        details.push(`announce: ${at}: hands over to a letter in a segment with none`);
       }
       if (!line.fixed && EMAIL.test(text)) {
         pii = false;

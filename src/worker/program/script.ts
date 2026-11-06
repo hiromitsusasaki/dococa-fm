@@ -73,6 +73,9 @@ function reactionTag(l: Letter): string {
 }
 
 
+/** A segment that carries only reactions has no letter to hand over to. */
+const REACTIONS_ONLY_NOTE = "この作品にはお便りの読み上げはありません。反応だけが伝えられます。手渡しの言い回しは使わず、作品の紹介と反応への一言にしてください。";
+
 function userMessage(input: ScriptInput): string {
   const who = [input.listener.radioName, input.listener.place].filter((s) => s !== "").map(escapeTags).join("、");
   const head = [
@@ -88,6 +91,7 @@ function userMessage(input: ScriptInput): string {
     return [
       `<segment n="${i + 1}" slot="${SLOT_LABEL[s.slot]}">`,
       `<work>${work.join("\n")}</work>`,
+      ...(s.letters.length === 0 ? [REACTIONS_ONLY_NOTE] : []),
       ...s.letters.map(letterTag),
       ...s.reactions.map(reactionTag),
       "</segment>",
