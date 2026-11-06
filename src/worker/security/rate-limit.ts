@@ -77,12 +77,15 @@ export class WindowStore implements Store<AppEnv> {
   }
 }
 
-/** Routes that write, or that spend a paid or external call. Everything here shares one bucket per IP and one per listener. `/mcp/*` has its own rule. */
+/**
+ * Routes that write, or that spend a paid or external call. Everything here shares one bucket per IP and one
+ * per listener. `/mcp/*`, `GET /tts` and `POST /listens` have their own buckets.
+ */
 export function isRateLimited(method: string, path: string, query: URLSearchParams): boolean {
   if (path === "/api" || path.startsWith("/api/")) return true;
   if (method === "GET") return path === "/auth/google" || (path === "/put" && (query.has("itemId") || query.has("url")));
   if (method !== "POST") return false;
-  return path === "/letters" || path === "/settings" || path.startsWith("/settings/") || path === "/auth/signout" || path === "/episodes" || path === "/start" || path === "/takedown" || path === "/listens" || path === "/put/register" || /^\/episodes\/[^/]+\/next$/.test(path) || /^\/stations\/[^/]+\/next$/.test(path) || /^\/letters\/[^/]+\/report$/.test(path);
+  return path === "/letters" || path === "/settings" || path.startsWith("/settings/") || path === "/auth/signout" || path === "/episodes" || path === "/start" || path === "/takedown" || path === "/put/register" || /^\/episodes\/[^/]+\/next$/.test(path) || /^\/stations\/[^/]+\/next$/.test(path) || /^\/letters\/[^/]+\/report$/.test(path);
 }
 
 const limitOf = (c: { env: Env }): number => {
@@ -118,7 +121,8 @@ export const listenerRateLimit = limiter((c) => {
 export const TTS_LISTENER_LIMIT_PER_WINDOW = 60;
 export const TTS_IP_LIMIT_PER_WINDOW = 120;
 
-function ttsLimiter(perWindow: number, keyOf: (c: Context<AppEnv>) => string | null): MiddlewareHandler<AppEnv> {
+/** A route's own buckets, apart from the shared ones, answering 429 in JSON. */
+function routeLimiter(perWindow: number, keyOf: (c: Context<AppEnv>) => string | null): MiddlewareHandler<AppEnv> {
   return rateLimiter<AppEnv>({
     windowMs: WINDOW_MS,
     limit: (c) => limitOf(c) * (perWindow / LIMIT_PER_WINDOW),
@@ -130,11 +134,28 @@ function ttsLimiter(perWindow: number, keyOf: (c: Context<AppEnv>) => string | n
   });
 }
 
-export const ttsIpRateLimit = ttsLimiter(TTS_IP_LIMIT_PER_WINDOW, (c) => {
+export const ttsIpRateLimit = routeLimiter(TTS_IP_LIMIT_PER_WINDOW, (c) => {
   const ip = c.req.header("cf-connecting-ip");
   return ip ? `ip:${ip}` : null;
 });
-export const ttsListenerRateLimit = ttsLimiter(TTS_LISTENER_LIMIT_PER_WINDOW, (c) => {
+export const ttsListenerRateLimit = routeLimiter(TTS_LISTENER_LIMIT_PER_WINDOW, (c) => {
+  const listener = c.get("listener");
+  return listener ? `listener:${listener.id}` : null;
+});
+
+/**
+ * `POST /listens` fires on every letter line a player starts: its own buckets, per listener 120 and per IP 240
+ * a minute (scaled with RATE_LIMIT_PER_MINUTE), so listeners on one venue Wi-Fi never use up the IP bucket
+ * that `next` and `letters` share.
+ */
+export const LISTENS_LISTENER_LIMIT_PER_WINDOW = 120;
+export const LISTENS_IP_LIMIT_PER_WINDOW = 240;
+
+export const listensIpRateLimit = routeLimiter(LISTENS_IP_LIMIT_PER_WINDOW, (c) => {
+  const ip = c.req.header("cf-connecting-ip");
+  return ip ? `ip:${ip}` : null;
+});
+export const listensListenerRateLimit = routeLimiter(LISTENS_LISTENER_LIMIT_PER_WINDOW, (c) => {
   const listener = c.get("listener");
   return listener ? `listener:${listener.id}` : null;
 });

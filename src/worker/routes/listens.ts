@@ -5,13 +5,14 @@ import { getVerifiedEpisode } from "../db/episodes";
 import { recordListen } from "../db/listens";
 import type { Env } from "../env";
 import { loadPublicEpisode } from "../program/stored";
+import { listensIpRateLimit, listensListenerRateLimit } from "../security/rate-limit";
 
 export const listens = new Hono<{ Bindings: Env; Variables: Variables }>();
 
 const bodySchema = z.object({ episodeId: z.string().min(1).max(100), letterId: z.string().min(1).max(100), segmentIndex: z.number().int().min(0).max(10_000) });
 
 /** The player calls this when a letter line starts. Only a letter the listener's own episode reads, in the segment it reads it, is recorded. */
-listens.post("/listens", async (c) => {
+listens.post("/listens", listensIpRateLimit, listensListenerRateLimit, async (c) => {
   let raw: unknown;
   try {
     raw = await c.req.json();

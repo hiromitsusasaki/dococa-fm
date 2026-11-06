@@ -336,14 +336,38 @@ describe("isRateLimited for /put/register", () => {
   });
 });
 
+/** POST routes outside the shared buckets, and why. Each must be limited some other way (tested below). */
+const OWN_LIMITER: Record<string, string> = { "/listens": "own limiter" };
+
 describe("rate-limit allowlist covers every write route", () => {
-  it("counts every registered POST route outside /admin and /mcp", () => {
+  it("counts every registered POST route outside /admin and /mcp, except the ones with their own limiter", () => {
     const posts = [...new Set(app.routes.filter((r) => r.method === "POST" || r.method === "ALL").map((r) => r.path))]
       .filter((p) => !p.startsWith("/admin") && !p.startsWith("/mcp") && p !== "*" && !p.includes("*"))
       .map((p) => p.replace(/:[A-Za-z]+/g, "x"));
     expect(posts).toContain("/settings/dial");
     expect(posts).toContain("/listens");
     expect(posts.length).toBeGreaterThan(8);
-    for (const path of posts) expect(isRateLimited("POST", path, new URLSearchParams()), path).toBe(true);
+    for (const path of posts) expect(isRateLimited("POST", path, new URLSearchParams()), path).toBe(!(path in OWN_LIMITER));
+  });
+
+  it("gives /listens its own buckets: the shared ones do not count it, and its own answers 429 in JSON after its window", async () => {
+    // RATE_LIMIT_PER_MINUTE=1 scales the buckets down: 6 a minute per listener, 12 per IP.
+    const slow = { ...e, RATE_LIMIT_PER_MINUTE: "1" };
+    const listen = (cookie: string, ip: string) =>
+      app.request("/listens", { method: "POST", headers: { cookie, "cf-connecting-ip": ip, "content-type": "application/json" }, body: JSON.stringify({ episodeId: "x", letterId: "y", segmentIndex: 0 }) }, slow);
+    const cookie = await newSession();
+    const statuses: number[] = [];
+    for (let i = 0; i < 7; i++) statuses.push((await listen(cookie, "203.0.113.70")).status);
+    expect(statuses.slice(0, 6).every((s) => s === 404)).toBe(true);
+    expect(statuses[6]).toBe(429);
+    expect(await (await listen(cookie, "203.0.113.70")).json()).toEqual({ error: "rate_limited" });
+    // The shared bucket of that IP was not touched: a POST /letters from it still gets through the limiter.
+    const letters = await app.request("/letters", { method: "POST", headers: { cookie, "cf-connecting-ip": "203.0.113.70", "content-type": "application/x-www-form-urlencoded" }, body: "itemId=x&body=hello" }, slow);
+    expect(letters.status).not.toBe(429);
+
+    const byIp: number[] = [];
+    for (let i = 0; i < 13; i++) byIp.push((await listen(await newSession(), "203.0.113.71")).status);
+    expect(byIp.slice(0, 12).every((s) => s === 404)).toBe(true);
+    expect(byIp[12]).toBe(429);
   });
 });
