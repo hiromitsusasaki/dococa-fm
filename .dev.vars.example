@@ -1,3 +1,4 @@
+# Workers AI（作品のベクトル）に鍵は要らない。wrangler.jsonc の ai バインディングと、開発機の `pnpm wrangler login` で使う
 # Claude API のキー（台本生成）
 ANTHROPIC_API_KEY=
 # Spotify Developer Dashboard のアプリの Client ID（PKCE のため secret は不要）

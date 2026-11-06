@@ -61,7 +61,7 @@ CSS 変数は `:root` にライト、`@media (prefers-color-scheme: dark)` と `
 | `.face`（ラジオの面） | 左に `DOCOCA FM`、右に赤い点つきの `ON AIR`。破線の下罫 | 局名は出さない |
 | `.scale`（目盛り） | 12px の高さの縦線の繰り返し + 針 | 針の位置は飾り（再生位置ではない） |
 | `.switch` | 72×36 のトグル。`aria-pressed` | OFF: `--haze` と枠線。ON: `--lemon` に点灯 + `box-shadow` のゆるい明滅（`prefers-reduced-motion` で止める） |
-| `.knob` | 52px の円、`--knob`、針は coral | 音量とセレンディピティの 2 つ。`input[type=range]` を置き換え、キーボードでも動く |
+| `.knob` | 52px の円、`--knob`、針は coral | 音量とセレンディピティの 2 つ。セレンディピティ（ダイヤル）はラジオの面にあり、自分のラジオだけに出る（ホームの Dococa FM と人のラジオには出さない）。0〜1 を 0.1 刻みで、離したときに値を `localStorage["dfm.dial"]` に残して次の回から効かせる。`input[type=range]` を置き換え、キーボードでも動く |
 | `.letter-card`（ホームの「いま届いているお便り」） | `article` に 2 つのリンク。絵と本文は `/stations/mine?letter=<id>`（自分のお便りは作品ページ）、薄い行は作品ページ `/items/<id>`。`--panel`、枠線 1px `--line`、丸角 12px、影。左に 96px の絵の箱（`--haze`、丸角 12px、絵が無ければ空の箱）、右に本文（120 字で切り、切れたときだけ「…」。全文は作品ページ）、`このお便りから聴く`（magenta。自分のお便りには出さない）、絵と本文の下に薄い行 `作品名 · 送り主（お住まい）`。見つけた声は送り主の代わりに出典の作者 | 最新 6 通。PC 幅（> 760px）は 2 列、スマホ幅は 1 列。数字は付けない |
 | お便り `blockquote` | 左線 3px `--lemon`、`--haze` の地、丸角 `0 12px 12px 0` | 主文 → 原文トグル（`<details>`）→ 送り主（`〇〇さん（お住まい、国）［デモ用］`） |
 | `.pill` | 枠線 1px coral、丸、13px | 主ボタン `.pill.hot` は magenta 塗り・白文字・700 |
@@ -90,7 +90,7 @@ CSS 変数は `:root` にライト、`@media (prefers-color-scheme: dark)` と `
 | スイッチ | ラジオをつける / 止める | Turn the radio on / Stop |
 | 放送中 | ON AIR | ON AIR |
 | 音量 | 音量 | Volume |
-| ダイヤル | セレンディピティ | Serendipity |
+| ダイヤル | セレンディピティ（ホバーの説明: 右に回すほど、あなたと接点のないお便りが増えます） | Serendipity |
 | いま | いま流れている | Now playing |
 | 次 | このあとのお便り | Up next: letters |
 | 自分の局 | あなたのラジオ | Your radio |

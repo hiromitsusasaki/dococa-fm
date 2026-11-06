@@ -12,7 +12,7 @@ Built with Claude: Japan 2026 への応募作です。
 - **Google でサインインするとできること。** 好きなものの登録、Spotify の取り込み、「お便りを送る」、「あなたのラジオ」の公開、マイページ（届いた反応、聴いたお便りのふり返り）。公開すると「〇〇さんのラジオ」として他の人が聴けます。公開に出るのはラジオネームだけで、Google の名前とメールアドレスは出ません。
 - **お便りを送る。** 作品は「URL を貼る」「好きなものから選ぶ」「題名で探す」の 3 通りで決めます。題名で探すのはサインイン済みのときだけで、iTunes・Google Books・TMDB（と、鍵があれば YouTube）を一度に探します。好きな作品のページからこの画面を開けるブックマークレットも、同じページにあります。Spotify をつなぐのは設定からです。
 - **言語。** 画面は日本語と英語を選べます。言語を英語にすると、DJ も英語で話し、お便りは英訳で読みます。日本語圏以外のお便りは、選んだ言語の訳を読み、原文を切り替えて確かめられます。
-- **土地。** 設定の「土地」は、国と都道府県・州から選びます。
+- **お住まい。** 設定の「お住まい」は、国と都道府県・州から選びます。お便りの送り主に添えて出ます。
 
 ### 三枠とダイヤル
 
@@ -103,6 +103,17 @@ pnpm test         # vitest + @cloudflare/vitest-plugin
 pnpm typecheck
 ```
 
+運用のスクリプトは、どれも `.dev.vars` を読みます。
+
+| コマンド | 役目 |
+|---|---|
+| `pnpm eval` | 番組を 20 回作って検証レポートを集計する（上の eval） |
+| `pnpm eval:units` | 単位を Claude に採点させる（単位の見直し） |
+| `pnpm rejudge` | 公開済みのお便りを今の基準で判定し直す（お便りの選別） |
+| `pnpm seed` | デモ用のお便りを投入する（デモ用のお便り） |
+| `pnpm collect` | 見つけた声の候補を集める（ローカルのみ） |
+| `pnpm db:migrate:local` / `pnpm db:migrate` | マイグレーションを開発 / 本番の D1 に当てる |
+
 Workers AI（作品のベクトル）はローカルで動かせません。`pnpm dev` は起動のたびにリモートの Workers AI に繋ぐので、先に `pnpm wrangler login` が要り、使った分はそのアカウントに課金されます。テストは Workers AI に繋ぎません。
 
 必要な鍵は `.dev.vars.example` に一覧があります。鍵は `.dev.vars` と Cloudflare secrets にだけ置き、リポジトリには入れません。
@@ -116,7 +127,7 @@ pnpm wrangler login
 pnpm wrangler d1 create dococa            # 出力の database_id を wrangler.jsonc の d1_databases に書く
 pnpm wrangler r2 bucket create dococa-audio
 pnpm wrangler secret put ANTHROPIC_API_KEY   # .dev.vars.example の鍵を 1 つずつ（ADMIN_TOKEN、SESSION_SECRET、SPOTIFY_CLIENT_ID、GOOGLE_TTS_SA_JSON、GOOGLE_OAUTH_CLIENT_ID、GOOGLE_OAUTH_CLIENT_SECRET、TMDB_API_KEY、YOUTUBE_API_KEY、任意で GOOGLE_BOOKS_API_KEY）
-pnpm db:migrate   # migrations/ の 0001〜0017 のうち、まだ当てていないものを順に当てる
+pnpm db:migrate   # migrations/ の 0001〜0018 のうち、まだ当てていないものを順に当てる
 # wrangler.jsonc の routes にカスタムドメイン、vars.PUBLIC_ORIGIN にその origin（例 https://dococafm.app）を書いてから
 pnpm run deploy   # pnpm deploy は pnpm 組み込みの別コマンドなので、run を付ける
 ```
@@ -137,7 +148,7 @@ Spotify 連携は開発モードのため、許可リストに入っているア
 
 ### 守りと制限
 
-書き込みの `POST` は同一オリジンのみ、好きなものの登録・お便り・マイページはサインイン必須、`/admin/*` は `ADMIN_TOKEN` 必須（スクリプトは Bearer、管理画面はブラウザの Basic 認証）、レート制限は IP とリスナーごとに 1 分 20 回です。詳しくは [SECURITY.md](SECURITY.md) にあります。レート制限のカウンタは Worker の isolate ごとのメモリにあるため、isolate をまたぐ厳密な上限ではありません。番組の作成は D1 を数える 1 日の枠の上限（`EPISODE_DAILY_LIMIT` 既定 60 枠、`EPISODE_GLOBAL_DAILY_LIMIT` 既定 1800 枠。1 回が 1 枠）が、クラウドの声は 1 日に合成する行数の上限（`CLOUD_TTS_GLOBAL_DAILY_LIMIT`、既定 3000）が、DJ の語り（単位）は 1 日に作る数の上限（`UNIT_DAILY_LIMIT`、既定 1000）が、お便りと一言は全員で 1 日に受け付ける数の上限（`LETTER_GLOBAL_DAILY_LIMIT`、既定 500。判定と翻訳で Claude を呼ぶため。「私も」は止めない）が最後の歯止めです（`0` は停止）。単位が上限に当たった日は、新しいお便りを定型の手渡しだけで読みます。同じ行の音声は全員で共有し、上限を超えると `GET /tts` は 503 を返してブラウザの音声に切り替わります。ただし判定は原子的ではなく同時実行で数回超えることがあり、cookie を捨てる 1 人に全体の上限を使い切られうることも、[SECURITY.md](SECURITY.md) の既知の制限に書いています。
+書き込みの `POST` は同一オリジンのみ、好きなものの登録・お便り・マイページはサインイン必須、`/admin/*` は `ADMIN_TOKEN` 必須（スクリプトは Bearer、管理画面はブラウザの Basic 認証）、レート制限は書き込みと外部 API を呼ぶ経路で IP とリスナーごとに 1 分 20 回（題名検索 `GET /put?q=` はサインイン済みのリスナーごとに別枠で 1 分 20 回、`GET /tts` と `POST /listens` もそれぞれ別枠）です。詳しくは [SECURITY.md](SECURITY.md) にあります。レート制限のカウンタは Worker の isolate ごとのメモリにあるため、isolate をまたぐ厳密な上限ではありません。番組の作成は D1 を数える 1 日の枠の上限（`EPISODE_DAILY_LIMIT` 既定 60 枠、`EPISODE_GLOBAL_DAILY_LIMIT` 既定 1800 枠。1 回が 1 枠）が、クラウドの声は 1 日に合成する行数の上限（`CLOUD_TTS_GLOBAL_DAILY_LIMIT`、既定 3000）が、DJ の語り（単位）は 1 日に作る数の上限（`UNIT_DAILY_LIMIT`、既定 1000）が、お便りと一言は全員で 1 日に受け付ける数の上限（`LETTER_GLOBAL_DAILY_LIMIT`、既定 500。判定と翻訳で Claude を呼ぶため。「私も」は止めない）が最後の歯止めです（`0` は停止）。単位が上限に当たった日は、新しいお便りを定型の手渡しだけで読みます。同じ行の音声は全員で共有し、上限を超えると `GET /tts` は 503 を返してブラウザの音声に切り替わります。ただし判定は原子的ではなく同時実行で数回超えることがあり、cookie を捨てる 1 人に全体の上限を使い切られうることも、[SECURITY.md](SECURITY.md) の既知の制限に書いています。
 
 ### public 化前チェックリスト（本人）
 

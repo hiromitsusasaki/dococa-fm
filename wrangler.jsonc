@@ -8,7 +8,7 @@
     { "binding": "DB", "database_name": "dococa", "database_id": "9f0f6a94-2634-4da3-9d7f-c93212f55639", "migrations_dir": "migrations" }
   ],
   "r2_buckets": [{ "binding": "BUCKET", "bucket_name": "dococa-audio" }],
-  // Workers AI: work embeddings (@cf/baai/bge-m3) for the dial's distance (src/worker/ai/embed.ts). Optional: without it the pick falls back to the pools.
+  // Workers AI: work embeddings (@cf/baai/bge-m3) for the dial's distance (src/worker/ai/embed.ts), made from public work metadata only. No key; needs Workers Paid. Optional: without it the pick falls back to the pools. `pnpm dev` reaches it remotely, so run `pnpm wrangler login` first.
   "ai": { "binding": "AI", "remote": true },
   "assets": { "binding": "ASSETS", "not_found_handling": "none", "run_worker_first": true },
   // The custom domain (Cloudflare Registrar zone). Other hosts, including workers.dev, redirect here.
