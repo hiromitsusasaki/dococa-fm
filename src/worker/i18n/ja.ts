@@ -35,7 +35,7 @@ export const ja = {
   "out.search.youtube": "YouTube で探す",
   "put.title": "お便りを送る",
   "put.url": "作品の URL",
-  "put.resolve": "作品を探す",
+  "put.resolve": "URL を読み込む",
   "put.notFound": "作品が見つかりませんでした。URL を確かめるか、作品名で探してみてください。",
   "put.body": "お便り",
   "put.bodyHelp": "200 字まで。書いたとおりに届きます。",

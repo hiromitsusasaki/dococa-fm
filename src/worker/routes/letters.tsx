@@ -158,7 +158,7 @@ letters.get("/bookmarklet", (c) => {
     <Layout title={t("bookmarklet.title")} lang={lang} listener={c.get("listener")} path={currentPath(c)}>
       <main class="bookmarklet">
         <h1>{t("bookmarklet.title")}</h1>
-        <BookmarkletHelp code={code} lang={lang} />
+        <BookmarkletHelp code={code} lang={lang} heading="h2" />
         {code && (
           <pre>
             <code>{code}</code>

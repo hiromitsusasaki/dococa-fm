@@ -38,7 +38,7 @@ export const en: Record<keyof typeof ja, string> = {
   "out.search.youtube": "Find on YouTube",
   "put.title": "Send a letter",
   "put.url": "Link to the work",
-  "put.resolve": "Find the work",
+  "put.resolve": "Load the URL",
   "put.notFound": "We couldn't find that work. Check the link, or try searching by title.",
   "put.body": "Your letter",
   "put.bodyHelp": "Up to 200 characters. It arrives exactly as you write it.",

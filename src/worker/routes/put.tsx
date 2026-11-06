@@ -202,7 +202,7 @@ export function PutPage(props: PutPageProps) {
         )}
         <section class="panel put-bookmarklet">
           <h2>{t("bookmarklet.title")}</h2>
-          <BookmarkletHelp code={bookmarklet} lang={lang} />
+          <BookmarkletHelp code={bookmarklet} lang={lang} heading="h3" />
         </section>
       </main>
     </Layout>

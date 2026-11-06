@@ -429,7 +429,7 @@ describe("GET /put", () => {
   it("puts the draggable bookmarklet button and its three lines on the page", async () => {
     const html = await (await get("/put", await signedInSession())).text();
     expect(html).toMatch(/<a class="button" href="javascript:location.href=[^"]*\/put\?url=[^"]*" draggable="true">/);
-    expect(html).toContain(t("bookmarklet.addTitle"));
+    expect(html).toContain(`<h3>${t("bookmarklet.addTitle")}</h3>`);
     for (const key of ["bookmarklet.help1", "bookmarklet.help2", "bookmarklet.help3"] as const) expect(html).toContain(t(key));
   });
 });
@@ -507,7 +507,8 @@ describe("reactions, report, takedown, bookmarklet", () => {
     expect(html).toContain("javascript:location.href=");
     expect(html).toContain("/put?url=");
     expect(html).toContain('draggable="true"');
-    expect(html).toContain(t("bookmarklet.addTitle"));
+    // Under the page's h1, the block's heading is an h2 (an h3 inside the send page's panel).
+    expect(html).toContain(`<h2>${t("bookmarklet.addTitle")}</h2>`);
     const at = (s: string) => html.indexOf(s);
     expect(at(t("bookmarklet.help1"))).toBeGreaterThan(-1);
     expect(at(t("bookmarklet.help1"))).toBeLessThan(at(t("bookmarklet.help2")));

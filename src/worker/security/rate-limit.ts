@@ -74,7 +74,6 @@ export class WindowStore implements Store<AppEnv> {
  * per listener. `GET /tts` and `POST /listens` have their own buckets.
  */
 export function isRateLimited(method: string, path: string, query: URLSearchParams): boolean {
-  if (path === "/api" || path.startsWith("/api/")) return true;
   if (method === "GET") return path === "/auth/google" || (path === "/put" && (query.has("itemId") || query.has("url")));
   if (method !== "POST") return false;
   return path === "/letters" || path === "/settings" || path.startsWith("/settings/") || path === "/auth/signout" || path === "/episodes" || path === "/start" || path === "/takedown" || path === "/put/register" || /^\/episodes\/[^/]+\/next$/.test(path) || /^\/stations\/[^/]+\/next$/.test(path) || /^\/letters\/[^/]+\/report$/.test(path);

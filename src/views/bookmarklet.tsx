@@ -13,7 +13,8 @@ export function bookmarkletCode(publicOrigin: string): string | null {
 }
 
 /** The button to drag to the bookmarks bar and the three lines on how to use it. */
-export function BookmarkletHelp({ code, lang }: { code: string | null; lang: Lang }) {
+/** `heading` is the level under the surrounding heading: h2 on its own page, h3 inside the send page's panel. */
+export function BookmarkletHelp({ code, lang, heading: Heading }: { code: string | null; lang: Lang; heading: "h2" | "h3" }) {
   const t = tFor(lang);
   if (!code) return <p>{t("bookmarklet.unavailable")}</p>;
   return (
@@ -23,7 +24,7 @@ export function BookmarkletHelp({ code, lang }: { code: string | null; lang: Lan
           {t("bookmarklet.drag")}
         </a>
       </p>
-      <h3>{t("bookmarklet.addTitle")}</h3>
+      <Heading>{t("bookmarklet.addTitle")}</Heading>
       <ol class="bookmarklet-steps">
         <li>{t("bookmarklet.help1")}</li>
         <li>{t("bookmarklet.help2")}</li>

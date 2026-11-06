@@ -258,8 +258,8 @@ describe("canonical host", () => {
 });
 
 describe("session exemptions", () => {
-  it("do not create listener rows for static assets and /api", async () => {
-    for (const path of ["/app.css", "/icon.svg", "/manifest.webmanifest", "/bed.mp3", "/healthz", "/api/search"]) {
+  it("do not create listener rows for static assets", async () => {
+    for (const path of ["/app.css", "/icon.svg", "/manifest.webmanifest", "/bed.mp3", "/healthz"]) {
       const res = await SELF.fetch(`http://example.com${path}`);
       expect(res.headers.get("set-cookie"), path).toBeNull();
     }
@@ -268,9 +268,10 @@ describe("session exemptions", () => {
 });
 
 describe("the temporary /api routes", () => {
-  it("are gone", async () => {
+  it("are gone, and nothing limits or exempts /api any more", async () => {
     expect(app.routes.some((r) => r.path.startsWith("/api"))).toBe(false);
     for (const path of ["/api/search?q=x", "/api/resolve?url=https%3A%2F%2Fexample.com%2F"]) expect((await app.request(path, {}, e)).status, path).toBe(404);
+    expect(isRateLimited("GET", "/api/search", new URLSearchParams())).toBe(false);
   });
 });
 
