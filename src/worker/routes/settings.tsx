@@ -63,6 +63,7 @@ function SettingsPage(props: { values: FormValues; listener: Listener; path: str
           </label>
           <fieldset class="settings-place">
             <legend>{t("settings.place")}</legend>
+            <small>{t("settings.placeHelp")}</small>
             <label>
               <span>{t("settings.placeCountry")}</span>
               <select name="placeCountry">

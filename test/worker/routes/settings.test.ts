@@ -93,6 +93,12 @@ describe("settings", () => {
     expect(await res.text()).toContain("名無しのリスナー");
   });
 
+  it("asks for where you live, not for a land", async () => {
+    const html = await (await SELF.fetch(`${BASE}/settings`, { headers: { "accept-language": "ja" } })).text();
+    expect(html).toContain("お住まい");
+    expect(html).not.toContain("土地");
+  });
+
   it("saves radio name, place and dial, then shows them", async () => {
     const cookie = cookieOf(await SELF.fetch(`${BASE}/settings`));
     const post = await postForm("/settings", cookie, { radioName: "ヒロ", placeCountry: "JP", placeRegion: "32", voice: "", dial: "0.8" });

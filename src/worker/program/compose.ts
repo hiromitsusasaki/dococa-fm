@@ -45,7 +45,7 @@ function who(l: Letter, lang: Lang): string {
   if (l.radioName === "") return t("script.someone", undefined, lang);
   const name = t("letter.who", { name: l.radioName }, lang);
   const place = placeSaid(l, lang);
-  return place === "" ? name : t("letter.whoPlace", { who: name, place }, lang);
+  return place === "" ? name : t("script.whoPlace", { who: name, place }, lang);
 }
 
 function reaction(l: Letter, lang: Lang): ScriptLine[] {

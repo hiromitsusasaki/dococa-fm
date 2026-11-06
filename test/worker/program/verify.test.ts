@@ -49,6 +49,13 @@ describe("verifyEpisode playback words", () => {
     expect(r.details.filter((d) => d.startsWith("playback:"))).toEqual([]);
   });
 
+  it("quote-checks only the filled values of a hand-over that says where the sender lives", () => {
+    const echo = letter({ id: "e", radioName: "ゆう", place: "", body: "函館にお住まいの、みなとさんからのお便りです。", bodyJa: "函館にお住まいの、みなとさんからのお便りです。" });
+    const r = verifyEpisode(episode(fixedDj("函館にお住まいの、みなとさんからのお便りです。"), read(echo)), byId([plain, echo]), me);
+    expect(r.verbatim).toBe(true);
+    expect(r.details).toEqual([]);
+  });
+
   it("exempts fixed lines", () => {
     expect(verifyEpisode(episode(fixedDj("お便りを読みます。どうぞ"), read(plain)), letters, me).details.filter((d) => d.startsWith("playback:"))).toEqual([]);
   });

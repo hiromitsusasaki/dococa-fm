@@ -39,7 +39,7 @@ describe("composeEpisode", () => {
     expect(seg!.lines).toEqual([
       { type: "dj", text: "Dococa FM。世界のどこかにいる誰かの好きなものへのお便りを、お届けします。", fixed: true, bridge: "bridge.open" },
       { type: "dj", text: "はじめ", unit: { letterId: "a", part: "intro" } },
-      { type: "dj", text: "みなとさん（函館）からのお便りです。", fixed: true },
+      { type: "dj", text: "函館にお住まいの、みなとさんからのお便りです。", fixed: true },
       { type: "letter", letterId: "a", text: plain.bodyJa, radioName: "みなと", place: "函館", kind: "letter", sourceUrl: null, sourceAuthor: null },
       { type: "dj", text: "おわり", unit: { letterId: "a", part: "after" } },
       { type: "dj", text: "同じ作品に、別の方からもお便りが届いています。", fixed: true, bridge: "bridge.sameWork" },
@@ -47,8 +47,8 @@ describe("composeEpisode", () => {
       { type: "dj", text: "ネットで見つけた声です。@jazzcatさん、YouTubeのコメントから。", fixed: true },
       { type: "letter", letterId: "f", text: "故郷を思い出す。", radioName: "", place: "", kind: "found", sourceUrl: "https://www.youtube.com/watch?v=x", sourceAuthor: "@jazzcat" },
       { type: "dj", text: "二通目のあと", unit: { letterId: "f", part: "after" } },
-      { type: "dj", text: "あおいさん（那覇）から『私も』が届いています", fixed: true },
-      { type: "dj", text: "そらさん（熊本）から一言が届いています", fixed: true },
+      { type: "dj", text: "那覇にお住まいの、あおいさんから『私も』が届いています", fixed: true },
+      { type: "dj", text: "熊本にお住まいの、そらさんから一言が届いています", fixed: true },
       { type: "letter", letterId: "r", text: "わかります", radioName: "そら", place: "熊本", kind: "reply", sourceUrl: null, sourceAuthor: null },
       { type: "dj", text: "ここで一息。", fixed: true, bridge: "bridge.close" },
     ]);
@@ -58,16 +58,16 @@ describe("composeEpisode", () => {
     const b = letter({ id: "b", radioName: "そら", place: "" });
     const plan = [{ itemId: "i1", slot: "near" as const, letterIds: ["a", "b"], reactionIds: [] }];
     const texts = (us: Map<string, Unit> | null) => composeEpisode(plan, us, byId([plain, b]), items)[0]!.lines.map((l) => (l.type === "letter" ? `letter:${l.letterId}` : (l as { text: string }).text));
-    const bare = [t("bridge.open"), "みなとさん（函館）からのお便りです。", "letter:a", t("bridge.sameWork"), "そらさんからのお便りです。", "letter:b", t("bridge.close")];
+    const bare = [t("bridge.open"), "函館にお住まいの、みなとさんからのお便りです。", "letter:a", t("bridge.sameWork"), "そらさんからのお便りです。", "letter:b", t("bridge.close")];
     expect(texts(null)).toEqual(bare);
     expect(texts(unitsOf(unit("a", "紹介", "感想", false), unit("b", "紹介b", "感想b", false)))).toEqual(bare);
     // The first letter's unit failed alone: no intro, since the next letter's intro was written about that letter.
     expect(texts(unitsOf(unit("a", "紹介", "感想", false), unit("b", "紹介b", "感想b")))).toEqual([
-      t("bridge.open"), "みなとさん（函館）からのお便りです。", "letter:a", t("bridge.sameWork"), "そらさんからのお便りです。", "letter:b", "感想b", t("bridge.close"),
+      t("bridge.open"), "函館にお住まいの、みなとさんからのお便りです。", "letter:a", t("bridge.sameWork"), "そらさんからのお便りです。", "letter:b", "感想b", t("bridge.close"),
     ]);
     // An empty line is not said.
     expect(texts(unitsOf(unit("a", "", "感想")))).toEqual([
-      t("bridge.open"), "みなとさん（函館）からのお便りです。", "letter:a", "感想", t("bridge.sameWork"), "そらさんからのお便りです。", "letter:b", t("bridge.close"),
+      t("bridge.open"), "函館にお住まいの、みなとさんからのお便りです。", "letter:a", "感想", t("bridge.sameWork"), "そらさんからのお便りです。", "letter:b", t("bridge.close"),
     ]);
   });
 
@@ -75,7 +75,7 @@ describe("composeEpisode", () => {
     const r2 = letter({ id: "r2", kind: "reply", body: "届きました", bodyJa: "届きました", radioName: "そら", place: "熊本" });
     const [seg] = composeEpisode([{ itemId: "i1", slot: "near", letterIds: ["r2", "a"], reactionIds: [] }], unitsOf(unit("a", "紹介", "感想")), byId([r2, plain]), items);
     expect(seg!.lines.map((l) => (l.type === "letter" ? `letter:${l.letterId}` : (l as { text: string }).text))).toEqual([
-      t("bridge.open"), "そらさん（熊本）からのお便りです。", "letter:r2", t("bridge.sameWork"), "みなとさん（函館）からのお便りです。", "letter:a", "感想", t("bridge.close"),
+      t("bridge.open"), "熊本にお住まいの、そらさんからのお便りです。", "letter:r2", t("bridge.sameWork"), "函館にお住まいの、みなとさんからのお便りです。", "letter:a", "感想", t("bridge.close"),
     ]);
   });
 
@@ -127,7 +127,7 @@ describe("composeEpisode", () => {
       items,
     );
     for (const seg of segs) {
-      expect(seg.lines[1]).toEqual({ type: "dj", text: "みなとさん（函館）からのお便りです。", fixed: true });
+      expect(seg.lines[1]).toEqual({ type: "dj", text: "函館にお住まいの、みなとさんからのお便りです。", fixed: true });
       // Only template lines: the reading cue and the spoken found-voice source.
       expect(seg.lines.filter((l) => l.type === "dj").every((l) => l.type === "dj" && l.fixed === true)).toBe(true);
     }
@@ -140,7 +140,7 @@ describe("composeEpisode", () => {
     const texts = seg!.lines.filter((l) => l.type === "dj").map((l) => (l as { text: string }).text);
     expect(texts).toEqual([
       t("bridge.open"),
-      "みなとさん（函館）からのお便りです。",
+      "函館にお住まいの、みなとさんからのお便りです。",
       t("bridge.sameWork"),
       "そらさんからのお便りです。",
       t("bridge.close"),
@@ -161,8 +161,8 @@ describe("composeEpisode", () => {
     const [seg] = composeEpisode([{ itemId: "i1", slot: "near", letterIds: [], reactionIds: ["w1", "r"] }], unitsOf(unit("r", "は", "お")), letters, items);
     expect(seg!.lines.map((l) => (l.type === "letter" ? `letter:${l.letterId}` : l.type === "dj" ? l.text : l.type))).toEqual([
       t("bridge.open"),
-      "あおいさん（那覇）から『私も』が届いています",
-      "そらさん（熊本）から一言が届いています",
+      "那覇にお住まいの、あおいさんから『私も』が届いています",
+      "熊本にお住まいの、そらさんから一言が届いています",
       "letter:r",
       t("bridge.close"),
     ]);
@@ -197,7 +197,7 @@ describe("composeEpisode in english", () => {
     expect(said).toEqual([
       t("bridge.open", undefined, "en"),
       "A quiet piece.",
-      "A letter from みなと (Shimane, Japan).",
+      "A letter from みなと, who lives in Shimane, Japan.",
       "letter:I listened alone at midnight.",
       "Lovely.",
       t("bridge.sameWork", undefined, "en"),
@@ -206,8 +206,8 @@ describe("composeEpisode in english", () => {
       t("bridge.sameWork", undefined, "en"),
       "Reading the letters.",
       `letter:${plain.body}`,
-      'A "me too" from あおい (那覇)',
-      "A note from そら (熊本)",
+      'A "me too" from あおい, who lives in 那覇',
+      "A note from そら, who lives in 熊本",
       "letter:わかります",
       t("bridge.close", undefined, "en"),
     ]);
@@ -217,6 +217,26 @@ describe("composeEpisode in english", () => {
 
   it("calls an unknown site the web in english", () => {
     expect(siteName("not a url", "en")).toBe("the web");
+  });
+});
+
+describe("saying where a sender lives", () => {
+  const minato = letter({ id: "m", radioName: "みなと", place: "東京" });
+  const say = (lang: "ja" | "en", ...ls: ReturnType<typeof letter>[]) =>
+    composeEpisode([{ itemId: "i1", slot: "near" as const, letterIds: [ls[0]!.id], reactionIds: ls.slice(1).map((l) => l.id) }], null, byId(ls), items, lang)[0]!.lines.flatMap((l) => (l.type === "dj" ? [l.text] : []));
+
+  it("hands over a named sender with the place said as where they live", () => {
+    expect(say("ja", minato)).toContain("東京にお住まいの、みなとさんからのお便りです。");
+    expect(say("en", { ...minato, placeCountry: "JP", placeRegion: "13" })).toContain("A letter from みなと, who lives in Tokyo, Japan.");
+  });
+
+  it("keeps the plain hand-over when there is no place", () => {
+    expect(say("ja", { ...minato, place: "" })).toContain("みなとさんからのお便りです。");
+  });
+
+  it("says reactions with the same phrase", () => {
+    const wm = letter({ id: "x", kind: "watashimo", radioName: "みなと", place: "東京", parentLetterId: "m" });
+    expect(say("ja", plain, wm)).toContain("東京にお住まいの、みなとさんから『私も』が届いています");
   });
 });
 
@@ -254,7 +274,7 @@ describe("bridges", () => {
     const b = letter({ id: "b", radioName: "そら", place: "" });
     const [s] = composeEpisode([seg("i1", "near", ["a", "b"])], unitsOf(unit("a", "紹介", "感想a"), unit("b", "紹介b", "感想b")), byId([plain, b]), items);
     expect(texts(s!.lines)).toEqual([
-      t("bridge.open"), "紹介", "みなとさん（函館）からのお便りです。", plain.bodyJa, "感想a",
+      t("bridge.open"), "紹介", "函館にお住まいの、みなとさんからのお便りです。", plain.bodyJa, "感想a",
       t("bridge.sameWork"), "そらさんからのお便りです。", b.bodyJa, "感想b", t("bridge.close"),
     ]);
   });

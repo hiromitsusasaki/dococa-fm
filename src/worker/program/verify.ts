@@ -37,12 +37,16 @@ const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 const fixedPatterns = (lang: Lang) =>
   FIXED_TEMPLATES.map((key) => new RegExp(`^${t(key, undefined, lang).split(/\{\w+\}/u).map((part) => escapeRe(norm(part))).join("(.*?)")}$`, "u"));
 const FIXED_PATTERNS: Record<Lang, RegExp[]> = { ja: fixedPatterns("ja"), en: fixedPatterns("en") };
+/** The sender phrase filled into `{who}` is itself a template, so its own wording is not a quote either. */
+const whoPlacePattern = (lang: Lang) =>
+  new RegExp(`^${t("script.whoPlace", undefined, lang).split(/\{\w+\}/u).map((part) => escapeRe(norm(part))).join("(.*?)")}$`, "u");
+const WHO_PLACE: Record<Lang, RegExp> = { ja: whoPlacePattern("ja"), en: whoPlacePattern("en") };
 
 /** What was filled into a fixed line of the episode's language; the whole line when it matches no template. */
 function filledValues(text: string, lang: Lang): string {
   for (const re of FIXED_PATTERNS[lang]) {
     const m = text.match(re);
-    if (m) return m.slice(1).join(NAME);
+    if (m) return m.slice(1).flatMap((value) => WHO_PLACE[lang].exec(value)?.slice(1) ?? [value]).join(NAME);
   }
   return text;
 }

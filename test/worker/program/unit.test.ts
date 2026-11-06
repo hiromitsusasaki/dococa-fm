@@ -162,7 +162,7 @@ describe("unitSegment", () => {
     const l = letter({ bodyEn: "I listened alone at midnight.", placeCountry: "JP", placeRegion: "01" });
     expect(unitSegment({ intro: "A quiet piece.", after: "Lovely." }, l, item(), "en").lines).toEqual([
       { type: "dj", text: "A quiet piece.", unit: { letterId: "l1", part: "intro" } },
-      { type: "dj", text: "A letter from みなと (Hokkaido, Japan).", fixed: true },
+      { type: "dj", text: "A letter from みなと, who lives in Hokkaido, Japan.", fixed: true },
       expect.objectContaining({ type: "letter", letterId: "l1", text: "I listened alone at midnight.", place: "函館", placeCountry: "JP", placeRegion: "01" }),
       { type: "dj", text: "Lovely.", unit: { letterId: "l1", part: "after" } },
     ]);
@@ -172,7 +172,7 @@ describe("unitSegment", () => {
     const seg = unitSegment(null, letter(), item(), "ja");
     expect(seg.itemId).toBe("i1");
     expect(seg.lines).toEqual([
-      { type: "dj", text: "みなとさん（函館）からのお便りです。", fixed: true },
+      { type: "dj", text: "函館にお住まいの、みなとさんからのお便りです。", fixed: true },
       expect.objectContaining({ type: "letter", letterId: "l1", text: letter().bodyJa }),
     ]);
   });

@@ -62,13 +62,13 @@ describe("buildEpisode", () => {
     // The intro follows the open bridge, whichever letter the shuffle reads first.
     expect(said[1]).toBe("近くの紹介です。");
     const at = said.indexOf(`letter:${f.near.id}`);
-    expect(said.slice(at - 1, at + 2)).toEqual(["しずくさん（松本）からのお便りです。", `letter:${f.near.id}`, "近くの感想です。"]);
-    expect(said).toContain("あおいさん（那覇）から『私も』が届いています");
+    expect(said.slice(at - 1, at + 2)).toEqual(["松本にお住まいの、しずくさんからのお便りです。", `letter:${f.near.id}`, "近くの感想です。"]);
+    expect(said).toContain("那覇にお住まいの、あおいさんから『私も』が届いています");
     expect(near.lines).toContainEqual(expect.objectContaining({ type: "letter", letterId: f.mineReply.id, text: "わかります" }));
     // The listener's own letter is never read back to them.
     expect(near.lines.some((l) => l.type === "letter" && l.letterId === f.mine.id)).toBe(false);
     const far = texts(ep.segments.find((s) => s.itemId === f.i1)!.lines);
-    expect(far.slice(1, 5)).toEqual(["遠くの紹介です。", "しずくさん（松本）からのお便りです。", `letter:${f.far.id}`, "遠くの感想です。"]);
+    expect(far.slice(1, 5)).toEqual(["遠くの紹介です。", "松本にお住まいの、しずくさんからのお便りです。", `letter:${f.far.id}`, "遠くの感想です。"]);
     expect(typeof ep.id).toBe("string");
   });
 
@@ -83,7 +83,7 @@ describe("buildEpisode", () => {
     const all = ep.segments.flatMap((s) => s.lines);
     expect(all).toContainEqual(expect.objectContaining({ type: "letter", letterId: near.id, text: "On a snowy morning." }));
     expect(all).toContainEqual(expect.objectContaining({ type: "letter", letterId: f.near.id, text: f.near.body }));
-    expect(djTexts(all)).toContain("A letter from しずく (Nagano, Japan).");
+    expect(djTexts(all)).toContain("A letter from しずく, who lives in Nagano, Japan.");
     expect(djTexts(all)).not.toContain("近くの紹介です。");
     expect(djTexts(all)).toContain("A quiet piece.");
     expect((await getUnits(env.DB, [f.near.id, near.id], "en")).size).toBe(2);
@@ -222,13 +222,13 @@ describe("buildEpisode", () => {
     const f = await fixture();
     await insertLetter(env.DB, letterDraft(f.i1, { listenerId: null, radioName: "ゆう", place: "", body: "ネットで見つけた声ですよね、これ。", bodyJa: "ネットで見つけた声ですよね、これ。" }));
     await insertLetter(env.DB, letterDraft(f.i1, { kind: "found", listenerId: null, sourceAuthor: "@jazzcat", sourceUrl: "https://youtu.be/x", body: "so good", bodyJa: "とてもいい" }));
-    await insertLetter(env.DB, letterDraft(f.i0, { listenerId: null, radioName: "ゆう", place: "", body: "あおいさん(那覇)から『私も』が届いていますね", bodyJa: "あおいさん(那覇)から『私も』が届いていますね" }));
+    await insertLetter(env.DB, letterDraft(f.i0, { listenerId: null, radioName: "ゆう", place: "", body: "那覇にお住まいの、あおいさんから『私も』が届いていますね", bodyJa: "那覇にお住まいの、あおいさんから『私も』が届いていますね" }));
     const ep = await buildEpisode(keyless, env.DB, f.a, { size: 2, seed: "s" });
     expect(ep.verified).toBe(true);
     expect(ep.report.pii).toBe(true);
     const texts = ep.segments.flatMap((s) => djTexts(s.lines));
     expect(texts).toContain("ネットで見つけた声です。@jazzcatさん、YouTubeのコメントから。");
-    expect(texts).toContain("あおいさん（那覇）から『私も』が届いています");
+    expect(texts).toContain("那覇にお住まいの、あおいさんから『私も』が届いています");
   });
 
   it("still fails a fixed line whose filled-in name quotes a letter", async () => {
