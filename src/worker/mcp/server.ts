@@ -8,6 +8,7 @@ import type { ja } from "../i18n/ja";
 import { type Lang, tFor } from "../i18n/t";
 import { type LetterFailure, type LetterInput, createLetter } from "../letters/create";
 import { makeEpisode } from "../program/create";
+import { prepareLetter } from "../program/prepare";
 import { loadPublicEpisode } from "../program/stored";
 import type { Episode, Listener } from "../types";
 import { renderEpisode, renderItemPage } from "./markdown";
@@ -48,7 +49,7 @@ async function itemPageWithNotice(db: D1Database, itemId: string, notice: string
 }
 
 /** Exactly four tools: the DJ side never gets write access beyond placing a letter or a reaction as the listener. */
-export function createMcpServer(env: Env, db: D1Database, listener: Listener): McpServer {
+export function createMcpServer(env: Env, db: D1Database, listener: Listener, waitUntil: (work: Promise<unknown>) => void = () => {}): McpServer {
   const server = new McpServer({ name: "dococa-fm", version: "0.1.0" });
   const lang = listener.lang;
   const t = tFor(lang);
@@ -79,6 +80,7 @@ export function createMcpServer(env: Env, db: D1Database, listener: Listener): M
 
   const place = async (input: LetterInput, notice: string): Promise<ToolResult> => {
     const result = await createLetter(env, db, listener, input);
+    if (result.ok && result.letter.kind === "letter") waitUntil(prepareLetter(env, db, result.letter.id));
     return result.ok ? itemPageWithNotice(db, result.itemId, notice, lang) : fail(failureText(result, lang));
   };
 

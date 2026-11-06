@@ -1,15 +1,17 @@
 import { env } from "cloudflare:workers";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, type MockInstance, vi } from "vitest";
 import app from "../../../src/worker/index";
 import { insertItem } from "../../../src/worker/db/items";
 import { insertLetter, listLettersForItem } from "../../../src/worker/db/letters";
 import { t } from "../../../src/worker/i18n/t";
+import * as prepare from "../../../src/worker/program/prepare";
 import { resetDb } from "../../helpers/db";
 import { okReply, stubAnthropic } from "../../helpers/anthropic";
 import { itemDraft, letterDraft } from "../db/helpers";
 import { get, signedInSession, postForm } from "./helpers";
 
 let create: ReturnType<typeof stubAnthropic>;
+let prepared: MockInstance<typeof prepare.prepareLetter>;
 
 const verdict = (input: unknown) => ({ content: [{ type: "tool_use", id: "j", name: "judge_letter", input }] });
 const translation = (ja: string) => ({ content: [{ type: "tool_use", id: "t", name: "translate", input: { ja } }] });
@@ -19,6 +21,7 @@ beforeEach(async () => {
   (env as { ANTHROPIC_API_KEY: string }).ANTHROPIC_API_KEY = "sk-test";
   create = stubAnthropic();
   create.mockImplementation(okReply);
+  prepared = vi.spyOn(prepare, "prepareLetter").mockResolvedValue({ units: 0, audio: 0, failed: 0 });
 });
 afterEach(() => {
   vi.restoreAllMocks();
@@ -215,6 +218,27 @@ describe("POST /letters", () => {
     expect(res.status).toBe(303);
     const rows = await env.DB.prepare("SELECT kind, parent_letter_id FROM letters WHERE kind = 'reply'").all();
     expect(rows.results).toEqual([{ kind: "reply", parent_letter_id: parent.id }]);
+  });
+
+  it("schedules the unit and audio of a new letter, but not of a watashimo", async () => {
+    const item = await seedItem();
+    const parent = await insertLetter(env.DB, letterDraft(item.id));
+    const cookie = await signedInSession();
+    expect((await postForm("/letters", cookie, { itemId: item.id, body: "中学の頃、毎日聴いていた" })).status).toBe(303);
+    const [l] = (await listLettersForItem(env.DB, item.id)).filter((x) => x.body === "中学の頃、毎日聴いていた");
+    expect(prepared).toHaveBeenCalledTimes(1);
+    expect(prepared.mock.calls[0]![2]).toBe(l!.id);
+
+    expect((await postForm("/letters", cookie, { itemId: item.id, kind: "watashimo", parentLetterId: parent.id, body: "x" })).status).toBe(303);
+    expect(prepared).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not schedule anything for a letter that is turned down", async () => {
+    const item = await seedItem();
+    create.mockResolvedValue(verdict({ ok: false, reason: "advert" }));
+    const res = await postForm("/letters", await signedInSession(), { itemId: item.id, body: "買ってください" });
+    expect(res.status).toBe(422);
+    expect(prepared).not.toHaveBeenCalled();
   });
 
   it("watashimo has fixed text, skips Claude, and a second one is 409", async () => {

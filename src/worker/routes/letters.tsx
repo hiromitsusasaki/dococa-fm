@@ -11,7 +11,9 @@ import { getLetter, insertReport, insertTakedown, listReactionsForLetter } from 
 import type { Env } from "../env";
 import type { ja } from "../i18n/ja";
 import { type Lang, tFor } from "../i18n/t";
+import { defer } from "../defer";
 import { createLetter } from "../letters/create";
+import { prepareLetter } from "../program/prepare";
 import type { ItemDraft } from "../resolve";
 import type { Listener } from "../types";
 import { PutPage } from "./put";
@@ -52,7 +54,11 @@ letters.post(
     const form = c.req.valid("form");
     const t = tFor(c.get("listener").lang);
     const result = await createLetter(c.env, c.env.DB, c.get("listener"), form);
-    if (result.ok) return c.redirect(`/items/${result.itemId}`, 303);
+    if (result.ok) {
+      // Reactions are fixed phrases and have no unit to make.
+      if (result.letter.kind === "letter") defer(c, prepareLetter(c.env, c.env.DB, result.letter.id));
+      return c.redirect(`/items/${result.itemId}`, 303);
+    }
     const message = result.reason ? `${t(result.key)} ${t(`letters.reason.${result.reason}` as keyof typeof ja)}` : t(result.key);
     return putError(c, form, message, result.status, result.draft);
   },

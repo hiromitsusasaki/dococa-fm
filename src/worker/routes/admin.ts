@@ -8,8 +8,10 @@ import { getItem } from "../db/items";
 import { getLetter, insertLetter, listFoundSources, setLetterStatus } from "../db/letters";
 import { createListener, getListener } from "../db/listeners";
 import type { Env } from "../env";
+import { defer } from "../defer";
 import { createLetter } from "../letters/create";
 import { makeEpisode } from "../program/create";
+import { prepareBatch, prepareLetter } from "../program/prepare";
 import { looksLikeContact } from "../program/pii-patterns";
 import { resolveOrCreate, resolveUrl } from "../resolve";
 import { isFetchableUrl } from "../resolve/url";
@@ -127,6 +129,10 @@ admin.post("/admin/found", async (c) => {
     });
     letterIds.push(letter.id);
   }
+  // One after another: fifty voices at once would ask Claude and Google fifty times in parallel.
+  defer(c, (async () => {
+    for (const id of letterIds) await prepareLetter(c.env, c.env.DB, id);
+  })());
   return c.json({ letterIds, skipped, rejected });
 });
 
@@ -214,5 +220,15 @@ admin.post("/admin/letters", async (c) => {
   if (!listener.demo) return c.json({ error: "not a demo listener" }, 403);
   const made = await createLetter(c.env, c.env.DB, listener, { itemId, url, body });
   if (!made.ok) return c.json({ error: made.key, ...(made.reason ? { reason: made.reason } : {}) }, made.status);
+  defer(c, prepareLetter(c.env, c.env.DB, made.letter.id));
   return c.json({ letterId: made.letter.id, itemId: made.itemId });
+});
+
+const prepareSchema = z.object({ limit: z.number().int().min(1).max(50).default(20) });
+
+/** The cron's work by hand: up to `limit` units and the audio that is still missing (use after seeding). */
+admin.post("/admin/prepare", async (c) => {
+  const parsed = prepareSchema.safeParse((await readJson(c)) ?? {});
+  if (!parsed.success) return invalid(c, parsed.error);
+  return c.json(await prepareBatch(c.env, c.env.DB, parsed.data.limit));
 });

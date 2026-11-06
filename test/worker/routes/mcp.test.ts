@@ -6,6 +6,7 @@ import { insertLetter, listLettersForItem, listReactionsForLetter, setLetterStat
 import { createListener, updateListener } from "../../../src/worker/db/listeners";
 import { upsertHistory } from "../../../src/worker/db/history";
 import { t } from "../../../src/worker/i18n/t";
+import * as prepare from "../../../src/worker/program/prepare";
 import { resetDb } from "../../helpers/db";
 import { okReply, stubAnthropic } from "../../helpers/anthropic";
 import { itemDraft, letterDraft } from "../db/helpers";
@@ -18,6 +19,7 @@ beforeEach(async () => {
   (env as { ANTHROPIC_API_KEY: string }).ANTHROPIC_API_KEY = "";
   vi.spyOn(console, "warn").mockImplementation(() => {});
   vi.spyOn(console, "error").mockImplementation(() => {});
+  vi.spyOn(prepare, "prepareLetter").mockResolvedValue({ units: 0, audio: 0, failed: 0 });
 });
 afterEach(() => {
   vi.restoreAllMocks();
@@ -153,6 +155,21 @@ describe("/mcp/:token", () => {
     const dup = await call(me.mcpToken, "post_letter", { itemId: far.id, body: "中学の頃、毎日聴いていた" });
     expect(dup.body.result.isError).toBe(true);
     expect(textOf(dup)).toBe(t("letters.duplicate"));
+  });
+
+  it("post_letter schedules the unit of the new letter, and react schedules nothing", async () => {
+    create = stubAnthropic();
+    create.mockImplementation(okReply);
+    (env as { ANTHROPIC_API_KEY: string }).ANTHROPIC_API_KEY = "sk-test";
+    const { me, far } = await seed();
+    await updateListener(env.DB, me.id, { googleSub: "g-me" });
+    await call(me.mcpToken, "post_letter", { itemId: far.id, body: "中学の頃、毎日聴いていた" });
+    const mine = (await listLettersForItem(env.DB, far.id)).find((l) => l.listenerId === me.id)!;
+    expect(prepare.prepareLetter).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(prepare.prepareLetter).mock.calls[0]![2]).toBe(mine.id);
+    const [parent] = await listLettersForItem(env.DB, far.id);
+    await call(me.mcpToken, "react", { letterId: parent!.id, kind: "watashimo" });
+    expect(prepare.prepareLetter).toHaveBeenCalledTimes(1);
   });
 
   it("post_letter fails for an anonymous listener, and react still works", async () => {

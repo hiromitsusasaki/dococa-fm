@@ -5,7 +5,8 @@ import { createListener, getListener } from "../../../src/worker/db/listeners";
 import { insertItem } from "../../../src/worker/db/items";
 import { insertLetter, listLettersForItem } from "../../../src/worker/db/letters";
 import { t } from "../../../src/worker/i18n/t";
-import { stubAnthropic } from "../../helpers/anthropic";
+import * as prepare from "../../../src/worker/program/prepare";
+import { stubAnthropic, toolUse } from "../../helpers/anthropic";
 import { resetDb } from "../../helpers/db";
 import { json, stubFetch } from "../../helpers/fetch";
 import { itemDraft, letterDraft } from "../db/helpers";
@@ -19,7 +20,11 @@ const call = (method: string, path: string, body?: unknown, headers: Record<stri
 
 const voice = (over: Record<string, unknown> = {}) => ({ body: "十五の夏に、この曲だけ聴いていました。", author: "ゆうき", url: "https://www.youtube.com/watch?v=abc&lc=c1", ...over });
 
-beforeEach(() => resetDb(env.DB));
+beforeEach(async () => {
+  await resetDb(env.DB);
+  // The hooks run the real preparation unless a test turns it into a spy.
+  vi.spyOn(prepare, "prepareLetter").mockResolvedValue({ units: 0, audio: 0, failed: 0 });
+});
 afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
@@ -39,7 +44,7 @@ describe("admin auth", () => {
 
   it("answers 401 for every admin route when ADMIN_TOKEN is empty, even with an empty bearer", async () => {
     const empty = { ...env, ADMIN_TOKEN: "" };
-    for (const [m, p] of [["POST", "/admin/found"], ["POST", "/admin/items"], ["GET", "/admin/items/x"], ["POST", "/admin/episodes"], ["POST", "/admin/letters/x/reject"]]) {
+    for (const [m, p] of [["POST", "/admin/found"], ["POST", "/admin/items"], ["GET", "/admin/items/x"], ["POST", "/admin/episodes"], ["POST", "/admin/letters/x/reject"], ["POST", "/admin/prepare"]]) {
       expect((await call(m!, p!, {}, { authorization: "Bearer " }, empty)).status).toBe(401);
       expect((await call(m!, p!, {}, { authorization: "Bearer" }, empty)).status).toBe(401);
     }
@@ -93,6 +98,22 @@ describe("POST /admin/found", () => {
     expect(foundSection).toContain("ゆうき");
     expect(foundSection).toContain("https://www.youtube.com/watch?v=abc&amp;lc=c1");
     expect(html.slice(0, html.indexOf(t("item.foundVoices")))).not.toContain("ゆうき");
+  });
+
+  it("prepares each stored voice after the response", async () => {
+    const item = await insertItem(env.DB, itemDraft());
+    const res = await post({ itemId: item.id, voices: [voice(), voice({ url: "https://www.youtube.com/watch?v=abc&lc=c2" })] });
+    const { letterIds } = (await res.json()) as { letterIds: string[] };
+    expect(letterIds).toHaveLength(2);
+    expect(vi.mocked(prepare.prepareLetter).mock.calls.map((c) => c[2])).toEqual(letterIds);
+  });
+
+  it("prepares nothing when the batch stored nothing", async () => {
+    const item = await insertItem(env.DB, itemDraft());
+    await post({ itemId: item.id, voices: [voice()] });
+    vi.mocked(prepare.prepareLetter).mockClear();
+    await post({ itemId: item.id, voices: [voice()] });
+    expect(prepare.prepareLetter).not.toHaveBeenCalled();
   });
 
   it("skips a url already stored for the item and a repeat inside the same request", async () => {
@@ -165,6 +186,41 @@ describe("POST /admin/found", () => {
     expect(again.letterIds).toEqual([]);
     expect(again.skipped).toEqual([first.letterIds[0]]);
     expect(await listLettersForItem(env.DB, item.id)).toHaveLength(0);
+  });
+});
+
+describe("POST /admin/prepare", () => {
+  const keyed = { ...e, ANTHROPIC_API_KEY: "sk-test", GOOGLE_TTS_SA_JSON: "" };
+  const post = (body?: unknown, headers?: Record<string, string>) => call("POST", "/admin/prepare", body, headers, keyed);
+
+  async function seedLetters(n: number) {
+    const item = await insertItem(env.DB, itemDraft());
+    for (let i = 0; i < n; i++) await insertLetter(env.DB, letterDraft(item.id, { body: `手紙${i}`, bodyJa: `手紙${i}` }));
+  }
+
+  it("answers 401 without the token", async () => {
+    expect((await post({}, {})).status).toBe(401);
+  });
+
+  it("makes the missing units and reports what is left", async () => {
+    await seedLetters(2);
+    vi.mocked(prepare.prepareLetter).mockRestore();
+    stubAnthropic().mockResolvedValue(toolUse("write_unit", { intro: "静かな一曲です。", after: "いいお便りでした。" }));
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const res = await post({});
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ units: 2, audio: 0, failed: 0, remaining: { units: 0, audio: 2 } });
+  });
+
+  it("takes a limit of 1 to 50, 20 by default", async () => {
+    await seedLetters(3);
+    vi.mocked(prepare.prepareLetter).mockRestore();
+    const create = stubAnthropic();
+    create.mockResolvedValue(toolUse("write_unit", { intro: "静かな一曲です。", after: "いいお便りでした。" }));
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    expect(await (await post({ limit: 1 })).json()).toMatchObject({ units: 1, remaining: { units: 2 } });
+    expect(await (await post()).json()).toMatchObject({ units: 2, remaining: { units: 0 } });
+    for (const limit of [0, 51, 1.5, "5"]) expect((await post({ limit })).status).toBe(422);
   });
 });
 
@@ -307,6 +363,9 @@ describe("POST /admin/letters", () => {
     expect(out.itemId).toBe(item.id);
     const [l] = await listLettersForItem(env.DB, item.id);
     expect(l).toMatchObject({ id: out.letterId, body: "I loved this at 15", bodyJa: "15 歳のときに大好きだった", lang: "en", listenerId, radioName: "Marisol", demo: true });
+
+    expect(prepare.prepareLetter).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(prepare.prepareLetter).mock.calls[0]![2]).toBe(out.letterId);
 
     const page = await (await get(`/items/${item.id}`, await newSession())).text();
     expect(page).toContain("Marisolさん（Oaxaca）");

@@ -2,6 +2,7 @@ import { StreamableHTTPTransport } from "@hono/mcp";
 import { Hono } from "hono";
 import { getListenerByMcpToken, isWellFormedMcpToken } from "../db/listeners";
 import type { Env } from "../env";
+import { defer } from "../defer";
 import { createMcpServer } from "../mcp/server";
 import { mcpIpBlocked, mcpTokenOver, mcpUnauthorizedOver } from "../security/rate-limit";
 
@@ -20,7 +21,7 @@ mcp.all("/mcp/:token", async (c) => {
   if (!listener) return mcpUnauthorizedOver(c.env, ip) ? limited() : c.json({ error: "unauthorized" }, 401);
   if (mcpTokenOver(c.env, token)) return limited();
   // Stateless: a server and a transport per request, no session id.
-  const server = createMcpServer(c.env, c.env.DB, listener);
+  const server = createMcpServer(c.env, c.env.DB, listener, (work) => defer(c, work));
   const transport = new StreamableHTTPTransport();
   await server.connect(transport);
   return (await transport.handleRequest(c)) ?? c.body(null, 204);

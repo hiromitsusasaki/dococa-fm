@@ -75,3 +75,28 @@ export async function listUnitsWithoutAudio(db: D1Database, lang: Unit["lang"], 
     .all<Row>();
   return results.map(rowToUnit);
 }
+
+/** Public letters of kind letter/found with no unit in `lang`. */
+export async function countLettersWithoutUnit(db: D1Database, lang: Unit["lang"]): Promise<number> {
+  const row = await db
+    .prepare(
+      `SELECT COUNT(*) AS n FROM letters l
+       WHERE l.status = 'public' AND l.kind IN ('letter', 'found')
+         AND NOT EXISTS (SELECT 1 FROM units u WHERE u.letter_id = l.id AND u.lang = ?)`,
+    )
+    .bind(lang)
+    .first<{ n: number }>();
+  return row?.n ?? 0;
+}
+
+/** Verified units of public letters whose audio is not ready yet. */
+export async function countUnitsWithoutAudio(db: D1Database, lang: Unit["lang"]): Promise<number> {
+  const row = await db
+    .prepare(
+      `SELECT COUNT(*) AS n FROM units u JOIN letters l ON l.id = u.letter_id
+       WHERE u.lang = ? AND u.verified = 1 AND u.audio_ready = 0 AND l.status = 'public'`,
+    )
+    .bind(lang)
+    .first<{ n: number }>();
+  return row?.n ?? 0;
+}

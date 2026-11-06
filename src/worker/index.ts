@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { secureHeaders } from "hono/secure-headers";
 import { type Variables, requireSessionSecret, sessionMiddleware } from "./auth/session";
 import type { Env } from "./env";
+import { prepareBatch } from "./program/prepare";
 import { admin } from "./routes/admin";
 import { auth } from "./routes/auth";
 import { authGoogle } from "./routes/auth-google";
@@ -59,4 +60,11 @@ app.get("*", async (c) => {
   return new Response(res.body, res);
 });
 
-export default app;
+/** Every 15 minutes: units for letters that have none and audio that is still missing. */
+async function scheduled(_event: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
+  ctx.waitUntil(prepareBatch(env, env.DB));
+}
+
+// The app itself stays the default export (tests call `app.request` and read `app.routes`); the runtime finds
+// `fetch` and `scheduled` on it.
+export default Object.assign(app, { scheduled } satisfies Pick<Required<ExportedHandler<Env>>, "scheduled">);
