@@ -57,7 +57,7 @@ describe("origin check", () => {
   });
 
   it("covers every write route outside /admin and /mcp, and does not mint a listener for a refused one", async () => {
-    for (const path of ["/start", "/episodes", "/settings", "/settings/mcp-token", "/settings/dial", "/takedown"]) {
+    for (const path of ["/start", "/episodes", "/settings", "/settings/mcp-token", "/settings/dial", "/takedown", "/listens"]) {
       const res = await form({ origin: "https://evil.example" }, path);
       expect(res.status, path).toBe(403);
       expect(res.headers.get("set-cookie")).toBeNull();
@@ -342,6 +342,7 @@ describe("rate-limit allowlist covers every write route", () => {
       .filter((p) => !p.startsWith("/admin") && !p.startsWith("/mcp") && p !== "*" && !p.includes("*"))
       .map((p) => p.replace(/:[A-Za-z]+/g, "x"));
     expect(posts).toContain("/settings/dial");
+    expect(posts).toContain("/listens");
     expect(posts.length).toBeGreaterThan(8);
     for (const path of posts) expect(isRateLimited("POST", path, new URLSearchParams()), path).toBe(true);
   });

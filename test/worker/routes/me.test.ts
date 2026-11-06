@@ -6,6 +6,7 @@ import { insertItem } from "../../../src/worker/db/items";
 import { insertLetter } from "../../../src/worker/db/letters";
 import { updateListener } from "../../../src/worker/db/listeners";
 import { insertEpisode } from "../../../src/worker/db/episodes";
+import { recordListen } from "../../../src/worker/db/listens";
 import { t } from "../../../src/worker/i18n/t";
 import { resetDb } from "../../helpers/db";
 import { itemDraft, letterDraft } from "../db/helpers";
@@ -88,14 +89,25 @@ describe("GET /me", () => {
       verified: true,
       report: { verbatim: true, sources: true, topical: true, pii: true, details: [] },
     });
+    // Only what was actually played counts: the programme also holds la, which was never started.
+    await recordListen(env.DB, { listenerId: me, episodeId: ep.id, letterId: lb.id, segmentIndex: 1 });
     const html = await (await get("/me", cookie)).text();
+    expect(html).not.toContain("Aへのお便り");
     expect(html).toContain(t("me.heard"));
     expect(html).toContain("Bへのお便り");
-    expect(html).toContain("那覇");
+    expect(html).not.toContain("那覇");
     expect(html).toContain(`href="/episodes/${ep.id}?seg=1"`);
     expect(html).toContain(`name="parentLetterId" value="${lb.id}"`);
     expect(html).not.toMatch(/\d+ ?件/);
     expect(html).not.toMatch(/\d+ letters/);
+  });
+
+  it("says so when nothing has been heard, even if an episode holds letters", async () => {
+    const cookie = await signedInSession();
+    const a = await insertItem(env.DB, itemDraft());
+    const l = await insertLetter(env.DB, letterDraft(a.id));
+    await insertEpisode(env.DB, { listenerId: idOf(cookie), segments: [{ itemId: a.id, slot: "near", lines: [{ type: "letter", letterId: l.id, text: l.body, radioName: l.radioName, place: l.place, kind: "letter", sourceUrl: null, sourceAuthor: null }] }], verified: true, report: { verbatim: true, sources: true, topical: true, pii: true, details: [] } });
+    expect(await (await get("/me", cookie)).text()).toContain(t("me.heardNone"));
   });
 
   it("says so when nothing has been heard", async () => {
@@ -107,12 +119,13 @@ describe("GET /me", () => {
     const cookie = await signedInSession();
     const a = await insertItem(env.DB, itemDraft());
     const found = await insertLetter(env.DB, letterDraft(a.id, { kind: "found", radioName: "", place: "", sourceAuthor: "@jazzcat", sourceUrl: "https://youtu.be/x", body: "so good", bodyJa: "とてもいい" }));
-    await insertEpisode(env.DB, {
+    const ep = await insertEpisode(env.DB, {
       listenerId: idOf(cookie),
       segments: [{ itemId: a.id, slot: "far", lines: [{ type: "letter", letterId: found.id, text: "とてもいい", radioName: "", place: "", kind: "found", sourceUrl: "https://youtu.be/x", sourceAuthor: "@jazzcat" }] }],
       verified: true,
       report: { verbatim: true, sources: true, topical: true, pii: true, details: [] },
     });
+    await recordListen(env.DB, { listenerId: idOf(cookie), episodeId: ep.id, letterId: found.id, segmentIndex: 0 });
     const html = await (await get("/me", cookie)).text();
     expect(html).toContain("@jazzcat");
     expect(html).toContain('href="https://youtu.be/x"');
