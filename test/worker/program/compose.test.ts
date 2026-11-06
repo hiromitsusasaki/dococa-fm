@@ -28,7 +28,7 @@ const letters = byId([plain, found, w("w1", "あおい"), w("w2", "いつき"), 
 const items = byId([item({ id: "i1" }), item({ id: "i2", previewUrl: null })]);
 
 describe("composeEpisode", () => {
-  it("lays out bridge, intro, hand-over, letter, after per letter, then reactions and the closing bridge", () => {
+  it("lays out bridge, intro, hand-over, letter, after per letter, then reactions, with no closing bridge", () => {
     const [seg] = composeEpisode(
       [{ itemId: "i1", slot: "near", letterIds: ["a", "f"], reactionIds: ["w1", "r"] }],
       unitsOf(unit("a", "はじめ", "おわり"), unit("f", "二通目の紹介", "二通目のあと")),
@@ -50,7 +50,6 @@ describe("composeEpisode", () => {
       { type: "dj", text: "那覇にお住まいの、あおいさんから『私も』が届いています", fixed: true },
       { type: "dj", text: "熊本にお住まいの、そらさんから一言が届いています", fixed: true },
       { type: "letter", letterId: "r", text: "わかります", radioName: "そら", place: "熊本", kind: "reply", sourceUrl: null, sourceAuthor: null },
-      { type: "dj", text: "ここで一息。", fixed: true, bridge: "bridge.close" },
     ]);
   });
 
@@ -58,16 +57,16 @@ describe("composeEpisode", () => {
     const b = letter({ id: "b", radioName: "そら", place: "" });
     const plan = [{ itemId: "i1", slot: "near" as const, letterIds: ["a", "b"], reactionIds: [] }];
     const texts = (us: Map<string, Unit> | null) => composeEpisode(plan, us, byId([plain, b]), items)[0]!.lines.map((l) => (l.type === "letter" ? `letter:${l.letterId}` : (l as { text: string }).text));
-    const bare = [t("bridge.open"), "函館にお住まいの、みなとさんからのお便りです。", "letter:a", t("bridge.sameWork"), "そらさんからのお便りです。", "letter:b", t("bridge.close")];
+    const bare = [t("bridge.open"), "函館にお住まいの、みなとさんからのお便りです。", "letter:a", t("bridge.sameWork"), "そらさんからのお便りです。", "letter:b"];
     expect(texts(null)).toEqual(bare);
     expect(texts(unitsOf(unit("a", "紹介", "感想", false), unit("b", "紹介b", "感想b", false)))).toEqual(bare);
     // The first letter's unit failed alone: no intro, since the next letter's intro was written about that letter.
     expect(texts(unitsOf(unit("a", "紹介", "感想", false), unit("b", "紹介b", "感想b")))).toEqual([
-      t("bridge.open"), "函館にお住まいの、みなとさんからのお便りです。", "letter:a", t("bridge.sameWork"), "そらさんからのお便りです。", "letter:b", "感想b", t("bridge.close"),
+      t("bridge.open"), "函館にお住まいの、みなとさんからのお便りです。", "letter:a", t("bridge.sameWork"), "そらさんからのお便りです。", "letter:b", "感想b",
     ]);
     // An empty line is not said.
     expect(texts(unitsOf(unit("a", "", "感想")))).toEqual([
-      t("bridge.open"), "函館にお住まいの、みなとさんからのお便りです。", "letter:a", "感想", t("bridge.sameWork"), "そらさんからのお便りです。", "letter:b", t("bridge.close"),
+      t("bridge.open"), "函館にお住まいの、みなとさんからのお便りです。", "letter:a", "感想", t("bridge.sameWork"), "そらさんからのお便りです。", "letter:b",
     ]);
   });
 
@@ -75,7 +74,7 @@ describe("composeEpisode", () => {
     const r2 = letter({ id: "r2", kind: "reply", body: "届きました", bodyJa: "届きました", radioName: "そら", place: "熊本" });
     const [seg] = composeEpisode([{ itemId: "i1", slot: "near", letterIds: ["r2", "a"], reactionIds: [] }], unitsOf(unit("a", "紹介", "感想")), byId([r2, plain]), items);
     expect(seg!.lines.map((l) => (l.type === "letter" ? `letter:${l.letterId}` : (l as { text: string }).text))).toEqual([
-      t("bridge.open"), "熊本にお住まいの、そらさんからのお便りです。", "letter:r2", t("bridge.sameWork"), "函館にお住まいの、みなとさんからのお便りです。", "letter:a", "感想", t("bridge.close"),
+      t("bridge.open"), "熊本にお住まいの、そらさんからのお便りです。", "letter:r2", t("bridge.sameWork"), "函館にお住まいの、みなとさんからのお便りです。", "letter:a", "感想",
     ]);
   });
 
@@ -143,7 +142,6 @@ describe("composeEpisode", () => {
       "函館にお住まいの、みなとさんからのお便りです。",
       t("bridge.sameWork"),
       "そらさんからのお便りです。",
-      t("bridge.close"),
     ]);
   });
 
@@ -164,7 +162,6 @@ describe("composeEpisode", () => {
       "那覇にお住まいの、あおいさんから『私も』が届いています",
       "熊本にお住まいの、そらさんから一言が届いています",
       "letter:r",
-      t("bridge.close"),
     ]);
     expect(verifyEpisode([seg!], letters, listener(), items).details).toEqual([]);
   });
@@ -209,7 +206,6 @@ describe("composeEpisode in english", () => {
       'A "me too" from あおい, who lives in 那覇',
       "A note from そら, who lives in 熊本",
       "letter:わかります",
-      t("bridge.close", undefined, "en"),
     ]);
     const r = verifyEpisode([seg!], all, listener({ lang: "en" }), items, "en");
     expect(r).toEqual({ verbatim: true, sources: true, topical: true, pii: true, details: [] });
@@ -275,7 +271,7 @@ describe("bridges", () => {
     const [s] = composeEpisode([seg("i1", "near", ["a", "b"])], unitsOf(unit("a", "紹介", "感想a"), unit("b", "紹介b", "感想b")), byId([plain, b]), items);
     expect(texts(s!.lines)).toEqual([
       t("bridge.open"), "紹介", "函館にお住まいの、みなとさんからのお便りです。", plain.bodyJa, "感想a",
-      t("bridge.sameWork"), "そらさんからのお便りです。", b.bodyJa, "感想b", t("bridge.close"),
+      t("bridge.sameWork"), "そらさんからのお便りです。", b.bodyJa, "感想b",
     ]);
   });
 
@@ -294,16 +290,21 @@ describe("bridges", () => {
     expect(texts(s2!.lines).filter((x) => x === t("bridge.sameWork"))).toHaveLength(0);
   });
 
-  it("ends the episode, and only the episode, with the close bridge", () => {
+  it("never says the close bridge: a programme has no end the DJ can know", () => {
     const segs = composeEpisode([seg("i1", "near", ["a"]), seg("i2", "far", ["a"])], null, letters, items);
-    expect(segs[0]!.lines.at(-1)).not.toMatchObject({ text: t("bridge.close") });
-    expect(segs[1]!.lines.at(-1)).toEqual({ type: "dj", text: t("bridge.close"), fixed: true, bridge: "bridge.close" });
+    expect(segs.flatMap((s) => s.lines).some((l) => (l as { bridge?: string }).bridge === "bridge.close")).toBe(false);
+  });
+
+  it("opens only the first programme of a visit; a later one starts with its slot bridge", () => {
+    const [later] = composeEpisode([seg("i2", "far", ["a"])], null, letters, items, "ja", "mine", { first: false });
+    expect(later!.lines[0]).toEqual({ type: "dj", text: t("bridge.far"), fixed: true, bridge: "bridge.far" });
+    const [firstOne] = composeEpisode([seg("i2", "far", ["a"])], null, letters, items, "ja", "mine", { first: true });
+    expect(firstOne!.lines[0]).toMatchObject({ bridge: "bridge.open" });
   });
 
   it("uses the listener's language for the bridge lines", () => {
     const [s] = composeEpisode([seg("i1", "near", ["a"])], null, letters, items, "en");
     expect(s!.lines[0]).toEqual({ type: "dj", text: t("bridge.open", undefined, "en"), fixed: true, bridge: "bridge.open" });
-    expect(s!.lines.at(-1)).toEqual({ type: "dj", text: t("bridge.close", undefined, "en"), fixed: true, bridge: "bridge.close" });
   });
 
   it("verifies as a whole even when a letter says 「お便り」 and the open sentence", () => {

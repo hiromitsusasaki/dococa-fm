@@ -1,3 +1,4 @@
+import { getLetter } from "../db/letters";
 import type { Listener } from "../types";
 import { ECHO_SQL, FAR_SQL, letterIdsSql, NEAR_SQL, NEIGHBOR_SQL, OWNER_FAVORITES_SQL } from "./select-sql";
 import type { StationKey } from "./station";
@@ -84,42 +85,74 @@ async function publicProgram(db: D1Database, listener: Listener, ownerId: string
   return (await withLetters(db, listener, pool, "near", rng)).filter(hasLetters);
 }
 
+/**
+ * The letter a listener asked to hear (a link to it): it must be someone else's public letter, or a found voice with
+ * its source, and still readable. Its item takes the first seat with that letter read first. Anything else: null.
+ */
+async function askedLetter(db: D1Database, listener: Listener, letterId: string, rng: () => number): Promise<{ itemId: string; letterIds: string[] } | null> {
+  const l = await getLetter(db, letterId);
+  if (!l || l.status !== "public" || l.listenerId === listener.id) return null;
+  const sourced = Boolean(l.sourceUrl?.trim()) && Boolean(l.sourceAuthor?.trim());
+  if (!(l.kind === "letter" || (l.kind === "found" && sourced))) return null;
+  const readable = (await letterIdsByItem(db, listener.id, [l.itemId])).get(l.itemId) ?? [];
+  if (!readable.includes(l.id)) return null;
+  const others = shuffle(readable.filter((id) => id !== l.id), rng);
+  return { itemId: l.itemId, letterIds: [l.id, ...others].slice(0, MAX_LETTERS_PER_SEGMENT) };
+}
+
+/** A one-seat programme: the dial picks which pool is tried first; the rest follow far, near, neighbor. */
+function seatOrder(dial: number): Slot[] {
+  const primary: Slot = dial >= 2 / 3 ? "far" : dial >= 1 / 3 ? "neighbor" : "near";
+  return [primary, ...(["far", "near", "neighbor"] as const).filter((s) => s !== primary)];
+}
+
 export async function selectProgram(
   db: D1Database,
   listener: Listener,
-  opts: { size?: number; seed?: string; station?: StationKey } = {},
+  opts: { size?: number; seed?: string; station?: StationKey; dial?: number; letterId?: string } = {},
 ): Promise<Selection[]> {
   const size = Math.max(0, Math.floor(opts.size ?? 6));
   const rng = seededRng(opts.seed ?? crypto.randomUUID());
   if (opts.station?.kind === "world") return worldProgram(db, listener, size, rng);
   if (opts.station?.kind === "public") return publicProgram(db, listener, opts.station.ownerId, size, rng);
-  const dial = Math.min(1, Math.max(0, listener.dial));
+  // The dial the player sends wins over the stored one.
+  const dial = Math.min(1, Math.max(0, opts.dial ?? listener.dial));
+  const asked = size > 0 && opts.letterId ? await askedLetter(db, listener, opts.letterId, rng) : null;
+  const room = size - (asked ? 1 : 0);
 
-  const farQuota = Math.min(size, Math.max(1, Math.round(size * dial)));
-  const remaining = size - farQuota;
+  const farQuota = Math.min(room, Math.max(1, Math.round(room * dial)));
+  const remaining = room - farQuota;
   const nearQuota = Math.round((remaining * 2) / 3);
   const neighborQuota = remaining - nearQuota;
 
-  const echo = nearQuota > 0 ? await echoItem(db, listener, rng) : null;
-  const taken = new Set<string>(echo ? [echo] : []);
-  const pool = async (sql: string) => shuffle((await ids(db, sql, listener.id)).filter((id) => !taken.has(id)), rng);
-
+  // With one seat the echo takes it whatever the dial says.
+  const echo = room === 1 || nearQuota > 0 ? await echoItem(db, listener, rng) : null;
+  const taken = new Set<string>([...(echo ? [echo] : []), ...(asked ? [asked.itemId] : [])]);
+  const raw: Record<Slot, string[]> = {
+    near: await ids(db, NEAR_SQL, listener.id),
+    neighbor: await ids(db, NEIGHBOR_SQL, listener.id),
+    far: await ids(db, FAR_SQL, listener.id),
+  };
   const pools: Record<Slot, string[]> = {
-    near: await pool(NEAR_SQL),
-    neighbor: await pool(NEIGHBOR_SQL),
-    far: await pool(FAR_SQL),
+    near: shuffle(raw.near.filter((id) => !taken.has(id)), rng),
+    neighbor: shuffle(raw.neighbor.filter((id) => !taken.has(id)), rng),
+    far: shuffle(raw.far.filter((id) => !taken.has(id)), rng),
   };
 
   const chosen: Record<Slot, string[]> = { near: echo ? [echo] : [], neighbor: [], far: [] };
-  // The echo item uses one unit of the near quota; it never adds to the program size.
-  const nearRoom = nearQuota - (echo ? 1 : 0);
-  const quota: Record<Slot, number> = { near: nearRoom, neighbor: neighborQuota, far: farQuota };
-  for (const slot of ["near", "neighbor", "far"] as const) chosen[slot].push(...pools[slot].splice(0, Math.max(0, quota[slot])));
-  // Seats near and neighbor cannot fill go to far (then to whatever is left), never to works nobody has written about.
   const count = () => chosen.near.length + chosen.neighbor.length + chosen.far.length;
-  for (const slot of ["far", "near", "neighbor"] as const) {
-    if (count() >= size) break;
-    chosen[slot].push(...pools[slot].splice(0, size - count()));
+  if (room === 1) {
+    for (const slot of seatOrder(dial)) if (count() < 1) chosen[slot].push(...pools[slot].splice(0, 1));
+  } else if (room > 1) {
+    // The echo item uses one unit of the near quota; it never adds to the program size.
+    const nearRoom = nearQuota - (echo ? 1 : 0);
+    const quota: Record<Slot, number> = { near: nearRoom, neighbor: neighborQuota, far: farQuota };
+    for (const slot of ["near", "neighbor", "far"] as const) chosen[slot].push(...pools[slot].splice(0, Math.max(0, quota[slot])));
+    // Seats near and neighbor cannot fill go to far (then to whatever is left), never to works nobody has written about.
+    for (const slot of ["far", "near", "neighbor"] as const) {
+      if (count() >= room) break;
+      chosen[slot].push(...pools[slot].splice(0, room - count()));
+    }
   }
 
   const readable = await letterIdsByItem(db, listener.id, [...chosen.near, ...chosen.neighbor, ...chosen.far]);
@@ -130,7 +163,10 @@ export async function selectProgram(
     }
   }
 
+  // The asked letter's item sits where the pools put it; an item no pool holds (nobody else wrote yet) counts as near.
+  const askedSlot: Slot = asked ? ((["near", "neighbor", "far"] as const).find((s) => raw[s].includes(asked.itemId)) ?? "near") : "near";
+  const head = asked ? [{ itemId: asked.itemId, slot: askedSlot, letterIds: asked.letterIds }] : [];
   const first = echo ? segments.near.splice(0, 1) : [];
   // The echo stays even without a letter: the reactions it carries are other people's words, read verbatim.
-  return [...first, ...interleave([segments.near, segments.neighbor, segments.far]).filter(hasLetters)];
+  return [...head, ...first, ...interleave([segments.near, segments.neighbor, segments.far]).filter(hasLetters)];
 }

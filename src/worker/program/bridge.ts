@@ -9,11 +9,12 @@ export type BridgeKey = "bridge.open" | "bridge.near" | "bridge.neighbor" | "bri
 export const BRIDGE_KEYS: readonly BridgeKey[] = ["bridge.open", "bridge.near", "bridge.neighbor", "bridge.far", "bridge.next", "bridge.sameWork", "bridge.close"];
 
 /**
- * The bridge before segment `index` of a programme: `open` for the first; on a public station the neutral
- * `next` (every work there is the owner's favourite, not the visitor's); else by slot.
+ * The bridge before a segment: `open` when it is the first the listener hears on this visit; on a public station the
+ * neutral `next` (every work there is the owner's favourite, not the visitor's); else by slot. `close` is no longer
+ * said (a programme has no end the DJ can know); the key stays so stored episodes still render.
  */
-export function bridgeBefore(index: number, slot: Slot, station: StationKey["kind"]): BridgeKey {
-  if (index === 0) return "bridge.open";
+export function bridgeBefore(first: boolean, slot: Slot, station: StationKey["kind"]): BridgeKey {
+  if (first) return "bridge.open";
   if (station === "public") return "bridge.next";
   return `bridge.${slot}`;
 }

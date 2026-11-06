@@ -3,11 +3,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { upsertHistory } from "../../../src/worker/db/history";
 import { insertItem } from "../../../src/worker/db/items";
 import { insertLetter } from "../../../src/worker/db/letters";
-import { createListener, updateListener } from "../../../src/worker/db/listeners";
+import { createListener, getListener, updateListener } from "../../../src/worker/db/listeners";
 import app from "../../../src/worker/index";
 import { resetDb } from "../../helpers/db";
 import { itemDraft, letterDraft } from "../db/helpers";
-import { newSession } from "./helpers";
+import { newSession, signedInSession } from "./helpers";
 
 const ORIGIN = "http://127.0.0.1:5173";
 type Body = { episode: { id: string; segments: { slot: string; itemId: string }[]; items: Record<string, unknown>; cloudTts: boolean }; station: { key: string; label: string } };
@@ -106,6 +106,103 @@ describe("POST /stations/:key/next", () => {
     const res = await postNext("world", await newSession());
     expect(res.status).toBe(409);
     expect(await res.json()).toEqual({ error: "empty" });
+  });
+});
+
+describe("POST /stations/:key/next with the dial, first and a letter", () => {
+  type Line = { type: string; bridge?: string; letterId?: string };
+  type Full = { episode: { segments: { slot: string; itemId: string; lines: Line[] }[] } };
+  const idOf = (cookie: string) => cookie.split("=")[1]!.split(".")[0]!;
+  const send = (key: string, cookie: string, body: unknown) =>
+    app.request(`/stations/${key}/next`, { method: "POST", headers: { cookie, origin: ORIGIN, "content-type": "application/json" }, body: JSON.stringify(body) }, env);
+
+  /** The listener's own work with a letter from someone else (near), and three far works. */
+  async function seedMine(cookie: string) {
+    await seedWorld();
+    const me = idOf(cookie);
+    const other = await createListener(env.DB);
+    const near = await insertItem(env.DB, itemDraft({ title: "near", externalIds: { itunes: "900" } }));
+    await upsertHistory(env.DB, [{ listenerId: me, itemId: near.id, source: "manual", occurredAt: null, rank: 1 }]);
+    const mine = await insertLetter(env.DB, letterDraft(near.id, { listenerId: me, body: "私の手紙", bodyJa: "私の手紙" }));
+    await insertLetter(env.DB, letterDraft(near.id, { listenerId: other.id, body: "近くの手紙", bodyJa: "近くの手紙" }));
+    return { me, near, mine, other };
+  }
+
+  it("first: one segment that opens with the open bridge", async () => {
+    const cookie = await newSession();
+    await seedMine(cookie);
+    const res = await send("mine", cookie, { dial: 1, first: true });
+    expect(res.status).toBe(200);
+    const { episode } = (await res.json()) as Full;
+    expect(episode.segments).toHaveLength(1);
+    expect(episode.segments[0]!.slot).toBe("far");
+    expect(episode.segments[0]!.lines[0]!.bridge).toBe("bridge.open");
+  });
+
+  it("not first: the slot bridge leads, and nothing closes", async () => {
+    const cookie = await newSession();
+    await seedMine(cookie);
+    const { episode } = (await (await send("mine", cookie, { dial: 0, first: false })).json()) as Full;
+    expect(episode.segments).toHaveLength(1);
+    expect(episode.segments[0]!.lines[0]!.bridge).toBe(`bridge.${episode.segments[0]!.slot}`);
+    expect(episode.segments.flatMap((s) => s.lines).some((l) => l.bridge === "bridge.close")).toBe(false);
+  });
+
+  it("a body without first does not open either", async () => {
+    const cookie = await newSession();
+    await seedMine(cookie);
+    const { episode } = (await (await postNext("mine", cookie)).json()) as Full;
+    expect(episode.segments[0]!.lines[0]!.bridge).not.toBe("bridge.open");
+  });
+
+  it("answers 400 for a dial out of range or a body of the wrong shape, and makes nothing", async () => {
+    const cookie = await newSession();
+    await seedMine(cookie);
+    for (const body of [{ dial: 2 }, { dial: -0.1 }, { first: "yes" }, { letterId: "" }, { letterId: "x".repeat(101) }, [1]]) {
+      const res = await send("mine", cookie, body);
+      expect(res.status).toBe(400);
+      expect(await res.json()).toEqual({ error: "bad request" });
+    }
+    const count = await env.DB.prepare("SELECT COUNT(*) AS n FROM episodes").first<{ n: number }>();
+    expect(count!.n).toBe(0);
+  });
+
+  it("reads the letter the listener came for", async () => {
+    const cookie = await newSession();
+    await seedMine(cookie);
+    const writer = await createListener(env.DB);
+    const far = await insertItem(env.DB, itemDraft({ title: "asked", externalIds: { itunes: "901" } }));
+    const asked = await insertLetter(env.DB, letterDraft(far.id, { listenerId: writer.id, body: "聴いてほしい", bodyJa: "聴いてほしい" }));
+    const { episode } = (await (await send("mine", cookie, { dial: 0, first: true, letterId: asked.id })).json()) as Full;
+    expect(episode.segments).toHaveLength(1);
+    expect(episode.segments[0]!.itemId).toBe(far.id);
+    expect(episode.segments[0]!.lines.some((l) => l.type === "letter" && l.letterId === asked.id)).toBe(true);
+  });
+
+  it("picks as usual when the letter is the listener's own, and ignores a letter on the world station", async () => {
+    const cookie = await newSession();
+    const { mine, near } = await seedMine(cookie);
+    const { episode } = (await (await send("mine", cookie, { dial: 0, letterId: mine.id })).json()) as Full;
+    expect(episode.segments).toHaveLength(1);
+    expect(episode.segments[0]!.itemId).toBe(near.id);
+    expect(episode.segments[0]!.lines.some((l) => l.letterId === mine.id)).toBe(false);
+    const writer = await createListener(env.DB);
+    const asked = await insertLetter(env.DB, letterDraft(near.id, { listenerId: writer.id, body: "別の手紙", bodyJa: "別の手紙" }));
+    const world = (await (await send("world", cookie, { letterId: asked.id })).json()) as Full;
+    expect(world.episode.segments[0]!.slot).toBe("far");
+  });
+
+  it("keeps a signed-in listener's dial from the request, and only theirs", async () => {
+    const signed = await signedInSession();
+    await seedMine(signed);
+    expect((await send("mine", signed, { dial: 0.9 })).status).toBe(200);
+    expect((await getListener(env.DB, idOf(signed)))!.dial).toBe(0.9);
+
+    const anon = await newSession();
+    await seedMine(anon);
+    const before = (await getListener(env.DB, idOf(anon)))!.dial;
+    expect((await send("mine", anon, { dial: 0.9 })).status).toBe(200);
+    expect((await getListener(env.DB, idOf(anon)))!.dial).toBe(before);
   });
 });
 
@@ -245,6 +342,14 @@ describe("GET /stations/:key (page)", () => {
     const it = await insertItem(env.DB, itemDraft({ title: "mine-1" }));
     await upsertHistory(env.DB, [{ listenerId, itemId: it.id, source: "manual", occurredAt: null, rank: 1 }]);
     expect(await (await page("mine", cookie)).text()).toContain('data-grow="0"');
+  });
+
+  it("mine carries a letter asked for in the url; other stations and odd values do not", async () => {
+    const cookie = await newSession();
+    expect(await (await page("mine?letter=abc-123", cookie)).text()).toContain('data-letter="abc-123"');
+    expect(await (await page("mine", cookie)).text()).not.toContain("data-letter");
+    expect(await (await page(`mine?letter=${"x".repeat(101)}`, cookie)).text()).not.toContain("data-letter");
+    expect(await (await page("world?letter=abc-123", cookie)).text()).not.toContain("data-letter");
   });
 
   it("a public station page carries og tags, titled with the owner's radio name, never the google display name", async () => {

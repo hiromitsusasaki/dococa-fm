@@ -40,7 +40,8 @@ export async function buildEpisode(
   env: Env,
   db: D1Database,
   listener: Listener,
-  opts: { size?: number; seed?: string; station?: StationKey } = {},
+  /** `first`: the first programme of a visit, which the DJ opens (true unless said otherwise). */
+  opts: { size?: number; seed?: string; station?: StationKey; dial?: number; letterId?: string; first?: boolean } = {},
 ): Promise<Episode> {
   // The programme is made in the listener's language: units, fixed lines, the letters' renderings and the checks.
   const lang = listener.lang;
@@ -97,7 +98,7 @@ export async function buildEpisode(
 
   const readLetters = plan.flatMap((p) => p.letterIds.map((id) => letters.get(id)!));
   const units = readLetters.length > 0 ? await ensureUnits(env, db, readLetters, items, lang) : new Map<string, Unit>();
-  const compose = (u: ReadonlyMap<string, Unit> | null) => finish(composeEpisode(plan, u, letters, items, lang, opts.station?.kind ?? "mine"));
+  const compose = (u: ReadonlyMap<string, Unit> | null) => finish(composeEpisode(plan, u, letters, items, lang, opts.station?.kind ?? "mine", { first: opts.first ?? true }));
 
   const usable = (u: ReadonlyMap<string, Unit>) => [...u.values()].some((x) => x.verified);
   if (usable(units)) {

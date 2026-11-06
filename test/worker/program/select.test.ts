@@ -332,3 +332,75 @@ describe("selectProgram stations", () => {
     expect(ownerListening.flatMap((s) => s.letterIds).some((id) => ownIds.has(id))).toBe(false);
   });
 });
+
+describe("selectProgram with one seat", () => {
+  beforeEach(() => resetDb(env.DB));
+  const seeds = ["s", "t", "u", "v", "w"];
+
+  it("lets the dial pick the pool: low near, middle neighbor, high far", async () => {
+    const f = await buildFixture();
+    for (const seed of seeds) {
+      expect((await selectProgram(env.DB, f.a, { size: 1, seed, dial: 0 })).map((s) => s.slot)).toEqual(["near"]);
+      expect((await selectProgram(env.DB, f.a, { size: 1, seed, dial: 0.5 })).map((s) => s.slot)).toEqual(["neighbor"]);
+      expect((await selectProgram(env.DB, f.a, { size: 1, seed, dial: 1 })).map((s) => s.slot)).toEqual(["far"]);
+    }
+  });
+
+  it("takes the dial from the request over the stored one", async () => {
+    const f = await buildFixture();
+    const p = await selectProgram(env.DB, { ...f.a, dial: 1 }, { size: 1, seed: "s", dial: 0 });
+    expect(p.map((s) => s.slot)).toEqual(["near"]);
+  });
+
+  it("falls back far, then near, then neighbor when the dial's pool is empty", async () => {
+    const f = await buildFixture();
+    // C's own items are i5..i11; only C and the found voice "zed" wrote there, so C has no neighbor.
+    const p = await selectProgram(env.DB, f.c, { size: 1, seed: "s", dial: 0.5 });
+    expect(p.map((s) => s.slot)).toEqual(["far"]);
+  });
+
+  it("gives the seat to the echo whatever the dial says", async () => {
+    const f = await buildFixture();
+    const x = await insertItem(env.DB, itemDraft({ title: "echo" }));
+    const mine = await insertLetter(env.DB, letterDraft(x.id, { listenerId: f.a.id, body: "A on echo" }));
+    await insertEpisode(env.DB, { listenerId: f.a.id, segments: [], verified: true, report: { verbatim: true, sources: true, topical: true, pii: true, details: [] }, createdAt: new Date(Date.now() - 60_000).toISOString() });
+    await insertLetter(env.DB, letterDraft(x.id, { kind: "watashimo", listenerId: f.b.id, parentLetterId: mine.id }));
+    for (const seed of seeds) {
+      const p = await selectProgram(env.DB, f.a, { size: 1, seed, dial: 1 });
+      expect(p).toHaveLength(1);
+      expect(p[0]?.slot).toBe("near");
+      expect([x.id, f.items[0]]).toContain(p[0]?.itemId);
+    }
+  });
+
+  it("seats a letter the listener asked for, read first, with the slot its item has", async () => {
+    const f = await buildFixture();
+    const asked = await insertLetter(env.DB, letterDraft(f.items[9]!, { listenerId: f.b.id, body: "B on 9" }));
+    const p = await selectProgram(env.DB, f.a, { size: 1, seed: "s", dial: 0, letterId: asked.id });
+    expect(p).toHaveLength(1);
+    // B also wrote on A's i0, so i9 is in A's neighbor pool now.
+    expect(p[0]).toMatchObject({ itemId: f.items[9], slot: "neighbor" });
+    expect(p[0]!.letterIds[0]).toBe(asked.id);
+  });
+
+  it("seats a sourced found voice too", async () => {
+    const f = await buildFixture();
+    const voice = await insertLetter(env.DB, letterDraft(f.items[1]!, { kind: "found", sourceAuthor: "hana", sourceUrl: "https://example.com/hana", body: "hana on 1" }));
+    const p = await selectProgram(env.DB, f.a, { size: 1, seed: "s", dial: 1, letterId: voice.id });
+    expect(p[0]).toMatchObject({ itemId: f.items[1], slot: "near" });
+    expect(p[0]!.letterIds[0]).toBe(voice.id);
+  });
+
+  it("ignores an asked letter that is the listener's own, not public, a reaction, unknown, or a found voice without a source", async () => {
+    const f = await buildFixture();
+    const hidden = await insertLetter(env.DB, letterDraft(f.items[9]!, { listenerId: f.b.id, body: "hidden" }));
+    await setLetterStatus(env.DB, hidden.id, "rejected");
+    const bare = await insertLetter(env.DB, letterDraft(f.items[10]!, { kind: "found", sourceAuthor: null, sourceUrl: null, body: "no source" }));
+    for (const id of [f.letters.own[0]!, hidden.id, f.letters.watashimo[0]!, bare.id, "no-such-letter"]) {
+      const p = await selectProgram(env.DB, f.a, { size: 1, seed: "s", dial: 0, letterId: id });
+      expect(p).toHaveLength(1);
+      expect(p[0]?.slot).toBe("near");
+      expect(p[0]!.letterIds).not.toContain(id);
+    }
+  });
+});

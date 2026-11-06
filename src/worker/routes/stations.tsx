@@ -8,7 +8,7 @@ import { getListenerBySlug } from "../db/listeners";
 import type { Env } from "../env";
 import { ja } from "../i18n/ja";
 import { type Lang, tFor } from "../i18n/t";
-import { makeEpisode } from "../program/create";
+import { makeEpisode, readNextBody } from "../program/create";
 import { playerView } from "../program/player-view";
 import { type StationKey, parseStationKey, stationColumn, stationLabel, stationUrl } from "../program/station";
 import { jsonForScript } from "./episodes";
@@ -53,10 +53,12 @@ export type StationPageProps = {
   hideName?: boolean;
   /** Content above the player (the home page's hero). */
   top?: unknown;
+  /** A letter the listener came to hear (`/stations/mine?letter=`): the first request asks for it. */
+  letter?: string;
 };
 
 /** The station screen: the player mounts into `#station` and takes everything it needs from its data attributes. */
-export function StationPage({ stationKey, label, lang, listener, path, voice, dial, grow, title, og, children, hideName, top }: StationPageProps) {
+export function StationPage({ stationKey, label, lang, listener, path, voice, dial, grow, title, og, children, hideName, top, letter }: StationPageProps) {
   return (
     <Layout title={title ?? label} script="station" lang={lang} listener={listener} path={path} og={og}>
       <main class="station-page">
@@ -73,6 +75,7 @@ export function StationPage({ stationKey, label, lang, listener, path, voice, di
           data-voice={voice}
           data-dial={String(dial)}
           data-grow={grow ? "1" : "0"}
+          data-letter={letter}
         ></div>
         <script type="application/json" id="station-i18n">
           {rawHtml(jsonForScript(stationStrings(lang)))}
@@ -88,7 +91,11 @@ stations.post("/stations/:key/next", async (c) => {
   const listener = c.get("listener");
   const station = await resolve(c.env, raw);
   if (!station) return c.json({ error: "station" }, 404);
-  const made = await makeEpisode(c.env, listener, { station: station.key });
+  const body = await readNextBody(c.req.raw);
+  if (!body) return c.json({ error: "bad request" }, 400);
+  // A letter link is for the listener's own station; the world and public stations pick from their own pools.
+  const { letterId, ...rest } = body;
+  const made = await makeEpisode(c.env, listener, { ...rest, ...(station.key.kind === "mine" && letterId ? { letterId } : {}), station: station.key });
   if (!made.ok) return c.json({ error: made.reason }, made.reason === "limit" ? 429 : made.reason === "empty" ? 409 : 503);
   const stored = await getVerifiedEpisode(c.env.DB, made.id);
   if (!stored) return c.json({ error: "unavailable" }, 503);
@@ -109,7 +116,9 @@ stations.get("/stations/:key", async (c) => {
 
   if (!asJson) {
     const grow = station.key.kind === "mine" && (await listHistory(c.env.DB, listener.id, 1)).length === 0;
-    return c.html(<StationPage stationKey={raw} label={label} lang={listener.lang} listener={listener} path={currentPath(c)} voice={listener.voice} dial={listener.dial} grow={grow} og={station.url ? { title: label, description: tFor(listener.lang)("app.tagline"), url: station.url } : undefined} />);
+    const asked = c.req.query("letter") ?? "";
+    const letter = station.key.kind === "mine" && asked.length > 0 && asked.length <= 100 ? asked : undefined;
+    return c.html(<StationPage letter={letter} stationKey={raw} label={label} lang={listener.lang} listener={listener} path={currentPath(c)} voice={listener.voice} dial={listener.dial} grow={grow} og={station.url ? { title: label, description: tFor(listener.lang)("app.tagline"), url: station.url } : undefined} />);
   }
 
   // Resume after a reload. With `?id=` it is that very episode, if it is this listener's, was made on this station and

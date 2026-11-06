@@ -54,6 +54,21 @@ describe("POST /episodes", () => {
     expect(rows[0]!.verified).toBe(true);
   });
 
+  it("makes one segment that opens, from a form post and from a json body with first", async () => {
+    const cookie = await newSession();
+    await seed(cookie);
+    const fromForm = await getEpisode(env.DB, locationId(await postForm("/episodes", cookie, {})));
+    expect(fromForm!.segments).toHaveLength(1);
+    expect(fromForm!.segments[0]!.lines[0]).toMatchObject({ bridge: "bridge.open" });
+    const json = await app.request("/episodes", { method: "POST", headers: { cookie, "content-type": "application/json" }, body: JSON.stringify({ first: true, dial: 0.5 }) }, env);
+    expect(json.status).toBe(303);
+    const fromJson = await getEpisode(env.DB, locationId(json));
+    expect(fromJson!.segments).toHaveLength(1);
+    expect(fromJson!.segments[0]!.lines[0]).toMatchObject({ bridge: "bridge.open" });
+    // The seed's far works are written by the same person as the listener's own work: neighbor.
+    expect(fromJson!.segments[0]!.slot).toBe("neighbor");
+  });
+
   it("answers 429 with the limit page once today's episodes reach the limit", async () => {
     const cookie = await newSession();
     await seed(cookie);
@@ -65,7 +80,7 @@ describe("POST /episodes", () => {
     expect(await listEpisodes(env.DB, idOf(cookie), 10)).toHaveLength(1);
   });
 
-  it("falls back to 10 when the limit is not a number, and a limit of 0 pauses episodes", async () => {
+  it("falls back to the default when the limit is not a number, and a limit of 0 pauses episodes", async () => {
     const cookie = await newSession();
     await seed(cookie);
     expect((await post("/episodes", cookie, { ...env, EPISODE_DAILY_LIMIT: "abc" })).status).toBe(303);
@@ -337,6 +352,22 @@ describe("POST /episodes/:id/next", () => {
     const { id } = (await res.json()) as { id: string };
     expect(id).not.toBe(first);
     expect(await getEpisode(env.DB, id)).not.toBeNull();
+  });
+
+  it("goes on without the open bridge, takes the dial from the body, and answers 400 for a bad body", async () => {
+    const cookie = await newSession();
+    await seed(cookie);
+    const first = locationId(await postForm("/episodes", cookie, {}));
+    const send = (body: unknown) => app.request(`/episodes/${first}/next`, { method: "POST", headers: { cookie, "content-type": "application/json" }, body: JSON.stringify(body) }, env);
+    const res = await send({ dial: 0.5 });
+    expect(res.status).toBe(200);
+    const next = await getEpisode(env.DB, ((await res.json()) as { id: string }).id);
+    expect(next!.segments).toHaveLength(1);
+    expect(next!.segments[0]!.slot).toBe("neighbor");
+    expect(next!.segments[0]!.lines[0]).toMatchObject({ bridge: "bridge.neighbor" });
+    const bad = await send({ dial: 2 });
+    expect(bad.status).toBe(400);
+    expect(await bad.json()).toEqual({ error: "bad request" });
   });
 
   it("answers 429 json at the limit and 503 json when unverifiable", async () => {

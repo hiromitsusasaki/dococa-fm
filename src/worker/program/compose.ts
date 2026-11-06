@@ -76,7 +76,7 @@ export function letterLines(l: Letter, unit: UnitLines | null, withIntro: boolea
 
 /**
  * Lays out each segment: bridge, the work's intro, then per letter [hand-over, letter, after] with a sameWork
- * bridge between letters, then the reactions; the close bridge ends the episode. The intro is the first
+ * bridge between letters, then the reactions; nothing closes the episode. The intro is the first
  * letter's own verified unit, said once before its hand-over; with none (a reply read first has no unit), none.
  * Letter lines come from `letters` only, so nothing the DJ wrote can stand in for a letter. Only verified
  * units speak; with `units === null`, or no verified unit for a letter, the DJ says only fixed phrases around it.
@@ -89,17 +89,19 @@ export function composeEpisode(
   lang: Lang = "ja",
   /** The station the programme airs on: a public one bridges with neutral lines. */
   station: StationKey["kind"] = "mine",
+  /** Whether this programme is the first the listener hears on this visit: only then the DJ opens. */
+  { first: opens = true }: { first?: boolean } = {},
 ): Segment[] {
   const spoken = (l: Letter): Unit | null => {
     const u = units?.get(l.id);
     return u?.verified ? u : null;
   };
-  const segments = plan.map((p, i) => {
+  return plan.map((p, i) => {
     const item = items.get(p.itemId);
     if (!item) throw new Error(`item missing: ${p.itemId}`);
     if (p.letterIds.length === 0 && p.reactionIds.length === 0) throw new Error("segment without letters");
     const present = p.letterIds.flatMap((id) => letters.get(id) ?? []);
-    const lines: ScriptLine[] = [bridgeLine(bridgeBefore(i, p.slot, station), lang)];
+    const lines: ScriptLine[] = [bridgeLine(bridgeBefore(opens && i === 0, p.slot, station), lang)];
     // A unit's intro was written with its own letter in the prompt, so it airs only before that letter.
     const first = present[0];
     const intro = first ? (spoken(first)?.intro ?? "") : "";
@@ -114,6 +116,4 @@ export function composeEpisode(
     }
     return { itemId: p.itemId, slot: p.slot, lines };
   });
-  segments.at(-1)?.lines.push(bridgeLine("bridge.close", lang));
-  return segments;
 }

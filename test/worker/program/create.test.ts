@@ -1,6 +1,6 @@
 import { env } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { getEpisode } from "../../../src/worker/db/episodes";
+import { getEpisode, insertEpisode } from "../../../src/worker/db/episodes";
 import { upsertHistory } from "../../../src/worker/db/history";
 import { insertItem } from "../../../src/worker/db/items";
 import { insertLetter } from "../../../src/worker/db/letters";
@@ -55,5 +55,23 @@ describe("makeEpisode cloud voice", () => {
     const me = await seed();
     const made = await makeEpisode({ ...env, GOOGLE_TTS_SA_JSON: "sa-test", CLOUD_TTS_GLOBAL_DAILY_LIMIT: "0" }, me);
     expect(made.ok).toBe(true);
+  });
+});
+
+describe("makeEpisode limits", () => {
+  it("allows 60 segments a day by default: the 61st is the limit", async () => {
+    const me = await seed();
+    const unset = { ...env, EPISODE_DAILY_LIMIT: "", EPISODE_GLOBAL_DAILY_LIMIT: "", GOOGLE_TTS_SA_JSON: "" };
+    // Made today already, cheaply: rows only.
+    for (let n = 0; n < 59; n++) await insertEpisode(env.DB, { listenerId: me.id, segments: [], verified: true, report: { verbatim: true, sources: true, topical: true, pii: true, details: [] } });
+    const sixtieth = await makeEpisode(unset, me);
+    expect(sixtieth.ok).toBe(true);
+    expect(await makeEpisode(unset, me)).toEqual({ ok: false, reason: "limit" });
+  });
+
+  it("makes one segment whatever the stored dial would have asked for", async () => {
+    const me = await seed();
+    const made = await makeEpisode({ ...env, GOOGLE_TTS_SA_JSON: "" }, me, { first: true });
+    expect((await getEpisode(env.DB, (made as { id: string }).id))!.segments).toHaveLength(1);
   });
 });

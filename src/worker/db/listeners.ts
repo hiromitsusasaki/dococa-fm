@@ -118,6 +118,11 @@ export async function updateListener(db: D1Database, id: string, patch: Partial<
   return getListener(db, id);
 }
 
+/** The dial alone, in one write: the player sends it with every request. */
+export async function setListenerDial(db: D1Database, id: string, dial: number): Promise<void> {
+  await db.prepare("UPDATE listeners SET dial = ? WHERE id = ?").bind(dial, id).run();
+}
+
 /**
  * Binds a Google account to a listener that has none yet. The write itself checks `google_sub IS NULL`, so two callbacks
  * racing on one listener cannot overwrite each other: the loser gets false. A sub already bound elsewhere throws (UNIQUE).

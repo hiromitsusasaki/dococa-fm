@@ -22,10 +22,10 @@ SESSION_SECRET=
 PUBLIC_ORIGIN=http://127.0.0.1:5173
 # 開発専用: 1 にすると、ANTHROPIC_API_KEY が空のときにお便りの判定と翻訳を素通しにする。本番では設定しない
 DEV_SKIP_CLAUDE=1
-# 任意: 1 リスナー 1 日の番組生成の上限
-EPISODE_DAILY_LIMIT=10
-# 任意: 全リスナー合計の 1 日の番組生成の上限（既定 300。0 で停止）
-EPISODE_GLOBAL_DAILY_LIMIT=300
+# 任意: 1 リスナー 1 日に作る枠（1 回 = 1 枠）の上限（既定 60。0 で停止）
+EPISODE_DAILY_LIMIT=60
+# 任意: 全リスナー合計の 1 日に作る枠の上限（既定 1800。0 で停止）
+EPISODE_GLOBAL_DAILY_LIMIT=1800
 # 任意: クラウド TTS で 1 日に合成する行数の上限（既定 3000。0 で停止）
 CLOUD_TTS_GLOBAL_DAILY_LIMIT=3000
 # 任意: 1 日に作る単位（お便りごとの DJ の語り。1 つで Claude を 1〜数回呼ぶ）の上限（既定 1000。0 で停止）

@@ -5,7 +5,7 @@
  *
  * Env: ADMIN_TOKEN, DOCOCA_ORIGIN (default http://127.0.0.1:5173); pnpm loads .dev.vars for you. The
  * listener id is shown on /settings. A run calls Claude only for letters whose unit is not made yet (run `POST /admin/prepare` first to make them), and the Worker caps
- * episodes per listener per day (EPISODE_DAILY_LIMIT, default 10): for 20 runs raise it for the eval run.
+ * episodes per listener per day (EPISODE_DAILY_LIMIT, default 60; each episode is one segment now).
  * Local only: the Worker never imports this file, and nothing here calls an LLM itself.
  */
 import { mkdir, writeFile } from "node:fs/promises";

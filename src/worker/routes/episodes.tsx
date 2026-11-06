@@ -9,7 +9,7 @@ import { getItemsByIds } from "../db/items";
 import type { Env } from "../env";
 import { ja } from "../i18n/ja";
 import { type Lang, tFor } from "../i18n/t";
-import { makeEpisode } from "../program/create";
+import { makeEpisode, readNextBody } from "../program/create";
 import { toPlayerView } from "../program/player-view";
 import { loadPublicEpisode, segmentReading } from "../program/stored";
 import type { Episode, Listener, ScriptLine } from "../types";
@@ -53,7 +53,9 @@ const readerOf = (l: Extract<ScriptLine, { type: "letter" }>, lang: Lang): strin
 export const startEpisode = async (c: Context<{ Bindings: Env; Variables: Variables }>) => {
   const lang = c.get("listener").lang;
   const t = tFor(lang);
-  const made = await makeEpisode(c.env, c.get("listener"));
+  // A form post carries no body we read; listening starts here, so the DJ opens unless told otherwise.
+  const body = (await readNextBody(c.req.raw)) ?? {};
+  const made = await makeEpisode(c.env, c.get("listener"), { ...body, first: body.first ?? true });
   if (made.ok) return c.redirect(`/episodes/${made.id}`, 303);
   if (made.reason === "empty") return c.html(<MessagePage message={t("episode.empty")} start listener={c.get("listener")} path={currentPath(c)} />, 200);
   return c.html(<MessagePage message={t(made.reason === "limit" ? "episode.limit" : "episode.unavailable")} listener={c.get("listener")} path={currentPath(c)} />, made.reason === "limit" ? 429 : 503);
@@ -162,7 +164,9 @@ episodes.get("/episodes/:id", async (c) => {
 
 episodes.post("/episodes/:id/next", async (c) => {
   if (!(await ownEpisode(c, c.req.param("id")))) return c.notFound();
-  const made = await makeEpisode(c.env, c.get("listener"));
+  const body = await readNextBody(c.req.raw);
+  if (!body) return c.json({ error: "bad request" }, 400);
+  const made = await makeEpisode(c.env, c.get("listener"), { ...body, first: body.first === true });
   if (made.ok) return c.json({ id: made.id });
   return c.json({ error: made.reason }, made.reason === "limit" ? 429 : made.reason === "empty" ? 409 : 503);
 });
