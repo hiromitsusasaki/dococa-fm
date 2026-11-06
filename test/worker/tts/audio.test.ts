@@ -110,7 +110,7 @@ describe("ensureAudio", () => {
     errorSpy.mockRestore();
   });
 
-  it("counts a paid synthesis even when storing fails, and a later request may synthesize again", async () => {
+  it("counts a paid synthesis even when storing fails, and counts the later synthesis of the same key too", async () => {
     vi.spyOn(console, "error").mockImplementation(() => {});
     const failing = new Proxy(env.BUCKET, {
       get(target, prop) {
@@ -125,6 +125,23 @@ describe("ensureAudio", () => {
     expect(await ensureAudio(keyed, env.DB, line)).toMatchObject({ ok: true, made: true });
     expect(fn).toHaveBeenCalledTimes(2);
     expect(await rowCount()).toBe(1);
+    expect(await countSynthesizedToday(env.DB)).toBe(2);
+  });
+
+  it("stops at the cap when one key was synthesized twice", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const failing = new Proxy(env.BUCKET, {
+      get(target, prop) {
+        if (prop === "put") return async () => { throw new Error("r2 down"); };
+        return (Reflect.get(target, prop) as (...a: unknown[]) => unknown).bind(target);
+      },
+    });
+    const { fn } = stubFetch([[GOOGLE, () => json({ audioContent: audio })]]);
+    const capped = { ...keyed, CLOUD_TTS_GLOBAL_DAILY_LIMIT: "2" };
+    expect(await ensureAudio({ ...capped, BUCKET: failing }, env.DB, line)).toEqual({ ok: false, reason: "failed" });
+    expect(await ensureAudio({ ...capped, BUCKET: failing }, env.DB, line)).toEqual({ ok: false, reason: "failed" });
+    expect(await ensureAudio(capped, env.DB, { ...line, text: "別の行です。" })).toEqual({ ok: false, reason: "limit" });
+    expect(fn).toHaveBeenCalledTimes(2);
   });
 
   it("answers failed for empty or whitespace text without touching the cap or Google", async () => {

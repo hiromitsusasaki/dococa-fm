@@ -27,18 +27,27 @@ export async function audioKey(lang: AudioLang, voice: AudioVoice, text: string)
   return `tts/v2/${lang}/${voice}/${await sha256Hex(text)}.mp3`;
 }
 
-/** Clips synthesized since the JST day began. */
+/**
+ * Paid syntheses since the JST day began: the sum of `synth_count` over today's rows. A key made again today
+ * carries its earlier syntheses into today, so the count errs on the high side.
+ */
 export async function countSynthesizedToday(db: D1Database, now: Date = new Date()): Promise<number> {
-  const row = await db.prepare("SELECT COUNT(*) AS n FROM tts_audio WHERE created_at >= ?").bind(jstDayStartIso(now)).first<{ n: number }>();
+  const row = await db
+    .prepare("SELECT COALESCE(SUM(synth_count), 0) AS n FROM tts_audio WHERE created_at >= ?")
+    .bind(jstDayStartIso(now))
+    .first<{ n: number }>();
   return row?.n ?? 0;
 }
 
 export type Ensured = { ok: true; key: string; made: boolean } | { ok: false; reason: "limit" | "busy" | "failed" | "unavailable" };
 
 /**
- * R2 hit → ok (made false). Miss → cap check → claimTts(key) → synthesize → INSERT tts_audio → BUCKET.put → release.
- * The row is inserted before the put, so the cap counts a clip even when the put fails. A lost claim waits up to 5 s for the winner's clip (busy after that). The cap is counted before the paid call;
- * the claim keeps two requests for the same key to one call.
+ * R2 hit → ok (made false). Miss → cap check → claimTts(key) → synthesize → upsert tts_audio → BUCKET.put → release.
+ * The cap (`CLOUD_TTS_GLOBAL_DAILY_LIMIT`, lines per JST day) is counted before the paid call and counts every
+ * synthesis: the row is written before the put, so a failed put still uses up the cap, and a key synthesized
+ * again adds one to its `synth_count`. A lost claim waits up to 5 s for the winner's clip (busy after that); the
+ * claim keeps two requests for the same key to one call. Misses of distinct keys at once can each pass the
+ * last remaining slot (bounded by the `/tts` limiters and the single prepare batch).
  */
 export async function ensureAudio(
   env: Env,
@@ -66,7 +75,10 @@ export async function ensureAudio(
     const audio = await synthesize(env, line.text, line.voice, line.lang);
     // Counted as soon as the paid call returns, so a failed put still uses up the cap.
     await db
-      .prepare("INSERT OR REPLACE INTO tts_audio (key, lang, voice, bytes, created_at) VALUES (?, ?, ?, ?, ?)")
+      .prepare(
+        `INSERT INTO tts_audio (key, lang, voice, bytes, created_at) VALUES (?, ?, ?, ?, ?)
+         ON CONFLICT(key) DO UPDATE SET synth_count = synth_count + 1, bytes = excluded.bytes, created_at = excluded.created_at`,
+      )
       .bind(key, line.lang, line.voice, audio.byteLength, new Date().toISOString())
       .run();
     await env.BUCKET.put(key, audio, { httpMetadata: { contentType: "audio/mpeg" } });
