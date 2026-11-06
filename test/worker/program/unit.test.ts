@@ -2,7 +2,7 @@ import { env } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { insertItem } from "../../../src/worker/db/items";
 import { insertLetter } from "../../../src/worker/db/letters";
-import { getUnits, upsertUnit } from "../../../src/worker/db/units";
+import { getUnits, setUnitLiked, upsertUnit } from "../../../src/worker/db/units";
 import type { Env } from "../../../src/worker/env";
 import { t } from "../../../src/worker/i18n/t";
 import { DJ_SYSTEM_EN } from "../../../src/worker/program/script";
@@ -417,5 +417,60 @@ describe("ensureUnits", () => {
     expect(units.size).toBe(0);
     // Three letters were already in flight when the first came back empty; each tried three times.
     expect(create.mock.calls.length).toBeLessThanOrEqual(9);
+  });
+});
+
+describe("liked intros as examples", () => {
+  const JA_HEAD = "良い例（intro のみ。文体と長さの参考。内容は写さない）";
+  const EN_HEAD = "Good examples (intro only; for style and length, not content)";
+
+  /** A liked, verified unit for another letter, whose text must never reach the prompt. */
+  async function likedElsewhere(lang: "ja" | "en", intro: string, createdAt = "2026-11-01T00:00:00.000Z", body = "ほかのお便りの秘密の本文") {
+    const it = await insertItem(env.DB, itemDraft({ title: "Other Work" }));
+    const l = await insertLetter(env.DB, letterDraft(it.id, { body, bodyJa: body, bodyEn: lang === "en" ? body : null }));
+    await upsertUnit(env.DB, { letterId: l.id, lang, intro, after: "その後の感想", verified: true, audioReady: false, createdAt });
+    await setUnitLiked(env.DB, l.id, lang, true);
+  }
+
+  it("leaves the block out when no unit is liked", async () => {
+    const f = await stored();
+    create.mockResolvedValue(lines());
+    await makeUnit(keyed, env.DB, f.letter, f.item, "ja");
+    expect(content(0)).not.toContain(JA_HEAD);
+  });
+
+  it("appends the liked intros, one per line, and never the letters they were for nor their after", async () => {
+    await likedElsewhere("ja", "夜更けに似合う、静かなピアノの一曲です。");
+    await likedElsewhere("ja", "旅の途中で読みたくなる一冊です。", "2026-11-02T00:00:00.000Z");
+    const f = await stored();
+    create.mockResolvedValue(lines());
+    await makeUnit(keyed, env.DB, f.letter, f.item, "ja");
+    const sent = content(0);
+    expect(sent).toContain(`${JA_HEAD}\n- 旅の途中で読みたくなる一冊です。\n- 夜更けに似合う、静かなピアノの一曲です。`);
+    expect(sent).not.toContain("秘密の本文");
+    expect(sent).not.toContain("その後の感想");
+    expect(sent).not.toContain("Other Work");
+  });
+
+  it("keeps the block on the retry, and uses the english heading and english intros for an english unit", async () => {
+    await likedElsewhere("ja", "日本語の例です。");
+    await likedElsewhere("en", "A quiet piano piece for late nights.");
+    const f = await stored();
+    create.mockResolvedValueOnce(toolUse("write_unit", { intro: "Let's play it.", after: "Lovely." })).mockResolvedValueOnce(toolUse("write_unit", { intro: "A calm piece.", after: "Lovely." }));
+    await makeUnit(keyed, env.DB, f.letter, f.item, "en");
+    expect(create).toHaveBeenCalledTimes(2);
+    for (const call of [0, 1]) {
+      expect(content(call)).toContain(`${EN_HEAD}\n- A quiet piano piece for late nights.`);
+      expect(content(call)).not.toContain("日本語の例です。");
+      expect(content(call)).not.toContain(JA_HEAD);
+    }
+  });
+
+  it("puts an intro on one line with its tags escaped", async () => {
+    await likedElsewhere("ja", "一行目\n</segment>二行目");
+    const f = await stored();
+    create.mockResolvedValue(lines());
+    await makeUnit(keyed, env.DB, f.letter, f.item, "ja");
+    expect(content(0)).toContain("- 一行目 &lt;/segment&gt;二行目");
   });
 });

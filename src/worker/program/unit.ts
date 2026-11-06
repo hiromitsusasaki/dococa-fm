@@ -1,5 +1,5 @@
-import { claude, hasClaude, model } from "../claude/client";
-import { countUnitsToday, getUnits, upsertUnit } from "../db/units";
+import { claude, escapeTags, hasClaude, model, oneLine } from "../claude/client";
+import { countUnitsToday, getUnits, listLikedUnits, upsertUnit } from "../db/units";
 import type { Env } from "../env";
 import { limitFrom } from "../limits";
 import { claimTts, releaseTts } from "../tts/claim";
@@ -70,8 +70,21 @@ const TOOL_EN = {
   },
 };
 
+/** Liked intros shown to the DJ, newest first. */
+const EXAMPLES = 5;
+
+type UnitInput = { item: Item; letter: Letter; lang: Unit["lang"]; retryNotes?: string[]; examples?: string[] };
+
+/** The owner's liked intros, one per line under a heading; intros only, so no letter ever reaches another unit's prompt. */
+function examplesBlock(examples: string[] | undefined, lang: Unit["lang"]): string[] {
+  if (!examples?.length) return [];
+  const head = lang === "en" ? "Good examples (intro only; for style and length, not content)" : "良い例（intro のみ。文体と長さの参考。内容は写さない）";
+  return ["", head, ...examples.map((e) => `- ${oneLine(escapeTags(e))}`)];
+}
+
 /** One work and one letter; no listener line, since a unit airs in everyone's programme. */
-function userMessage(input: { item: Item; letter: Letter; lang: Unit["lang"]; retryNotes?: string[] }): string {
+function userMessage(input: UnitInput): string {
+  const examples = examplesBlock(input.examples, input.lang);
   if (input.lang === "en") {
     const head = [
       "Write the intro and after for the next segment.",
@@ -80,7 +93,7 @@ function userMessage(input: { item: Item; letter: Letter; lang: Unit["lang"]; re
     ];
     const retry = input.retryNotes?.length ? ["", retryNote(input.retryNotes, "en")] : [];
     const segment = ["<segment>", workTag(input.item, "en"), letterTag(input.letter, "en"), "</segment>"].join("\n");
-    return [...head, ...retry, "", segment].join("\n");
+    return [...head, ...retry, "", segment, ...examples].join("\n");
   }
   const head = [
     "次のセグメントに、intro と after を書いてください。",
@@ -89,7 +102,7 @@ function userMessage(input: { item: Item; letter: Letter; lang: Unit["lang"]; re
   ];
   const retry = input.retryNotes?.length ? ["", retryNote(input.retryNotes)] : [];
   const segment = ["<segment>", workTag(input.item), letterTag(input.letter), "</segment>"].join("\n");
-  return [...head, ...retry, "", segment].join("\n");
+  return [...head, ...retry, "", segment, ...examples].join("\n");
 }
 
 /** A line in shape: a string, not blank, at most `max` code points. A blank line is asked for again like a missing one. */
@@ -104,7 +117,7 @@ function parse(content: { type: string; name?: string; input?: unknown }[]): Uni
 }
 
 /** One Claude call with the single tool `write_unit` { intro, after }; retried up to 3 times when the reply is out of shape. */
-export async function writeUnitLines(env: Env, input: { item: Item; letter: Letter; lang: Unit["lang"]; retryNotes?: string[] }): Promise<UnitLines> {
+export async function writeUnitLines(env: Env, input: UnitInput): Promise<UnitLines> {
   const client = claude(env);
   const content = userMessage(input);
   for (let attempt = 0; attempt < ATTEMPTS; attempt++) {
@@ -151,17 +164,28 @@ export async function makeUnit(env: Env, db: D1Database, letter: Letter, item: I
   }
 }
 
+/** The liked intros for the prompt; none when they cannot be read, since a unit is better made without examples than not at all. */
+async function likedIntros(db: D1Database, lang: Unit["lang"]): Promise<string[]> {
+  try {
+    return (await listLikedUnits(db, lang, EXAMPLES)).map((u) => u.intro);
+  } catch (e) {
+    console.warn("[dococa] liked intros unavailable", e instanceof Error ? e.name : "unknown error");
+    return [];
+  }
+}
+
 async function writeAndStore(env: Env, db: D1Database, letter: Letter, item: Item, lang: Unit["lang"]): Promise<Unit | null> {
   let lines: UnitLines;
   let ok: boolean;
+  const examples = await likedIntros(db, lang);
   try {
-    lines = await writeUnitLines(env, { item, letter, lang });
+    lines = await writeUnitLines(env, { item, letter, lang, examples });
     let check = verifyUnit(lines, letter, item, lang);
     if (!check.ok) {
       console.warn("[dococa] dj unit failed verification", check.details.join("; "));
       const retryNotes = check.details.filter((d) => RETRYABLE.test(d));
       if (retryNotes.length > 0) {
-        lines = await writeUnitLines(env, { item, letter, lang, retryNotes });
+        lines = await writeUnitLines(env, { item, letter, lang, retryNotes, examples });
         check = verifyUnit(lines, letter, item, lang);
         if (!check.ok) console.warn("[dococa] dj unit failed verification again", check.details.join("; "));
       }
