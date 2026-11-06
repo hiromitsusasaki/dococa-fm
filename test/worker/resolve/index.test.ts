@@ -79,6 +79,23 @@ describe("resolveUrl", () => {
     expect(Object.keys(draft!.externalIds)).toEqual(["youtube", "itunes"]);
   });
 
+  it("youtube: keeps the video's own title when the itunes hit is another song", async () => {
+    const url = "https://www.youtube.com/watch?v=abcdefghijk";
+    stubFetch([
+      ["https://www.youtube.com/oembed", () => json({ title: "Miles Davis - Blue In Green (Official Audio)", author_name: "MilesDavisVEVO", thumbnail_url: "https://i.ytimg.com/x.jpg" })],
+      ["https://itunes.apple.com/search", () => json({ results: [itunesTrack(30, "So What"), itunesTrack(31, "Blue in Green")] })],
+    ]);
+    // The matching song is taken even when it is not the first hit.
+    expect(await resolveUrl(url, testEnv)).toMatchObject({ title: "Blue in Green", externalIds: { youtube: "abcdefghijk", itunes: "31" } });
+    stubFetch([
+      ["https://www.youtube.com/oembed", () => json({ title: "Miles Davis - Blue In Green (Official Audio)", author_name: "MilesDavisVEVO", thumbnail_url: "https://i.ytimg.com/x.jpg" })],
+      ["https://itunes.apple.com/search", () => json({ results: [itunesTrack(30, "So What")] })],
+    ]);
+    const draft = await resolveUrl(url, testEnv);
+    expect(draft).toMatchObject({ title: "Miles Davis - Blue In Green (Official Audio)", creator: "MilesDavisVEVO", externalIds: { youtube: "abcdefghijk" } });
+    expect(draft!.externalIds.itunes).toBeUndefined();
+  });
+
   it("youtube: falls back to oembed data when itunes finds nothing", async () => {
     stubFetch([
       ["https://www.youtube.com/oembed", () => json({ title: "Song", author_name: "Artist", thumbnail_url: "https://i.ytimg.com/x.jpg" })],
@@ -361,16 +378,20 @@ describe("searchByText", () => {
   it("any: takes one from itunes, books and tmdb in turn, cut to the limit (5 by default)", async () => {
     stubFetch(routes);
     expect((await searchByText("q", "any", testEnv)).map((d) => d.title)).toEqual(["Song 1", "Book A", "Film 7", "Song 2", "Book B"]);
-    expect((await searchByText("q", "any", testEnv, 10)).map((d) => d.title)).toEqual(["Song 1", "Book A", "Film 7", "Song 2", "Book B", "Song 3", "Book C"]);
+    expect((await searchByText("q", "any", testEnv, { limit: 10, youtube: true })).map((d) => d.title)).toEqual(["Song 1", "Book A", "Film 7", "Song 2", "Book B", "Song 3", "Book C"]);
   });
 
-  it("any asks YouTube only when YOUTUBE_API_KEY is set, and a music search never does", async () => {
+  it("any asks YouTube only when asked to and YOUTUBE_API_KEY is set, and a music search never does", async () => {
     const youtube: [string, () => Response] = ["https://www.googleapis.com/youtube/", () => json({ items: [{ id: { videoId: "v1" }, snippet: { title: "Video 1" } }] })];
     const { calls } = stubFetch([youtube, ...routes]);
-    expect((await searchByText("q", "any", testEnv, 10)).map((d) => d.title)).not.toContain("Video 1");
+    expect((await searchByText("q", "any", testEnv, { limit: 10, youtube: true })).map((d) => d.title)).not.toContain("Video 1");
     expect(calls().some((u) => u.includes("/youtube/"))).toBe(false);
     const keyed = { ...testEnv, YOUTUBE_API_KEY: "YT" } as Env;
-    expect((await searchByText("q", "any", keyed, 10)).map((d) => d.title)).toEqual(["Song 1", "Book A", "Film 7", "Video 1", "Song 2", "Book B", "Song 3", "Book C"]);
+    expect((await searchByText("q", "any", keyed, { limit: 10, youtube: true })).map((d) => d.title)).toEqual(["Song 1", "Book A", "Film 7", "Video 1", "Song 2", "Book B", "Song 3", "Book C"]);
+    // Without the option (as /start calls it), a key alone never asks YouTube.
+    const before = calls().length;
+    expect((await searchByText("q", "any", keyed, { limit: 10 })).map((d) => d.title)).not.toContain("Video 1");
+    expect(calls().slice(before).some((u) => u.includes("/youtube/"))).toBe(false);
     expect((await searchByText("q", "music", keyed)).map((d) => d.title)).toEqual(["Song 1", "Song 2", "Song 3"]);
   });
 

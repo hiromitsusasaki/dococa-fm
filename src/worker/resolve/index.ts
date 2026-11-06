@@ -49,11 +49,16 @@ function interleave<T>(lists: T[][]): T[] {
   return out;
 }
 
-/** "any" also asks YouTube when a key is set. The first result is always the best guess of the first provider that has one. */
-export async function searchByText(q: string, kind: ItemKind | "any", env: Env, limit = MAX_RESULTS): Promise<ItemDraft[]> {
+/**
+ * `youtube: true` lets "any" also ask YouTube when a key is set. Only the send page's own search passes it: each call
+ * costs a hundredth of the day's quota, and it sits behind that page's search limit. The first result is always the
+ * best guess of the first provider that has one.
+ */
+export async function searchByText(q: string, kind: ItemKind | "any", env: Env, opts: { limit?: number; youtube?: boolean } = {}): Promise<ItemDraft[]> {
+  const limit = opts.limit ?? MAX_RESULTS;
   const by = searchers(q, env);
   if (kind !== "any") return (await orEmpty(by[kind]())).slice(0, limit);
-  const youtube = env.YOUTUBE_API_KEY ? [() => searchYouTube(q, env.YOUTUBE_API_KEY)] : [];
+  const youtube = opts.youtube && env.YOUTUBE_API_KEY ? [() => searchYouTube(q, env.YOUTUBE_API_KEY)] : [];
   const results = await Promise.all([by.music, by.book, by.film, ...youtube].map((search) => orEmpty(search())));
   return interleave(results).slice(0, limit);
 }
@@ -73,6 +78,11 @@ function artistFromDescription(description: string | null | undefined): string |
 }
 
 const normalizeName = (s: string) => s.toLowerCase().trim().replace(/\s+/g, " ");
+
+const titleWithin = (song: string, video: string): boolean => {
+  const s = normalizeName(song);
+  return s !== "" && normalizeName(video).includes(s);
+};
 
 export function sameArtist(a: string, b: string): boolean {
   const x = normalizeName(a);
@@ -111,7 +121,8 @@ async function resolveOembed(provider: "spotify" | "youtube", parsed: ParsedUrl,
   const author = provider === "youtube" ? oembed.author : artist;
   // YouTube's author is a channel, not an artist, so only a Spotify artist is checked against the hit.
   const hits = await orEmpty(searchItunes(author ? `${oembed.title} ${author}` : oembed.title));
-  const found = artist ? hits.find((h) => sameArtist(h.creator, artist)) : hits[0];
+  // A video title is free text ("Artist - Song (Official Audio)"), so a hit is taken only when its title is in it.
+  const found = artist ? hits.find((h) => sameArtist(h.creator, artist)) : hits.find((h) => titleWithin(h.title, oembed.title));
   const base: ItemDraft = found ?? {
     kind: "music",
     title: oembed.title,

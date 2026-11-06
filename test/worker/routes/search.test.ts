@@ -58,6 +58,25 @@ describe("GET /put?q= (search by title)", () => {
     expect(calls().filter((u) => u.includes("/youtube/"))).toHaveLength(1);
   });
 
+  it("a chosen YouTube hit comes back as that video, never another song", async () => {
+    const video = "Miles Davis - Blue In Green (Official Audio)";
+    stubFetch([
+      ["https://itunes.apple.com/search", () => json({ results: [{ trackId: 99, trackName: "So What", artistName: "Miles Davis", trackViewUrl: "https://music.apple.com/jp/album/x/1?i=99" }] })],
+      ["https://www.googleapis.com/books/", () => json({})],
+      ["https://www.googleapis.com/youtube/", () => json({ items: [{ id: { videoId: "yt1" }, snippet: { title: video, channelTitle: "MilesDavisVEVO" } }] })],
+      ["https://www.youtube.com/oembed", () => json({ title: video, author_name: "MilesDavisVEVO" })],
+    ]);
+    const cookie = await signedInSession();
+    const keyed = { ...base, TMDB_API_KEY: "", YOUTUBE_API_KEY: "YT" } as Env;
+    const results = await (await search("blue in green", cookie, keyed)).text();
+    const href = `/put?url=${encodeURIComponent("https://www.youtube.com/watch?v=yt1")}`;
+    expect(results).toContain(href);
+    const chosen = await (await app.request(href, { headers: { cookie } }, keyed)).text();
+    const card = chosen.slice(chosen.indexOf('class="item-card"'), chosen.indexOf("</section>", chosen.indexOf('class="item-card"')));
+    expect(card).toContain(video.replace(/&/g, "&amp;"));
+    expect(card).not.toContain("So What");
+  });
+
   it("links a hit that is already stored to the stored item", async () => {
     stubFetch(providers());
     const stored = await insertItem(env.DB, itemDraft({ title: "Blue in Green", externalIds: { itunes: "11" } }));

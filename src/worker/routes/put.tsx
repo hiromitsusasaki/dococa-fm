@@ -211,7 +211,7 @@ export function PutPage(props: PutPageProps) {
 
 /** Stored hits link to the item; the rest link to their own page, which /put?url= resolves to the same work. */
 async function searchResults(env: Env, q: string): Promise<SearchResult[]> {
-  const drafts = await searchByText(q, "any", env, SEARCH_RESULTS);
+  const drafts = await searchByText(q, "any", env, { limit: SEARCH_RESULTS, youtube: true });
   const firstId = (d: ItemDraft): [string, string] | undefined => Object.entries(d.externalIds)[0];
   const pairs = drafts.flatMap((d) => {
     const id = firstId(d);

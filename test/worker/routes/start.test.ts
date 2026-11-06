@@ -65,6 +65,19 @@ describe("POST /start", () => {
     expect(rows.map((r) => r.item.title).sort()).toEqual(["曲A", "曲B", "曲C"]);
   });
 
+  it("never asks YouTube, even with a key set (its quota is for the send page's search)", async () => {
+    const { calls } = stubSearch({ 曲A: 1 });
+    (env as { YOUTUBE_API_KEY: string }).YOUTUBE_API_KEY = "YT";
+    try {
+      const res = await postForm("/start", await signedInSession(), { fav1: "曲A", fav2: "存在しない何か", fav3: "" });
+      expect(res.status).toBe(303);
+    } finally {
+      (env as { YOUTUBE_API_KEY: string }).YOUTUBE_API_KEY = "";
+    }
+    expect(calls().length).toBeGreaterThan(0);
+    expect(calls().some((u) => u.includes("/youtube/"))).toBe(false);
+  });
+
   it("goes on with the rest when one field cannot be resolved", async () => {
     stubSearch({ 曲A: 1, 曲C: 3 });
     const cookie = await signedInSession();
