@@ -9,7 +9,7 @@ import type { Variables } from "../auth/session";
 import { embedItems } from "../ai/embed";
 import { getItem } from "../db/items";
 import { updateListener } from "../db/listeners";
-import { isValidPlace, profileFields, profilePatch } from "../listener-profile";
+import { isValidPlace, profileFields, replyProfilePatch } from "../listener-profile";
 import { displayText } from "../letters/display";
 import { getLetter, insertReport, insertTakedown, listReactionsForLetter } from "../db/letters";
 import type { Env } from "../env";
@@ -63,15 +63,18 @@ letters.post(
   }),
   async (c) => {
     const form = c.req.valid("form");
-    let listener = c.get("listener");
+    const listener = c.get("listener");
     const t = tFor(listener.lang);
-    // Kept on the listener before the reply is made, so the reply (and later ones) carry it. Once named, the fields are ignored.
+    // A nameless listener's name and place, sent with a reply: checked first, carried by this reply, and kept on the listener only
+    // once the reply is taken (so a refused reply changes nothing). Once named, the fields are ignored.
+    let profile: Partial<Listener> | null = null;
     if (form.kind === "reply" && !listener.radioName && (form.radioName?.trim() || form.placeCountry?.trim())) {
-      const profile = profileSchema.safeParse({ radioName: form.radioName ?? "", placeCountry: form.placeCountry ?? "", placeRegion: form.placeRegion ?? "" });
-      if (!profile.success) return putError(c, form, t("settings.invalid"), 422);
-      listener = (await updateListener(c.env.DB, listener.id, profilePatch(listener, profile.data))) ?? listener;
+      const parsed = profileSchema.safeParse({ radioName: form.radioName ?? "", placeCountry: form.placeCountry ?? "", placeRegion: form.placeRegion ?? "" });
+      if (!parsed.success) return putError(c, form, t("settings.invalid"), 422);
+      profile = replyProfilePatch(parsed.data);
     }
-    const result = await createLetter(c.env, c.env.DB, listener, form);
+    const result = await createLetter(c.env, c.env.DB, profile ? { ...listener, ...profile } : listener, form);
+    if (result.ok && profile) await updateListener(c.env.DB, listener.id, profile);
     if (result.ok) {
       // The work may be new: its vector is made after the answer (a no-op when it has one).
       defer(c, embedItems(c.env, c.env.DB, [result.itemId]));

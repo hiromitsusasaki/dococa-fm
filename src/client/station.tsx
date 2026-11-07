@@ -2,8 +2,8 @@
 import { flushSync } from "hono/jsx/dom";
 import { createRoot } from "hono/jsx/dom/client";
 import { bindMediaSession, createLinePlayer, fetchNext, fmt, type LetterLine, type PlayerEpisode, type PlayerItem, reportListen, resumeAt, type StoredPosition, syncMediaSession, whoOf } from "./playback";
-import { shareSender } from "../views/share";
-import { loadDial, postLetter, reactionOf, storeDial } from "./reactions";
+import { shareText } from "../views/share";
+import { loadDial, reactionOf, sendLetter, storeDial } from "./reactions";
 import { clearToast, toast as showToast, wireShare } from "./share";
 import { createSounds } from "./sounds";
 import { StationScreen, type UpNextRow } from "./station-view";
@@ -42,7 +42,7 @@ export type StationState = {
 };
 
 type Reason = "limit" | "failed" | "empty";
-type State = StationState & { reason: Reason | null; loading: boolean; sent: Record<string, true>; sendFailed: boolean; askName: boolean };
+type State = StationState & { reason: Reason | null; loading: boolean; sent: Record<string, true>; sendFailed: string | null; askName: boolean };
 type Fetched = { ok: true; view: PlayerEpisode } | { ok: false; reason: Reason };
 
 const VOLUME_KEY = "dfm.volume";
@@ -116,7 +116,7 @@ export function mountStation(root: HTMLElement, opts: StationOptions) {
   const sounds = createSounds(() => breathe());
   const player = createLinePlayer({ voiceURI: opts.voiceURI, ttsUrl: opts.ttsUrl, lang: str("lang.code") === "en" ? "en" : "ja", onClip: (el) => sounds.listen(el) });
   const reactRoot = createRoot(root);
-  let state: State = { power: "off", volume: loadVolume(), current: null, seg: 0, line: 0, queue: [], reason: null, loading: false, sent: {}, sendFailed: false, askName: opts.askName === true };
+  let state: State = { power: "off", volume: loadVolume(), current: null, seg: 0, line: 0, queue: [], reason: null, loading: false, sent: {}, sendFailed: null, askName: opts.askName === true };
   let abort = new AbortController();
   let mounted = true;
   /** The episode being made for the queue, if any. */
@@ -474,18 +474,22 @@ export function mountStation(root: HTMLElement, opts: StationOptions) {
 
   /** Reactions on their way, so a second tap before the answer does not post twice. */
   const sending = new Set<string>();
-  /** True when the post was taken. A reply that carried a radio name named the listener: the form stops asking. */
+  /**
+   * True when the post was taken. A reply that carried a radio name named the listener: the form stops asking. A refused name or place
+   * (the region of another country, a contact in the name) says so; anything else is the plain failure.
+   */
   async function send(fields: Record<string, string>, key: string): Promise<boolean> {
     if (sending.has(key)) return false;
     sending.add(key);
-    const taken = await postLetter(fields);
+    const answer = await sendLetter(fields);
+    const taken = answer === "taken";
     sending.delete(key);
     if (taken && key.startsWith("w:")) {
       toast(str("player.sentToast"));
       if (state.power === "on") sounds.play("watashimo", state.volume);
     }
-    if (taken) setState({ sent: { ...state.sent, [key]: true }, sendFailed: false, ...(fields.radioName ? { askName: false } : {}) });
-    else setState({ sendFailed: true });
+    if (taken) setState({ sent: { ...state.sent, [key]: true }, sendFailed: null, ...(fields.radioName ? { askName: false } : {}) });
+    else setState({ sendFailed: answer === "invalid" && (fields.radioName || fields.placeCountry) ? "reply.invalidName" : "player.sendFailed" });
     if (taken && key.startsWith("w:")) envelope(document, "float");
     return taken;
   }
@@ -510,7 +514,7 @@ export function mountStation(root: HTMLElement, opts: StationOptions) {
         if (!item) return;
         const first = s.lines.find((l): l is LetterLine => l.type === "letter");
         const reading = s.lines.length > 1 ? Math.min(1, state.line / (s.lines.length - 1)) : 0;
-        rows.push({ key: `${ep.id}:${from + n}`, now, kind: item.kind ?? null, title: item.title, creator: item.creator, ...(first ? { sender: whoOf(first, str) } : {}), ...(now && first ? { letterId: first.letterId, shareable: first.kind !== "reply" && first.kind !== "watashimo", shareText: fmt(str("share.text"), { work: item.title, sender: shareSender(first, (k, p) => fmt(str(k), p ?? {})) }) } : {}), ...(now ? { imageUrl: item.imageUrl, reading } : {}) });
+        rows.push({ key: `${ep.id}:${from + n}`, now, kind: item.kind ?? null, title: item.title, creator: item.creator, ...(first ? { sender: whoOf(first, str) } : {}), ...(now && first ? { letterId: first.letterId, shareable: first.kind !== "reply" && first.kind !== "watashimo", shareText: shareText(item.title, first, (k, p) => fmt(str(k), p ?? {})) } : {}), ...(now ? { imageUrl: item.imageUrl, reading } : {}) });
       });
     };
     // Off, limit and failed: the panel is empty and shows its hint, so nothing stale is listed.

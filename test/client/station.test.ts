@@ -59,6 +59,7 @@ const strings: Record<string, string> = {
   "share.native": "共有",
   "share.text": "{work} · {sender}のお便り — Dococa FM",
   "reply.addName": "ラジオネームとお住まいを添える（任意）",
+  "reply.invalidName": "ラジオネームとお住まいを確かめてください",
   "settings.radioName": "ラジオネーム",
   "lang.confirmPlaying": "切り替えると再生が止まります。続けますか？",
   "letter.showOriginal": "原文を見る",
@@ -940,6 +941,25 @@ describe("station: a name and place before a reply", () => {
     const init = (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls.at(-1)![1];
     expect(Object.fromEntries(new URLSearchParams(String(init.body)))).toEqual({ kind: "reply", body: "いい曲", itemId: "a", parentLetterId: "L1", radioName: "しずく", placeCountry: "JP", placeRegion: "32" });
     expect(root.querySelector(".now details.reply-name")).toBeNull();
+    off();
+  });
+
+  it("a refused name or place says so and keeps asking; a refused reply without them is the plain failure", async () => {
+    const off = await onLetter(true);
+    const real = fetch as unknown as ReturnType<typeof vi.fn>;
+    const refused = () => Promise.resolve(new Response("", { status: 422 }));
+    real.mockImplementationOnce(refused);
+    root.querySelector<HTMLInputElement>('.now input[name="radioName"]')!.value = "しずく";
+    root.querySelector<HTMLTextAreaElement>(".now form.reply textarea")!.value = "いい曲";
+    submit();
+    await flush();
+    expect(root.querySelector(".station-status")!.textContent).toBe("ラジオネームとお住まいを確かめてください");
+    expect(root.querySelector(".now details.reply-name")).not.toBeNull();
+    real.mockImplementationOnce(refused);
+    root.querySelector<HTMLInputElement>('.now input[name="radioName"]')!.value = "";
+    submit();
+    await flush();
+    expect(root.querySelector(".station-status")!.textContent).toBe("送れませんでした");
     off();
   });
 

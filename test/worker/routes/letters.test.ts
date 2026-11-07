@@ -9,7 +9,7 @@ import * as prepare from "../../../src/worker/program/prepare";
 import { resetDb } from "../../helpers/db";
 import { okReply, stubAnthropic } from "../../helpers/anthropic";
 import { itemDraft, letterDraft } from "../db/helpers";
-import { getListener } from "../../../src/worker/db/listeners";
+import { getListener, updateListener } from "../../../src/worker/db/listeners";
 import { get, newSession, signedInSession, postForm } from "./helpers";
 
 let create: ReturnType<typeof stubAnthropic>;
@@ -612,6 +612,26 @@ describe("POST /letters: a radio name and place before an anonymous reply", () =
     await postForm("/letters", cookie, { ...base, body: "もう一言", radioName: "別の名前", placeCountry: "FR" });
     const me = (await getListener(env.DB, idOf(cookie)))!;
     expect([me.radioName, me.placeCountry]).toEqual(["しずく", null]);
+  });
+
+  it("a reply that adds only a name keeps the place the listener set before, and carries both", async () => {
+    const base = await seed();
+    const cookie = await newSession();
+    await updateListener(env.DB, idOf(cookie), { placeCountry: "JP", placeRegion: "32", place: "島根" });
+    expect((await postForm("/letters", cookie, { ...base, body: "わかる", radioName: "しずく", placeCountry: "", placeRegion: "" })).status).toBe(303);
+    const me = (await getListener(env.DB, idOf(cookie)))!;
+    expect([me.radioName, me.placeCountry, me.placeRegion, me.place]).toEqual(["しずく", "JP", "32", "島根"]);
+    expect(await replies()).toEqual([{ radio_name: "しずく", place: "島根" }]);
+  });
+
+  it("a reply that is refused (a parent that is not there) leaves the listener's name and place alone", async () => {
+    const base = await seed();
+    const cookie = await newSession();
+    const res = await postForm("/letters", cookie, { ...base, parentLetterId: "nope", body: "わかる", radioName: "しずく", placeCountry: "JP" });
+    expect(res.status).toBe(422);
+    expect(await replies()).toEqual([]);
+    const me = (await getListener(env.DB, idOf(cookie)))!;
+    expect([me.radioName, me.placeCountry]).toEqual(["", null]);
   });
 
   it("ignores the fields on anything but a reply", async () => {

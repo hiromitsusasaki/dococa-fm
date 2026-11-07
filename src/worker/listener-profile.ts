@@ -18,10 +18,14 @@ export type Profile = { radioName: string; placeCountry: string; placeRegion: st
 
 export const isValidPlace = (v: { placeCountry: string; placeRegion: string }) => isValidRegion(v.placeCountry, v.placeRegion);
 
-/** The columns to write. An old free-text place stays until a country is chosen; choosing "none" afterwards clears it. */
+const placeColumns = (placeCountry: string, placeRegion: string): Partial<Listener> => ({ placeCountry: placeCountry || null, placeRegion: placeRegion || null, place: placeLabel(placeCountry || null, placeRegion || null, "ja") });
+
+/** `/settings`, whose selects show the current place: an old free-text place stays until a country is chosen; choosing "none" afterwards clears it. */
 export function profilePatch(listener: Pick<Listener, "placeCountry">, { placeCountry, placeRegion, radioName }: Profile): Partial<Listener> {
-  return {
-    radioName,
-    ...(placeCountry === "" && listener.placeCountry === null ? {} : { placeCountry: placeCountry || null, placeRegion: placeRegion || null, place: placeLabel(placeCountry || null, placeRegion || null, "ja") }),
-  };
+  return { radioName, ...(placeCountry === "" && listener.placeCountry === null ? {} : placeColumns(placeCountry, placeRegion)) };
+}
+
+/** A reply's optional line, which starts empty: the place is written only when a country is sent, so adding a name keeps a place set before. */
+export function replyProfilePatch({ placeCountry, placeRegion, radioName }: Profile): Partial<Listener> {
+  return { radioName, ...(placeCountry ? placeColumns(placeCountry, placeRegion) : {}) };
 }

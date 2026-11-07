@@ -5,7 +5,7 @@ import { ja } from "../worker/i18n/ja";
 import { whoLine } from "../worker/letters/label";
 import { COUNTRIES, REGIONS } from "../worker/geo/places";
 import { raw } from "hono/html";
-import { shareSender, xIntentUrl } from "./share";
+import { shareText, xIntentUrl } from "./share";
 
 type CardItem = Pick<Item, "kind" | "title" | "creator" | "year" | "imageUrl">;
 
@@ -72,10 +72,10 @@ export const whoOf = (l: Pick<Letter, "radioName" | "place"> & Partial<Pick<Lett
   return whoLine(l, (key, params) => t(key, params), lang);
 };
 
-/** The short text a shared letter goes out with: the work and who wrote it, no place, nothing private. */
+/** The short text a shared letter goes out with (see `shareText`): nothing private. */
 export const letterShareText = (work: string, l: { kind: string; radioName: string; sourceAuthor: string | null }, lang: Lang): string => {
   const t = tFor(lang);
-  return t("share.text", { work, sender: shareSender(l, (key, params) => t(key, params)) });
+  return shareText(work, l, (key, params) => t(key, params));
 };
 
 /**

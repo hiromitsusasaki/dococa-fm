@@ -20,7 +20,8 @@ export type StationScreenProps = {
   loading: boolean;
   /** `limit`, `failed` or `empty`, shown as the matching message. */
   reason: string | null;
-  sendFailed: boolean;
+  /** The message key of the last reaction that did not go out, or null. */
+  sendFailed: string | null;
   volume: number;
   dial: number | null;
   grow: boolean;
@@ -54,7 +55,7 @@ const REASON_KEY: Record<string, string> = { limit: "station.limit", failed: "st
 export function StationScreen(p: StationScreenProps) {
   const { str } = p;
   const lit = p.power === "on" || p.power === "tuning";
-  const status = p.reason ? str(REASON_KEY[p.reason] ?? "station.failed") : p.power === "tuning" ? str("station.searching") : p.loading ? str("station.tuning") : p.sendFailed ? str("player.sendFailed") : "";
+  const status = p.reason ? str(REASON_KEY[p.reason] ?? "station.failed") : p.power === "tuning" ? str("station.searching") : p.loading ? str("station.tuning") : p.sendFailed ? str(p.sendFailed) : "";
   const links = Object.entries(p.item?.outLinks ?? {}).flatMap(([key, href]) => {
     const label = outLabel(str, key);
     return label && isHttpUrl(href) ? [{ label, href }] : [];

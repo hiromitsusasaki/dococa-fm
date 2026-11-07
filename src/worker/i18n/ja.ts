@@ -293,5 +293,8 @@ export const ja = {
   "share.x": "X で共有",
   "share.native": "共有",
   "share.text": "{work} · {sender}のお便り — Dococa FM",
+  "share.textFound": "{work} · 出典: {author}さんの声 — Dococa FM",
+  "share.textFoundNoAuthor": "{work} · 見つけた声 — Dococa FM",
   "reply.addName": "ラジオネームとお住まいを添える（任意）",
+  "reply.invalidName": "ラジオネームとお住まいを確かめてください（国と都道府県・州の組み合わせ、連絡先の書き込みなど）",
 } as const;
