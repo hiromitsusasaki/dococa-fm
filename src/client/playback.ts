@@ -81,8 +81,6 @@ export type LinePlayer = {
 /** `onClip` sees the one clip element when it is made (the station taps it for the lamp). */
 export function createLinePlayer(opts: { voiceURI: string; ttsUrl: string | null; lang?: "ja" | "en"; onClip?: (el: HTMLAudioElement) => void }): LinePlayer {
   const bed = createBed();
-  /** The episode the bed is playing for: a different one gets a new bed, crossed over the old one. */
-  let bedEpisode: string | null = null;
   const clips = createClipPlayer(opts.onClip);
   let unlocked = false;
   let voices: SpeechSynthesisVoice[] | null = null;
@@ -128,10 +126,6 @@ export function createLinePlayer(opts: { voiceURI: string; ttsUrl: string | null
       const line = episode.segments[seg]?.lines[index];
       // Only talk airs; the server no longer sends a preview clip, and one that slips through is not played.
       if (!line || line.type === "preview") return;
-      if (bedEpisode !== episode.id) {
-        if (bedEpisode !== null) bed.next();
-        bedEpisode = episode.id;
-      }
       bed.start();
       if (cloudOn(episode)) {
         warmNext(episode, seg, index);

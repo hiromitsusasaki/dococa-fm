@@ -63,95 +63,49 @@ export const isIOS = (): boolean => typeof navigator !== "undefined" && (/iP(hon
 export const BED_URLS = ["/bed-1.mp3", "/bed-2.mp3", "/bed-3.mp3", "/bed-4.mp3", "/bed-5.mp3"];
 // The beds are about -24 LUFS, so 0.3 puts them roughly 18 dB under the voice.
 const BED_VOLUME = 0.3;
-/** A new episode's bed comes in under the old one over this long, equal power. */
-export const BED_FADE_MS = 1500;
-const FADE_STEP_MS = 50;
 
-export type Bed = { unlock(): void; next(): void; start(): void; stop(): void; setVolume(volume: number): void };
+export type Bed = { unlock(): void; start(): void; stop(): void; setVolume(volume: number): void };
 
 /**
- * Two looping elements, so a new episode's bed can cross the old one (not on iOS, which cuts): `next` while a bed plays fades the playing one out and
- * the other in (cos/sin over `BED_FADE_MS`); while none plays it only changes the url for the next `start`.
+ * The bed under the DJ: the tracks play like a record on repeat. The first is picked at random; when one ends the next
+ * follows in order, and after the last the first comes round again. An episode change leaves it alone, so a track is
+ * never cut mid-way; only the switch stops it, and `start` picks it up where it paused. One element, so a track that
+ * ends can start the next without a gesture (iOS Safari).
  */
 export function createBed(opts: { urls?: string[] } = {}): Bed {
   const urls = opts.urls ?? BED_URLS;
-  const beds: HTMLAudioElement[] = [];
-  let at = 0;
-  let current: string | null = null;
+  let el: HTMLAudioElement | undefined;
+  let index = 0;
   let level = BED_VOLUME;
-  let fade: ReturnType<typeof setInterval> | undefined;
-  /** A random url other than the one in use (when there is another to take). */
-  const pick = () => {
-    const others = urls.length > 1 ? urls.filter((u) => u !== current) : urls;
-    return others[Math.floor(Math.random() * others.length)]!;
-  };
-  const make = (i: number) => (beds[i] ??= Object.assign(new Audio(), { loop: true, volume: level }));
   const element = () => {
-    const bed = make(at);
-    if (current === null) {
-      current = pick();
-      bed.src = current;
+    if (!el) {
+      index = Math.floor(Math.random() * urls.length);
+      el = Object.assign(new Audio(), { loop: urls.length === 1, volume: level, src: urls[index]! });
+      el.addEventListener("ended", () => {
+        index = (index + 1) % urls.length;
+        el!.src = urls[index]!;
+        el!.play().catch(() => {});
+      });
     }
-    return bed;
-  };
-  const endFade = () => {
-    if (fade === undefined) return;
-    clearInterval(fade);
-    fade = undefined;
-    beds[1 - at]?.pause();
-    if (beds[at]) beds[at]!.volume = level;
+    return el;
   };
   return {
     /** The listener's volume (0..1) scales the bed's own quiet level. */
     setVolume(v) {
       level = BED_VOLUME * v;
-      if (fade === undefined) for (const b of beds) b.volume = level;
+      if (el) el.volume = level;
     },
-    /** Inside the tap: lets both elements play later without a gesture (iOS Safari). */
+    /** Inside the tap: lets the element play later without a gesture (iOS Safari). */
     unlock() {
       const a = element();
       a.play().catch(() => {});
       a.pause();
-      const b = make(1 - at);
-      if (!b.src) b.src = SILENT_WAV;
-      b.play().catch(() => {});
-      b.pause();
-    },
-    /** A new episode begins: another bed, crossed over the one playing, or kept for the next start(). */
-    next() {
-      if (current === null) return;
-      current = pick();
-      const old = beds[at];
-      if (!old || old.paused) {
-        if (old) old.src = current;
-        return;
-      }
-      // Where volume cannot change (iOS) a crossfade is both beds at full level: switch at once instead.
-      if (isIOS()) {
-        old.src = current;
-        old.play().catch(() => {});
-        return;
-      }
-      endFade();
-      at = 1 - at;
-      const incoming = make(at);
-      incoming.src = current;
-      incoming.volume = 0;
-      incoming.play().catch(() => {});
-      const began = Date.now();
-      fade = setInterval(() => {
-        const t = Math.min(1, (Date.now() - began) / BED_FADE_MS);
-        old.volume = level * Math.cos((t * Math.PI) / 2);
-        incoming.volume = level * Math.sin((t * Math.PI) / 2);
-        if (t >= 1) endFade();
-      }, FADE_STEP_MS);
     },
     start() {
       element().play().catch(() => {});
     },
     stop() {
-      endFade();
-      for (const b of beds) b.pause();
+      el?.pause();
     },
   };
 }

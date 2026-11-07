@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { BED_FADE_MS, createBed } from "../../src/client/audio";
+import { createBed } from "../../src/client/audio";
 import { createSounds } from "../../src/client/sounds";
 import { createLinePlayer, forgetReportedListens } from "../../src/client/playback";
 import { mountPlayer, type PlayerEpisode } from "../../src/client/player";
@@ -212,7 +212,7 @@ describe("player", () => {
     expect(unlockSpeaks).toBe(1);
     const clip = audios.find((a) => a.src.startsWith("data:audio"))!;
     expect(clip.play).toHaveBeenCalledTimes(1);
-    expect(audios.find((a) => a.loop)!.play).toHaveBeenCalled();
+    expect(audios.find((a) => a.src.startsWith("/bed-"))!.play).toHaveBeenCalled();
   });
 
   it("does not play a preview clip that an older episode still carries", async () => {
@@ -232,8 +232,8 @@ describe("player", () => {
       audios.find((a) => a.src === src)!.fire("ended");
     }
     await vi.waitFor(() => expect(audios.some((a) => a.src === "/tts?episode=ep1&line=2")).toBe(true));
-    // one element for clips, two for the bed (a new episode's bed crosses the old one)
-    expect(audioCtor).toBe(3);
+    // one element for clips, one for the bed
+    expect(audioCtor).toBe(2);
   });
 
   it("asks /tts for the stored line when the page left lines out", async () => {
@@ -362,8 +362,8 @@ describe("player", () => {
     mountPlayer(root, one, opts());
     await tap("toggle");
     await vi.waitFor(() => expect(spoken).toEqual(["d1", "l1", "d2"]));
-    const bed = audios.find((a) => a.loop)!;
-    expect(bed.loop).toBe(true);
+    const bed = audios.find((a) => a.src.startsWith("/bed-"))!;
+    expect(bed.loop).toBe(false);
     expect(bed.volume).toBe(0.3);
     expect(log.some((l) => /^play:\/bed-[1-5]\.mp3$/.test(l))).toBe(true);
   });
@@ -557,7 +557,7 @@ describe("player", () => {
     await tap("toggle");
     expect(btn("toggle").textContent).toContain("再生");
     expect((speechSynthesis.cancel as ReturnType<typeof vi.fn>).mock.calls.length).toBeGreaterThan(0);
-    expect(audios.find((a) => a.loop)!.paused).toBe(true);
+    expect(audios.find((a) => a.src.startsWith("/bed-"))!.paused).toBe(true);
     await tap("toggle");
     await vi.waitFor(() => expect(spoken).toEqual(["a1", "a1"]));
     expect(btn("toggle").textContent).toContain("一時停止");
@@ -727,9 +727,8 @@ describe("createBed", () => {
     let i = 0;
     vi.spyOn(Math, "random").mockImplementation(() => values[i++ % values.length]);
   };
-  const bedEl = () => audios.find((a) => a.loop)!;
-  /** The bed last started: with two elements, the one a crossfade brought in. */
-  const bedNow = () => [...log].reverse().find((l) => l.startsWith("play:/bed-"))!.slice("play:".length);
+  const beds = () => audios.filter((a) => a.src.startsWith("/bed-"));
+  const bedEl = () => beds()[0]!;
 
   beforeEach(() => {
     audios.length = 0;
@@ -737,30 +736,40 @@ describe("createBed", () => {
   });
   afterEach(() => vi.restoreAllMocks());
 
-  it("picks a url at random, loops it and keeps it while the episode goes on", () => {
+  it("starts on a random track, plays it through without looping, and picks it up where it paused", () => {
     rand([0.5]);
     const bed = createBed({ urls });
     bed.start();
     expect(bedEl().src).toBe("/bed-3.mp3");
-    expect(bedEl().loop).toBe(true);
+    expect(bedEl().loop).toBe(false);
+    expect(bedEl().paused).toBe(false);
     bed.stop();
+    expect(bedEl().paused).toBe(true);
     bed.start();
     expect(bedEl().src).toBe("/bed-3.mp3");
+    expect(beds()).toHaveLength(1);
   });
 
-  it("never plays the same bed twice in a row", () => {
-    rand([0, 0, 0.99, 0.99]);
+  it("goes on to the next track when one ends, and comes round to the first after the last", () => {
+    rand([0.99]);
     const bed = createBed({ urls });
     bed.start();
-    const seen = [bedNow()];
-    for (let i = 0; i < 3; i++) {
-      bed.next();
-      seen.push(bedNow());
-    }
-    seen.slice(1).forEach((u, i) => expect(u).not.toBe(seen[i]));
+    expect(bedEl().src).toBe("/bed-5.mp3");
+    bedEl().fire("ended");
+    expect(bedEl().src).toBe("/bed-1.mp3");
+    expect(bedEl().play).toHaveBeenCalledTimes(2);
+    bedEl().fire("ended");
+    expect(bedEl().src).toBe("/bed-2.mp3");
+    expect(beds()).toHaveLength(1);
   });
 
-  it("unlock picks a bed and plays then pauses it", () => {
+  it("a single track loops", () => {
+    const bed = createBed({ urls: ["/bed-1.mp3"] });
+    bed.start();
+    expect(bedEl().loop).toBe(true);
+  });
+
+  it("unlock readies the bed inside the tap: plays then pauses it", () => {
     const bed = createBed({ urls });
     bed.unlock();
     expect(urls).toContain(bedEl().src);
@@ -776,81 +785,20 @@ describe("createBed", () => {
     expect(bedEl().volume).toBeCloseTo(0.15);
   });
 
-  it("a new episode's bed crosses the playing one over 1.5 s, equal power, at the listener's level", () => {
-    vi.useFakeTimers();
-    try {
-      rand([0, 0.99]);
-      const bed = createBed({ urls });
-      bed.setVolume(0.5);
-      bed.start();
-      const [old] = audios.filter((a) => a.loop);
-      bed.next();
-      const loops = audios.filter((a) => a.loop);
-      expect(loops).toHaveLength(2);
-      const incoming = loops[1]!;
-      expect(incoming.src).toBe("/bed-5.mp3");
-      expect(incoming.paused).toBe(false);
-      expect(incoming.volume).toBe(0);
-      vi.advanceTimersByTime(BED_FADE_MS / 2);
-      expect(old!.volume).toBeCloseTo(0.15 * Math.SQRT1_2, 3);
-      expect(incoming.volume).toBeCloseTo(0.15 * Math.SQRT1_2, 3);
-      expect(old!.paused).toBe(false);
-      vi.advanceTimersByTime(BED_FADE_MS / 2);
-      expect(old!.paused).toBe(true);
-      expect(incoming.volume).toBeCloseTo(0.15);
-      bed.stop();
-      expect(incoming.paused).toBe(true);
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
-  it("on iOS, where volume is read-only, a new episode switches the bed at once instead of fading", () => {
-    vi.stubGlobal("navigator", { userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148 Safari/604.1", platform: "iPhone", maxTouchPoints: 5 });
-    rand([0, 0.99]);
-    const bed = createBed({ urls });
-    bed.start();
-    bed.next();
-    const loops = audios.filter((a) => a.loop);
-    expect(loops).toHaveLength(1);
-    expect(loops[0]!.src).toBe("/bed-5.mp3");
-    expect(loops[0]!.paused).toBe(false);
-  });
-
-  it("a new episode while no bed plays only changes the url, without a fade", () => {
-    vi.useFakeTimers();
-    try {
-      rand([0, 0.99]);
-      const bed = createBed({ urls });
-      bed.start();
-      bed.stop();
-      bed.next();
-      expect(audios.filter((a) => a.loop)).toHaveLength(1);
-      expect(bedEl().src).toBe("/bed-5.mp3");
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
-  it("unlock readies both bed elements inside the tap", () => {
-    const bed = createBed({ urls });
-    bed.unlock();
-    const loops = audios.filter((a) => a.loop);
-    expect(loops).toHaveLength(2);
-    for (const a of loops) expect(a.play).toHaveBeenCalledTimes(1);
-  });
-
-  it("the line player changes the bed only when the episode changes", async () => {
-    rand([0, 0]);
+  it("the line player keeps the same bed across episodes; only stopBed pauses it", async () => {
+    rand([0]);
     const lp = createLinePlayer({ voiceURI: "mine", ttsUrl: null });
     const ac = new AbortController();
     const ep = (id: string) => ({ ...one, id });
     await lp.play(ep("e1"), 0, 0, ac.signal);
-    const first = bedNow();
+    const first = bedEl().src;
     await lp.play(ep("e1"), 0, 1, ac.signal);
-    expect(bedNow()).toBe(first);
     await lp.play(ep("e2"), 0, 0, ac.signal);
-    expect(bedNow()).not.toBe(first);
+    expect(bedEl().src).toBe(first);
+    expect(beds()).toHaveLength(1);
+    expect(bedEl().paused).toBe(false);
+    lp.stopBed();
+    expect(bedEl().paused).toBe(true);
   });
 });
 
