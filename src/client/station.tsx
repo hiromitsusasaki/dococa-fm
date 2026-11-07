@@ -23,8 +23,6 @@ export type StationOptions = {
   dial?: number;
   /** A letter the listener came to hear: the first ask of this visit carries it, and only that one. */
   letterId?: string;
-  /** A station with no history yet: show how to start, and do not fetch anything. */
-  grow?: boolean;
   /** The home: show the send panel above the on-air list. */
   send?: boolean;
   /** The listener has no radio name: the 一言 form offers to add one, until a reply carries it. */
@@ -57,6 +55,8 @@ const DIAL_SETTLE_MS = 300;
 const HINT_KEY = "dfm.dialHinted";
 /** Set while this browser shows the dial locked, so a dial that woke between visits (a letter sent from /put) is greeted at load. */
 const LOCKED_KEY = "dfm.dialLocked";
+/** What a locked dial asks with: the middle, where the scale's needle rests. */
+const LOCKED_DIAL = 0.5;
 /** Set at the first switch-on; the home then shows its hero short (wordmark and tagline only) on later visits. */
 const SEEN_KEY = "dfm.seen";
 
@@ -220,7 +220,8 @@ export function mountStation(root: HTMLElement, opts: StationOptions) {
 
   /** Asks for the next episode. The asked letter rides every ask until one is answered and used (see `begin`, `ensureAhead`). */
   async function requestNext(): Promise<Fetched> {
-    const r = await fetchNext(opts.nextUrl, { dial, first: !heard, ...(letterId ? { letterId } : {}) });
+    // A locked dial does nothing yet: the radio asks with the centre, as the screen shows, and keeps the stored value.
+    const r = await fetchNext(opts.nextUrl, { dial: state.dialReady ? dial : LOCKED_DIAL, first: !heard, ...(letterId ? { letterId } : {}) });
     if (!r.ok) return r;
     if (r.body.dialReady === true && !state.dialReady) wake();
     const episode = r.body.episode;
@@ -376,7 +377,7 @@ export function mountStation(root: HTMLElement, opts: StationOptions) {
   }
 
   function turnOn() {
-    if (state.power === "on" || state.power === "tuning" || opts.grow) return;
+    if (state.power === "on" || state.power === "tuning") return;
     // The context first: the clip element made by the player's unlock is tapped in it.
     sounds.unlock();
     player.unlock();
@@ -463,7 +464,7 @@ export function mountStation(root: HTMLElement, opts: StationOptions) {
   function onCardClick(e: MouseEvent) {
     const card = (e.target as Element | null)?.closest?.("[data-play-letter]");
     const id = card?.getAttribute("data-play-letter");
-    if (!id || opts.grow || !root.isConnected || !plainClick(e)) return;
+    if (!id || !root.isConnected || !plainClick(e)) return;
     e.preventDefault();
     fly(card!);
     playLetter(id);
@@ -565,7 +566,6 @@ export function mountStation(root: HTMLElement, opts: StationOptions) {
       dial: opts.stationKey === "mine" ? dial : null,
       dialReady: state.dialReady,
       woke: state.woke,
-      grow: opts.grow === true,
       primed: letterId !== undefined,
       send: opts.send === true,
       item: itemOf(state.current, state.seg),
@@ -710,7 +710,6 @@ function boot() {
     voiceURI: el.dataset.voice ?? "",
     ...(Number.isFinite(dial) ? { dial } : {}),
     ...(el.dataset.letter ? { letterId: el.dataset.letter } : {}),
-    grow: el.dataset.grow === "1",
     send: el.dataset.send === "1",
     askName: el.dataset.askName === "1",
     ...(el.dataset.dialReady ? { dialReady: el.dataset.dialReady === "1" } : {}),

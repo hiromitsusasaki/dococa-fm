@@ -258,7 +258,7 @@ export async function selectProgram(
     else {
       // Without distances the dial's pool is tried first, but a fresher work of another pool wins over a stale one.
       let seats = seatOrder(dial).flatMap((slot) => pools[slot].map((id) => ({ slot, id })));
-      // A cold start (no favourite, nothing heard, no own work written about): within the same freshness, a work with a
+      // A cold start (no own letter or reaction, nothing heard, no own work written about): within the same freshness, a work with a
       // letter from another country than the last two segments' goes first, so the dial's far is felt from the start.
       if (blank && raw.near.length === 0 && raw.neighbor.length === 0) {
         const { results } = await db.prepare(FRESH_PLACE_LETTERS_SQL).bind(listener.id).all<{ id: string; item_id: string }>();

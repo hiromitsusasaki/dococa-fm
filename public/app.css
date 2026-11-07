@@ -1114,16 +1114,6 @@ button.pill {
   letter-spacing: 0.08em;
 }
 
-.grow {
-  margin-top: 18px;
-}
-
-.grow p {
-  margin: 0 0 var(--sp-3);
-  color: var(--ink-2);
-  font-size: var(--fs-14);
-}
-
 .station-page .home {
   gap: var(--sp-3);
   max-width: none;
@@ -2168,6 +2158,8 @@ body.embed .put h1 {
 .knob-dial.locked .control-label {
   max-width: 168px;
   text-align: center;
+  /* Break at a phrase (after 「、」), not inside 「ダイヤル」; browsers without it break as before. */
+  word-break: auto-phrase;
 }
 
 .knob-dial.ready .knob-body {

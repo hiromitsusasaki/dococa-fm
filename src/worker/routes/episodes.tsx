@@ -19,16 +19,16 @@ export const episodes = new Hono<{ Bindings: Env; Variables: Variables }>();
 
 const JST_OFFSET_MS = 9 * 60 * 60 * 1000;
 
-function MessagePage({ message, start, listener, path }: { message: string; start?: boolean; listener: Listener; path: string }) {
+function MessagePage({ message, sendLetter, listener, path }: { message: string; sendLetter?: boolean; listener: Listener; path: string }) {
   const lang = listener.lang;
   const t = tFor(lang);
   return (
     <Layout title={t("episode.title")} lang={lang} listener={listener} path={path}>
       <main class="episode-page">
         <p role="alert">{message}</p>
-        {start && (
+        {sendLetter && (
           <p>
-            <a class="button" href="/start">{t("home.start")}</a>
+            <a class="button" href="/put">{t("episodes.sendLetter")}</a>
           </p>
         )}
         <p>
@@ -58,7 +58,7 @@ export const startEpisode = async (c: Context<{ Bindings: Env; Variables: Variab
   const body = (await readNextBody(c.req.raw)) ?? {};
   const made = await makeEpisode(c.env, c.get("listener"), { ...body, first: body.first ?? true });
   if (made.ok) return c.redirect(`/episodes/${made.id}`, 303);
-  if (made.reason === "empty") return c.html(<MessagePage message={t("episode.empty")} start listener={c.get("listener")} path={currentPath(c)} />, 200);
+  if (made.reason === "empty") return c.html(<MessagePage message={t("episode.empty")} sendLetter listener={c.get("listener")} path={currentPath(c)} />, 200);
   return c.html(<MessagePage message={t(made.reason === "limit" ? "episode.limit" : "episode.unavailable")} listener={c.get("listener")} path={currentPath(c)} />, made.reason === "limit" ? 429 : 503);
 };
 

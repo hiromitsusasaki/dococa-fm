@@ -71,7 +71,7 @@ home.get("/", async (c) => {
   );
   const heroBoot = <script>{raw(HERO_COMPACT)}</script>;
   return c.html(
-    <StationPage stationKey="mine" title={t("app.name")} label={stationLabel({ kind: "mine" }, "", lang)} lang={lang} listener={listener} path={letter ? `/?letter=${encodeURIComponent(letter)}` : "/"} voice={listener.voice} dial={listener.dial} dialReady={dialReady} grow={false} hideName top={<>{hero}{heroBoot}</>} send letter={letter} og={og}>
+    <StationPage stationKey="mine" title={t("app.name")} label={stationLabel({ kind: "mine" }, "", lang)} lang={lang} listener={listener} path={letter ? `/?letter=${encodeURIComponent(letter)}` : "/"} voice={listener.voice} dial={listener.dial} dialReady={dialReady} hideName top={<>{hero}{heroBoot}</>} send letter={letter} og={og}>
       <section class="home">
         {/* The station script opens this over the page, so the radio keeps playing; the frame loads on the first open. */}
         <dialog class="send-modal" aria-label={t("put.title")}>

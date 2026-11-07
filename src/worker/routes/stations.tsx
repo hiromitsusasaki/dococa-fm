@@ -4,7 +4,6 @@ import { PlaceFields } from "../../views/components";
 import { Layout } from "../../views/layout";
 import type { Variables } from "../auth/session";
 import { getVerifiedEpisode, latestVerifiedEpisodeOn } from "../db/episodes";
-import { listHistory } from "../db/history";
 import { getListenerBySlug } from "../db/listeners";
 import type { Env } from "../env";
 import { ja } from "../i18n/ja";
@@ -45,8 +44,6 @@ export type StationPageProps = {
   path: string;
   voice: string;
   dial: number;
-  /** A `mine` station with no history yet: the player shows how to start instead of tuning. */
-  grow: boolean;
   /** The page title when it differs from the station label (the home page is titled by the app). */
   title?: string;
   /** Link-preview tags (a public station is meant to be shared). */
@@ -66,7 +63,7 @@ export type StationPageProps = {
 };
 
 /** The station screen: the player mounts into `#station` and takes everything it needs from its data attributes. */
-export function StationPage({ stationKey, label, lang, listener, path, voice, dial, grow, title, og, children, hideName, top, letter, send, dialReady }: StationPageProps) {
+export function StationPage({ stationKey, label, lang, listener, path, voice, dial, title, og, children, hideName, top, letter, send, dialReady }: StationPageProps) {
   return (
     <Layout title={title ?? label} script="station" lang={lang} listener={listener} path={path} og={og}>
       <main class="station-page">
@@ -83,7 +80,6 @@ export function StationPage({ stationKey, label, lang, listener, path, voice, di
           data-voice={voice}
           data-dial={String(dial)}
           data-dial-ready={dialReady === undefined ? undefined : dialReady ? "1" : "0"}
-          data-grow={grow ? "1" : "0"}
           data-letter={letter}
           data-send={send ? "1" : undefined}
           data-ask-name={listener.radioName ? undefined : "1"}
@@ -131,14 +127,12 @@ stations.get("/stations/:key", async (c) => {
   if (!asJson) {
     const asked = c.req.query("letter") ?? "";
     const letter = station.key.kind === "mine" && asked.length > 0 && asked.length <= 100 ? asked : undefined;
-    // A letter link plays even before the listener has favourites: after it, the station goes on like the world radio.
-    const grow = station.key.kind === "mine" && !letter && (await listHistory(c.env.DB, listener.id, 1)).length === 0;
     // A public radio plays only its owner's letters and the ones they answered: before the first, the page says so.
     const empty = station.key.kind === "public" && !(await publicRadioHasLetters(c.env.DB, station.key.ownerId));
     const dialReady = station.key.kind === "mine" ? await dialAwake(c.env.DB, listener.id) : undefined;
     const t = tFor(listener.lang);
     return c.html(
-      <StationPage letter={letter} stationKey={raw} label={label} lang={listener.lang} listener={listener} path={currentPath(c)} voice={listener.voice} dial={listener.dial} dialReady={dialReady} grow={grow} og={station.url ? { title: label, description: t("app.tagline"), url: station.url } : undefined}>
+      <StationPage letter={letter} stationKey={raw} label={label} lang={listener.lang} listener={listener} path={currentPath(c)} voice={listener.voice} dial={listener.dial} dialReady={dialReady} og={station.url ? { title: label, description: t("app.tagline"), url: station.url } : undefined}>
         {empty && <p class="muted station-empty">{t("station.publicEmpty")}</p>}
       </StationPage>,
     );

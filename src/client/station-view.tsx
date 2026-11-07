@@ -28,7 +28,6 @@ export type StationScreenProps = {
   dialReady: boolean;
   /** It woke on this visit: it lights and its needle sweeps in once. */
   woke: boolean;
-  grow: boolean;
   /** A letter link is waiting for the switch: it says it plays from that letter. */
   primed: boolean;
   /** The home: the right column opens with the send panel, whose button opens the send modal. */
@@ -84,7 +83,7 @@ export function StationScreen(p: StationScreenProps) {
         <div class={`scale${lit ? " lit" : ""}${p.power === "on" ? " sweep" : ""}`} style={{ "--needle": needle(p.dialReady ? p.dial : null) }} aria-hidden="true"></div>
         <div class="controls">
           <div class="control">
-            <button type="button" class="switch" data-action="power" aria-pressed={String(lit)} aria-label={str("station.onOff")} disabled={p.grow} onClick={p.on.power}></button>
+            <button type="button" class="switch" data-action="power" aria-pressed={String(lit)} aria-label={str("station.onOff")} onClick={p.on.power}></button>
             <span id="station-switch-label" class="control-label">
               {str(lit ? "station.off" : p.primed ? "station.playFromLetter" : "station.on")}
             </span>
@@ -97,7 +96,7 @@ export function StationScreen(p: StationScreenProps) {
             <span class="control-label">{str("station.volume")}</span>
           </label>
           {p.dial !== null && (
-            <label class={`knob knob-dial ${p.dialReady ? (p.woke ? "ready woke" : "ready") : "locked"}`} title={str("station.dialHelp")}>
+            <label class={`knob knob-dial ${p.dialReady ? (p.woke ? "ready woke" : "ready") : "locked"}`} title={p.dialReady ? str("station.dialHelp") : undefined}>
               <span class="dial-row">
                 <span class="dial-end">{str("station.dialNear")}</span>
                 <span class="knob-body" style={{ "--angle": angle(p.dial) }}>
@@ -112,6 +111,7 @@ export function StationScreen(p: StationScreenProps) {
                     aria-label={str("station.dial")}
                     value={String(p.dial)}
                     disabled={!p.dialReady}
+                    aria-describedby={p.dialReady ? undefined : "dial-locked"}
                     ref={onReleased(p.on.dial)}
                     onInput={(e: Event) => {
                       const input = e.currentTarget as HTMLInputElement;
@@ -124,7 +124,9 @@ export function StationScreen(p: StationScreenProps) {
                 </span>
                 <span class="dial-end">{str("station.dialFar")}</span>
               </span>
-              <span class="control-label">{str(p.dialReady ? "station.dial" : "station.dialLocked")}</span>
+              <span class="control-label" id={p.dialReady ? undefined : "dial-locked"}>
+                {str(p.dialReady ? "station.dial" : "station.dialLocked")}
+              </span>
             </label>
           )}
         </div>
@@ -178,7 +180,7 @@ export function StationScreen(p: StationScreenProps) {
         )}
         <section class="panel on-air">
           <h2>{str("station.panel")}</h2>
-          {p.upNext.length === 0 && p.power === "off" && !p.grow && <p class="muted">{str("station.offHint")}</p>}
+          {p.upNext.length === 0 && p.power === "off" && <p class="muted">{str("station.offHint")}</p>}
           <ul class="up-next">
             {p.upNext.map((r) => (
               <li key={r.key} class={r.now ? "now" : ""}>
@@ -195,15 +197,6 @@ export function StationScreen(p: StationScreenProps) {
               </li>
             ))}
           </ul>
-          {p.grow && (
-            <div class="grow">
-              <h2>{str("station.grow")}</h2>
-              <p>{str("station.growHelp")}</p>
-              <a class="pill hot" href="/start">
-                {str("station.growStart")}
-              </a>
-            </div>
-          )}
         </section>
       </aside>
     </div>

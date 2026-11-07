@@ -359,7 +359,7 @@ describe("GET /stations/:key (page)", () => {
     expect(html).toContain('data-next-url="/stations/world/next"');
     expect(html).toContain('data-resume-url="/stations/world.json"');
     expect(html).toContain('data-station-key="world"');
-    expect(html).toContain('data-grow="0"');
+    expect(html).not.toContain("data-grow");
     expect(html).toMatch(/<script type="module" src="\/(assets\/station\.js|src\/client\/station\.tsx)">/);
     const i18n = JSON.parse(html.match(/<script type="application\/json" id="station-i18n">(.*?)<\/script>/s)![1]!) as Record<string, string>;
     expect(i18n["station.onOff"]).toBe("ラジオをつける / 止める");
@@ -400,13 +400,10 @@ describe("GET /stations/:key (page)", () => {
     expect(await (await page("world", cookie)).text()).not.toContain("data-dial-ready");
   });
 
-  it("mine with no history asks the player to show how to start; with history it does not", async () => {
-    const cookie = await newSession();
-    expect(await (await page("mine", cookie)).text()).toContain('data-grow="1"');
-    const listenerId = (await env.DB.prepare("SELECT id FROM listeners ORDER BY created_at DESC LIMIT 1").first<{ id: string }>())!.id;
-    const it = await insertItem(env.DB, itemDraft({ title: "mine-1" }));
-    await upsertHistory(env.DB, [{ listenerId, itemId: it.id, source: "manual", occurredAt: null, rank: 1 }]);
-    expect(await (await page("mine", cookie)).text()).toContain('data-grow="0"');
+  it("mine tunes in for a brand-new listener: no registration gate, no way to /start", async () => {
+    const html = await (await page("mine", await newSession())).text();
+    expect(html).not.toContain("data-grow");
+    expect(html).not.toContain('href="/start"');
   });
 
   it("a letter link plays for a brand-new listener: the switch works, the first next reads it, the next one still answers", async () => {
@@ -416,7 +413,7 @@ describe("GET /stations/:key (page)", () => {
     const asked = await insertLetter(env.DB, letterDraft(item.id, { listenerId: writer.id, body: "聴いてほしい", bodyJa: "聴いてほしい" }));
     const cookie = await newSession();
     const html = await (await page(`mine?letter=${asked.id}`, cookie)).text();
-    expect(html).toContain('data-grow="0"');
+    expect(html).not.toContain("data-grow");
     expect(html).toContain(`data-letter="${asked.id}"`);
     const send = (body: unknown) =>
       app.request("/stations/mine/next", { method: "POST", headers: { cookie, origin: ORIGIN, "content-type": "application/json" }, body: JSON.stringify(body) }, env);

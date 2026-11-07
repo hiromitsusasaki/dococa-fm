@@ -437,13 +437,14 @@ describe("GET /episodes", () => {
 });
 
 describe("empty plan", () => {
-  it("stores nothing, keeps the daily limit and points to /start when there is nothing to play", async () => {
+  it("stores nothing, keeps the daily limit and points to /put when there is nothing to play", async () => {
     const cookie = await newSession();
     const res = await post("/episodes", cookie, { ...env, EPISODE_DAILY_LIMIT: "1" });
     expect(res.status).toBe(200);
     const html = await res.text();
     expect(html).toContain("まだお便りがありません");
-    expect(html).toContain('href="/start"');
+    expect(html).toContain('<a class="button" href="/put">お便りを送る</a>');
+    expect(html).not.toContain('href="/start"');
     expect(await listEpisodes(env.DB, idOf(cookie), 10)).toHaveLength(0);
     await seed(cookie);
     expect((await post("/episodes", cookie, { ...env, EPISODE_DAILY_LIMIT: "1" })).status).toBe(303);

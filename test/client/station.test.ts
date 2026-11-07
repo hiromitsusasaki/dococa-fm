@@ -22,7 +22,6 @@ const strings: Record<string, string> = {
   "station.onOff": "ラジオをつける / 止める",
   "station.on": "ラジオをつける",
   "station.off": "止める",
-  "station.growStart": "好きなものを 3 つ送る",
   "station.onAir": "ON AIR",
   "station.volume": "音量",
   "station.dial": "セレンディピティ",
@@ -35,8 +34,6 @@ const strings: Record<string, string> = {
   "station.limit": "今日の分はここまで。また明日",
   "station.failed": "電波が届きませんでした",
   "station.empty": "まだお便りがありません",
-  "station.grow": "あなたのラジオ",
-  "station.growHelp": "好きなものを 3 つ送ると始まります",
   "player.watashimo": "私も",
   "player.reply": "一言を送る",
   "player.send": "送る",
@@ -295,15 +292,6 @@ describe("station: screen", () => {
     asked.mockReturnValue(true);
     expect(submit()).toBe(false);
     form.remove();
-  });
-
-  it("a station with no history shows the way to start and a switch that is not usable", async () => {
-    mountStation(root, opts({ stationKey: "mine", grow: true }));
-    await flush();
-    expect(root.querySelector(".grow a")!.getAttribute("href")).toBe("/start");
-    expect(root.querySelector(".grow a")!.textContent).toBe("好きなものを 3 つ送る");
-    expect(root.querySelector(".grow")!.textContent).toContain("好きなものを 3 つ送ると始まります");
-    expect((el("power") as HTMLButtonElement).disabled).toBe(true);
   });
 });
 
@@ -1172,6 +1160,10 @@ describe("station: the dial wakes after three letters", () => {
     expect(knob().querySelector(".control-label")!.textContent).toBe("お便りを 3 通送ると、ダイヤルが効きはじめます");
     const input = el("dial") as HTMLInputElement;
     expect(input.disabled).toBe(true);
+    // Assistive technology hears why: the slider is described by the locked line, and the turning help is gone.
+    expect(input.getAttribute("aria-describedby")).toBe("dial-locked");
+    expect(document.getElementById("dial-locked")!.textContent!.trim()).toBe("お便りを 3 通送ると、ダイヤルが効きはじめます");
+    expect(knob().hasAttribute("title")).toBe(false);
     input.value = "0.9";
     input.dispatchEvent(new Event("change", { bubbles: true }));
     expect(localStorage.getItem("dfm.dial")).toBeNull();
@@ -1196,6 +1188,25 @@ describe("station: the dial wakes after three letters", () => {
     expect(knob().querySelector(".control-label")!.textContent).toBe("セレンディピティ");
     expect(toastText()).toBe("ダイヤルが効くようになりました");
     expect(localStorage.getItem("dfm.dialLocked")).toBeNull();
+  });
+
+  it("asks with the centre while locked, keeping the stored value; awake, it asks with the stored value again", async () => {
+    localStorage.setItem("dfm.dial", "0.9");
+    nextReplies = [awake(one("e1"), false), awake(one("e2"), true), awake(one("e3"), true)];
+    autoEnd = false;
+    const s = mountStation(root, opts({ stationKey: "mine", dial: 0.4, dialReady: false }));
+    await power();
+    await vi.waitFor(() => expect(s.state().queue.map((e) => e.id)).toEqual(["e2"]));
+    expect(bodies.map((b) => b.dial)).toEqual([0.5, 0.5]);
+    expect(localStorage.getItem("dfm.dial")).toBe("0.9");
+    expect(knob().getAttribute("title")).toBe(strings["station.dialHelp"] ?? "station.dialHelp");
+    expect(el("dial").hasAttribute("aria-describedby")).toBe(false);
+    // Awake: a turn now counts, and the next ask carries the browser's value.
+    const input = el("dial") as HTMLInputElement;
+    input.value = "0.9";
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+    await vi.waitFor(() => expect(bodies).toHaveLength(3));
+    expect(bodies[2]!.dial).toBe(0.9);
   });
 
   it("wakes at load when this browser last saw it locked, once; a dial that was always awake says nothing", async () => {

@@ -255,7 +255,7 @@ describe("GET /", () => {
     expect(html).toContain('data-resume-url="/stations/mine.json"');
     // The player shows the dial on `mine` only (station.test.ts); the page hands it the listener's value.
     expect(html).toMatch(/data-dial="[0-9.]+"/);
-    expect(html).toContain('data-grow="0"');
+    expect(html).not.toContain("data-grow");
     expect(html).toContain('id="station-i18n"');
     const page = html.replace(/<script[\s\S]*?<\/script>/g, "");
     expect(page.match(/<h1/g)).toHaveLength(1);
