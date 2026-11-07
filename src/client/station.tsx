@@ -81,7 +81,7 @@ const plainClick = (e: MouseEvent): boolean => !e.defaultPrevented && e.button =
 
 export function mountStation(root: HTMLElement, opts: StationOptions) {
   const str = (key: string) => opts.strings[key] ?? key;
-  const player = createLinePlayer({ voiceURI: opts.voiceURI, ttsUrl: opts.ttsUrl });
+  const player = createLinePlayer({ voiceURI: opts.voiceURI, ttsUrl: opts.ttsUrl, lang: str("lang.code") === "en" ? "en" : "ja" });
   const reactRoot = createRoot(root);
   let state: State = { power: "off", volume: loadVolume(), current: null, seg: 0, line: 0, queue: [], reason: null, loading: false, replyOpen: false, sent: {}, sendFailed: false };
   let abort = new AbortController();

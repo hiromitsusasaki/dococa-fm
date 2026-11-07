@@ -1293,6 +1293,7 @@ describe("station: the face explains itself", () => {
       expect(toastText()).toBe("このお便りから流します");
       vi.advanceTimersByTime(2600);
       expect(toastText()).toBeNull();
+      a.remove();
     } finally {
       vi.useRealTimers();
     }

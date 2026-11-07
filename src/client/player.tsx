@@ -47,7 +47,7 @@ type State = {
 export function mountPlayer(root: HTMLElement, episode: PlayerEpisode, opts: PlayerOptions) {
   const str = (key: string) => opts.strings?.[key] ?? key;
   const segments = episode.segments;
-  const player = createLinePlayer({ voiceURI: opts.voiceURI, ttsUrl: opts.ttsUrl });
+  const player = createLinePlayer({ voiceURI: opts.voiceURI, ttsUrl: opts.ttsUrl, lang: str("lang.code") === "en" ? "en" : "ja" });
   const reactRoot = createRoot(root);
 
   const startSeg = Number.isInteger(opts.startSeg) && opts.startSeg! >= 0 && opts.startSeg! < segments.length ? opts.startSeg! : 0;

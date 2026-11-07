@@ -487,6 +487,37 @@ describe("player", () => {
       expect(clipAt(1)).toBeDefined();
     });
 
+    it("stops during the retry wait: no second try, nothing spoken for that line", async () => {
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+      mountPlayer(root, one, opts({ ttsUrl: "/tts" }));
+      await tap("toggle");
+      await waitClip(0);
+      const plays = clipAt(0)!.play.mock.calls.length;
+      clipAt(0)!.fire("error");
+      await flush();
+      vi.advanceTimersByTime(2000);
+      await tap("toggle");
+      vi.advanceTimersByTime(4000);
+      await flush();
+      expect(clipAt(0)!.play.mock.calls.length).toBe(plays);
+      expect(spoken).toEqual([]);
+    });
+
+    it("an English episode falls back to an English voice", async () => {
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+      voices = [{ voiceURI: "ja-1", name: "Kyoko", lang: "ja-JP" }, { voiceURI: "en-1", name: "Samantha", lang: "en-US" }, { voiceURI: "en-2", name: "Daniel", lang: "en-GB" }];
+      mountPlayer(root, one, opts({ ttsUrl: "/tts", voiceURI: "ja-1", strings: { ...strings, "lang.code": "en" } }));
+      await tap("toggle");
+      await waitClip(0);
+      clipAt(0)!.fire("error");
+      await flush();
+      vi.advanceTimersByTime(4000);
+      await flush();
+      clipAt(0)!.fire("error");
+      await vi.waitFor(() => expect(utterances.length).toBeGreaterThan(0));
+      expect(utterances[0]).toMatchObject({ lang: "en-US", voice: { voiceURI: "en-2" } });
+    });
+
     it("gives up on the cloud for the rest of the episode after three lines in a row", async () => {
       vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
       const four: PlayerEpisode = { ...one, segments: [{ itemId: "a", slot: "near", lines: [1, 2, 3, 4].map((n) => ({ type: "dj" as const, text: `x${n}` })) }] };

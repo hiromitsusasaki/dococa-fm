@@ -805,7 +805,7 @@ button.pill {
 }
 
 .kind {
-  color: var(--magenta);
+  color: var(--magenta-text);
   font-size: 11px;
   letter-spacing: 0.08em;
 }
@@ -1024,7 +1024,7 @@ button:disabled,
 .settings-error,
 .form-error,
 .player-message {
-  color: var(--magenta);
+  color: var(--magenta-text);
 }
 
 /* Items and letters */
@@ -1063,7 +1063,7 @@ button:disabled,
 }
 
 .item-kind {
-  color: var(--magenta);
+  color: var(--magenta-text);
   font-size: 11px;
   letter-spacing: 0.08em;
 }

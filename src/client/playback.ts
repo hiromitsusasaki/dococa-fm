@@ -78,7 +78,7 @@ export type LinePlayer = {
   stopBed(): void;
 };
 
-export function createLinePlayer(opts: { voiceURI: string; ttsUrl: string | null }): LinePlayer {
+export function createLinePlayer(opts: { voiceURI: string; ttsUrl: string | null; lang?: "ja" | "en" }): LinePlayer {
   const bed = createBed();
   const clips = createClipPlayer();
   let unlocked = false;
@@ -87,6 +87,8 @@ export function createLinePlayer(opts: { voiceURI: string; ttsUrl: string | null
   const cloudFailed = new Set<string>();
   /** Lines in a row, per episode, that fell back to the browser voice. */
   const misses = new Map<string, number>();
+  /** Clip URLs whose retry failed too: a replay of the line goes straight to the browser voice, without the 4 s wait. */
+  const deadClips = new Set<string>();
   const warmed = new Set<string>();
 
   const ttsSrc = (episode: PlayerEpisode, seg: number, line: number) =>
@@ -127,8 +129,8 @@ export function createLinePlayer(opts: { voiceURI: string; ttsUrl: string | null
       if (cloudOn(episode)) {
         warmNext(episode, seg, index);
         const src = ttsSrc(episode, seg, index);
-        let played = await clips.play(src, signal);
-        if (!played && !signal.aborted) {
+        let played = deadClips.has(src) ? false : await clips.play(src, signal);
+        if (!played && !signal.aborted && !deadClips.has(src)) {
           await pause(CLOUD_RETRY_MS, signal);
           if (!signal.aborted) played = await clips.play(src, signal);
         }
@@ -137,12 +139,14 @@ export function createLinePlayer(opts: { voiceURI: string; ttsUrl: string | null
           misses.delete(episode.id);
           return;
         }
+        deadClips.add(src);
         const missed = (misses.get(episode.id) ?? 0) + 1;
         misses.set(episode.id, missed);
         if (missed >= CLOUD_GIVE_UP_AFTER) cloudFailed.add(episode.id);
       }
+      const lang = opts.lang ?? "ja";
       voices ??= await loadVoices();
-      if (!signal.aborted) await speak(line.text, pickVoice(voices, opts.voiceURI), signal);
+      if (!signal.aborted) await speak(line.text, pickVoice(voices, opts.voiceURI, lang), signal, lang);
     },
   };
 }

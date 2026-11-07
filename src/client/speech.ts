@@ -30,19 +30,23 @@ export function loadVoices(): Promise<SpeechSynthesisVoice[]> {
 }
 
 /**
- * Voice names that suggest a male narrator, matched anywhere in the name (`male` only as a whole word, so "Female" does not match): the radio's own (cloud) voice is male, so the
- * browser fallback should not jump to a female one. A plain list, since the Web Speech API reports no gender.
+ * Voice names that suggest a male narrator, per language, matched anywhere in the name (`male` only as a whole word, so
+ * "Female" does not match): the radio's own (cloud) voice is male, so the browser fallback should not jump to a female one.
+ * A plain list, since the Web Speech API reports no gender.
  */
-const MALE_NAMES = /otoya|hattori|ichiro|\bmale\b|男性|daniel|alex/i;
+const MALE_NAMES: Record<"ja" | "en", RegExp> = {
+  ja: /otoya|hattori|ichiro|keita|\bmale\b|男性/i,
+  en: /daniel|alex|\bmale\b/i,
+};
 
-/** The voice the listener chose, else a Japanese voice that looks male, else the first Japanese voice. */
-export const pickVoice = (voices: SpeechSynthesisVoice[], voiceURI: string): SpeechSynthesisVoice | undefined => {
-  const ja = voices.filter((v) => v.lang.startsWith("ja"));
-  return voices.find((v) => v.voiceURI === voiceURI) ?? ja.find((v) => MALE_NAMES.test(v.name ?? "")) ?? ja[0];
+/** The voice the listener chose (if it speaks the language), else a voice of the spoken language that looks male, else the first of that language, else any. */
+export const pickVoice = (voices: SpeechSynthesisVoice[], voiceURI: string, lang: "ja" | "en" = "ja"): SpeechSynthesisVoice | undefined => {
+  const same = voices.filter((v) => v.lang.toLowerCase().startsWith(lang));
+  return same.find((v) => v.voiceURI === voiceURI) ?? same.find((v) => MALE_NAMES[lang].test(v.name ?? "")) ?? same[0] ?? voices[0];
 };
 
 /** Resolves when the line has been read (or skipped through `signal`). Without speech support it just waits a reading time. */
-export function speak(text: string, voice: SpeechSynthesisVoice | undefined, signal: AbortSignal): Promise<void> {
+export function speak(text: string, voice: SpeechSynthesisVoice | undefined, signal: AbortSignal, lang: "ja" | "en" = "ja"): Promise<void> {
   const s = synth();
   return new Promise((resolve) => {
     let timer: ReturnType<typeof setTimeout>;
@@ -62,7 +66,7 @@ export function speak(text: string, voice: SpeechSynthesisVoice | undefined, sig
       timer = setTimeout(finish, Math.max(SILENT_MIN_MS, text.length * SILENT_MS_PER_CHAR));
       return;
     }
-    utterance.lang = "ja-JP";
+    utterance.lang = lang === "en" ? "en-US" : "ja-JP";
     if (voice) utterance.voice = voice;
     utterance.onend = finish;
     utterance.onerror = finish;
