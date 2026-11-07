@@ -1430,6 +1430,42 @@ describe("station: a letter's link and sharing", () => {
     }
   });
 
+  it("the now-playing card shares the letter to X with the short text and the letter's page, in a new tab", async () => {
+    nextReplies = [ok(epA())];
+    autoEnd = false;
+    mountStation(root, opts());
+    await power();
+    await vi.waitFor(() => expect(root.querySelector(".now .share a")).not.toBeNull());
+    const x = root.querySelector<HTMLAnchorElement>(".now .share a")!;
+    expect(x.textContent).toBe("X で共有");
+    expect([x.target, x.rel]).toEqual(["_blank", "noopener"]);
+    const intent = new URL(x.href);
+    expect(intent.origin + intent.pathname).toBe("https://x.com/intent/post");
+    expect(Object.fromEntries(intent.searchParams)).toEqual({ text: "曲A · しずくさんのお便り — Dococa FM", url: `${location.origin}/letters/L1` });
+  });
+
+  it("offers the device's share sheet only where the browser has one, with the title, short text and page", async () => {
+    nextReplies = [ok(epA())];
+    autoEnd = false;
+    mountStation(root, opts());
+    await power();
+    await vi.waitFor(() => expect(root.querySelector(".now .share [data-share]")).not.toBeNull());
+    expect(root.querySelector<HTMLButtonElement>(".now .share [data-share]")!.hidden).toBe(true);
+    const share = vi.fn(() => Promise.resolve());
+    Object.defineProperty(navigator, "share", { value: share, configurable: true });
+    try {
+      held.shift()!.onend?.();
+      await vi.waitFor(() => expect(root.querySelector<HTMLButtonElement>(".now .share [data-share]")!.hidden).toBe(false));
+      const button = root.querySelector<HTMLButtonElement>(".now .share [data-share]")!;
+      expect(button.textContent).toBe("共有");
+      button.click();
+      await flush();
+      expect(share).toHaveBeenCalledWith({ title: "Dococa FM", text: "曲A · しずくさんのお便り — Dococa FM", url: `${location.origin}/letters/L1` });
+    } finally {
+      Object.defineProperty(navigator, "share", { value: undefined, configurable: true });
+    }
+  });
+
   it("without the clipboard API the copy button shows the link to copy by hand", async () => {
     setClipboard(undefined);
     const ask = vi.fn(() => null);

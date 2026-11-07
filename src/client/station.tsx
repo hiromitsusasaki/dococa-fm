@@ -1,7 +1,8 @@
 /** @jsxImportSource hono/jsx/dom */
 import { flushSync } from "hono/jsx/dom";
 import { createRoot } from "hono/jsx/dom/client";
-import { bindMediaSession, createLinePlayer, fetchNext, type LetterLine, type PlayerEpisode, type PlayerItem, reportListen, resumeAt, type StoredPosition, syncMediaSession, whoOf } from "./playback";
+import { bindMediaSession, createLinePlayer, fetchNext, fmt, type LetterLine, type PlayerEpisode, type PlayerItem, reportListen, resumeAt, type StoredPosition, syncMediaSession, whoOf } from "./playback";
+import { shareSender } from "../views/share";
 import { loadDial, postLetter, reactionOf, storeDial } from "./reactions";
 import { clearToast, toast as showToast, wireShare } from "./share";
 import { createSounds } from "./sounds";
@@ -507,7 +508,7 @@ export function mountStation(root: HTMLElement, opts: StationOptions) {
         if (!item) return;
         const first = s.lines.find((l): l is LetterLine => l.type === "letter");
         const reading = s.lines.length > 1 ? Math.min(1, state.line / (s.lines.length - 1)) : 0;
-        rows.push({ key: `${ep.id}:${from + n}`, now, kind: item.kind ?? null, title: item.title, creator: item.creator, ...(first ? { sender: whoOf(first, str) } : {}), ...(now && first ? { letterId: first.letterId, shareable: first.kind !== "reply" && first.kind !== "watashimo" } : {}), ...(now ? { imageUrl: item.imageUrl, reading } : {}) });
+        rows.push({ key: `${ep.id}:${from + n}`, now, kind: item.kind ?? null, title: item.title, creator: item.creator, ...(first ? { sender: whoOf(first, str) } : {}), ...(now && first ? { letterId: first.letterId, shareable: first.kind !== "reply" && first.kind !== "watashimo", shareText: fmt(str("share.text"), { work: item.title, sender: shareSender(first, (k, p) => fmt(str(k), p ?? {})) }) } : {}), ...(now ? { imageUrl: item.imageUrl, reading } : {}) });
       });
     };
     // Off, limit and failed: the panel is empty and shows its hint, so nothing stale is listed.
