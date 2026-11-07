@@ -17,8 +17,9 @@ about.get("/about", (c) => {
         <h1>{t("about.title")}</h1>
         <p class="about-lead">{t("about.lead")}</p>
         {SECTIONS.map((key) => (
-          <section class="panel">
+          <section class="panel panel-rule-under">
             <h2>{t(`about.${key}.title`)}</h2>
+            <div class="rule" aria-hidden="true" />
             <figure class="about-art">
               <img
                 src={`/about/${key}.jpg`}

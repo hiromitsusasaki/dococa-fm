@@ -2197,3 +2197,19 @@ body.letter-player .embed-player {
   border-radius: 0;
   box-shadow: none;
 }
+
+/* /about: the gradient rule sits right under each section heading instead of on top of the panel. */
+.panel-rule-under::before {
+  display: none;
+}
+
+.panel-rule-under .rule {
+  height: 3px;
+  margin: 0 0 var(--sp-3);
+  border-radius: 3px;
+  background: linear-gradient(90deg, var(--coral), var(--lemon) 55%, var(--magenta));
+}
+
+.about .panel-rule-under h2 {
+  margin-bottom: var(--sp-2);
+}

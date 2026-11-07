@@ -18,6 +18,15 @@ describe("GET /about", () => {
     expect(html).not.toContain("局");
   });
 
+  it("carries the gradient rule under each heading, not on top of the panel", async () => {
+    const html = await (await get("/about", await newSession())).text();
+    expect((html.match(/<section class="panel panel-rule-under"/g) ?? []).length).toBe(4);
+    expect((html.match(/<\/h2>\s*<div class="rule"/g) ?? []).length).toBe(4);
+    expect((html.match(/class="rule"/g) ?? []).length).toBe(4);
+    const css = await (await SELF.fetch(`${BASE}/app.css`)).text();
+    expect(css).toMatch(/\.panel-rule-under::before\s*{\s*display:\s*none/);
+  });
+
   it("puts one illustration in each section", async () => {
     const html = await (await get("/about", await newSession())).text();
     for (const name of ["listen", "send", "mine", "rules"]) {
@@ -27,11 +36,11 @@ describe("GET /about", () => {
 
   it("opens the rules with what the AI never does", async () => {
     const ja = await (await get("/about", await newSession())).text();
-    expect(ja).toMatch(/<h2>できること・しないこと<\/h2>\s*<figure[^>]*>.*?<\/figure>\s*<p>AI は、お便りに書き足しません。/);
+    expect(ja).toMatch(/<h2>できること・しないこと<\/h2>\s*<div class="rule"[^>]*><\/div>\s*<figure[^>]*>.*?<\/figure>\s*<p>AI は、お便りに書き足しません。/);
     const cookie = await newSession();
     await postForm("/lang", cookie, { lang: "en", next: "/about" });
     const en = await (await get("/about", cookie)).text();
-    expect(en).toMatch(/<h2>What we do and don[^<]*t do<\/h2>\s*<figure[^>]*>.*?<\/figure>\s*<p>The AI never adds to a letter\./);
+    expect(en).toMatch(/<h2>What we do and don[^<]*t do<\/h2>\s*<div class="rule"[^>]*><\/div>\s*<figure[^>]*>.*?<\/figure>\s*<p>The AI never adds to a letter\./);
   });
 
   it("answers in English for an English listener", async () => {
