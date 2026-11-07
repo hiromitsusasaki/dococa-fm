@@ -15,6 +15,12 @@ about.get("/about", (c) => {
     <Layout title={t("about.title")} lang={listener.lang} listener={listener} path="/about">
       <main class="about">
         <h1>{t("about.title")}</h1>
+        <figure class="about-kv">
+          <picture>
+            <source media="(max-width: 760px)" srcset="/kv-mobile.jpg" />
+            <img src="/kv.jpg" alt={t("home.kvAlt")} width="1280" height="853" loading="eager" decoding="async" />
+          </picture>
+        </figure>
         <p class="about-lead">{t("about.lead")}</p>
         {/* The home opens its tour again on `?tour=1`. */}
         <p>

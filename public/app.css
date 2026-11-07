@@ -1441,6 +1441,19 @@ button:disabled,
   line-height: 1.8;
 }
 
+.about-kv {
+  margin: 0;
+}
+
+.about-kv img {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 3 / 2;
+  object-fit: cover;
+  border-radius: var(--r-hero);
+}
+
 .about-art {
   margin: 0 0 var(--sp-3);
 }

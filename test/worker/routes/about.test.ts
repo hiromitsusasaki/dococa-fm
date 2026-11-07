@@ -44,6 +44,12 @@ describe("GET /about", () => {
     expect(html).toMatch(/<a class="pill tour-again" href="\/\?tour=1">使い方<\/a>/);
   });
 
+  it("opens with the key visual under the title", async () => {
+    const html = await (await get("/about", await newSession())).text();
+    expect(html).toMatch(/<h1>[^<]*<\/h1>\s*<figure class="about-kv"><picture><source media="\(max-width: 760px\)" srcset="\/kv-mobile\.jpg"\/?><img src="\/kv\.jpg" alt="[^"]+" width="1280" height="853"/);
+    expect(html.indexOf("/kv.jpg")).toBeLessThan(html.indexOf('class="about-lead"'));
+  });
+
   it("puts one illustration in each section", async () => {
     const html = await (await get("/about", await newSession())).text();
     for (const name of ["listen", "send", "mine", "rules"]) {

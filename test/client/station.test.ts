@@ -42,8 +42,10 @@ const strings: Record<string, string> = {
   "player.again": "この作品を聴く・観る",
   "player.sendFailed": "送れませんでした",
   "player.sentToast": "送りました",
-  "station.dialNear": "近く",
-  "station.dialFar": "遠く",
+  "station.dialNear": "小",
+  "station.dialFar": "大",
+  "station.volumeLow": "小",
+  "station.volumeHigh": "大",
   "station.dialHint": "次のお便りから効きます",
   "station.dialLocked": "お便りを 3 通送ると、ダイヤルが効きはじめます",
   "station.dialReady": "ダイヤルが効くようになりました",
@@ -1167,7 +1169,7 @@ describe("station: the dial wakes after three letters", () => {
     await flush();
     expect(knob().classList.contains("locked")).toBe(true);
     expect(knob().querySelector(".knob-lock")).not.toBeNull();
-    expect([...knob().querySelectorAll(".dial-end")].map((e) => e.textContent)).toEqual(["近く", "遠く"]);
+    expect([...knob().querySelectorAll(".dial-end")].map((e) => e.textContent)).toEqual(["小", "大"]);
     expect(knob().querySelector(".control-label")!.textContent).toBe("お便りを 3 通送ると、ダイヤルが効きはじめます");
     const input = el("dial") as HTMLInputElement;
     expect(input.disabled).toBe(true);
@@ -1453,11 +1455,19 @@ describe("the home's send modal", () => {
 describe("station: the face explains itself", () => {
   const toastText = () => document.body.querySelector(".toast")?.textContent ?? null;
 
-  it("the dial has Near and Far labels on either side", async () => {
+  it("the dial has 小 and 大 labels on either side", async () => {
     mountStation(root, opts({ stationKey: "mine", dial: 0.4 }));
     await flush();
     const ends = [...root.querySelectorAll(".knob-dial .dial-end")].map((e) => e.textContent);
-    expect(ends).toEqual(["近く", "遠く"]);
+    expect(ends).toEqual(["小", "大"]);
+  });
+
+  it("the volume knob has the same two ends, and they never dim", async () => {
+    mountStation(root, opts({ stationKey: "mine", dial: 0.4, dialReady: false }));
+    await flush();
+    const ends = [...root.querySelectorAll(".knob-volume .dial-end")].map((e) => e.textContent);
+    expect(ends).toEqual(["小", "大"]);
+    expect(root.querySelectorAll(".knob-dial .dial-end").length).toBe(2);
   });
 
   it("the first release of the dial hints once per session", async () => {

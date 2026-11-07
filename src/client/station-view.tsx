@@ -90,9 +90,13 @@ export function StationScreen(p: StationScreenProps) {
             </span>
           </div>
           <label class="knob knob-volume">
-            <span class="knob-body" style={{ "--angle": angle(p.volume) }}>
-              <i></i>
-              <input type="range" min="0" max="100" step="1" data-action="volume" aria-label={str("station.volume")} value={String(Math.round(p.volume * 100))} onInput={(e: Event) => p.on.volume(Number((e.currentTarget as HTMLInputElement).value) / 100)} />
+            <span class="dial-row">
+              <span class="dial-end">{str("station.volumeLow")}</span>
+              <span class="knob-body" style={{ "--angle": angle(p.volume) }}>
+                <i></i>
+                <input type="range" min="0" max="100" step="1" data-action="volume" aria-label={str("station.volume")} value={String(Math.round(p.volume * 100))} onInput={(e: Event) => p.on.volume(Number((e.currentTarget as HTMLInputElement).value) / 100)} />
+              </span>
+              <span class="dial-end">{str("station.volumeHigh")}</span>
             </span>
             <span class="control-label">{str("station.volume")}</span>
           </label>

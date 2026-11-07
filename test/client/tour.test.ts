@@ -100,7 +100,7 @@ describe("the tour on the home", () => {
     "station.tour1Title": "スイッチ",
     "station.tour1": "スイッチを入れると、世界のどこかの誰かのお便りが流れます。サインインは要りません",
     "station.tour2Title": "ダイヤル",
-    "station.tour2": "近く・遠く。好みに近いお便りか、少し遠くのお便りか。お便りを 3 通送ると効きはじめます",
+    "station.tour2": "右に回すほど、思いがけない出会いが増えます。お便りを 3 通送ると効きはじめます",
     "station.tour3Title": "いま流れている",
     "station.tour3": "流れているお便りに「私も」と一言を返せます。",
     "station.tour4Title": "オンエア",
