@@ -4,6 +4,10 @@
 
 Built with Claude: Japan 2026 への応募作です。本番: https://dococafm.app
 
+![本番のホーム（ダーク。左が PC、右がスマホ）](docs/screenshots/2026-11-08-prod-home.png)
+
+ライトモードもあります（[docs/screenshots/2026-11-08-prod-home-light.png](docs/screenshots/2026-11-08-prod-home-light.png)）。
+
 ## なぜ作ったか
 
 好きな曲や本や映画の話を、同じ熱量でできる相手は、なかなかいません。私は田舎で青春を過ごし、知らない音楽や本に出会う場所は夜のラジオでした。顔も知らない誰かが、好きなものの話を書いて送る。それを、ひとりで聴く。
