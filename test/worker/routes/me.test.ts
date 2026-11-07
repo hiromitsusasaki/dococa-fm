@@ -1,9 +1,10 @@
 import { SELF } from "cloudflare:test";
 import { env } from "cloudflare:workers";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { upsertHistory } from "../../../src/worker/db/history";
 import { insertItem } from "../../../src/worker/db/items";
 import { getLetter, insertLetter, setLetterStatus } from "../../../src/worker/db/letters";
+import * as listeners from "../../../src/worker/db/listeners";
 import { createListener, updateListener } from "../../../src/worker/db/listeners";
 import { insertEpisode } from "../../../src/worker/db/episodes";
 import { recordListen } from "../../../src/worker/db/listens";
@@ -113,7 +114,7 @@ describe("GET /me", () => {
     expect(off).toContain(`data-copy="${url}"`);
     // Private: the url is shown but not a link, and the toggle offers to make it public.
     expect(off).not.toContain(`href="${url}"`);
-    expect(off).toMatch(/<form method="post" action="\/me\/radio"[^>]*>[\s\S]*?name="public" value="1"[\s\S]*?<button type="submit"[^>]*>公開する<\/button>/);
+    expect(off).toMatch(/<form method="post" action="\/me\/radio"[^>]*>[\s\S]*?name="public" value="1"[\s\S]*?<button type="submit"[^>]*>ラジオを公開する<\/button>/);
     expect(off).toMatch(/<input type="text" name="slug"[^>]*value="hiro-fm"/);
     expect(off).toContain("公開ラジオには、あなたが送ったお便りと、一言を返したお便りが流れます。");
     expect(off).toContain(t("me.radioNameOnly"));
@@ -121,7 +122,7 @@ describe("GET /me", () => {
     await updateListener(env.DB, idOf(cookie), { stationPublic: true });
     const on = panelOf(await (await get("/me", cookie)).text());
     expect(on).toContain(`href="${url}"`);
-    expect(on).toMatch(/name="public" value="0"[\s\S]*?<button type="submit"[^>]*>非公開にする<\/button>/);
+    expect(on).toMatch(/name="public" value="0"[\s\S]*?<button type="submit"[^>]*>ラジオを非公開にする<\/button>/);
     expect(on).not.toMatch(/\d+ ?件/);
   });
 
@@ -233,7 +234,7 @@ describe("own letters and POST /letters/:id/withdraw", () => {
     expect(panel).not.toContain("取り下げ済み");
     expect(panel).not.toContain("他人のお便り");
     expect(panel.match(new RegExp(`action="/letters/(${l1.id}|${l2.id})/withdraw"`, "g"))).toHaveLength(2);
-    expect(panel).toContain(t("me.withdraw"));
+    expect(panel).toContain("このお便りを非公開にする");
     expect(panel).toContain(t("me.withdrawConfirm"));
     expect(panel).not.toMatch(/\d+ ?件/);
     // Share: the letter's public page and a short text with the work and the radio name; nothing private.
@@ -331,6 +332,19 @@ describe("POST /me/radio", () => {
     const row = await rowOf(idOf(cookie));
     expect(row?.pub).toBe(1);
     expect(row?.slug).toMatch(/^radio-[0-9a-z]{6}$/);
+  });
+
+  it("re-renders the page with a short message and writes nothing when the address cannot be assigned", async () => {
+    const spy = vi.spyOn(listeners, "setStationSlugIfNone").mockRejectedValue(new Error("D1 unavailable"));
+    try {
+      const cookie = await signedInSession();
+      const res = await radio(cookie, { public: "1" });
+      expect(res.status).toBe(503);
+      expect(await res.text()).toContain("公開ラジオの URL を用意できませんでした。もう一度試してください");
+      expect(await rowOf(idOf(cookie))).toEqual({ pub: 0, slug: null });
+    } finally {
+      spy.mockRestore();
+    }
   });
 
   it("changes the slug (trimmed, lower-cased) without touching public", async () => {

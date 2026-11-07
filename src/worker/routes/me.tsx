@@ -25,8 +25,10 @@ const isHttp = (s: string | null): s is string => s !== null && /^https?:\/\//i.
 
 type MeContext = Context<{ Bindings: Env; Variables: Variables }>;
 
-/** What the public radio panel shows after a refused change: the slug as typed, and why. */
-type RadioError = { slug: string; reason: "taken" | "invalid" };
+/** What the public radio panel shows after a refused change: the slug as typed, and why. `failed`: no address could be assigned. */
+type RadioError = { slug: string; reason: "taken" | "invalid" | "failed" };
+
+const RADIO_ERROR_TEXT = { taken: "me.slugTaken", invalid: "me.slugInvalid", failed: "me.radioFailed" } as const;
 
 export const me = new Hono<{ Bindings: Env; Variables: Variables }>();
 
@@ -124,7 +126,7 @@ async function renderMe(c: MeContext, signedIn: Listener, radioError?: RadioErro
           )}
           <form method="post" action="/me/radio" class="me-radio-toggle">
             <input type="hidden" name="public" value={listener.stationPublic ? "0" : "1"} />
-            <button type="submit" class={listener.stationPublic ? "quiet" : undefined}>{t(listener.stationPublic ? "me.radioMakePrivate" : "me.radioMakePublic")}</button>
+            <button type="submit" class={listener.stationPublic ? "quiet" : undefined}>{t(listener.stationPublic ? "me.radioUnpublish" : "me.radioPublish")}</button>
           </form>
           <form method="post" action="/me/radio" class="me-radio-slug">
             <label>
@@ -133,7 +135,7 @@ async function renderMe(c: MeContext, signedIn: Listener, radioError?: RadioErro
             </label>
             <button type="submit" class="quiet">{t("me.radioSlugSave")}</button>
             <small>{t("me.radioSlugHelp")}</small>
-            {radioError && <p class="settings-error" role="alert">{t(radioError.reason === "taken" ? "me.slugTaken" : "me.slugInvalid")}</p>}
+            {radioError && <p class="settings-error" role="alert">{t(RADIO_ERROR_TEXT[radioError.reason])}</p>}
           </form>
           <p class="muted">{t("me.radioNameOnly")}</p>
         </section>
@@ -158,7 +160,7 @@ async function renderMe(c: MeContext, signedIn: Listener, radioError?: RadioErro
         </section>
       </main>
     </Layout>,
-    radioError ? 422 : 200,
+    !radioError ? 200 : radioError.reason === "failed" ? 503 : 422,
   );
 }
 
@@ -182,7 +184,14 @@ me.post(
     const form = c.req.valid("form");
     if ("public" in form) {
       // Turning it on needs an address; one signed in before addresses were assigned gets it now.
-      if (form.public === "1") await ensureStationSlug(c.env.DB, listener);
+      // If that fails nothing is written: the page says so and the listener can try again.
+      if (form.public === "1") {
+        try {
+          await ensureStationSlug(c.env.DB, listener);
+        } catch {
+          return renderMe(c, listener, { slug: listener.stationSlug ?? "", reason: "failed" });
+        }
+      }
       await updateListener(c.env.DB, listener.id, { stationPublic: form.public === "1" });
       return c.redirect("/me#radio", 303);
     }
