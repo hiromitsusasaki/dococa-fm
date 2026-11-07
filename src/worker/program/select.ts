@@ -1,14 +1,16 @@
 import { getItemVecs } from "../db/items";
 import { getLetter } from "../db/letters";
 import type { Letter, Listener } from "../types";
-import { ECHO_SQL, EXCLUDED_SQL, FAR_SQL, FRESH_PLACE_LETTERS_SQL, letterIdsSql, NEAR_SQL, NEIGHBOR_SQL, OWNER_FAVORITES_SQL, STATION_EXCLUDED_SQL } from "./select-sql";
+import { ECHO_SQL, EXCLUDED_SQL, FAR_SQL, FRESH_PLACE_LETTERS_SQL, letterIdsSql, NEAR_SQL, NEIGHBOR_SQL, OWNER_FAVORITES_SQL } from "./select-sql";
 import { type StationKey, stationColumn } from "./station";
 import { farness, pickByDial, standingOf } from "./taste";
 
 export type Slot = "near" | "neighbor" | "far";
+/** One segment: a work and the one letter it reads (none in an echo of reactions only). */
 export type Selection = { itemId: string; slot: Slot; letterIds: string[] };
 
-const MAX_LETTERS_PER_SEGMENT = 3;
+/** A letter heard within this long waits; then it may air again. */
+const HEARD_WITHIN_MS = 7 * 24 * 60 * 60 * 1000;
 
 function fnv1a(s: string): number {
   let h = 0x811c9dc5;
@@ -50,37 +52,49 @@ async function echoItem(db: D1Database, listener: Listener, rng: () => number): 
   return candidates.length === 0 ? null : (shuffle(candidates, rng)[0] ?? null);
 }
 
-/** Items per letter query: D1 binds at most 100 parameters, and the listener id takes one. */
+/** Items per letter query: D1 binds at most 100 parameters, and the listener id and the time take two. */
 const LETTER_QUERY_ITEMS = 90;
 
-/** Readable letter ids of every chosen item, one query per 90 items; each item's list is ordered by id, as the shuffle expects. */
-async function letterIdsByItem(db: D1Database, listenerId: string, itemIds: string[]): Promise<Map<string, string[]>> {
-  const out = new Map<string, string[]>();
+/** A letter the DJ may read, and whether the listener heard it in the last 7 days. */
+type Readable = { id: string; heard: boolean };
+
+/** Readable letters of every chosen item, one query per 90 items; each item's list has the unheard first, the oldest first. */
+async function lettersByItem(db: D1Database, listenerId: string, since: string, itemIds: string[]): Promise<Map<string, Readable[]>> {
+  const out = new Map<string, Readable[]>();
   for (let i = 0; i < itemIds.length; i += LETTER_QUERY_ITEMS) {
     const chunk = itemIds.slice(i, i + LETTER_QUERY_ITEMS);
-    const { results } = await db.prepare(letterIdsSql(chunk.length)).bind(listenerId, ...chunk).all<{ id: string; item_id: string }>();
-    for (const r of results) out.set(r.item_id, [...(out.get(r.item_id) ?? []), r.id]);
+    const { results } = await db.prepare(letterIdsSql(chunk.length)).bind(listenerId, since, ...chunk).all<{ id: string; item_id: string; heard: number }>();
+    for (const r of results) out.set(r.item_id, [...(out.get(r.item_id) ?? []), { id: r.id, heard: r.heard === 1 }]);
   }
   return out;
 }
 
-/** What the listener met lately on a station: works heard (own station only), works of the last episodes there, and the latest episode's work. */
-type Recent = { heard: ReadonlySet<string>; aired: ReadonlySet<string>; latest: ReadonlySet<string> };
-
-async function recentOn(db: D1Database, sql: string, ...binds: unknown[]): Promise<Recent> {
-  const { results } = await db.prepare(sql).bind(...binds).all<{ item_id: string; why: "heard" | "aired" | "latest" }>();
-  const of = (why: string) => new Set(results.filter((r) => r.why === why).map((r) => r.item_id));
-  return { heard: of("heard"), aired: of("aired"), latest: of("latest") };
+/**
+ * The one letter a segment reads among its work's: the first the listener has not heard lately, the oldest first, so
+ * the letters of a work take turns. At a cold start a letter from a fresh place goes before the others of its kind.
+ */
+function oneLetter(letters: readonly Readable[] = [], freshPlace: ReadonlySet<string> | null = null): string[] {
+  const order = freshPlace ? [...letters].sort((a, b) => Number(a.heard) - Number(b.heard) || Number(freshPlace.has(b.id)) - Number(freshPlace.has(a.id))) : letters;
+  return order[0] ? [order[0].id] : [];
 }
 
-/** 0: not met lately; 1: heard lately; 2: aired in the last episodes; 3: the latest episode's work. The lower is tried first. */
+/** What waits on a station: works with every letter heard lately, works of the last three segments there, and the latest segment's work. */
+type Recent = { spent: ReadonlySet<string>; aired: ReadonlySet<string>; latest: ReadonlySet<string> };
+
+async function recentOn(db: D1Database, listenerId: string, since: string, station: string): Promise<Recent> {
+  const { results } = await db.prepare(EXCLUDED_SQL).bind(listenerId, since, station).all<{ item_id: string; why: keyof Recent }>();
+  const of = (why: keyof Recent) => new Set(results.filter((r) => r.why === why).map((r) => r.item_id));
+  return { spent: of("spent"), aired: of("aired"), latest: of("latest") };
+}
+
+/** 0: nothing waits; 1: every letter heard lately; 2: aired in the last three segments; 3: the latest segment's work. The lower is tried first. */
 function staleness(r: Recent, id: string): number {
-  return r.latest.has(id) ? 3 : r.aired.has(id) ? 2 : r.heard.has(id) ? 1 : 0;
+  return r.latest.has(id) ? 3 : r.aired.has(id) ? 2 : r.spent.has(id) ? 1 : 0;
 }
 
 /**
  * The candidates in the order they are tried: the exclusions are lifted one at a time when nothing fresher is left, and
- * the latest episode's work comes last, so it airs again only when it is the only one. The sort is stable: the shuffle
+ * the latest segment's work comes last, so it airs again only when it is the only one. The sort is stable: the shuffle
  * still decides within each rank.
  */
 function freshestFirst<T>(xs: readonly T[], r: Recent, idOf: (x: T) => string): T[] {
@@ -104,51 +118,52 @@ function interleave(lists: Selection[][]): Selection[] {
 
 const hasLetters = (s: Selection): boolean => s.letterIds.length > 0;
 
-/** Letters the listener may hear for each item, up to the per-segment cap, in a seeded order. */
-async function withLetters(db: D1Database, listener: Listener, itemIds: string[], slot: Slot, rng: () => number): Promise<Selection[]> {
-  const readable = await letterIdsByItem(db, listener.id, itemIds);
-  return itemIds.map((itemId) => ({ itemId, slot, letterIds: shuffle(readable.get(itemId) ?? [], rng).slice(0, MAX_LETTERS_PER_SEGMENT) }));
+/** Each item with the one letter it reads (see `oneLetter`). */
+async function withLetters(db: D1Database, listener: Listener, since: string, itemIds: string[], slot: Slot): Promise<Selection[]> {
+  const readable = await lettersByItem(db, listener.id, since, itemIds);
+  return itemIds.map((itemId) => ({ itemId, slot, letterIds: oneLetter(readable.get(itemId)) }));
 }
 
-/** The world station: far only, for anyone. No echo: nothing here is the listener's own. The works of the listener's last episodes here wait. */
-async function worldProgram(db: D1Database, listener: Listener, size: number, rng: () => number): Promise<Selection[]> {
-  const recent = await recentOn(db, STATION_EXCLUDED_SQL, listener.id, stationColumn({ kind: "world" }));
+/** The world station: far only, for anyone. No echo: nothing here is the listener's own. The works of the last segments here wait. */
+async function worldProgram(db: D1Database, listener: Listener, since: string, size: number, rng: () => number): Promise<Selection[]> {
+  const recent = await recentOn(db, listener.id, since, stationColumn({ kind: "world" }));
   const pool = freshestFirst(shuffle(await ids(db, FAR_SQL, listener.id), rng), recent, self).slice(0, size);
-  return withLetters(db, listener, pool, "far", rng);
+  return (await withLetters(db, listener, since, pool, "far")).filter(hasLetters);
 }
 
 /**
- * A public station: the owner's favourites that someone has written about. The rest wait until a letter arrives. The
- * works of the listener's last episodes here wait too; a favourite without a letter never takes a seat from one with.
+ * A public station: the owner's favourites that someone has written about, one letter each. The rest wait until a
+ * letter arrives. The works of the listener's last segments here wait too; a favourite without a letter never takes a
+ * seat from one with.
  */
-async function publicProgram(db: D1Database, listener: Listener, ownerId: string, size: number, rng: () => number): Promise<Selection[]> {
-  const recent = await recentOn(db, STATION_EXCLUDED_SQL, listener.id, stationColumn({ kind: "public", ownerId }));
-  const lettered = (await withLetters(db, listener, shuffle(await ids(db, OWNER_FAVORITES_SQL, ownerId), rng), "near", rng)).filter(hasLetters);
+async function publicProgram(db: D1Database, listener: Listener, ownerId: string, since: string, size: number, rng: () => number): Promise<Selection[]> {
+  const recent = await recentOn(db, listener.id, since, stationColumn({ kind: "public", ownerId }));
+  const lettered = (await withLetters(db, listener, since, shuffle(await ids(db, OWNER_FAVORITES_SQL, ownerId), rng), "near")).filter(hasLetters);
   return freshestFirst(lettered, recent, (s) => s.itemId).slice(0, size);
 }
 
 /**
  * Whether a listener may ask to hear this letter (a link to it): someone else's public letter, or a found voice with
- * its source, still readable for them. With the readable letters of its work; null for anything else.
+ * its source, still readable for them.
  */
-async function readableAsked(db: D1Database, listener: Listener, l: Letter): Promise<string[] | null> {
-  if (l.status !== "public" || l.listenerId === listener.id) return null;
+async function readableAsked(db: D1Database, listener: Listener, since: string, l: Letter): Promise<boolean> {
+  if (l.status !== "public" || l.listenerId === listener.id) return false;
   const sourced = Boolean(l.sourceUrl?.trim()) && Boolean(l.sourceAuthor?.trim());
-  if (!(l.kind === "letter" || (l.kind === "found" && sourced))) return null;
-  const readable = (await letterIdsByItem(db, listener.id, [l.itemId])).get(l.itemId) ?? [];
-  return readable.includes(l.id) ? readable : null;
+  if (!(l.kind === "letter" || (l.kind === "found" && sourced))) return false;
+  const readable = (await lettersByItem(db, listener.id, since, [l.itemId])).get(l.itemId) ?? [];
+  return readable.some((r) => r.id === l.id);
 }
 
-/** Whether the letter a link names would take the first seat for this listener (the home primes the radio only then). */
-export const canAskLetter = async (db: D1Database, listener: Listener, l: Letter): Promise<boolean> => (await readableAsked(db, listener, l)) !== null;
+const heardSince = (): string => new Date(Date.now() - HEARD_WITHIN_MS).toISOString();
 
-/** The letter a listener asked to hear (see `readableAsked`): its item takes the first seat with that letter read first. Anything else: null. */
-async function askedLetter(db: D1Database, listener: Listener, letterId: string, rng: () => number): Promise<{ itemId: string; letterIds: string[] } | null> {
+/** Whether the letter a link names would take the first seat for this listener (the home primes the radio only then). */
+export const canAskLetter = async (db: D1Database, listener: Listener, l: Letter): Promise<boolean> => readableAsked(db, listener, heardSince(), l);
+
+/** The letter a listener asked to hear (see `readableAsked`): its item takes the first seat, reading that letter. Anything else: null. */
+async function askedLetter(db: D1Database, listener: Listener, since: string, letterId: string): Promise<{ itemId: string; letterIds: string[] } | null> {
   const l = await getLetter(db, letterId);
-  const readable = l ? await readableAsked(db, listener, l) : null;
-  if (!l || !readable) return null;
-  const others = shuffle(readable.filter((id) => id !== l.id), rng);
-  return { itemId: l.itemId, letterIds: [l.id, ...others].slice(0, MAX_LETTERS_PER_SEGMENT) };
+  if (!l || !(await readableAsked(db, listener, since, l))) return null;
+  return { itemId: l.itemId, letterIds: [l.id] };
 }
 
 /** A one-seat programme without distances: the dial picks which pool is tried first; the rest follow far, near, neighbor. */
@@ -157,14 +172,13 @@ function seatOrder(dial: number): Slot[] {
   return [primary, ...(["far", "near", "neighbor"] as const).filter((s) => s !== primary)];
 }
 
-const HEARD_WITHIN_MS = 7 * 24 * 60 * 60 * 1000;
 /** Candidates scored per pick, drawn at random from the pools, so a large catalogue does not thrash the vector cache. */
 const MAX_SCORED = 300;
 
 /**
- * The one seat by distance: among the pool items that have a vector, minus the works heard in the last 7 days and
- * those of the last 30 episodes on this station (the first exclusion is lifted when nothing is left, then the
- * second; the latest episode's work only when it is the only one), the dial's band of the listener's taste. Null when
+ * The one seat by distance: among the pool items that have a vector, minus the works whose every letter was heard in the
+ * last 7 days and those of the last three segments on this station (the first exclusion is lifted when nothing is left,
+ * then the second; the latest segment's work only when it is the only one), the dial's band of the listener's taste. Null when
  * no candidate has a vector: the pools then choose as before. The distance only
  * chooses; it is not returned. The slot (what the bridge says) follows the listener's own pools: a work of their near
  * pool is near however far its vector lies; any other is neighbor below the 2/3 percentile, far above.
@@ -188,11 +202,12 @@ export async function selectProgram(
 ): Promise<Selection[]> {
   const size = Math.max(0, Math.floor(opts.size ?? 6));
   const rng = seededRng(opts.seed ?? crypto.randomUUID());
-  if (opts.station?.kind === "world") return worldProgram(db, listener, size, rng);
-  if (opts.station?.kind === "public") return publicProgram(db, listener, opts.station.ownerId, size, rng);
+  const since = heardSince();
+  if (opts.station?.kind === "world") return worldProgram(db, listener, since, size, rng);
+  if (opts.station?.kind === "public") return publicProgram(db, listener, opts.station.ownerId, since, size, rng);
   // The dial the player sends wins over the stored one.
   const dial = Math.min(1, Math.max(0, opts.dial ?? listener.dial));
-  const asked = size > 0 && opts.letterId ? await askedLetter(db, listener, opts.letterId, rng) : null;
+  const asked = size > 0 && opts.letterId ? await askedLetter(db, listener, since, opts.letterId) : null;
   const room = size - (asked ? 1 : 0);
 
   const farQuota = Math.min(room, Math.max(1, Math.round(room * dial)));
@@ -220,8 +235,7 @@ export async function selectProgram(
   let freshPlace: ReadonlySet<string> | null = null;
   const count = () => chosen.near.length + chosen.neighbor.length + chosen.far.length;
   if (room === 1 && !echo) {
-    const since = new Date(Date.now() - HEARD_WITHIN_MS).toISOString();
-    const recent = await recentOn(db, EXCLUDED_SQL, listener.id, since);
+    const recent = await recentOn(db, listener.id, since, stationColumn({ kind: "mine" }));
     const { taste, blank } = await standingOf(db, listener);
     const byDistance = taste ? await pickByDistance(db, taste, [...pools.near, ...pools.neighbor, ...pools.far], new Set(raw.near), recent, dial, rng) : null;
     if (byDistance) chosen[byDistance.slot].push(byDistance.id);
@@ -251,14 +265,10 @@ export async function selectProgram(
     }
   }
 
-  const readable = await letterIdsByItem(db, listener.id, [...chosen.near, ...chosen.neighbor, ...chosen.far]);
+  const readable = await lettersByItem(db, listener.id, since, [...chosen.near, ...chosen.neighbor, ...chosen.far]);
   const segments: Record<Slot, Selection[]> = { near: [], neighbor: [], far: [] };
   for (const slot of ["near", "neighbor", "far"] as const) {
-    for (const itemId of chosen[slot]) {
-      const order = shuffle(readable.get(itemId) ?? [], rng);
-      const letterIds = freshPlace ? byFlag(order, (id) => (freshPlace as ReadonlySet<string>).has(id)) : order;
-      segments[slot].push({ itemId, slot, letterIds: letterIds.slice(0, MAX_LETTERS_PER_SEGMENT) });
-    }
+    for (const itemId of chosen[slot]) segments[slot].push({ itemId, slot, letterIds: oneLetter(readable.get(itemId), freshPlace) });
   }
 
   // The asked letter's item sits where the pools put it; an item no pool holds (nobody else wrote yet) counts as near.

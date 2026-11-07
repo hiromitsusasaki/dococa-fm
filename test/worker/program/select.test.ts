@@ -164,17 +164,17 @@ describe("selectProgram", () => {
     expect(await selectProgram(env.DB, d, { seed: "s" })).toEqual([]);
   });
 
-  it("letterIds hold at most 3, never own letters, never watashimo", async () => {
+  it("each segment reads exactly one letter, never an own letter, never a reaction", async () => {
     const f = await buildFixture();
     const forbidden = new Set([...f.letters.own, ...f.letters.watashimo]);
     for (const seed of ["a", "b", "c", "d"]) {
       const p = await selectProgram(env.DB, { ...f.a, dial: 0.3 }, { seed });
       for (const seg of p) {
-        expect(seg.letterIds.length).toBeLessThanOrEqual(3);
+        expect(seg.letterIds).toHaveLength(1);
         for (const id of seg.letterIds) expect(forbidden.has(id)).toBe(false);
       }
       const seg0 = p.find((s) => s.itemId === f.items[0]);
-      expect(seg0?.letterIds).toHaveLength(3);
+      expect(seg0?.letterIds).toHaveLength(1);
       const allowed = new Set(f.letters.i0Letters.map((l) => l.id));
       for (const id of seg0?.letterIds ?? []) expect(allowed.has(id)).toBe(true);
     }
@@ -361,7 +361,7 @@ describe("selectProgram stations", () => {
     const p = await selectProgram(env.DB, guest, { station: { kind: "public", ownerId: owner.id }, size: 6, seed: "p" });
     expect(p.map((s) => s.itemId)).toEqual([items[0]]);
     expect(p.every((s) => s.slot === "near" && s.letterIds.length > 0)).toBe(true);
-    expect(p.find((s) => s.itemId === items[0])?.letterIds).toHaveLength(2);
+    expect(p.find((s) => s.itemId === items[0])?.letterIds).toHaveLength(1);
 
     const ownerListening = await selectProgram(env.DB, owner, { station: { kind: "public", ownerId: owner.id }, size: 6, seed: "p" });
     expect(ownerListening.find((s) => s.itemId === items[0])?.letterIds).toHaveLength(1);
@@ -502,11 +502,21 @@ describe("selectProgram by distance", () => {
     }
   });
 
-  it("skips a work heard yesterday unless it is the only one", async () => {
+  it("skips a letter heard yesterday; the work waits once every letter of it was heard, unless it is the only one", async () => {
     const f = await withVectors();
     const ep = await episodeOf(f.a.id, new Date(Date.now() - 2 * DAY).toISOString());
     const onI1 = await insertLetter(env.DB, letterDraft(f.items[1]!, { listenerId: f.c.id, body: "C on 1" }));
-    await recordListen(env.DB, { listenerId: f.a.id, episodeId: ep.id, letterId: onI1.id, segmentIndex: 0, heardAt: new Date(Date.now() - DAY).toISOString() });
+    const heard = (letterId: string) => recordListen(env.DB, { listenerId: f.a.id, episodeId: ep.id, letterId, segmentIndex: 0, heardAt: new Date(Date.now() - DAY).toISOString() });
+    await heard(onI1.id);
+    // i1 still has letters A has not heard: the close work comes, with one of those.
+    for (const seed of seeds) {
+      const [seg] = await selectProgram(env.DB, f.a, { size: 1, seed, dial: 0 });
+      expect(seg?.itemId).toBe(f.items[1]);
+      expect(seg?.letterIds).toHaveLength(1);
+      expect(seg?.letterIds).not.toContain(onI1.id);
+    }
+    const rest = await env.DB.prepare("SELECT id FROM letters WHERE item_id = ? AND id != ? AND kind IN ('letter', 'found')").bind(f.items[1]!, onI1.id).all<{ id: string }>();
+    for (const r of rest.results) await heard(r.id);
     for (const seed of seeds) expect((await selectProgram(env.DB, f.a, { size: 1, seed, dial: 0 }))[0]?.itemId).toBe(f.items[9]);
     // i9's only letter is taken down: i1 is the one work with a vector left, so it airs again.
     await env.DB.prepare("UPDATE letters SET status = 'rejected' WHERE item_id = ?").bind(f.items[9]!).run();
@@ -633,19 +643,44 @@ describe("selectProgram never airs the same work twice in a row", () => {
     }
   });
 
-  it("mine without distances: skips the works of the last episodes, and never repeats the latest when that is lifted", async () => {
+  it("mine without distances: only the works of the last three segments wait; older ones come back", async () => {
     const f = await buildFixture();
-    const far = f.items.slice(5, 12);
-    // i5..i10 aired lately: at the far end only i11 is fresh.
-    await episodeOf(f.a.id, ago(60_000), far.slice(0, 6));
-    for (const seed of seeds) expect((await selectProgram(env.DB, f.a, { size: 1, seed, dial: 1 }))[0]?.itemId).toBe(f.items[11]);
-    // Every work of every pool aired lately; the latest episode holds i11.
-    await episodeOf(f.a.id, ago(50_000), [f.items[0]!, f.items[1]!, f.items[2]!, f.items[4]!]);
-    await episodeOf(f.a.id, ago(30_000), [f.items[11]!]);
-    for (const seed of seeds) for (const dial of [0, 0.5, 1]) {
-      const p = await selectProgram(env.DB, f.a, { size: 1, seed, dial });
-      expect(p).toHaveLength(1);
-      expect(p[0]?.itemId).not.toBe(f.items[11]);
+    // i5..i8 aired four segments and more ago; i9, i10, i11 are the last three segments.
+    await episodeOf(f.a.id, ago(90_000), f.items.slice(5, 9));
+    for (const n of [9, 10, 11]) await episodeOf(f.a.id, ago(60_000 - n * 1000), [f.items[n]!]);
+    const seen = new Set<string>();
+    for (const seed of seeds) seen.add((await selectProgram(env.DB, f.a, { size: 1, seed, dial: 1 }))[0]!.itemId);
+    for (const id of seen) expect(f.items.slice(5, 9)).toContain(id);
+  });
+
+  it("one letter per segment: a work with several letters never airs twice in a row, and its letters take turns", async () => {
+    const writer = await createListener(env.DB);
+    const many = (await insertItem(env.DB, itemDraft({ title: "many" }))).id;
+    const letters: string[] = [];
+    for (let n = 0; n < 3; n++) letters.push((await insertLetter(env.DB, letterDraft(many, { listenerId: writer.id, body: `many ${n}` }))).id);
+    const one = (await insertItem(env.DB, itemDraft({ title: "one" }))).id;
+    await insertLetter(env.DB, letterDraft(one, { listenerId: writer.id, body: "one" }));
+    for (const station of [undefined, { kind: "world" as const }]) {
+      const me = await createListener(env.DB);
+      const aired: { itemId: string; letterId: string }[] = [];
+      for (let n = 0; n < 6; n++) {
+        const [seg] = await selectProgram(env.DB, me, { size: 1, seed: `s${n}`, dial: 0.5, ...(station ? { station } : {}) });
+        expect(seg?.letterIds).toHaveLength(1);
+        const at = ago(60_000 - n * 1000);
+        const ep = await insertEpisode(env.DB, {
+          listenerId: me.id,
+          segments: [{ itemId: seg!.itemId, slot: seg!.slot, lines: [{ type: "letter", letterId: seg!.letterIds[0]!, text: "x", radioName: "r", place: "p", kind: "letter", sourceUrl: null, sourceAuthor: null }] }],
+          verified: true,
+          report: REPORT,
+          station: station ? "world" : "mine",
+          createdAt: at,
+        });
+        await recordListen(env.DB, { listenerId: me.id, episodeId: ep.id, letterId: seg!.letterIds[0]!, segmentIndex: 0, heardAt: at });
+        aired.push({ itemId: seg!.itemId, letterId: seg!.letterIds[0]! });
+      }
+      for (let n = 1; n < aired.length; n++) expect(aired[n]!.itemId).not.toBe(aired[n - 1]!.itemId);
+      // The three letters of "many" each air once before any of them airs again.
+      expect(new Set(aired.filter((a) => a.itemId === many).slice(0, 3).map((a) => a.letterId))).toEqual(new Set(letters));
     }
   });
 

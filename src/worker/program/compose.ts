@@ -142,11 +142,11 @@ export function letterLines(l: Letter, unit: UnitLines | null, withIntro: boolea
 }
 
 /**
- * Lays out each segment: bridge, the fixed lead naming the work, the work's intro, then per letter [hand-over, letter, after] with a sameWork
- * bridge between letters, then the reactions; nothing closes the episode. The intro is the first
- * letter's own verified unit, said once before its hand-over; with none (a reply read first has no unit), none.
- * Letter lines come from `letters` only, so nothing the DJ wrote can stand in for a letter. Only verified
- * units speak; with `units === null`, or no verified unit for a letter, the DJ says only fixed phrases around it.
+ * Lays out each segment around one letter: bridge, the fixed lead naming the work, the letter's intro, hand-over, the
+ * letter, its after, then the reactions; nothing closes the episode. The letter is the first of `letterIds` that
+ * `letters` holds; a segment never reads a second one (each letter airs in its own segment). Letter lines come from
+ * `letters` only, so nothing the DJ wrote can stand in for a letter. Only verified units speak; with `units === null`,
+ * or no verified unit for the letter, the DJ says only fixed phrases around it.
  */
 export function composeEpisode(
   plan: SegmentPlan[],
@@ -170,20 +170,13 @@ export function composeEpisode(
     const item = items.get(p.itemId);
     if (!item) throw new Error(`item missing: ${p.itemId}`);
     if (p.letterIds.length === 0 && p.reactionIds.length === 0) throw new Error("segment without letters");
-    const present = p.letterIds.flatMap((id) => letters.get(id) ?? []);
     const lines: ScriptLine[] = opens && asked && i === 0 ? [] : [bridgeLine(bridgeBefore(opens && i === 0, p.slot, station), lang)];
-    // A unit's intro was written with its own letter in the prompt, so it airs only before that letter.
-    // The lead names the work once, before the first letter, with or without a unit.
-    const first = present[0];
-    if (first) lines.push(leadLine(item, lang));
-    const firstUnit = first ? spoken(first) : null;
-    const intro = firstUnit?.intro ?? "";
-    if (first && intro !== "") lines.push(unitLine(intro, first.id, "intro", speechReadings(firstUnit, item, lang)));
-    present.forEach((l, n) => {
-      if (n > 0) lines.push(bridgeLine("bridge.sameWork", lang));
-      const u = spoken(l);
-      lines.push(...letterLines(l, u, false, lang, speechReadings(u, item, lang)));
-    });
+    // The lead names the work before the letter, with or without a unit.
+    const letter = p.letterIds.map((id) => letters.get(id)).find((l) => l !== undefined);
+    if (letter) {
+      const u = spoken(letter);
+      lines.push(leadLine(item, lang), ...letterLines(letter, u, true, lang, speechReadings(u, item, lang)));
+    }
     for (const id of p.reactionIds.slice(0, MAX_REACTIONS)) {
       const l = letters.get(id);
       if (l) lines.push(...reaction(l, lang));

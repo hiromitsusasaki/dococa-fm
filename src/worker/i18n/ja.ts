@@ -171,7 +171,6 @@ export const ja = {
   "bridge.neighbor": "次は、近くの棚からのお便りです。",
   "bridge.far": "次は、少し遠くからのお便りです。",
   "bridge.next": "続いてのお便りです。",
-  "bridge.sameWork": "同じ作品に、別の人からもお便りが届いています。",
   "bridge.close": "ここで一息。",
   "station.world": "Dococa FM",
   "station.mine": "あなたのラジオ",

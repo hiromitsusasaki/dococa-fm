@@ -5,6 +5,7 @@ import { upsertHistory } from "../../../src/worker/db/history";
 import { insertItem } from "../../../src/worker/db/items";
 import { insertLetter } from "../../../src/worker/db/letters";
 import { createListener } from "../../../src/worker/db/listeners";
+import { recordListen } from "../../../src/worker/db/listens";
 import { getUnits, upsertUnit } from "../../../src/worker/db/units";
 import type { Env } from "../../../src/worker/env";
 import { buildEpisode, EpisodeUnverifiedError } from "../../../src/worker/program/build";
@@ -20,6 +21,8 @@ const storeUnit = (letterId: string, intro: string, after: string, verified = tr
   upsertUnit(env.DB, { letterId, lang: "ja", intro, after, verified, audioReady: false });
 const texts = (lines: ScriptLine[]) => lines.map((l) => (l.type === "letter" ? `letter:${l.letterId}` : (l as { text: string }).text));
 const djTexts = (lines: ScriptLine[]) => lines.filter((l) => l.type === "dj").map((l) => (l as { text: string }).text);
+/** Makes the letter the oldest of its work, so the segment reads it (the oldest unheard first). */
+const oldest = (letterId: string) => env.DB.prepare("UPDATE letters SET created_at = '2020-01-01T00:00:00Z' WHERE id = ?").bind(letterId).run();
 
 /** Listener A owns i0 (with A's own letter, which B answered); C wrote on i0 and on i1, a far item. */
 async function fixture(): Promise<{ a: Listener; mine: Letter; mineReply: Letter; near: Letter; far: Letter; i0: string; i1: string }> {
@@ -77,6 +80,7 @@ describe("buildEpisode", () => {
     const f = await fixture();
     await upsertUnit(env.DB, { letterId: f.near.id, lang: "ja", intro: "近くの紹介です。", after: "近くの感想です。", verified: true, audioReady: false });
     const near = await insertLetter(env.DB, letterDraft(f.i1, { listenerId: f.near.listenerId, radioName: "しずく", place: "松本", placeCountry: "JP", placeRegion: "20", body: "雪の朝に。", bodyJa: "雪の朝に。", bodyEn: "On a snowy morning." }));
+    await oldest(near.id);
     create.mockResolvedValue(unitReply("A quiet piece.", "A lovely letter."));
     const ep = await buildEpisode(keyed, env.DB, { ...f.a, lang: "en" }, { size: 2, seed: "s" });
     expect(ep).toMatchObject({ lang: "en", verified: true });
@@ -102,20 +106,20 @@ describe("buildEpisode", () => {
     expect((await getUnits(env.DB, [f.far.id], "ja")).get(f.far.id)).toMatchObject({ intro: "遠くの紹介です。", verified: true });
   });
 
-  it("drops from the programme a stored unit that quotes another letter of its segment, and leaves the row alone", async () => {
+  it("drops from the programme a stored unit that quotes a reaction read in its segment, and leaves the row alone", async () => {
     const f = await fixture();
-    const second = await insertLetter(env.DB, letterDraft(f.i0, { listenerId: null, radioName: "ゆう", place: "", body: "海の見える駅で聴いていました。", bodyJa: "海の見える駅で聴いていました。" }));
+    const b = await createListener(env.DB);
+    const reply = await insertLetter(env.DB, letterDraft(f.i0, { kind: "reply", listenerId: b.id, radioName: "ゆう", place: "", parentLetterId: f.mine.id, body: "海の見える駅で聴いていました。", bodyJa: "海の見える駅で聴いていました。" }));
     await storeUnit(f.near.id, "近くの紹介です。", "海の見える駅で聴いていました、という方も。");
-    await storeUnit(second.id, "二通目の紹介です。", "二通目の感想です。");
     await storeUnit(f.far.id, "遠くの紹介です。", "遠くの感想です。");
     const ep = await buildEpisode(keyed, env.DB, f.a, { size: 2, seed: "s" });
     expect(create).not.toHaveBeenCalled();
     expect(ep.verified).toBe(true);
     const near = texts(ep.segments.find((s) => s.itemId === f.i0)!.lines);
-    expect(near).toContain(`letter:${second.id}`);
+    expect(near).toContain(`letter:${f.near.id}`);
+    expect(near).toContain(`letter:${reply.id}`);
     expect(near.some((x) => x.includes("海の見える駅で聴いていました、"))).toBe(false);
     expect(near).not.toContain("近くの紹介です。");
-    expect(near).not.toContain("二通目の感想です。");
     // Only the failing segment loses its units.
     expect(texts(ep.segments.find((s) => s.itemId === f.i1)!.lines)).toContain("遠くの感想です。");
     expect((await getUnits(env.DB, [f.near.id], "ja")).get(f.near.id)).toMatchObject({ verified: true });
@@ -193,19 +197,19 @@ describe("buildEpisode", () => {
     for (const seg of ep.segments) expect(seg.lines[2]).toEqual({ type: "dj", text: expect.stringMatching(/からのお便りです。$/), fixed: true });
   });
 
-  it("drops a found voice without a source and still verifies", async () => {
+  it("never reads a found voice without a source, even the oldest of its work, and still verifies", async () => {
     const f = await fixture();
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const bad = await insertLetter(env.DB, letterDraft(f.i1, { kind: "found", listenerId: null, sourceAuthor: "@x", sourceUrl: null, body: "no link", bodyJa: "出典なし" }));
+    await oldest(bad.id);
     const ep = await buildEpisode(keyless, env.DB, f.a, { size: 2, seed: "s" });
     expect(ep.verified).toBe(true);
     expect(ep.segments.flatMap((s) => s.lines).some((l) => l.type === "letter" && l.letterId === bad.id)).toBe(false);
-    expect(warn.mock.calls.some((c) => String(c[0]).includes("without a source"))).toBe(true);
+    expect(texts(ep.segments.find((s) => s.itemId === f.i1)!.lines)).toContain(`letter:${f.far.id}`);
   });
 
   it("speaks a found voice's author and site", async () => {
     const f = await fixture();
-    await insertLetter(env.DB, letterDraft(f.i1, { kind: "found", listenerId: null, sourceAuthor: "@jazzcat", sourceUrl: "https://youtu.be/x", body: "so good", bodyJa: "とてもいい" }));
+    await oldest((await insertLetter(env.DB, letterDraft(f.i1, { kind: "found", listenerId: null, sourceAuthor: "@jazzcat", sourceUrl: "https://youtu.be/x", body: "so good", bodyJa: "とてもいい" }))).id);
     const ep = await buildEpisode(keyless, env.DB, f.a, { size: 2, seed: "s" });
     const texts = ep.segments.flatMap((s) => djTexts(s.lines));
     expect(texts).toContain("ネットで見つけた声です。@jazzcatさん、YouTubeのコメントから。");
@@ -213,7 +217,7 @@ describe("buildEpisode", () => {
 
   it("verifies a found voice from a non-YouTube site and says the host", async () => {
     const f = await fixture();
-    await insertLetter(env.DB, letterDraft(f.i1, { kind: "found", listenerId: null, sourceAuthor: "ゆき", sourceUrl: "https://note.com/yuki/n/abc", body: "遠い歌", bodyJa: "遠い歌" }));
+    await oldest((await insertLetter(env.DB, letterDraft(f.i1, { kind: "found", listenerId: null, sourceAuthor: "ゆき", sourceUrl: "https://note.com/yuki/n/abc", body: "遠い歌", bodyJa: "遠い歌" }))).id);
     const ep = await buildEpisode(keyless, env.DB, f.a, { size: 2, seed: "s" });
     expect(ep.verified).toBe(true);
     expect(ep.segments.flatMap((s) => djTexts(s.lines))).toContain("ネットで見つけた声です。ゆきさん、note.comのコメントから。");
@@ -221,9 +225,9 @@ describe("buildEpisode", () => {
 
   it("does not count template wording as a quote when a letter happens to contain it", async () => {
     const f = await fixture();
-    await insertLetter(env.DB, letterDraft(f.i1, { listenerId: null, radioName: "ゆう", place: "", body: "ネットで見つけた声ですよね、これ。", bodyJa: "ネットで見つけた声ですよね、これ。" }));
-    await insertLetter(env.DB, letterDraft(f.i1, { kind: "found", listenerId: null, sourceAuthor: "@jazzcat", sourceUrl: "https://youtu.be/x", body: "so good", bodyJa: "とてもいい" }));
-    await insertLetter(env.DB, letterDraft(f.i0, { listenerId: null, radioName: "ゆう", place: "", body: "那覇にお住まいの、あおいさんから『私も』が届いていますね", bodyJa: "那覇にお住まいの、あおいさんから『私も』が届いていますね" }));
+    // Each letter is read in the segment whose fixed line it echoes: the found voice's own hand-over, and the 私も on i0.
+    await oldest((await insertLetter(env.DB, letterDraft(f.i1, { kind: "found", listenerId: null, sourceAuthor: "@jazzcat", sourceUrl: "https://youtu.be/x", body: "ネットで見つけた声ですよね、これ。", bodyJa: "ネットで見つけた声ですよね、これ。" }))).id);
+    await oldest((await insertLetter(env.DB, letterDraft(f.i0, { listenerId: null, radioName: "ゆう", place: "", body: "那覇にお住まいの、あおいさんから『私も』が届いていますね", bodyJa: "那覇にお住まいの、あおいさんから『私も』が届いていますね" }))).id);
     const ep = await buildEpisode(keyless, env.DB, f.a, { size: 2, seed: "s" });
     expect(ep.verified).toBe(true);
     expect(ep.report.pii).toBe(true);
@@ -268,9 +272,14 @@ describe("buildEpisode", () => {
 
   it("an echo segment with no readable letter still airs with its reaction lines", async () => {
     const f = await fixture();
-    // A work only the listener wrote about, answered by someone else since the last episode.
+    // A work only the listener wrote about, answered by someone else since the last letter they heard.
     const echo = (await insertItem(env.DB, itemDraft({ title: "返事のあった曲" }))).id;
     const own = await insertLetter(env.DB, letterDraft(echo, { listenerId: f.a.id, body: "私の一通。", bodyJa: "私の一通。" }));
+    const at = new Date(Date.now() - 60_000).toISOString();
+    const heard = await insertEpisode(env.DB, { listenerId: f.a.id, segments: [], verified: true, report: { verbatim: true, sources: true, topical: true, pii: true, details: [] }, station: "mine", createdAt: at });
+    await recordListen(env.DB, { listenerId: f.a.id, episodeId: heard.id, letterId: f.far.id, segmentIndex: 0, heardAt: at });
+    // The fixture's reactions on i0 came before that, so only this work is an echo.
+    await env.DB.prepare("UPDATE letters SET created_at = '2020-01-01T00:00:00Z' WHERE parent_letter_id = ?").bind(f.mine.id).run();
     const b = await createListener(env.DB);
     await insertLetter(env.DB, letterDraft(echo, { kind: "reply", listenerId: b.id, radioName: "そら", place: "熊本", parentLetterId: own.id, body: "届きました", bodyJa: "届きました" }));
     const ep = await buildEpisode(keyless, env.DB, f.a, { size: 3, seed: "s" });

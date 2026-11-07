@@ -10,6 +10,9 @@ import { lettersOf, originalsOf, publicView } from "../../../src/worker/program/
 import type { ScriptLine, Segment } from "../../../src/worker/types";
 import { byId, letter } from "./fixtures";
 
+/** The bridge episodes stored before one letter per segment still carry; it is no longer composed. */
+const SAME_WORK: ScriptLine = { type: "dj", text: "同じ作品に、別の人からもお便りが届いています。", fixed: true, bridge: "bridge.sameWork" };
+
 const read = (id: string, kind: "letter" | "found" | "reply" = "letter"): ScriptLine => ({
   type: "letter",
   letterId: id,
@@ -84,7 +87,7 @@ describe("publicView", () => {
           fixed("a hand-over"),
           read("a"),
           unitLine("after a", "a", "after"),
-          bridgeLine("bridge.sameWork", "ja"),
+          SAME_WORK,
           fixed("b hand-over"),
           read("b"),
           unitLine("after b", "b", "after"),
@@ -118,7 +121,7 @@ describe("originalsOf", () => {
 });
 
 describe("publicView sameWork bridge", () => {
-  const same = bridgeLine("bridge.sameWork", "ja");
+  const same = SAME_WORK;
   const open = bridgeLine("bridge.open", "ja");
   const seg: Segment[] = [{ itemId: "i1", slot: "near", lines: [open, read("a"), same, read("b"), fixed("tail")] }];
   const all = [letter({ id: "a" }), letter({ id: "b" })];

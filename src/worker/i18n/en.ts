@@ -174,7 +174,6 @@ export const en: Record<keyof typeof ja, string> = {
   "bridge.neighbor": "Next, a letter from a shelf nearby.",
   "bridge.far": "Next, a letter from a little farther away.",
   "bridge.next": "The next letter.",
-  "bridge.sameWork": "Another letter about the same work.",
   "bridge.close": "A moment's pause.",
   "station.world": "Dococa FM",
   "station.mine": "Your radio",

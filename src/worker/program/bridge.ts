@@ -4,9 +4,10 @@ import type { ScriptLine } from "../types";
 import type { Slot } from "./select";
 import type { StationKey } from "./station";
 
-export type BridgeKey = "bridge.open" | "bridge.near" | "bridge.neighbor" | "bridge.far" | "bridge.next" | "bridge.sameWork" | "bridge.close";
+/** `sameWork` (a second letter about the same work) is gone: each letter airs in its own segment. Episodes stored before still carry its text. */
+export type BridgeKey = "bridge.open" | "bridge.near" | "bridge.neighbor" | "bridge.far" | "bridge.next" | "bridge.close";
 
-export const BRIDGE_KEYS: readonly BridgeKey[] = ["bridge.open", "bridge.near", "bridge.neighbor", "bridge.far", "bridge.next", "bridge.sameWork", "bridge.close"];
+export const BRIDGE_KEYS: readonly BridgeKey[] = ["bridge.open", "bridge.near", "bridge.neighbor", "bridge.far", "bridge.next", "bridge.close"];
 
 /**
  * The bridge before a segment: `open` when it is the first the listener hears on this visit; on a public station the

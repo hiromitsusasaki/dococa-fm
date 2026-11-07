@@ -30,9 +30,9 @@ const letters = byId([plain, found, w("w1", "あおい"), w("w2", "いつき"), 
 const items = byId([item({ id: "i1" }), item({ id: "i2", previewUrl: null })]);
 
 describe("composeEpisode", () => {
-  it("lays out bridge, intro, hand-over, letter, after per letter, then reactions, with no closing bridge", () => {
+  it("lays out bridge, lead, intro, hand-over, letter, after, then reactions, with no closing bridge", () => {
     const [seg] = composeEpisode(
-      [{ itemId: "i1", slot: "near", letterIds: ["a", "f"], reactionIds: ["w1", "r"] }],
+      [{ itemId: "i1", slot: "near", letterIds: ["a"], reactionIds: ["w1", "r"] }],
       unitsOf(unit("a", "はじめ", "おわり"), unit("f", "二通目の紹介", "二通目のあと")),
       letters,
       items,
@@ -45,11 +45,6 @@ describe("composeEpisode", () => {
       { type: "dj", text: "函館にお住まいの、みなとさんからのお便りです。", fixed: true },
       { type: "letter", letterId: "a", text: plain.bodyJa, radioName: "みなと", place: "函館", kind: "letter", sourceUrl: null, sourceAuthor: null },
       { type: "dj", text: "おわり", unit: { letterId: "a", part: "after" } },
-      { type: "dj", text: "同じ作品に、別の人からもお便りが届いています。", fixed: true, bridge: "bridge.sameWork" },
-      // The second letter of a work has no intro of its own: the first letter's introduced the work.
-      { type: "dj", text: "ネットで見つけた声です。@jazzcatさん、YouTubeのコメントから。", fixed: true },
-      { type: "letter", letterId: "f", text: "故郷を思い出す。", radioName: "", place: "", kind: "found", sourceUrl: "https://www.youtube.com/watch?v=x", sourceAuthor: "@jazzcat" },
-      { type: "dj", text: "二通目のあと", unit: { letterId: "f", part: "after" } },
       { type: "dj", text: "那覇にお住まいの、あおいさんから『私も』が届いています", fixed: true },
       { type: "dj", text: "熊本にお住まいの、そらさんから一言が届いています", fixed: true },
       { type: "letter", letterId: "r", text: "わかります", radioName: "そら", place: "熊本", kind: "reply", sourceUrl: null, sourceAuthor: null },
@@ -57,28 +52,25 @@ describe("composeEpisode", () => {
   });
 
   it("speaks only verified units, and fixed lines alone around a letter without one", () => {
-    const b = letter({ id: "b", radioName: "そら", place: "" });
-    const plan = [{ itemId: "i1", slot: "near" as const, letterIds: ["a", "b"], reactionIds: [] }];
-    const texts = (us: Map<string, Unit> | null) => composeEpisode(plan, us, byId([plain, b]), items)[0]!.lines.map((l) => (l.type === "letter" ? `letter:${l.letterId}` : (l as { text: string }).text));
-    const bare = [t("bridge.open"), LEAD, "函館にお住まいの、みなとさんからのお便りです。", "letter:a", t("bridge.sameWork"), "そらさんからのお便りです。", "letter:b"];
+    const plan = [{ itemId: "i1", slot: "near" as const, letterIds: ["a"], reactionIds: [] }];
+    const texts = (us: Map<string, Unit> | null) => composeEpisode(plan, us, byId([plain]), items)[0]!.lines.map((l) => (l.type === "letter" ? `letter:${l.letterId}` : (l as { text: string }).text));
+    const bare = [t("bridge.open"), LEAD, "函館にお住まいの、みなとさんからのお便りです。", "letter:a"];
     expect(texts(null)).toEqual(bare);
-    expect(texts(unitsOf(unit("a", "紹介", "感想", false), unit("b", "紹介b", "感想b", false)))).toEqual(bare);
-    // The first letter's unit failed alone: no intro, since the next letter's intro was written about that letter.
-    expect(texts(unitsOf(unit("a", "紹介", "感想", false), unit("b", "紹介b", "感想b")))).toEqual([
-      t("bridge.open"), LEAD, "函館にお住まいの、みなとさんからのお便りです。", "letter:a", t("bridge.sameWork"), "そらさんからのお便りです。", "letter:b", "感想b",
-    ]);
+    expect(texts(unitsOf(unit("a", "紹介", "感想", false)))).toEqual(bare);
+    expect(texts(unitsOf(unit("a", "紹介", "感想")))).toEqual([t("bridge.open"), LEAD, "紹介", "函館にお住まいの、みなとさんからのお便りです。", "letter:a", "感想"]);
     // An empty line is not said.
-    expect(texts(unitsOf(unit("a", "", "感想")))).toEqual([
-      t("bridge.open"), LEAD, "函館にお住まいの、みなとさんからのお便りです。", "letter:a", "感想", t("bridge.sameWork"), "そらさんからのお便りです。", "letter:b",
-    ]);
+    expect(texts(unitsOf(unit("a", "", "感想")))).toEqual([...bare, "感想"]);
   });
 
-  it("says no intro when a reply is read first, since only the first letter's own unit introduces the work", () => {
-    const r2 = letter({ id: "r2", kind: "reply", body: "届きました", bodyJa: "届きました", radioName: "そら", place: "熊本" });
-    const [seg] = composeEpisode([{ itemId: "i1", slot: "near", letterIds: ["r2", "a"], reactionIds: [] }], unitsOf(unit("a", "紹介", "感想")), byId([r2, plain]), items);
-    expect(seg!.lines.map((l) => (l.type === "letter" ? `letter:${l.letterId}` : (l as { text: string }).text))).toEqual([
-      t("bridge.open"), LEAD, "熊本にお住まいの、そらさんからのお便りです。", "letter:r2", t("bridge.sameWork"), "函館にお住まいの、みなとさんからのお便りです。", "letter:a", "感想",
-    ]);
+  it("reads one letter per segment: the first the plan names that is there, never a sameWork bridge", () => {
+    const b = letter({ id: "b", radioName: "そら", place: "" });
+    const said = (letterIds: string[]) =>
+      composeEpisode([{ itemId: "i1", slot: "near", letterIds, reactionIds: [] }], unitsOf(unit("a", "紹介a", "感想a"), unit("b", "紹介b", "感想b")), byId([plain, b]), items)[0]!.lines.map((l) =>
+        l.type === "letter" ? `letter:${l.letterId}` : (l as { text: string }).text,
+      );
+    expect(said(["a", "b"])).toEqual([t("bridge.open"), LEAD, "紹介a", "函館にお住まいの、みなとさんからのお便りです。", "letter:a", "感想a"]);
+    expect(said(["gone", "b"])).toEqual([t("bridge.open"), LEAD, "紹介b", "そらさんからのお便りです。", "letter:b", "感想b"]);
+    expect(said(["a", "b"]).filter((x) => x.startsWith("letter:"))).toHaveLength(1);
   });
 
   it("introduces the work with the first letter's own intro", () => {
@@ -133,20 +125,14 @@ describe("composeEpisode", () => {
       // Only template lines: the reading cue and the spoken found-voice source.
       expect(seg.lines.filter((l) => l.type === "dj").every((l) => l.type === "dj" && l.fixed === true)).toBe(true);
     }
-    expect(segs[0]!.lines.filter((l) => l.type === "letter")).toHaveLength(2);
+    expect(segs[0]!.lines.filter((l) => l.type === "letter")).toHaveLength(1);
   });
 
-  it("hands over before every named non-found letter in the readings-only fallback", () => {
+  it("hands over before the letter in the readings-only fallback", () => {
     const b = letter({ id: "b", radioName: "そら", place: "" });
-    const [seg] = composeEpisode([{ itemId: "i1", slot: "near", letterIds: ["a", "b"], reactionIds: [] }], null, byId([plain, b]), items);
+    const [seg] = composeEpisode([{ itemId: "i1", slot: "near", letterIds: ["b"], reactionIds: [] }], null, byId([b]), items);
     const texts = seg!.lines.filter((l) => l.type === "dj").map((l) => (l as { text: string }).text);
-    expect(texts).toEqual([
-      t("bridge.open"),
-      LEAD,
-      "函館にお住まいの、みなとさんからのお便りです。",
-      t("bridge.sameWork"),
-      "そらさんからのお便りです。",
-    ]);
+    expect(texts).toEqual([t("bridge.open"), LEAD, "そらさんからのお便りです。"]);
   });
 
   it("does not say 'someone' for a sender with a place but no radio name", () => {
@@ -193,8 +179,18 @@ describe("composeEpisode in english", () => {
   const all = byId([placed, found, w("w1", "あおい"), reply, letter({ id: "n", radioName: "", place: "" })]);
 
   it("says every fixed line in english, reads bodyEn or the original, and names the place in english", () => {
-    const [seg] = composeEpisode([{ itemId: "i1", slot: "near", letterIds: ["p", "f", "n"], reactionIds: ["w1", "r"] }], unitsOf(en("p", "A quiet piece.", "Lovely.")), all, items, "en");
-    const said = seg!.lines.map((l) => (l.type === "letter" ? `letter:${l.text}` : (l as { text: string }).text));
+    const segs = composeEpisode(
+      [
+        { itemId: "i1", slot: "near", letterIds: ["p"], reactionIds: ["w1", "r"] },
+        { itemId: "i1", slot: "near", letterIds: ["f"], reactionIds: [] },
+        { itemId: "i1", slot: "near", letterIds: ["n"], reactionIds: [] },
+      ],
+      unitsOf(en("p", "A quiet piece.", "Lovely.")),
+      all,
+      items,
+      "en",
+    );
+    const said = segs.flatMap((s) => s.lines).map((l) => (l.type === "letter" ? `letter:${l.text}` : (l as { text: string }).text));
     expect(said).toEqual([
       t("bridge.open", undefined, "en"),
       "Here is “Blue in Green”, a song by Miles Davis.",
@@ -202,17 +198,19 @@ describe("composeEpisode in english", () => {
       "A letter from みなと, who lives in Shimane, Japan.",
       "letter:I listened alone at midnight.",
       "Lovely.",
-      t("bridge.sameWork", undefined, "en"),
-      "A voice found online. @jazzcat, from a comment on YouTube.",
-      "letter:Reminds me of home.",
-      t("bridge.sameWork", undefined, "en"),
-      "Reading the letters.",
-      `letter:${plain.body}`,
       'A "me too" from あおい, who lives in 那覇',
       "A note from そら, who lives in 熊本",
       "letter:わかります",
+      t("bridge.near", undefined, "en"),
+      "Here is “Blue in Green”, a song by Miles Davis.",
+      "A voice found online. @jazzcat, from a comment on YouTube.",
+      "letter:Reminds me of home.",
+      t("bridge.near", undefined, "en"),
+      "Here is “Blue in Green”, a song by Miles Davis.",
+      "Reading the letters.",
+      `letter:${plain.body}`,
     ]);
-    const r = verifyEpisode([seg!], all, listener({ lang: "en" }), items, "en");
+    const r = verifyEpisode(segs, all, listener({ lang: "en" }), items, "en");
     expect(r).toEqual({ verbatim: true, sources: true, topical: true, pii: true, details: [] });
   });
 
@@ -271,28 +269,13 @@ describe("bridges", () => {
     expect(composeEpisode([seg("i1", "near", ["a"]), seg("i2", "near", ["a"])], null, letters, items, "ja", "mine")[1]!.lines[0]).toMatchObject({ bridge: "bridge.near" });
   });
 
-  it("puts sameWork between the letters of a segment, not before the first", () => {
+  it("has no sameWork bridge any more: each letter airs in its own segment", () => {
+    expect(BRIDGE_KEYS as readonly string[]).not.toContain("bridge.sameWork");
+    expect(FIXED_TEMPLATES as readonly string[]).not.toContain("bridge.sameWork");
     const b = letter({ id: "b", radioName: "そら", place: "" });
-    const [s] = composeEpisode([seg("i1", "near", ["a", "b"])], unitsOf(unit("a", "紹介", "感想a"), unit("b", "紹介b", "感想b")), byId([plain, b]), items);
-    expect(texts(s!.lines)).toEqual([
-      t("bridge.open"), LEAD, "紹介", "函館にお住まいの、みなとさんからのお便りです。", plain.bodyJa, "感想a",
-      t("bridge.sameWork"), "そらさんからのお便りです。", b.bodyJa, "感想b",
-    ]);
-  });
-
-  it("puts a sameWork bridge between each pair of letters", () => {
-    const b = letter({ id: "b", radioName: "そら", place: "" });
-    const c = letter({ id: "c", radioName: "うみ", place: "" });
-    const [s] = composeEpisode([seg("i1", "near", ["a", "b", "c"])], null, byId([plain, b, c]), items);
-    expect(texts(s!.lines).filter((x) => x === t("bridge.sameWork"))).toHaveLength(2);
-  });
-
-  it("adds no sameWork bridge for a letter id that is missing", () => {
-    const b = letter({ id: "b", radioName: "そら", place: "" });
-    const [s] = composeEpisode([seg("i1", "near", ["a", "gone", "b"])], null, byId([plain, b]), items);
-    expect(texts(s!.lines).filter((x) => x === t("bridge.sameWork"))).toHaveLength(1);
-    const [s2] = composeEpisode([seg("i1", "near", ["a", "gone"])], null, byId([plain]), items);
-    expect(texts(s2!.lines).filter((x) => x === t("bridge.sameWork"))).toHaveLength(0);
+    const segs = composeEpisode([seg("i1", "near", ["a", "b"]), seg("i1", "near", ["b"])], null, byId([plain, b]), items);
+    expect(segs.flatMap((s) => s.lines).some((l) => (l as { bridge?: string }).bridge === "bridge.sameWork")).toBe(false);
+    expect(texts(segs[0]!.lines)).toEqual([t("bridge.open"), LEAD, "函館にお住まいの、みなとさんからのお便りです。", plain.bodyJa]);
   });
 
   it("never says the close bridge: a programme has no end the DJ can know", () => {

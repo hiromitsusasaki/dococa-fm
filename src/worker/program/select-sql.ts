@@ -4,10 +4,16 @@
  * Nothing here counts or ranks: a pool is a set, not a leaderboard.
  */
 
-/** A 一言 goes with its letter: one whose parent is no longer public (rejected, withdrawn) is never chosen. */
-const OTHERS_TEXT =
-  "l.status = 'public' AND l.kind IN ('letter', 'reply', 'found') AND (l.parent_letter_id IS NULL OR EXISTS (SELECT 1 FROM letters p WHERE p.id = l.parent_letter_id AND p.status = 'public'))";
-const NOT_ME = "(l.listener_id IS NULL OR l.listener_id != ?1)";
+/** A letter, or a found voice with both its link and its author. */
+const letterOrSourced = (a: string): string =>
+  `(${a}.kind = 'letter' OR (${a}.kind = 'found' AND TRIM(COALESCE(${a}.source_url, '')) != '' AND TRIM(COALESCE(${a}.source_author, '')) != ''))`;
+
+/**
+ * A letter the DJ may read to the listener (?1) as a segment's one letter: someone else's public letter, or a found
+ * voice with its source (a segment with a sourceless one would have nothing to read). A 一言 or a 私も is never a
+ * segment's letter: it airs as a reaction in the echo. `a` is the table alias.
+ */
+const readable = (a: string): string => `${a}.status = 'public' AND ${letterOrSourced(a)} AND (${a}.listener_id IS NULL OR ${a}.listener_id != ?1)`;
 
 const OWN = `own AS (
   SELECT item_id FROM history WHERE listener_id = ?1
@@ -16,10 +22,10 @@ const OWN = `own AS (
 )`;
 
 const NEAR = `SELECT DISTINCT l.item_id FROM letters l
-  WHERE l.item_id IN (SELECT item_id FROM own) AND ${OTHERS_TEXT} AND ${NOT_ME}`;
+  WHERE l.item_id IN (SELECT item_id FROM own) AND ${readable("l")}`;
 
 const NEIGHBOR = `SELECT DISTINCT l.item_id FROM letters l
-  WHERE l.item_id NOT IN (SELECT item_id FROM own) AND ${OTHERS_TEXT}
+  WHERE l.item_id NOT IN (SELECT item_id FROM own) AND ${readable("l")}
     AND (
       l.listener_id IN (
         SELECT n.listener_id FROM letters n
@@ -38,7 +44,7 @@ export const FAR_SQL = `WITH ${OWN},
   near AS (${NEAR}),
   neighbor AS (${NEIGHBOR})
   SELECT DISTINCT l.item_id FROM letters l
-  WHERE ${OTHERS_TEXT}
+  WHERE ${readable("l")}
     AND l.item_id NOT IN (SELECT item_id FROM own)
     AND l.item_id NOT IN (SELECT item_id FROM near)
     AND l.item_id NOT IN (SELECT item_id FROM neighbor)
@@ -63,31 +69,33 @@ export const ECHO_SQL = `SELECT DISTINCT r.item_id FROM letters r
     AND r.item_id NOT IN (${LATEST_MINE_ITEMS})
   ORDER BY r.item_id`;
 
-/** Items whose letter the listener heard since ?2 (an ISO time). */
-export const HEARD_RECENTLY_SQL = `SELECT DISTINCT l.item_id FROM listens s JOIN letters l ON l.id = s.letter_id
-  WHERE s.listener_id = ?1 AND s.heard_at > ?2`;
+/** Letters the listener heard since ?2 (an ISO time), on any station. */
+const HEARD_LETTERS = "SELECT s.letter_id FROM listens s WHERE s.listener_id = ?1 AND s.heard_at > ?2";
 
-/** Items of the listener's last `limit` verified episodes on the station `station` (an SQL expression: a literal or a parameter). */
-const episodeItemsSql = (station: string, limit: number): string => `SELECT DISTINCT json_extract(seg.value, '$.itemId') AS item_id FROM
-    (SELECT segments FROM episodes WHERE listener_id = ?1 AND station = ${station} AND verified = 1 ORDER BY created_at DESC, id DESC LIMIT ${limit}) e,
+/** Works with nothing left to hear: a letter of theirs was heard since ?2, and every letter the DJ may read was. */
+const SPENT_ITEMS = `SELECT DISTINCT l.item_id FROM letters l
+  WHERE l.id IN (${HEARD_LETTERS})
+    AND NOT EXISTS (SELECT 1 FROM letters o WHERE o.item_id = l.item_id AND ${readable("o")} AND o.id NOT IN (${HEARD_LETTERS}))`;
+
+/** Segments whose works wait: the same work never airs within three segments of itself. */
+export const RECENT_SEGMENTS = 3;
+
+/** Works of the listener's last `n` segments on the station ?3 (verified episodes; an episode is one segment, the eval's more). */
+const lastSegmentItems = (n: number): string => `SELECT json_extract(seg.value, '$.itemId') AS item_id FROM
+    (SELECT segments, created_at, id FROM episodes WHERE listener_id = ?1 AND station = ?3 AND verified = 1 ORDER BY created_at DESC, id DESC LIMIT ${n}) e,
     json_each(e.segments) seg
-  WHERE json_extract(seg.value, '$.itemId') IS NOT NULL`;
-
-/** Episodes whose works the listener's own station leaves out; the world and public stations leave out fewer. */
-export const MINE_RECENT_EPISODES = 30;
-export const STATION_RECENT_EPISODES = 10;
+  WHERE json_extract(seg.value, '$.itemId') IS NOT NULL
+  ORDER BY e.created_at DESC, e.id DESC, seg.key DESC
+  LIMIT ${n}`;
 
 /**
- * The listener's own station: works heard since ?2, works of the last 30 episodes there, and the work of the latest one
- * (on air now, or fetched ahead), each row tagged with why.
+ * What waits on the station ?3 (its `episodes.station` value) for the listener ?1, each row tagged with why: works
+ * whose every readable letter was heard since ?2 (`spent`), works of the last three segments there (`aired`), and the
+ * work of the latest one (`latest`: on air now, or fetched ahead).
  */
-export const EXCLUDED_SQL = `SELECT item_id, 'heard' AS why FROM (${HEARD_RECENTLY_SQL})
-  UNION ALL SELECT item_id, 'aired' AS why FROM (${episodeItemsSql("'mine'", MINE_RECENT_EPISODES)})
-  UNION ALL SELECT item_id, 'latest' AS why FROM (${episodeItemsSql("'mine'", 1)})`;
-
-/** The world or a public station (?2 = its `episodes.station` value): works of the listener's last 10 episodes there, and of the latest one. */
-export const STATION_EXCLUDED_SQL = `SELECT item_id, 'aired' AS why FROM (${episodeItemsSql("?2", STATION_RECENT_EPISODES)})
-  UNION ALL SELECT item_id, 'latest' AS why FROM (${episodeItemsSql("?2", 1)})`;
+export const EXCLUDED_SQL = `SELECT item_id, 'spent' AS why FROM (${SPENT_ITEMS})
+  UNION ALL SELECT item_id, 'aired' AS why FROM (${lastSegmentItems(RECENT_SEGMENTS)})
+  UNION ALL SELECT item_id, 'latest' AS why FROM (${lastSegmentItems(1)})`;
 
 /** The vectors of up to 50 favourites, in `listFavorites`' order (keep the predicate and ORDER in step); null for a work without one. */
 export const TASTE_FAVORITES_SQL = `SELECT i.vec FROM
@@ -101,10 +109,13 @@ export const TASTE_HEARD_SQL = `SELECT i.vec FROM
      WHERE s.listener_id = ?1 GROUP BY l.item_id ORDER BY at DESC, l.item_id LIMIT 20) h
   JOIN items i ON i.id = h.item_id`;
 
-/** Letters the DJ may read for the chosen items (?2…): other people's text, never reactions. */
-export const letterIdsSql = (items: number): string => `SELECT l.id, l.item_id FROM letters l
-  WHERE l.item_id IN (${Array.from({ length: items }, (_, i) => `?${i + 2}`).join(", ")}) AND ${OTHERS_TEXT} AND ${NOT_ME}
-  ORDER BY l.item_id, l.id`;
+/**
+ * Letters the DJ may read for the chosen items (?3…), with whether the listener heard each since ?2: per item, the
+ * unheard first, the oldest first. Other people's letters and found voices, never reactions.
+ */
+export const letterIdsSql = (items: number): string => `SELECT l.id, l.item_id, (l.id IN (${HEARD_LETTERS})) AS heard FROM letters l
+  WHERE l.item_id IN (${Array.from({ length: items }, (_, i) => `?${i + 3}`).join(", ")}) AND ${readable("l")}
+  ORDER BY l.item_id, heard, l.created_at, l.id`;
 
 /** A public station's pool (?1 = the owner): the owner's favourites, best-ranked first. Letters are read separately. Keep the predicate and ORDER in step with `listFavorites` in db/history.ts. */
 export const OWNER_FAVORITES_SQL = `SELECT h.item_id FROM history h
@@ -129,6 +140,6 @@ export const FRESH_PLACE_LETTERS_SQL = `WITH recent AS (
     SELECT l.place_country FROM (${LAST_TWO_LEADS}) r JOIN letters l ON l.id = r.letter_id WHERE l.place_country IS NOT NULL
   )
   SELECT l.id, l.item_id FROM letters l
-  WHERE ${OTHERS_TEXT} AND ${NOT_ME}
+  WHERE ${readable("l")}
     AND (l.place_country IS NULL OR l.place_country NOT IN (SELECT place_country FROM recent))
   ORDER BY l.item_id, l.id`;
