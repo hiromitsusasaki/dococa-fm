@@ -1144,8 +1144,7 @@ button.pill {
   margin-top: var(--sp-6);
 }
 
-.settings-place,
-.settings-station {
+.settings-place {
   display: grid;
   gap: var(--sp-4);
   min-width: 0;
@@ -1154,8 +1153,7 @@ button.pill {
   border: 0;
 }
 
-.settings-place legend,
-.settings-station legend {
+.settings-place legend {
   margin-bottom: var(--sp-1);
   padding: 0;
   color: var(--ink-2);
