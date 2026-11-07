@@ -38,7 +38,7 @@
 ### Google サインインと秘密
 
 - `GOOGLE_OAUTH_CLIENT_ID` と `GOOGLE_OAUTH_CLIENT_SECRET` は Cloudflare secrets と `.dev.vars`（gitignore 済み）にだけ置き、リポジトリには入れません。ID が空のとき `/auth/google` は 503 を返します。
-- Google から受け取る表示名（`displayName`）とメールアドレスは、公開しません。公開局の表示名と自動で作る URL の slug は、本人が決めたラジオネームだけから作ります（未設定なら乱数の `radio-xxxx`）。表示名は本人の画面（ヘッダとマイページ）にだけ出ます。
+- Google から受け取る表示名（`displayName`）とメールアドレスは、公開しません。公開局の表示名は、本人が決めたラジオネームだけから作ります。自動で作る URL の slug は、いつも乱数の `radio-xxxxxx` で、名前からは作りません。表示名は本人の画面（ヘッダとマイページ）にだけ出ます。
 - セッション cookie はリスナー id の決定的な HMAC なので、サインインで Google アカウントに紐づけても回しません。有効な cookie が無いままコールバックに来ると、孤児の匿名リスナー行ができます。別の Google アカウントに紐づいたリスナーへは上書きせず、失敗にします。`google_sub` には UNIQUE 制約があります。
 - ログイン後の戻り先 `next` は、`PUBLIC_ORIGIN` と同じオリジンのパスだけを受け付けます。制御文字（タブ・改行）を含むもの、`//` で始まるものは既定のパスに落とします。
 - サインインの門: `/start`、`/auth/spotify`、`/auth/spotify/callback`、`POST /letters`（`kind=letter`）、`POST /put/register`、`/me` は、サインイン済みでなければ通りません。ブラウザの移動はサインインへ 303、スクリプトからの要求は 401 です。「私も」と「一言」は匿名のままです。題名検索（`GET /put?q=`）は、匿名の訪問者にはサインインの案内だけを返し、外部の API を呼びません。検索語はログに残しません。YouTube の鍵は URL ではなく `X-Goog-Api-Key` ヘッダで渡します（Google Books と同じ）。
