@@ -47,6 +47,9 @@ export function slugSuffix(length = 4): string {
   return out;
 }
 
+/** Whether a write failed because another listener already holds the slug (the UNIQUE index on `station_slug`). */
+export const isSlugTaken = (e: unknown): boolean => String((e as Error)?.message ?? e).includes("station_slug");
+
 const MAX_SLUG_ATTEMPTS = 3;
 
 /**
@@ -60,7 +63,7 @@ export async function ensureStationSlug(db: D1Database, listener: Listener, suff
       await setStationSlugIfNone(db, listener.id, `radio-${suffix(6)}`);
       break;
     } catch (e) {
-      if (!String((e as Error)?.message ?? e).includes("station_slug") || attempt >= MAX_SLUG_ATTEMPTS) throw e;
+      if (!isSlugTaken(e) || attempt >= MAX_SLUG_ATTEMPTS) throw e;
     }
   }
   // Read back: a concurrent request may have assigned one first.

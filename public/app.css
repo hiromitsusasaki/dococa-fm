@@ -863,7 +863,8 @@ button.pill {
   margin-top: var(--sp-6);
 }
 
-.settings-place {
+.settings-place,
+.settings-station {
   display: grid;
   gap: var(--sp-4);
   min-width: 0;
@@ -872,7 +873,8 @@ button.pill {
   border: 0;
 }
 
-.settings-place legend {
+.settings-place legend,
+.settings-station legend {
   margin-bottom: var(--sp-1);
   padding: 0;
   color: var(--ink-2);
@@ -881,7 +883,19 @@ button.pill {
 .settings label {
   display: grid;
   gap: var(--sp-1);
+  min-width: 0;
   color: var(--ink-2);
+}
+
+.settings label.check {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+.settings select {
+  width: 100%;
+  min-width: 0;
 }
 
 .settings input[type="range"],
