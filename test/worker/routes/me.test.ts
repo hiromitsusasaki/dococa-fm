@@ -358,7 +358,7 @@ describe("POST /me/radio", () => {
   it("422s for a slug that breaks the rule, an unknown public value or an empty post, and changes nothing", async () => {
     const cookie = await signedInSession();
     await updateListener(env.DB, idOf(cookie), { stationSlug: "hiro-fm" });
-    const bodies: Record<string, string>[] = [{ slug: "ab" }, { slug: "has space" }, { slug: "UPPER_x" }, { slug: "a".repeat(25) }, { slug: "" }, { public: "yes" }, {}];
+    const bodies: Record<string, string>[] = [{ slug: "ab" }, { slug: "has space" }, { slug: "UPPER_x" }, { slug: "a".repeat(25) }, { slug: "" }, { public: "yes" }, { public: "1", slug: "x-fm" }, {}];
     for (const body of bodies) {
       expect((await radio(cookie, body)).status, JSON.stringify(body)).toBe(422);
     }

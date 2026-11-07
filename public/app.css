@@ -181,7 +181,17 @@ a {
   flex-wrap: wrap;
   align-items: center;
   gap: var(--sp-1) var(--sp-4);
+  min-width: 0;
   font-size: 13px;
+}
+
+/* From 761px the header is one row: the nav shrinks (the name first) instead of pushing the switches to a second line. */
+@media (min-width: 761px) {
+  .site-header nav {
+    flex: 1 1 auto;
+    flex-wrap: nowrap;
+    justify-content: flex-end;
+  }
 }
 
 .site-header nav a,
@@ -203,32 +213,40 @@ a {
 }
 
 .site-header .site-user {
-  max-width: 12em;
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 8em;
   overflow: hidden;
   color: var(--ink-2);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-/* New reactions wait on /me: a dot, never a number. */
-/* The settings link: a gear and the word. */
-.site-header nav .gear {
-  margin-right: 4px;
-  font-size: 14px;
+/* The settings link: the gear alone (named 設定 for assistive technology and the tooltip), 44px tall like the other links. */
+.site-header nav .settings-link {
+  justify-content: center;
+  min-width: 24px;
+  font-size: 16px;
+}
+
+/* New reactions wait on /me: a dot, never a number. It sits over the link's corner, so it takes no width in the row. */
+.site-header nav a[href="/me"] {
+  position: relative;
 }
 
 .site-header nav .dot {
-  display: inline-block;
+  position: absolute;
+  top: 10px;
+  right: -5px;
   width: 8px;
   height: 8px;
-  margin-left: 4px;
   border-radius: 50%;
   background: var(--magenta);
-  vertical-align: top;
 }
 
+/* Sign-out lines up with the links, with no padding of its own, so a signed-in header fits one row down to 761px. */
 .site-header nav .quiet {
-  padding: 0 var(--sp-2);
+  padding: 0;
   border: 0;
   background: transparent;
   color: var(--ink-2);
@@ -312,8 +330,8 @@ a {
   }
 }
 
-/* Below 900px the signed-in name goes (サインアウト stays), so the header still fits one row at 800px. */
-@media (max-width: 899px) {
+/* Below 1000px the signed-in name goes (サインアウト stays), so the header still fits one row down to 761px. */
+@media (max-width: 999px) {
   .site-header .site-user {
     display: none;
   }
@@ -326,22 +344,13 @@ a {
     flex: 1 0 100%;
   }
 
-  /* Sign-out lines up with the links, so a signed-in nav stays on one row. */
-  .site-header nav .quiet {
-    padding: 0;
-  }
-
   .lang-toggle {
     margin-right: 0;
   }
 }
 
-/* On a phone the word alone, so the signed-in links stay on one row. */
+/* On a narrow phone the links sit closer, so a signed-in nav stays on one row at 390px. */
 @media (max-width: 420px) {
-  .site-header nav .gear {
-    display: none;
-  }
-
   .site-header nav {
     gap: 0 var(--sp-1);
   }

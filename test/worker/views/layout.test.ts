@@ -127,13 +127,14 @@ describe("the header's notice of new reactions", () => {
     expect(meLink(html)).toContain('class="dot"');
   });
 
-  it("links a signed-in listener to the settings, after the my page, with a gear and the word", async () => {
+  it("links a signed-in listener to the settings, after the my page, as a gear named 設定", async () => {
     const html = await (await get("/put", await signedInSession())).text();
     const nav = html.match(/<nav>[\s\S]*?<\/nav>/)?.[0] ?? "";
-    expect(nav).toMatch(/<a href="\/settings"[^>]*><span class="gear" aria-hidden="true">⚙\uFE0E<\/span>設定<\/a>/);
+    // The gear alone keeps the header on one row; the name is for assistive technology and the tooltip.
+    expect(nav).toMatch(/<a class="settings-link" href="\/settings" aria-label="設定" title="設定"><span class="gear" aria-hidden="true">⚙\uFE0E<\/span><\/a>/);
     expect(nav.indexOf('href="/settings"')).toBeGreaterThan(nav.indexOf('href="/me"'));
     const here = (await (await get("/settings", await signedInSession())).text()).match(/<nav>[\s\S]*?<\/nav>/)?.[0] ?? "";
-    expect(here).toMatch(/<a href="\/settings" aria-current="page">/);
+    expect(here).toMatch(/<a class="settings-link" href="\/settings"[^>]*aria-current="page"/);
     const anon = (await (await get("/put", await newSession())).text()).match(/<nav>[\s\S]*?<\/nav>/)?.[0] ?? "";
     expect(anon).not.toContain('href="/settings"');
   });

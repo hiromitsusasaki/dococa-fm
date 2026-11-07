@@ -106,7 +106,7 @@ authGoogle.get("/auth/google/callback", async (c) => {
     const slug = await ensureStationSlug(c.env.DB, signedIn);
     if (!signedIn.stationSlug && slug) welcome = true;
   } catch {
-    // Not fatal: /settings and /me assign the address when they are opened.
+    // Not fatal: /me assigns the address when it is opened.
   }
   // The welcome line lives on /me, so only a sign-in that was going there carries it; one that started elsewhere returns there.
   return c.redirect(welcome && next === DEFAULT_NEXT ? "/me?welcome=1" : next, 303);
