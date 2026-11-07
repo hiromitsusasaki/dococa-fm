@@ -194,7 +194,11 @@ a {
 }
 
 .site-header .site-user {
+  max-width: 12em;
+  overflow: hidden;
   color: var(--ink-2);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* New reactions wait on /me: a dot, never a number. */
@@ -291,11 +295,16 @@ a {
   .site-header nav {
     order: 3;
     flex: 1 0 100%;
-    gap: 0 var(--sp-3);
+    gap: 0 var(--sp-2);
   }
 
   .site-header .site-user {
     display: none;
+  }
+
+  /* Sign-out lines up with the links, so a signed-in nav stays on one row. */
+  .site-header nav .quiet {
+    padding: 0;
   }
 
   .lang-toggle {

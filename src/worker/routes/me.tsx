@@ -33,7 +33,8 @@ me.get("/me", requireSignin, async (c) => {
   const reactions = await listRecentReactionsToListener(c.env.DB, listener.id, REACTIONS_LIMIT);
   const items = await getItemsByIds(c.env.DB, reactions.map((r) => r.itemId));
   const heard = await listHeardLetters(c.env.DB, listener.id);
-  await markReactionsSeen(c.env.DB, listener.id, seenAt);
+  // The dot is a decoration: a failed write leaves it lit, it does not fail the page.
+  await markReactionsSeen(c.env.DB, listener.id, seenAt).catch(() => {});
   const publicUrl = listener.stationPublic && listener.stationSlug ? stationUrl(c.env, listener.stationSlug) : null;
   // Shown once: the script drops the query, so a reload does not repeat it. A listener who is already public has no news in it.
   const welcome = c.req.query("welcome") === "1" && listener.stationSlug && !listener.stationPublic ? stationUrl(c.env, listener.stationSlug) : null;

@@ -4,20 +4,28 @@ import { hasUnseenReactions } from "./db/letters";
 import type { Env } from "./env";
 import type { Listener } from "./types";
 
-/**
- * The header's dot for new reactions. The session middleware's listener object is the key: a signed-in `GET` registers the
- * check here, and the header runs it only when it draws the `/me` link, so a JSON read or a redirect costs nothing.
- */
-const checks = new WeakMap<Listener, () => Promise<boolean>>();
+type Check = () => Promise<boolean>;
 
-export const reactionNotice: MiddlewareHandler<{ Bindings: Env; Variables: Variables }> = (c, next) => {
+/**
+ * The header's dot for new reactions. A signed-in `GET` registers the check under the listener's id for as long as the
+ * request runs; the header runs it only when it draws the `/me` link, so a JSON read or a redirect costs nothing. Keyed by
+ * id, a page that passes a copy of the listener still finds it.
+ */
+const checks = new Map<string, Check>();
+
+export const reactionNotice: MiddlewareHandler<{ Bindings: Env; Variables: Variables }> = async (c, next) => {
   const listener = c.get("listener");
-  if (c.req.method === "GET" && listener?.googleSub) {
-    let asked: Promise<boolean> | null = null;
-    checks.set(listener, () => (asked ??= hasUnseenReactions(c.env.DB, listener.id).catch(() => false)));
+  if (c.req.method !== "GET" || !listener?.googleSub) return next();
+  let asked: Promise<boolean> | null = null;
+  const check: Check = () => (asked ??= hasUnseenReactions(c.env.DB, listener.id).catch(() => false));
+  checks.set(listener.id, check);
+  try {
+    await next();
+  } finally {
+    // Two tabs of one listener may overlap: leave the other request's check in place.
+    if (checks.get(listener.id) === check) checks.delete(listener.id);
   }
-  return next();
 };
 
-/** False for a listener nobody registered (not signed in, not a `GET`, or a copy of the session's object). */
-export const unseenReactions = (listener: Listener): Promise<boolean> => checks.get(listener)?.() ?? Promise.resolve(false);
+/** False for a listener nobody registered (not signed in, or not a `GET`). */
+export const unseenReactions = (listener: Listener): Promise<boolean> => checks.get(listener.id)?.() ?? Promise.resolve(false);

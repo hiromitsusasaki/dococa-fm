@@ -119,6 +119,19 @@ describe("the header's notice of new reactions", () => {
     expect(meLink(await (await get("/", cookie)).text())).not.toContain('class="dot"');
   });
 
+  it("shows on a page that passes a copy of the listener (/settings filling in an address)", async () => {
+    const cookie = await signedInSession();
+    const mine = await letterBy(idOf(cookie));
+    await react(mine);
+    const html = await (await get("/settings", cookie)).text();
+    expect(meLink(html)).toContain('class="dot"');
+  });
+
+  it("names the signed-in listener by name alone, the full sentence in its title", async () => {
+    const html = await (await get("/put", await signedInSession("Hiro"))).text();
+    expect(html).toMatch(/<span class="site-user" title="Hiro としてサインイン中">Hiro<\/span>/);
+  });
+
   it("is never shown to a listener who has not signed in", async () => {
     const cookie = await newSession();
     const mine = await letterBy(idOf(cookie));

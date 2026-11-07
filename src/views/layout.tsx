@@ -64,7 +64,9 @@ function SiteHeader({ listener, path, lang }: { listener?: Listener; path?: stri
           (signedIn ? (
             <>
               <MeLink listener={listener} label={t("me.title")} dot={t("me.newReactions")} here={path?.split("?")[0] === "/me"} />
-              <span class="site-user">{t("signin.as", { name: listener.displayName })}</span>
+              <span class="site-user" title={t("signin.as", { name: listener.displayName })}>
+                {listener.displayName}
+              </span>
               <form method="post" action="/auth/signout">
                 <button type="submit" class="quiet">{t("signin.out")}</button>
               </form>
