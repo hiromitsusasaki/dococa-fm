@@ -1562,16 +1562,19 @@ describe("station: a letter's link and sharing", () => {
     expect(label()).toBe("ラジオをつける");
   });
 
-  it("an echo of the listener's own letter (a reply or 私も) has no share button: it has no page", async () => {
+  it("an echo of the listener's own letter (a reply or 私も) has no reactions and no share: nothing to answer, no page", async () => {
     for (const kind of ["reply", "watashimo"] as const) {
       root.innerHTML = "";
       nextReplies = [ok(view(`ep-${kind}`, [["a", [dj("e1"), { ...letter("R1", "r1"), kind }]]]))];
       autoEnd = false;
       const s = mountStation(root, opts());
       await power();
-      await vi.waitFor(() => expect(root.querySelector(".now .react")).not.toBeNull());
+      await vi.waitFor(() => expect(root.querySelector(".now.panel")).not.toBeNull());
+      await flush();
+      expect(root.querySelector(".now .react")).toBeNull();
       expect(root.querySelector(".now .share")).toBeNull();
-      expect(root.querySelector('.now [data-action="watashimo"]')).not.toBeNull();
+      expect(root.querySelector('.now [data-action="watashimo"]')).toBeNull();
+      expect(root.querySelector(".now form.reply")).toBeNull();
       s.unmount();
     }
   });

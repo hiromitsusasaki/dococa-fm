@@ -7,7 +7,8 @@ import { canShare } from "./share";
 
 /**
  * `sender` is the first reader's name line; absent for a work nobody has written about. `letterId` is only on the row now on air, for the
- * reactions on the now-playing card; `shareable` is false for a reply or 私も (an echo of the listener's own letter), which has no page to share,
+ * reactions on the now-playing card; `shareable` is false for a reply or 私も (an echo of the listener's own letter), which has no page to share
+ * and nothing to answer (the card shows no reactions),
  * and `shareText` is the short text a share goes out with;
  * `reading` too: how far down the segment's lines the voice is (0 at the first line, 1 at the last), drawn as a thin line that moves down the row.
  */
@@ -164,7 +165,8 @@ export function StationScreen(p: StationScreenProps) {
               </ul>
             </div>
           )}
-          {onAir && <NowReact id={onAir.letterId!} askName={p.askName} share={onAir.shareable === false ? null : (onAir.shareText ?? "")} sent={p.sent} str={str} on={p.on} />}
+          {/* An echo has no letter to answer: its 私も and 一言 would go to a reaction, which the server refuses. */}
+          {onAir && onAir.shareable !== false && <NowReact id={onAir.letterId!} askName={p.askName} share={onAir.shareText ?? ""} sent={p.sent} str={str} on={p.on} />}
         </section>
       )}
 
@@ -205,9 +207,9 @@ export function StationScreen(p: StationScreenProps) {
 
 /**
  * 私も, 一言 and the ways to share for the segment's letter, on the now-playing card, through the whole segment. `share` is the short
- * text, or null for a letter with no page. The share sheet's button shows where the browser has one; `wireShare` handles its click and the copy.
+ * text. The share sheet's button shows where the browser has one; `wireShare` handles its click and the copy.
  */
-function NowReact({ id, askName, share, sent, str, on }: { id: string; askName: boolean; share: string | null; sent: Record<string, true>; str: (key: string) => string; on: StationScreenProps["on"] }) {
+function NowReact({ id, askName, share, sent, str, on }: { id: string; askName: boolean; share: string; sent: Record<string, true>; str: (key: string) => string; on: StationScreenProps["on"] }) {
   const said = sent[`w:${id}`] === true;
   const url = `${location.origin}/letters/${encodeURIComponent(id)}`;
   return (
@@ -249,19 +251,17 @@ function NowReact({ id, askName, share, sent, str, on }: { id: string; askName: 
           {str(sent[`r:${id}`] ? "player.sent" : "player.reply")}
         </button>
       </form>
-      {share !== null && (
-        <div class="share">
-          <a class="pill" href={xIntentUrl(share, url)} target="_blank" rel="noopener">
-            {str("share.x")}
-          </a>
-          <button type="button" class="pill" data-share={url} data-text={share} hidden={!canShare()}>
-            {str("share.native")}
-          </button>
-          <button type="button" class="pill" data-copy={url} data-copied={str("station.shared")}>
-            {str("station.share")}
-          </button>
-        </div>
-      )}
+      <div class="share">
+        <a class="pill" href={xIntentUrl(share, url)} target="_blank" rel="noopener">
+          {str("share.x")}
+        </a>
+        <button type="button" class="pill" data-share={url} data-text={share} hidden={!canShare()}>
+          {str("share.native")}
+        </button>
+        <button type="button" class="pill" data-copy={url} data-copied={str("station.shared")}>
+          {str("station.share")}
+        </button>
+      </div>
     </div>
   );
 }
