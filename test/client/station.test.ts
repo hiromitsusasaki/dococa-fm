@@ -28,6 +28,12 @@ const strings: Record<string, string> = {
   "player.replyLabel": "一言",
   "player.again": "この作品を聴く・観る",
   "player.sendFailed": "送れませんでした",
+  "player.sentToast": "送りました",
+  "station.dialNear": "近く",
+  "station.dialFar": "遠く",
+  "station.dialHint": "次のお便りから効きます",
+  "station.searching": "電波を探しています…",
+  "station.playFromToast": "このお便りから流します",
   "letter.showOriginal": "原文を見る",
   "letter.who": "{name}さん",
   "letter.whoPlace": "{who}（{place}）",
@@ -1221,5 +1227,86 @@ describe("the home's send modal", () => {
     message({ type: "dfm:close" }, location.origin, null);
     vi.advanceTimersByTime(2000);
     expect(close).not.toHaveBeenCalled();
+  });
+});
+
+describe("station: the face explains itself", () => {
+  const toastText = () => document.body.querySelector(".toast")?.textContent ?? null;
+
+  it("the dial has Near and Far labels on either side", async () => {
+    mountStation(root, opts({ stationKey: "mine", dial: 0.4 }));
+    await flush();
+    const ends = [...root.querySelectorAll(".knob-dial .dial-end")].map((e) => e.textContent);
+    expect(ends).toEqual(["近く", "遠く"]);
+  });
+
+  it("the first release of the dial hints once per session", async () => {
+    sessionStorage.clear();
+    mountStation(root, opts({ stationKey: "mine", dial: 0.4 }));
+    const input = el("dial") as HTMLInputElement;
+    input.value = "0.7";
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+    expect(toastText()).toBe("次のお便りから効きます");
+    document.body.querySelector(".toast")!.remove();
+    input.value = "0.9";
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+    expect(toastText()).toBeNull();
+  });
+
+  it("while the first ask is pending the status says the radio is searching", async () => {
+    let answer!: (r: Response) => void;
+    nextReplies = [() => new Promise<Response>((r) => (answer = r))];
+    autoEnd = false;
+    const s = mountStation(root, opts());
+    await power();
+    expect(s.state().power).toBe("tuning");
+    expect(root.querySelector(".station-status")!.textContent).toBe("電波を探しています…");
+    answer(await ok(epB())());
+    await vi.waitFor(() => expect(s.state().power).toBe("on"));
+    expect(root.querySelector(".station-status")!.textContent).toBe("");
+  });
+
+  it("pressing 私も toasts, and a new toast replaces the old one", async () => {
+    nextReplies = [ok(epA())];
+    autoEnd = false;
+    mountStation(root, opts());
+    await power();
+    await vi.waitFor(() => expect(spoken).toEqual(["a1"]));
+    root.querySelector<HTMLButtonElement>('.up-next li.now [data-action="panel-watashimo"]')!.click();
+    await vi.waitFor(() => expect(toastText()).toBe("送りました"));
+    expect(document.body.querySelectorAll(".toast")).toHaveLength(1);
+    expect(document.body.querySelector(".toast")!.getAttribute("role")).toBe("status");
+  });
+
+  it("a card press toasts that it plays from this letter, and the toast goes away", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      HTMLElement.prototype.scrollIntoView = vi.fn() as unknown as HTMLElement["scrollIntoView"];
+      nextReplies = [ok(epB())];
+      autoEnd = false;
+      mountStation(root, opts({ stationKey: "mine" }));
+      const a = document.createElement("a");
+      a.href = "/stations/mine?letter=L5";
+      a.setAttribute("data-play-letter", "L5");
+      document.body.append(a);
+      a.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+      expect(toastText()).toBe("このお便りから流します");
+      vi.advanceTimersByTime(2600);
+      expect(toastText()).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("the on-air row shows the work's picture, other rows do not", async () => {
+    nextReplies = [ok(epA())];
+    autoEnd = false;
+    mountStation(root, opts());
+    await power();
+    await vi.waitFor(() => expect(root.querySelector(".up-next li.now")).not.toBeNull());
+    const thumb = root.querySelector<HTMLImageElement>(".up-next li.now img.thumb")!;
+    expect(thumb.getAttribute("src")).toBe("https://img/a.jpg");
+    expect(thumb.getAttribute("width")).toBe("40");
+    expect(root.querySelectorAll(".up-next li:not(.now) img")).toHaveLength(0);
   });
 });

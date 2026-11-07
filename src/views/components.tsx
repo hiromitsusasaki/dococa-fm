@@ -175,7 +175,12 @@ export function LetterCard({ letter, item, lang, viewerId }: { letter: Letter; i
         <span class="letter-card-art">{item.imageUrl && <img src={item.imageUrl} alt="" width="96" height="96" loading="lazy" />}</span>
         <span class="letter-card-body">
           <span class="letter-card-text">{text}</span>
-          {!own && <span class="letter-card-play">{t("home.playFrom")}</span>}
+          {!own && (
+            <span class="letter-card-play">
+              <span class="letter-card-playmark" aria-hidden="true"></span>
+              {t("home.playFrom")}
+            </span>
+          )}
         </span>
       </a>
       <a class="letter-card-meta" href={`/items/${item.id}`}>{`${item.title} · ${from}`}</a>

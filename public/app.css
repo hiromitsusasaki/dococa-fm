@@ -17,6 +17,7 @@
   --shadow: 0 18px 40px rgba(20, 40, 70, 0.12);
   --on-magenta: #141b31;
   --label: #c93d4d;
+  --magenta-text: #c8287d;
   --lamp-glow: rgba(255, 216, 107, 0.55);
   color-scheme: light;
 
@@ -62,6 +63,7 @@
     --lemon: #ffe08a;
     --on-magenta: #121a2e;
     --label: var(--coral);
+    --magenta-text: var(--magenta);
     --hero: #1a2440;
     --knob: radial-gradient(circle at 35% 30%, rgba(255, 255, 255, 0.38), rgba(255, 255, 255, 0.08) 55%, rgba(0, 0, 0, 0.3));
     color-scheme: dark;
@@ -83,6 +85,7 @@
   --lemon: #ffe08a;
   --on-magenta: #121a2e;
   --label: var(--coral);
+  --magenta-text: var(--magenta);
   --hero: #1a2440;
   --knob: radial-gradient(circle at 35% 30%, rgba(255, 255, 255, 0.38), rgba(255, 255, 255, 0.08) 55%, rgba(0, 0, 0, 0.3));
   color-scheme: dark;
@@ -1484,7 +1487,7 @@ button:disabled,
 }
 
 .letter-card-play {
-  color: var(--magenta);
+  color: var(--magenta-text);
 }
 
 .program {
@@ -1649,4 +1652,64 @@ body.embed .put {
 
 body.embed .put h1 {
   margin-top: 0;
+}
+
+/* The dial's end labels, the toast, the on-air thumbnail and the play mark on letter cards. */
+.dial-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+.dial-end {
+  color: var(--ink-2);
+  font-size: 11px;
+}
+
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: max(var(--sp-4), env(safe-area-inset-bottom, 0px));
+  z-index: 20;
+  max-width: calc(100vw - 32px);
+  padding: var(--sp-2) var(--sp-4);
+  border-radius: var(--r-pill);
+  background: var(--ink);
+  color: var(--paper);
+  font-size: var(--fs-14);
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.up-next .thumb {
+  flex: none;
+  width: 40px;
+  height: 40px;
+  border-radius: 6px;
+  object-fit: cover;
+}
+
+.letter-card-play {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+.letter-card-playmark {
+  position: relative;
+  flex: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--magenta);
+}
+
+.letter-card-playmark::after {
+  content: "";
+  position: absolute;
+  top: 5px;
+  left: 8px;
+  border-left: 7px solid var(--on-magenta);
+  border-top: 5px solid transparent;
+  border-bottom: 5px solid transparent;
 }

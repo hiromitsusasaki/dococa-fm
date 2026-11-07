@@ -43,6 +43,8 @@ const POS_KEY = "dfm.pos:";
 const DEFAULT_VOLUME = 0.8;
 /** A turn of the dial is sent once it rests this long, so a sweep is one new ask, not many. */
 const DIAL_SETTLE_MS = 300;
+const TOAST_MS = 2500;
+const HINT_KEY = "dfm.dialHinted";
 
 function loadVolume(): number {
   try {
@@ -98,8 +100,38 @@ export function mountStation(root: HTMLElement, opts: StationOptions) {
   let generation = 0;
   /** Something has played or been resumed on this visit, so the DJ does not open again. */
   let heard = false;
+  let hinted = false;
   let letterId = opts.letterId;
   player.setVolume(state.volume);
+
+  /** One `div.toast` at a time: a new message replaces the last, and it goes away after 2.5 s. */
+  let toastEl: HTMLElement | null = null;
+  let toastTimer: ReturnType<typeof setTimeout> | undefined;
+  function toast(text: string) {
+    if (!mounted) return;
+    toastEl?.remove();
+    clearTimeout(toastTimer);
+    toastEl = document.createElement("div");
+    toastEl.className = "toast";
+    toastEl.setAttribute("role", "status");
+    toastEl.textContent = text;
+    document.body.append(toastEl);
+    toastTimer = setTimeout(() => {
+      toastEl?.remove();
+      toastEl = null;
+    }, TOAST_MS);
+  }
+  /** Once per session, the first time the dial rests: a turn only counts from the next letter. */
+  function hintDial() {
+    try {
+      if (sessionStorage.getItem(HINT_KEY)) return;
+      sessionStorage.setItem(HINT_KEY, "1");
+    } catch {
+      if (hinted) return;
+    }
+    hinted = true;
+    toast(str("station.dialHint"));
+  }
 
   const itemOf = (ep: PlayerEpisode | null, seg: number): PlayerItem | undefined => {
     const id = ep?.segments[seg]?.itemId;
@@ -179,6 +211,7 @@ export function mountStation(root: HTMLElement, opts: StationOptions) {
     const v = storeDial(value);
     if (v === null) return;
     dial = v;
+    hintDial();
     setState({});
     clearTimeout(dialTimer);
     dialTimer = setTimeout(() => {
@@ -312,6 +345,7 @@ export function mountStation(root: HTMLElement, opts: StationOptions) {
     starting = false;
     setState({ power: "off", current: null, seg: 0, line: 0, queue: [], loading: false });
     turnOn();
+    toast(str("station.playFromToast"));
     root.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
@@ -352,6 +386,7 @@ export function mountStation(root: HTMLElement, opts: StationOptions) {
     sending.add(key);
     const taken = await postLetter(fields);
     sending.delete(key);
+    if (taken && key.startsWith("w:")) toast(str("player.sentToast"));
     if (taken) setState({ sent: { ...state.sent, [key]: true }, ...(fromPlayer ? { replyOpen: false } : {}), sendFailed: false });
     else setState({ sendFailed: true });
     return taken;
@@ -376,7 +411,7 @@ export function mountStation(root: HTMLElement, opts: StationOptions) {
         const item = ep.items[s.itemId];
         if (!item) return;
         const first = s.lines.find((l): l is LetterLine => l.type === "letter");
-        rows.push({ key: `${ep.id}:${from + n}`, now, kind: item.kind ?? null, title: item.title, creator: item.creator, ...(first ? { sender: whoOf(first, str) } : {}), ...(now && first ? { letterId: first.letterId } : {}) });
+        rows.push({ key: `${ep.id}:${from + n}`, now, kind: item.kind ?? null, title: item.title, creator: item.creator, ...(first ? { sender: whoOf(first, str) } : {}), ...(now && first ? { letterId: first.letterId } : {}), ...(now ? { imageUrl: item.imageUrl } : {}) });
       });
     };
     // Off, limit and failed: the panel is empty and shows its hint, so nothing stale is listed.
@@ -430,6 +465,8 @@ export function mountStation(root: HTMLElement, opts: StationOptions) {
     unmount() {
       mounted = false;
       clearTimeout(dialTimer);
+      clearTimeout(toastTimer);
+      toastEl?.remove();
       document.removeEventListener("click", onCardClick);
       abort.abort();
       player.stopBed();

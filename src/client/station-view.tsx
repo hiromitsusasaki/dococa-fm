@@ -4,7 +4,7 @@ import { isHttpUrl, type LetterLine, outLabel, type PlayerItem, type PlayerOrigi
 import { onReleased } from "./reactions";
 
 /** `sender` is the first reader's name line; absent for a work nobody has written about. `letterId` is only on the row now on air, for the reactions. */
-export type UpNextRow = { key: string; now: boolean; kind: string | null; title: string; creator: string; sender?: string; letterId?: string };
+export type UpNextRow = { key: string; now: boolean; kind: string | null; title: string; creator: string; sender?: string; letterId?: string; imageUrl?: string | null };
 
 export type StationScreenProps = {
   str: (key: string) => string;
@@ -40,7 +40,7 @@ const REASON_KEY: Record<string, string> = { limit: "station.limit", failed: "st
 export function StationScreen(p: StationScreenProps) {
   const { str } = p;
   const lit = p.power === "on" || p.power === "tuning";
-  const status = p.reason ? str(REASON_KEY[p.reason] ?? "station.failed") : p.power === "tuning" || p.loading ? str("station.tuning") : p.sendFailed ? str("player.sendFailed") : "";
+  const status = p.reason ? str(REASON_KEY[p.reason] ?? "station.failed") : p.power === "tuning" ? str("station.searching") : p.loading ? str("station.tuning") : p.sendFailed ? str("player.sendFailed") : "";
   const links = Object.entries(p.item?.outLinks ?? {}).flatMap(([key, href]) => {
     const label = outLabel(str, key);
     return label && isHttpUrl(href) ? [{ label, href }] : [];
@@ -71,22 +71,26 @@ export function StationScreen(p: StationScreenProps) {
           </label>
           {p.dial !== null && (
             <label class="knob knob-dial" title={str("station.dialHelp")}>
-              <span class="knob-body" style={{ "--angle": angle(p.dial) }}>
-                <i></i>
-                <input
-                  type="range"
-                  min="0"
-                  max="1"
-                  step="0.1"
-                  data-action="dial"
-                  aria-label={str("station.dial")}
-                  value={String(p.dial)}
-                  ref={onReleased(p.on.dial)}
-                  onInput={(e: Event) => {
-                    const input = e.currentTarget as HTMLInputElement;
-                    input.parentElement?.style.setProperty("--angle", angle(Number(input.value)));
-                  }}
-                />
+              <span class="dial-row">
+                <span class="dial-end">{str("station.dialNear")}</span>
+                <span class="knob-body" style={{ "--angle": angle(p.dial) }}>
+                  <i></i>
+                  <input
+                    type="range"
+                    min="0"
+                    max="1"
+                    step="0.1"
+                    data-action="dial"
+                    aria-label={str("station.dial")}
+                    value={String(p.dial)}
+                    ref={onReleased(p.on.dial)}
+                    onInput={(e: Event) => {
+                      const input = e.currentTarget as HTMLInputElement;
+                      input.parentElement?.style.setProperty("--angle", angle(Number(input.value)));
+                    }}
+                  />
+                </span>
+                <span class="dial-end">{str("station.dialFar")}</span>
               </span>
               <span class="control-label">{str("station.dial")}</span>
             </label>
@@ -160,6 +164,7 @@ export function StationScreen(p: StationScreenProps) {
           {p.upNext.map((r) => (
             <li key={r.key} class={r.now ? "now" : ""}>
               <span class="tag">{str(r.now ? "station.now" : "station.next")}</span>
+              {r.now && isHttpUrl(r.imageUrl) && <img class="thumb" src={r.imageUrl} alt="" width="40" height="40" />}
               {r.kind && <span class="kind">{kindLabel(str, r.kind)}</span>}
               <span class="title">{r.title}</span>
               <span class="creator">{r.creator}</span>

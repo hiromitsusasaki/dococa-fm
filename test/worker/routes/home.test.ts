@@ -75,6 +75,8 @@ describe("GET /", () => {
     // The link stays for a new tab and for no script; the station script plays the letter on the home radio.
     expect(html).toContain(`<a class="letter-card-main" href="/stations/mine?letter=${other.id}" data-play-letter="${other.id}">`);
     expect(html).toContain(`<a class="letter-card-main" href="/items/${it.id}">`);
+    // The play mark is decoration on the cards that play; the viewer's own card has none.
+    expect((html.match(/<span class="letter-card-playmark" aria-hidden="true"><\/span>/g) ?? []).length).toBe((html.match(/data-play-letter="/g) ?? []).length);
     expect(html).not.toContain(`letter=${mine.id}`);
     expect(html).not.toContain(`data-play-letter="${mine.id}"`);
     expect((html.match(new RegExp(`<a class="letter-card-meta" href="/items/${it.id}">曲B`, "g")) ?? []).length).toBe(2);
