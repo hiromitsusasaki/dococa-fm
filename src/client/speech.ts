@@ -29,8 +29,17 @@ export function loadVoices(): Promise<SpeechSynthesisVoice[]> {
   });
 }
 
-export const pickVoice = (voices: SpeechSynthesisVoice[], voiceURI: string): SpeechSynthesisVoice | undefined =>
-  voices.find((v) => v.voiceURI === voiceURI) ?? voices.find((v) => v.lang.startsWith("ja")) ?? undefined;
+/**
+ * Voice names that suggest a male narrator, matched anywhere in the name (`male` only as a whole word, so "Female" does not match): the radio's own (cloud) voice is male, so the
+ * browser fallback should not jump to a female one. A plain list, since the Web Speech API reports no gender.
+ */
+const MALE_NAMES = /otoya|hattori|ichiro|\bmale\b|男性|daniel|alex/i;
+
+/** The voice the listener chose, else a Japanese voice that looks male, else the first Japanese voice. */
+export const pickVoice = (voices: SpeechSynthesisVoice[], voiceURI: string): SpeechSynthesisVoice | undefined => {
+  const ja = voices.filter((v) => v.lang.startsWith("ja"));
+  return voices.find((v) => v.voiceURI === voiceURI) ?? ja.find((v) => MALE_NAMES.test(v.name ?? "")) ?? ja[0];
+};
 
 /** Resolves when the line has been read (or skipped through `signal`). Without speech support it just waits a reading time. */
 export function speak(text: string, voice: SpeechSynthesisVoice | undefined, signal: AbortSignal): Promise<void> {

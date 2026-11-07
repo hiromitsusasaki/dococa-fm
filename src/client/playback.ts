@@ -1,8 +1,32 @@
-/** Line playback shared by the episode player and the station player: cloud and Web Speech talk, the bed, Media Session. */
+/**
+ * Line playback shared by the episode player and the station player: cloud and Web Speech talk, the bed, Media Session.
+ *
+ * Cloud clips fall back per line, not per episode: a clip that fails (503/502 or a network error shows up as the audio
+ * element's error) is asked for once more after `CLOUD_RETRY_MS`; if that fails too, that one line is read by the browser
+ * voice and the next line tries the cloud again. A dead backend must not add a wait to every line, so after
+ * `CLOUD_GIVE_UP_AFTER` lines in a row that fell back, the rest of that episode is read by the browser voice.
+ */
 import { siteLabel, whoLine } from "../worker/letters/label";
 import type { ScriptLine, Segment } from "../worker/types";
 import { createBed, createClipPlayer } from "./audio";
 import { loadVoices, pickVoice, speak } from "./speech";
+
+/** How long to wait before asking for a failed clip once more. */
+const CLOUD_RETRY_MS = 4000;
+/** Consecutive lines that fell back to the browser voice before the cloud is skipped for the rest of the episode. */
+const CLOUD_GIVE_UP_AFTER = 3;
+
+/** Resolves after `ms`, or at once when `signal` aborts. */
+const pause = (ms: number, signal: AbortSignal) =>
+  new Promise<void>((resolve) => {
+    const done = () => {
+      clearTimeout(timer);
+      signal.removeEventListener("abort", done);
+      resolve();
+    };
+    const timer = setTimeout(done, ms);
+    signal.addEventListener("abort", done);
+  });
 
 export type PlayerItem = {
   title: string;
@@ -59,8 +83,10 @@ export function createLinePlayer(opts: { voiceURI: string; ttsUrl: string | null
   const clips = createClipPlayer();
   let unlocked = false;
   let voices: SpeechSynthesisVoice[] | null = null;
-  /** Episodes whose cloud clip failed once: the rest of that episode is read by the browser voice. */
+  /** Episodes whose cloud clips failed `CLOUD_GIVE_UP_AFTER` lines in a row: the rest of that episode is read by the browser voice. */
   const cloudFailed = new Set<string>();
+  /** Lines in a row, per episode, that fell back to the browser voice. */
+  const misses = new Map<string, number>();
   const warmed = new Set<string>();
 
   const ttsSrc = (episode: PlayerEpisode, seg: number, line: number) =>
@@ -100,9 +126,20 @@ export function createLinePlayer(opts: { voiceURI: string; ttsUrl: string | null
       bed.start();
       if (cloudOn(episode)) {
         warmNext(episode, seg, index);
-        const played = await clips.play(ttsSrc(episode, seg, index), signal);
-        if (played || signal.aborted) return;
-        cloudFailed.add(episode.id);
+        const src = ttsSrc(episode, seg, index);
+        let played = await clips.play(src, signal);
+        if (!played && !signal.aborted) {
+          await pause(CLOUD_RETRY_MS, signal);
+          if (!signal.aborted) played = await clips.play(src, signal);
+        }
+        if (signal.aborted) return;
+        if (played) {
+          misses.delete(episode.id);
+          return;
+        }
+        const missed = (misses.get(episode.id) ?? 0) + 1;
+        misses.set(episode.id, missed);
+        if (missed >= CLOUD_GIVE_UP_AFTER) cloudFailed.add(episode.id);
       }
       voices ??= await loadVoices();
       if (!signal.aborted) await speak(line.text, pickVoice(voices, opts.voiceURI), signal);

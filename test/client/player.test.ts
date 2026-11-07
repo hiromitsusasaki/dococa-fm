@@ -448,13 +448,62 @@ describe("player", () => {
     expect(unlockSpeaks).toBe(1);
   });
 
-  it("falls back to speech for a tts line whose clip fails, and stays on speech afterwards", async () => {
-    mountPlayer(root, one, opts({ ttsUrl: "/tts" }));
-    await tap("toggle");
-    await vi.waitFor(() => expect(audios.some((a) => a.src === "/tts?episode=ep1&line=0")).toBe(true));
-    audios.find((a) => a.src === "/tts?episode=ep1&line=0")!.fire("error");
-    await vi.waitFor(() => expect(spoken.slice(0, 2)).toEqual(["d1", "l1"]));
-    expect(audios.some((a) => a.src === "/tts?episode=ep1&line=1")).toBe(false);
+  describe("cloud clips that fail", () => {
+    const clipAt = (line: number) => audios.find((a) => a.src === `/tts?episode=ep1&line=${line}`);
+    const waitClip = (line: number) => vi.waitFor(() => expect(clipAt(line)).toBeDefined());
+
+    it("asks again after 4 s, and plays the cloud clip when the second try works", async () => {
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+      mountPlayer(root, one, opts({ ttsUrl: "/tts" }));
+      await tap("toggle");
+      await waitClip(0);
+      const plays = clipAt(0)!.play.mock.calls.length;
+      clipAt(0)!.fire("error");
+      await flush();
+      vi.advanceTimersByTime(3900);
+      await flush();
+      expect(clipAt(0)!.play.mock.calls.length).toBe(plays);
+      vi.advanceTimersByTime(200);
+      await flush();
+      expect(clipAt(0)!.play.mock.calls.length).toBe(plays + 1);
+      expect(spoken).toEqual([]);
+      clipAt(0)!.fire("ended");
+      await waitClip(1);
+      expect(spoken).toEqual([]);
+    });
+
+    it("reads only that line with the browser voice when the retry fails too, and tries the cloud again on the next line", async () => {
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+      mountPlayer(root, one, opts({ ttsUrl: "/tts" }));
+      await tap("toggle");
+      await waitClip(0);
+      clipAt(0)!.fire("error");
+      await flush();
+      vi.advanceTimersByTime(4000);
+      await flush();
+      clipAt(0)!.fire("error");
+      await vi.waitFor(() => expect(spoken).toEqual(["d1"]));
+      await waitClip(1);
+      expect(clipAt(1)).toBeDefined();
+    });
+
+    it("gives up on the cloud for the rest of the episode after three lines in a row", async () => {
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+      const four: PlayerEpisode = { ...one, segments: [{ itemId: "a", slot: "near", lines: [1, 2, 3, 4].map((n) => ({ type: "dj" as const, text: `x${n}` })) }] };
+      mountPlayer(root, { ...four, id: "ep1" }, opts({ ttsUrl: "/tts" }));
+      await tap("toggle");
+      for (const line of [0, 1, 2]) {
+        await waitClip(line);
+        clipAt(line)!.fire("error");
+        await flush();
+        vi.advanceTimersByTime(4000);
+        await flush();
+        clipAt(line)!.fire("error");
+        await vi.waitFor(() => expect(spoken.length).toBeGreaterThanOrEqual(line + 1));
+      }
+      await vi.waitFor(() => expect(spoken).toEqual(["x1", "x2", "x3", "x4"]));
+      expect(clipAt(3)).toBeUndefined();
+    });
   });
 
   it("次の作品 skips to the next segment", async () => {
