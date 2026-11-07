@@ -42,9 +42,10 @@ export async function unitCapReached(env: Env, db: D1Database): Promise<boolean>
  * `strict`, the limits are stated in words, and `parse` enforces them.
  *
  * Readings (Japanese only) are free model output that only the voice says, so they are held tight: `parse` keeps a
- * reading only in full-width katakana, at most 3 times its text's length (Latin, digits) or 2 times (CJK), never
- * for a text of digits alone, and only for a text the unit's lines, the work or the sender's name and place say;
- * anything else is dropped. The spoken lines then get the same checks as the written ones in `verifyEpisode`.
+ * reading only in full-width katakana, at most 3 katakana per Latin letter or digit and 2 per kanji of its text (at
+ * least 2), never for a text without a Latin letter, digit or kanji or for a number alone, and only for a text the
+ * unit's lines, the work or the sender's name and place say; anything else is dropped. The work's reading follows
+ * the most recent verified unit that gives one. The spoken lines then get the same checks as the written ones in `verifyEpisode`.
  */
 const TOOL = {
   name: "write_unit",
@@ -148,19 +149,33 @@ const within = (v: unknown, max: number): v is string => typeof v === "string" &
 
 /** Full-width katakana, ー and ・ only, with a space between words. */
 const KATAKANA = /^[ァ-ヶー・](?:[ァ-ヶー・ 　]*[ァ-ヶー・])?$/u;
-/** A text in Latin letters, digits and symbols: its reading may run to 3 times its length; anything else (CJK), 2. */
-const LATIN_TEXT = /^[\p{Script=Latin}\p{N}\p{P}\p{S}\s]+$/u;
+/** A name worth a reading has a Latin letter, a digit or a kanji in it; kana alone is read as written. */
+const NEEDS_READING = /[\p{Script=Latin}\p{N}\p{Script=Han}]/u;
+/** Digits with punctuation, symbols or spaces only: a number, not a name, so it never gets a reading. */
+const NUMBER_ONLY = /^[\p{N}\p{P}\p{S}\s]+$/u;
+
 /**
- * Whether `reading` is a reading the voice may say for `text`: katakana only, and at most 3 times the code points
- * of a Latin or digit text, 2 times of any other. A text of digits alone has no reading (a number is not a name).
+ * The most katakana a reading of `text` may have: 3 per Latin letter or digit and 2 per kanji (or other letter) of
+ * the text, at least 2. Kana, punctuation and spaces in the text add nothing.
+ */
+function readingRoom(text: string): number {
+  let room = 0;
+  for (const c of text) {
+    if (/[\p{Script=Latin}\p{N}]/u.test(c)) room += 3;
+    else if (/\p{L}/u.test(c) && !/[\p{Script=Hiragana}\p{Script=Katakana}ー]/u.test(c)) room += 2;
+  }
+  return Math.max(2, room);
+}
+
+/**
+ * Whether `reading` is a reading the voice may say for `text`: full-width katakana only, no longer than
+ * `readingRoom(text)`, for a text with a Latin letter, a digit or a kanji in it that is not a number alone.
  */
 function isReadingOf(text: string, reading: unknown): reading is string {
-  if (typeof reading !== "string" || text === "" || /^\p{N}+$/u.test(text)) return false;
+  if (typeof reading !== "string" || text === "" || !NEEDS_READING.test(text) || NUMBER_ONLY.test(text)) return false;
   const r = reading.trim();
-  return KATAKANA.test(r) && Array.from(r).length <= Array.from(text).length * (LATIN_TEXT.test(text) ? 3 : 2);
+  return KATAKANA.test(r) && Array.from(r).length <= readingRoom(text);
 }
-/** Kana alone is read as written: a reading is for a name with Latin letters, digits or kanji in it. */
-const NEEDS_READING = /[^\p{Script=Hiragana}\p{Script=Katakana}ー・\s]/u;
 
 /** Unit lines and the work's readings, as one Japanese reply gives them. */
 export type WrittenUnit = UnitLines & { titleReading?: string; creatorReading?: string };
@@ -177,7 +192,7 @@ function keptReadings(raw: unknown, said: string[]): Reading[] {
   for (const r of raw as { text?: unknown; reading?: unknown }[]) {
     if (out.size >= READINGS_MAX) break;
     const text = typeof r?.text === "string" ? r.text.trim() : "";
-    if (text === "" || Array.from(text).length > READING_TEXT_MAX || !NEEDS_READING.test(text) || out.has(text)) continue;
+    if (text === "" || Array.from(text).length > READING_TEXT_MAX || out.has(text)) continue;
     if (!isReadingOf(text, r.reading) || !said.some((s) => s.includes(text))) continue;
     out.set(text, r.reading.trim());
   }
@@ -201,7 +216,8 @@ function parse(content: { type: string; name?: string; input?: unknown }[], item
   const titleReading = isReadingOf(title, input.titleReading) ? input.titleReading.trim() : kept.find((r) => r.text === title)?.reading;
   const creatorReading = isReadingOf(creator, input.creatorReading) ? input.creatorReading.trim() : kept.find((r) => r.text === creator)?.reading;
   const own = new Map(kept.map((r) => [r.text, r.reading]));
-  const fits = (text: string) => text !== "" && Array.from(text).length <= READING_TEXT_MAX && !own.has(text);
+  // One reading per name: the work's (titleReading, creatorReading) replaces a `readings` entry for the same text.
+  const fits = (text: string) => text !== "" && Array.from(text).length <= READING_TEXT_MAX;
   if (titleReading && fits(title)) own.set(title, titleReading);
   if (creatorReading && fits(creator)) own.set(creator, creatorReading);
   // Only what the unit's lines say (talk and hand-over): the lead is voiced with the work's readings.
@@ -216,12 +232,12 @@ function readingOf(written: WrittenUnit): Item["readingJa"] {
 }
 
 /**
- * The work as this unit is voiced: its stored readings, or the ones the reply gave when it has none yet (they are
- * stored with the unit), so the unit is checked as it will air.
+ * The work as this unit is voiced: its stored readings with the ones the reply gave laid over them (a verified unit
+ * stores them), so the unit is checked as it will air.
  */
 const voicedItem = (item: Item, written: WrittenUnit): Item => {
   const reading = readingOf(written);
-  return item.readingJa || !reading ? item : { ...item, readingJa: reading };
+  return reading ? { ...item, readingJa: { ...item.readingJa, ...reading } } : item;
 };
 
 /**
@@ -321,13 +337,14 @@ export async function remakeUnit(env: Env, db: D1Database, letter: Letter, item:
 }
 
 /**
- * The work's readings from the reply, stored when the work has none yet; a work that has them keeps them. Every
+ * The work's readings from the reply, stored over what the work had: the most recent verified unit (or remake) that
+ * gives a reading for the title or the creator sets it, so a wrong reading is fixed by the next good unit. Every
  * programme says the work this way, so only readings `parse` accepted for the whole title or creator (katakana,
  * bounded length) get here, and only from a verified unit. Nothing is logged: the reading is the model's output.
  */
 async function storeItemReading(db: D1Database, item: Item, written: WrittenUnit): Promise<void> {
   const reading = readingOf(written);
-  if (reading && !item.readingJa) await setItemReading(db, item.id, reading);
+  if (reading) await setItemReading(db, item.id, reading);
 }
 
 /**
