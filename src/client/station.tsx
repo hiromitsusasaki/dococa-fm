@@ -86,7 +86,7 @@ export function mountStation(root: HTMLElement, opts: StationOptions) {
   let mounted = true;
   /** The episode being made for the queue, if any. */
   let ahead: Promise<void> | null = null;
-  /** Why the last ask for the next episode failed. `limit` is final for the day; others are tried again. */
+  /** Why the last ask for the next episode failed. `limit` holds until the switch or a card asks again; others are tried again. */
   let aheadFail: Reason | null = null;
   let resumeTried = false;
   let starting = false;
@@ -304,7 +304,8 @@ export function mountStation(root: HTMLElement, opts: StationOptions) {
     generation++;
     starts++;
     ahead = null;
-    if (aheadFail !== "limit") aheadFail = null;
+    // A press is a fresh ask, even after the day's limit: the tab may have been open past midnight JST.
+    aheadFail = null;
     letterId = id;
     heard = false;
     resumeTried = true;

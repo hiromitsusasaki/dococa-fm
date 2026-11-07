@@ -1083,6 +1083,30 @@ describe("station: a letter card plays on this radio", () => {
     expect(s.state().power).toBe("on");
   });
 
+  it("a press after the day's limit asks again, and keeps asking ahead once it is answered", async () => {
+    nextReplies = [ok(one("e1")), json(429, { error: "limit" }), ok(one("e2")), ok(one("e3"))];
+    const s = mountStation(root, opts({ stationKey: "mine" }));
+    await power();
+    await vi.waitFor(() => expect(s.state().power).toBe("limit"));
+    autoEnd = false;
+    press(card("L3"));
+    await vi.waitFor(() => expect(s.state().current?.id).toBe("e2"));
+    expect(s.state().power).toBe("on");
+    expect(bodies[2]).toMatchObject({ first: true, letterId: "L3" });
+    await vi.waitFor(() => expect(s.state().queue.map((e) => e.id)).toEqual(["e3"]));
+  });
+
+  it("a press after a failure asks again", async () => {
+    nextReplies = [json(503, { error: "unavailable" }), ok(one("e1"))];
+    const s = mountStation(root, opts({ stationKey: "mine" }));
+    await power();
+    await vi.waitFor(() => expect(s.state().power).toBe("failed"));
+    autoEnd = false;
+    press(card("L4"));
+    await vi.waitFor(() => expect(s.state().current?.id).toBe("e1"));
+    expect(s.state().power).toBe("on");
+  });
+
   it("leaves a modified click (a new tab) and other links alone", async () => {
     const s = mountStation(root, opts({ stationKey: "mine" }));
     expect(press(card("L9"), { metaKey: true })).toBe(true);
