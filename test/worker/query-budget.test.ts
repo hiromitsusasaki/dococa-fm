@@ -18,11 +18,11 @@ const START_BUDGET = 50;
 /** With every unit stored: the selection, three loads, one units read, the insert. */
 const EPISODE_BUDGET = 30;
 /**
- * The worst case: no unit made yet, so per letter read (at most 6 segments × 3 letters) seven statements on top:
- * the cap read, the claim (two), the liked examples, the write, the read back and the release. Over the Free plan's 50; the app
- * runs on Workers Paid (1000 per invocation, docs/status.md), so this bounds the growth instead.
+ * The worst case: no unit made yet. An episode is one segment with one letter (the player asks again for each), so
+ * one unit's seven statements on top: the cap read, the claim (two), the liked examples, the write, the read back and
+ * the release. Measured at 24 (2026-11-07: 17 without a key, plus 7); the margin is small so a regression shows.
  */
-const EPISODE_MAKING_UNITS_BUDGET = 150;
+const EPISODE_MAKING_UNITS_BUDGET = 28;
 const PER_UNIT = 7;
 /**
  * The distance pick (Task 4) adds at most three statements to `next`: the taste, the candidates' vectors (one per 90
