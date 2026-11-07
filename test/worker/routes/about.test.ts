@@ -27,6 +27,11 @@ describe("GET /about", () => {
     expect(css).toMatch(/\.panel-rule-under::before\s*{\s*display:\s*none/);
   });
 
+  it("offers the home's tour again, through /?tour=1", async () => {
+    const html = await (await get("/about", await newSession())).text();
+    expect(html).toMatch(/<a class="pill tour-again" href="\/\?tour=1">使い方<\/a>/);
+  });
+
   it("puts one illustration in each section", async () => {
     const html = await (await get("/about", await newSession())).text();
     for (const name of ["listen", "send", "mine", "rules"]) {

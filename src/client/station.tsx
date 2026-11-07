@@ -7,6 +7,7 @@ import { loadDial, reactionOf, sendLetter, storeDial } from "./reactions";
 import { clearToast, toast as showToast, wireShare } from "./share";
 import { createSounds } from "./sounds";
 import { StationScreen, type UpNextRow } from "./station-view";
+import { startTour, tourDone } from "./tour";
 
 export type StationOptions = {
   stationKey: string;
@@ -110,6 +111,10 @@ export function envelope(doc: Document, kind: keyof typeof GLYPH_MS) {
 
 /** A left click no one has handled and without a modifier: one that would follow the link in this tab. */
 const plainClick = (e: MouseEvent): boolean => !e.defaultPrevented && e.button === 0 && !e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey;
+
+/** The tour's parts, in the owner's order (2026-11-07): what works without an account first, sign-in last. */
+const TOUR = [".radio .control", ".knob-dial", ".now", ".on-air"];
+const SIGNIN = '.site-header a[href^="/auth/google"]';
 
 export function mountStation(root: HTMLElement, opts: StationOptions) {
   const str = (key: string) => opts.strings[key] ?? key;
@@ -559,8 +564,20 @@ export function mountStation(root: HTMLElement, opts: StationOptions) {
         },
         watashimo: (letterId: string) => void react("watashimo", letterId),
         reply: (body: string, letterId: string, profile?: Record<string, string>) => react("reply", letterId, body, profile),
+        tour,
       },
     };
+  }
+
+  /** The home's tour; the last step is the sign-in link, or the send panel for a listener already signed in. */
+  let endTour = () => {};
+  function tour() {
+    const signedOut = document.querySelector(SIGNIN) !== null;
+    const steps = [...TOUR, signedOut ? SIGNIN : ".send-panel"].map((at, n) => {
+      const id = `station.tour${n + 1}${n === 4 && !signedOut ? "In" : ""}`;
+      return { at, title: str(`${id}Title`), text: str(id) };
+    });
+    endTour = startTour(steps, { next: str("station.tourNext"), end: str("station.tourEnd"), skip: str("station.tourSkip"), label: str("station.tour") });
   }
 
   bindMediaSession({ play: turnOn, pause: turnOff, next: skip });
@@ -569,11 +586,22 @@ export function mountStation(root: HTMLElement, opts: StationOptions) {
   markNight();
   const nightTimer = setInterval(markNight, NIGHT_CHECK_MS);
   setState({});
+  // A first visit to the home, or `/?tour=1` (the about page's 「使い方」); never over the send modal.
+  if (opts.send && !document.querySelector("dialog[open]")) {
+    const url = new URL(location.href);
+    const asked = url.searchParams.has("tour");
+    if (asked) {
+      url.searchParams.delete("tour");
+      history.replaceState(history.state, "", url);
+    }
+    if (asked || !tourDone()) tour();
+  }
 
   return {
     state: (): StationState => state,
     unmount() {
       mounted = false;
+      endTour();
       clearTimeout(dialTimer);
       clearInterval(nightTimer);
       if (typeof cancelAnimationFrame === "function") cancelAnimationFrame(lampFrame);

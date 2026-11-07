@@ -15,6 +15,7 @@
   --hero: #f6f7fa;
   --knob: radial-gradient(circle at 35% 30%, #ffffff, #e9eef5 60%, #c9d3e0);
   --shadow: 0 18px 40px rgba(20, 40, 70, 0.12);
+  --scrim: rgba(10, 16, 30, 0.62);
   --on-magenta: #141b31;
   --label: #c93d4d;
   --magenta-text: #c0247a;
@@ -2391,4 +2392,98 @@ body.letter-player .embed-player {
 
 .about .panel-rule-under h2 {
   margin-bottom: var(--sp-2);
+}
+/* The home's first-visit tour (DESIGN.md「チュートリアル」): the page dims around one part, a bubble says what it does. */
+.face .tour-again,
+.tour-actions .quiet {
+  border: 0;
+  background: transparent;
+  color: var(--ink-2);
+  font: inherit;
+  cursor: pointer;
+}
+
+.face .tour-again {
+  margin-right: auto;
+  padding: var(--sp-1);
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  text-decoration: underline dotted;
+  position: relative;
+}
+
+/* Quiet on the face, still a 44px tap. */
+.face .tour-again::after {
+  content: "";
+  position: absolute;
+  inset: -12px -8px;
+}
+
+.tour {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+}
+
+.tour-hole {
+  position: fixed;
+  border-radius: 14px;
+  box-shadow:
+    0 0 0 2px var(--lemon),
+    0 0 0 200vmax var(--scrim);
+  pointer-events: none;
+}
+
+/* A step whose part is not on the page (the card shows only while a letter plays): the page dims, nothing is ringed. */
+.tour-hole.none {
+  box-shadow: 0 0 0 200vmax var(--scrim);
+}
+
+.tour-bubble {
+  position: fixed;
+  width: min(340px, calc(100vw - 32px));
+  padding: var(--sp-4);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--panel);
+  color: var(--ink);
+  box-shadow: var(--shadow);
+}
+
+.tour-bubble h2 {
+  margin: 0 0 var(--sp-1);
+  font-size: var(--fs-16);
+}
+
+.tour-bubble p {
+  margin: 0 0 var(--sp-3);
+  font-size: var(--fs-14);
+  line-height: var(--lh-body);
+}
+
+.tour-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--sp-2);
+}
+
+.tour-actions button {
+  min-height: 44px;
+  padding: 0 var(--sp-4);
+}
+
+@media (max-width: 480px) {
+  .tour-bubble {
+    width: calc(100vw - 32px);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .tour-hole {
+    transition:
+      top 200ms ease,
+      left 200ms ease,
+      width 200ms ease,
+      height 200ms ease;
+  }
 }

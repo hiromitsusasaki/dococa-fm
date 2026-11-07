@@ -16,6 +16,12 @@ about.get("/about", (c) => {
       <main class="about">
         <h1>{t("about.title")}</h1>
         <p class="about-lead">{t("about.lead")}</p>
+        {/* The home opens its tour again on `?tour=1`. */}
+        <p>
+          <a class="pill tour-again" href="/?tour=1">
+            {t("about.tour")}
+          </a>
+        </p>
         {SECTIONS.map((key) => (
           <section class="panel panel-rule-under">
             <h2>{t(`about.${key}.title`)}</h2>

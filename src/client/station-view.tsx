@@ -47,6 +47,8 @@ export type StationScreenProps = {
     watashimo: (letterId: string) => void;
     /** `profile`: the radio name and place typed in the form's optional line, only those filled in. */
     reply: (body: string, letterId: string, profile?: Record<string, string>) => Promise<boolean> | void;
+    /** Opens the home's tour again (the face's quiet 「使い方」). */
+    tour: () => void;
   };
 };
 
@@ -67,6 +69,11 @@ export function StationScreen(p: StationScreenProps) {
       <section class="panel radio">
         <div class="face">
           <span class="brand">DOCOCA FM</span>
+          {p.send && (
+            <button type="button" class="quiet tour-again" onClick={p.on.tour}>
+              {str("station.tour")}
+            </button>
+          )}
           {p.power === "on" && <span class="live">{str("station.onAir")}</span>}
           {p.power === "tuning" && <span class="tuning" aria-hidden="true">{str("station.tuning")}</span>}
         </div>
