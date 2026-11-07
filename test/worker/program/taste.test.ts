@@ -167,4 +167,12 @@ describe("dialAwake", () => {
     expect(await countOwnLetters(env.DB, me.id)).toBe(1);
     expect(await dialAwake(env.DB, me.id)).toBe(false);
   });
+
+  it("counts an answer on a found voice, which has no listener", async () => {
+    const me = await createListener(env.DB);
+    const it1 = await insertItem(env.DB, itemDraft({ externalIds: {} }));
+    const found = await insertLetter(env.DB, letterDraft(it1.id, { body: "from the web", sourceUrl: "https://example.com/review" }));
+    await insertLetter(env.DB, letterDraft(it1.id, { kind: "watashimo", listenerId: me.id, parentLetterId: found.id, body: "" }));
+    expect(await countOwnLetters(env.DB, me.id)).toBe(1);
+  });
 });

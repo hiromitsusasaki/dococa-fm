@@ -289,14 +289,14 @@ export async function hasWatashimo(db: D1Database, listenerId: string, parentLet
 
 /**
  * The listener's (?1) own voices, one row per letter with the work it is about (`item_id`, `created_at`): their public
- * letters, and their public 私も and 一言 on someone else's public letter (answers on their own letter are not a new
- * voice). The dial's taste is made from these works, and the dial
+ * letters, and their public 私も and 一言 on someone else's public letter or on a found voice (answers on their own letter are
+ * not a new voice; a found voice has no listener). The dial's taste is made from these works, and the dial
  * wakes once there are three. Never a favourite.
  */
 export const OWN_VOICES_SQL = `SELECT l.item_id, l.created_at FROM letters l WHERE l.listener_id = ?1 AND l.status = 'public' AND l.kind = 'letter'
   UNION ALL
   SELECT p.item_id, r.created_at FROM letters r JOIN letters p ON p.id = r.parent_letter_id
-  WHERE r.listener_id = ?1 AND r.status = 'public' AND r.kind IN ('watashimo', 'reply') AND p.status = 'public' AND p.listener_id <> ?1`;
+  WHERE r.listener_id = ?1 AND r.status = 'public' AND r.kind IN ('watashimo', 'reply') AND p.status = 'public' AND (p.listener_id IS NULL OR p.listener_id <> ?1)`;
 
 /** How many own voices (`OWN_VOICES_SQL`) the listener has: letters sent and reactions, in one statement. Never shown as a number. */
 export async function countOwnLetters(db: D1Database, listenerId: string): Promise<number> {
