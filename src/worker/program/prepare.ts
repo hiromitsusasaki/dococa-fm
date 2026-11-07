@@ -1,7 +1,7 @@
 import { EMBED_BATCH, ensureItemVectors } from "../ai/embed";
 import { getItem } from "../db/items";
 import { getLetter } from "../db/letters";
-import { countLettersWithoutUnit, countUnitsWithoutAudio, getUnits, listLettersWithoutUnit, listUnitsWithoutAudio, setUnitAudioReady } from "../db/units";
+import { countLettersWithoutUnit, countUnitsGaveUp, countUnitsWithoutAudio, getUnits, listLettersWithoutUnit, listUnitsWithoutAudio, setUnitAudioGaveUp, setUnitAudioReady } from "../db/units";
 import { hasClaude } from "../claude/client";
 import type { Env } from "../env";
 import { ensureAudio, voiceOf } from "../tts/audio";
@@ -61,6 +61,7 @@ async function run(env: Env, db: D1Database, letterId: string, lang: Unit["lang"
   const texts = unitSegment(unit.verified ? unit : null, letter, item, lang).lines.flatMap((l) => (l.type === "dj" || l.type === "letter") && l.text !== "" ? [l.text] : []);
   const voice = voiceOf(env);
   let complete = true;
+  let gaveUp = false;
   for (const text of texts) {
     const r = await ensureAudio(env, db, { text, lang, voice });
     if (r.ok) {
@@ -72,9 +73,13 @@ async function run(env: Env, db: D1Database, letterId: string, lang: Unit["lang"
       out.audioHalted = true;
       break;
     }
+    if (r.reason === "gaveUp") gaveUp = true;
     out.failed++;
   }
   if (complete && unit.verified) await setUnitAudioReady(db, letter.id, lang, true, unit);
+  // Given up: no run voices this unit again (the browser voice reads the line). Not when the cap cut the clips
+  // short, so the next run still voices the lines after it.
+  else if (gaveUp && !out.audioHalted && unit.verified) await setUnitAudioGaveUp(db, letter.id, lang, unit);
   return out;
 }
 
@@ -83,7 +88,7 @@ const LANGS: readonly Unit["lang"][] = ["ja", "en"];
 
 /**
  * The letter's unit in `lang` (made if missing), or in every language when none is named, and the audio of
- * every dj/letter line of `unitSegment`; marks `audio_ready` when all clips exist. Every unit is made first
+ * every dj/letter line of `unitSegment`; marks `audio_ready` when all clips exist (2 when a line gave up). Every unit is made first
  * (ja, then en), then the clips (ja, then en): a letter gets its talk in both languages before any paid
  * voice. Once the cloud voice refuses a clip, the next language is not voiced. Non-public letters and
  * reactions are ignored. Never throws.
@@ -118,7 +123,8 @@ export async function prepareLetter(env: Env, db: D1Database, letterId: string, 
 const OUTAGE_AFTER = 3;
 
 /** `vectors`: works still without an embedding (all of them while Workers AI is not bound). */
-export type Remaining = { vectors: number; units: Record<Unit["lang"], number>; audio: Record<Unit["lang"], number> };
+/** `gaveUp`: units at `audio_ready = 2`, whose given-up lines the browser voice reads; they are not in `audio`. */
+export type Remaining = { vectors: number; units: Record<Unit["lang"], number>; audio: Record<Unit["lang"], number>; gaveUp: Record<Unit["lang"], number> };
 
 /**
  * `limit` is the whole run's budget, spent in order on work vectors (one per 20 works embedded), then letter-language
@@ -173,10 +179,11 @@ export async function prepareBatch(env: Env, db: D1Database, limit = 20): Promis
       if (!done.has(`${lang}:${u.letterId}`)) await one(u.letterId, lang);
     }
   }
-  const remaining: Remaining = { vectors: vectors.remaining, units: { ja: 0, en: 0 }, audio: { ja: 0, en: 0 } };
+  const remaining: Remaining = { vectors: vectors.remaining, units: { ja: 0, en: 0 }, audio: { ja: 0, en: 0 }, gaveUp: { ja: 0, en: 0 } };
   for (const lang of LANGS) {
     remaining.units[lang] = await countLettersWithoutUnit(db, lang);
     remaining.audio[lang] = await countUnitsWithoutAudio(db, lang);
+    remaining.gaveUp[lang] = await countUnitsGaveUp(db, lang);
   }
   return { ...total, remaining };
 }

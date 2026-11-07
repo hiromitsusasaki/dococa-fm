@@ -61,6 +61,29 @@ export async function setUnitAudioReady(db: D1Database, letterId: string, lang: 
     .run();
 }
 
+/**
+ * `audio_ready = 2`: a line of the unit gave up (`ensureAudio` answered `gaveUp`), so the batch stops voicing it
+ * and the player reads that line in the browser voice. Same guard as `setUnitAudioReady`; a remake resets it to 0.
+ */
+export async function setUnitAudioGaveUp(db: D1Database, letterId: string, lang: Unit["lang"], voiced: Pick<Unit, "intro" | "after">): Promise<void> {
+  await db
+    .prepare("UPDATE units SET audio_ready = 2 WHERE letter_id = ? AND lang = ? AND intro = ? AND after = ?")
+    .bind(letterId, lang, voiced.intro, voiced.after)
+    .run();
+}
+
+/** Verified units of public letters marked as given up (`audio_ready = 2`). */
+export async function countUnitsGaveUp(db: D1Database, lang: Unit["lang"]): Promise<number> {
+  const row = await db
+    .prepare(
+      `SELECT COUNT(*) AS n FROM units u JOIN letters l ON l.id = u.letter_id
+       WHERE u.lang = ? AND u.verified = 1 AND u.audio_ready = 2 AND l.status = 'public'`,
+    )
+    .bind(lang)
+    .first<{ n: number }>();
+  return row?.n ?? 0;
+}
+
 /** A found voice without a source can never be verified, so it never gets a unit (it would be re-made on every run). */
 const READABLE = `l.status = 'public' AND l.kind IN ('letter', 'found')
          AND (l.kind <> 'found' OR (TRIM(COALESCE(l.source_url, '')) <> '' AND TRIM(COALESCE(l.source_author, '')) <> ''))`;
@@ -81,8 +104,8 @@ export async function listLettersWithoutUnit(db: D1Database, lang: Unit["lang"],
 }
 
 /**
- * Verified units whose audio is not ready yet, oldest first. Only units of letters still public: a letter
- * rejected or taken down after its unit was made is never voiced.
+ * Verified units whose audio is not ready yet, oldest first (given-up units, `audio_ready = 2`, are left out).
+ * Only units of letters still public: a letter rejected or taken down after its unit was made is never voiced.
  */
 export async function listUnitsWithoutAudio(db: D1Database, lang: Unit["lang"], limit: number): Promise<Unit[]> {
   const { results } = await db

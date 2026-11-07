@@ -10,7 +10,7 @@ Phase 5（TTS の見張りと指示文・ヘッダの言語切替・オンエア
 
 - [ ] `pnpm db:migrate`（0021: 音声の鍵 v4。`tts_audio` を空にし `units.audio_ready` を戻す。当日の TTS 上限カウンタも空になる（本番は `CLOUD_TTS_GLOBAL_DAILY_LIMIT=8000` のまま）ので、日本時間の日の早いうちに当てるか、prepare の回数を見ながら進める）。
 - [ ] `pnpm run deploy`。
-- [ ] `/admin/prepare` のループ（`{"limit":8}` 程度で、`remaining.audio` が ja/en とも 0 になるまで。約 700 行、上限の内）。最初の 1〜2 回で `failed` が増えるなら、英語の見張りが新しい遅めの指示文に対して厳しすぎる可能性がある。`src/worker/tts/google.ts` の `SECONDS_PER_OTHER_CHAR`（かな・漢字以外の 1 文字）を 0.125 → 0.14 に緩めて再デプロイ。
+- [ ] `/admin/prepare` のループ（`{"limit":8}` 程度で、`remaining.audio` が ja/en とも 0 になったら止める。約 700 行、上限の内）。`remaining.gaveUp` は、合成を諦めた行を含む単位の数で、その行からその回の終わりまではブラウザの声が読む（`audio` には数えない）。諦めた行をもう一度試すときは、`pnpm wrangler d1 execute dococa --remote --command "DELETE FROM tts_audio WHERE synth_count >= 6 AND bytes = 0"` のあと `pnpm wrangler d1 execute dococa --remote --command "UPDATE units SET audio_ready = 0 WHERE audio_ready = 2"` を流して、またループする（1 通だけなら `/admin/units` の 👎 で作り直しても 0 に戻る。ただしお便りの本文の行は作り直しでも変わらないので、その行の `tts_audio` は消す）。最初の 1〜2 回で `failed` が増えるなら、英語の見張りが新しい遅めの指示文に対して厳しすぎる可能性がある。`src/worker/tts/google.ts` の `SECONDS_PER_OTHER_CHAR`（かな・漢字以外の 1 文字）を 0.125 → 0.14 に緩めて再デプロイ。
 - [ ] 聴いて確かめる: 冒頭の挨拶（指示文が読まれていないか）、日本語と英語の回の話し方、BGM の音量感（声の 16 dB ほど下。大きい/小さいなら `src/client/audio.ts` の `BED_VOLUME`）。
 - [ ] 画面を確かめる: ヘッダの言語切替、ホーム（ダイヤル、カードを押して即再生、送るモーダル、直近 3 番組）、`/settings`（公開 URL）、`/about`。
 - [ ] 任意: あとで `pnpm wrangler secret delete CLOUD_TTS_GLOBAL_DAILY_LIMIT` で既定の 3000 に戻す。
@@ -38,7 +38,7 @@ Phase 5（TTS の見張りと指示文・ヘッダの言語切替・オンエア
 - ホームのラジオは、匿名も含め全員が `mine`（自分のラジオ）にする。ダイヤルも全員に出る（Task 6）。
 - 英語の見張りの余裕は 1 秒に満たない（Task 1 のレビュー M1）。測ったのは古い指示文で、新しい「ゆっくり」の指示文では英語の読みが遅くなりうる。`failed` が増えたら `SECONDS_PER_OTHER_CHAR` を 0.125 → 0.14 に緩める（上の本人作業）。
 - 見張りの余裕は番組の言語ではなく文字の種類で数える（最終修正 1。かな・漢字・ハングル・全角は 1 文字 0.27 秒、ほかは 0.125 秒）。英語の番組が日本語の見つけた声を読んでも、正直な clip を落とさない。
-- 1 つの行（鍵）に払う合成は一生で 6 回まで（最終修正 2。`MAX_SYNTH_PER_KEY`）。`synth_count` が 6 に達して R2 に clip が無い鍵は、Google を呼ばずに `failed` にする。もう一度試すなら本人が `tts_audio` のその行を消す。
+- 1 つの行（鍵）に払う合成はおよそ 6 回まで（最終修正 2。`MAX_SYNTH_PER_KEY`）。確かめるのは要求の前なので、正確には 5 回に、線を越える要求の分（1 チャンクにつき最大 3 回）を足した数。`synth_count` が 6 に達して R2 に clip が無い鍵は、Google を呼ばずに `gaveUp` を返す。prepare はその単位を `audio_ready = 2` にして以後は選ばず、`remaining.gaveUp` に数える（最終修正の 2 巡目）。もう一度試すなら本人が `tts_audio` のその行を消し、単位を 0 に戻す（上の本人作業）。
 - 0021 は `tts_audio` を空にするので、その日の TTS 上限カウンタ（`tts_audio` の行数）も空になる（Task 1 のレビュー M5）。当てる日と prepare の回し方に注意する（上の本人作業）。
 
 ## Phase 4 の進み（計画: `docs/superpowers/plans/2026-11-06-dococa-fm-phase4.md`、設計: 追記 L）

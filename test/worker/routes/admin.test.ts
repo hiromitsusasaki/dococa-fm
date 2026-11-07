@@ -210,7 +210,7 @@ describe("POST /admin/prepare", () => {
     vi.spyOn(console, "warn").mockImplementation(() => {});
     const res = await post({});
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ units: 4, audio: 0, failed: 0, remaining: { vectors: 1, units: { ja: 0, en: 0 }, audio: { ja: 2, en: 2 } } });
+    expect(await res.json()).toEqual({ units: 4, audio: 0, failed: 0, remaining: { vectors: 1, units: { ja: 0, en: 0 }, audio: { ja: 2, en: 2 }, gaveUp: { ja: 0, en: 0 } } });
   });
 
   it("takes a limit of 1 to 50, 20 by default", async () => {

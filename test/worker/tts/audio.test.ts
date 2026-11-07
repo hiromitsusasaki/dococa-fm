@@ -150,7 +150,7 @@ describe("ensureAudio", () => {
     await env.DB.prepare("INSERT INTO tts_audio (key, lang, voice, bytes, synth_count, created_at) VALUES (?, 'ja', 'male', 0, 6, ?)").bind(key, new Date().toISOString()).run();
     const { fn } = stubFetch([[GOOGLE, () => json({ audioContent: audio })]]);
     const log = vi.spyOn(console, "error").mockImplementation(() => {});
-    expect(await ensureAudio(keyed, env.DB, line)).toEqual({ ok: false, reason: "failed" });
+    expect(await ensureAudio(keyed, env.DB, line)).toEqual({ ok: false, reason: "gaveUp" });
     expect(fn).not.toHaveBeenCalled();
     expect(log.mock.calls).toEqual([["[dococa] tts gave up"]]);
     expect(await env.DB.prepare("SELECT COUNT(*) AS n FROM tts_claims").first<{ n: number }>()).toEqual({ n: 0 });
