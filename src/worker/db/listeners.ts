@@ -128,6 +128,35 @@ export async function setListenerDial(db: D1Database, id: string, dial: number):
   await db.prepare("UPDATE listeners SET dial = ? WHERE id = ?").bind(dial, id).run();
 }
 
+export type PublicRadio = { slug: string; radioName: string; place: string; placeCountry: string | null; placeRegion: string | null; demo: boolean };
+
+/**
+ * Public stations with a named radio whose newest public letter is newest, newest first. Nothing but who they are: no count,
+ * no date, so the order is the only thing it says.
+ */
+export async function listRecentPublicRadios(db: D1Database, limit: number): Promise<PublicRadio[]> {
+  const { results } = await db
+    .prepare(
+      `SELECT li.station_slug, li.radio_name, li.place, li.place_country, li.place_region, li.demo
+       FROM listeners li
+       JOIN (SELECT listener_id, MAX(created_at) AS newest FROM letters WHERE status = 'public' AND kind = 'letter' AND listener_id IS NOT NULL GROUP BY listener_id) x
+         ON x.listener_id = li.id
+       WHERE li.station_public = 1 AND li.station_slug IS NOT NULL AND li.radio_name != ''
+       ORDER BY x.newest DESC, li.id DESC
+       LIMIT ?`,
+    )
+    .bind(limit)
+    .all<Row>();
+  return results.map((r) => ({
+    slug: r.station_slug as string,
+    radioName: r.radio_name as string,
+    place: r.place as string,
+    placeCountry: (r.place_country as string | null) ?? null,
+    placeRegion: (r.place_region as string | null) ?? null,
+    demo: r.demo === 1,
+  }));
+}
+
 /** The listener opened /me: reactions made up to `at` no longer light the header's dot. */
 export async function markReactionsSeen(db: D1Database, id: string, at: Date = new Date()): Promise<void> {
   await db.prepare("UPDATE listeners SET reactions_seen_at = ? WHERE id = ?").bind(at.toISOString(), id).run();

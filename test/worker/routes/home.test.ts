@@ -4,6 +4,7 @@ import { upsertHistory } from "../../../src/worker/db/history";
 import { insertItem } from "../../../src/worker/db/items";
 import { resetDb } from "../../helpers/db";
 import { insertLetter } from "../../../src/worker/db/letters";
+import { createListener, updateListener } from "../../../src/worker/db/listeners";
 import { insertEpisode } from "../../../src/worker/db/episodes";
 import { recordListen } from "../../../src/worker/db/listens";
 import type { Episode } from "../../../src/worker/types";
@@ -308,5 +309,46 @@ describe("GET /?letter=", () => {
       expect(html).toContain(`data-letter="${id}"`);
     }
     expect(await (await get("/", cookie)).text()).not.toContain("og:title");
+  });
+});
+
+describe("GET / public radios", () => {
+  const radio = async (slug: string, over: Parameters<typeof updateListener>[2] = {}) =>
+    (await updateListener(env.DB, (await createListener(env.DB)).id, { stationSlug: slug, stationPublic: true, radioName: `${slug}ラジオ`, place: "札幌", ...over }))!;
+
+  it("lists up to 5 public radios with new letters, newest first, as a name and a place linked to the station, without a number", async () => {
+    const item = await insertItem(env.DB, itemDraft());
+    const slugs = ["r1", "r2", "r3", "r4", "r5", "r6"];
+    for (const slug of slugs) {
+      const l = await radio(slug, slug === "r2" ? { placeCountry: "JP", placeRegion: "47" } : {});
+      await insertLetter(env.DB, letterDraft(item.id, { listenerId: l.id }));
+      await new Promise((r) => setTimeout(r, 3));
+    }
+    const priv = await radio("hidden", { stationPublic: false });
+    await insertLetter(env.DB, letterDraft(item.id, { listenerId: priv.id }));
+    const html = await (await get("/", await newSession())).text();
+    const section = html.slice(html.indexOf('class="public-radios"'));
+    const end = section.indexOf("</section>");
+    const block = section.slice(0, end);
+    expect(block).toContain("お便りが届いた公開ラジオ");
+    const hrefs = [...block.matchAll(/href="(\/stations\/s:[^"]+)"/g)].map((m) => m[1]);
+    expect(hrefs).toEqual(["/stations/s:r6", "/stations/s:r5", "/stations/s:r4", "/stations/s:r3", "/stations/s:r2"]);
+    expect(block).toContain("r6ラジオ");
+    expect(block).toContain("沖縄");
+    expect(block).not.toContain("hidden");
+    expect(block).not.toContain("r1ラジオ");
+    expect(block).not.toMatch(/\d+ ?(件|通)/);
+    // Between the recent programmes and the letter cards.
+    expect(html.indexOf('class="public-radios"')).toBeGreaterThan(html.indexOf('class="home"'));
+  });
+
+  it("is left out when no public radio has a letter, and a withdrawn letter does not count", async () => {
+    const item = await insertItem(env.DB, itemDraft());
+    const l = await radio("quiet");
+    await insertLetter(env.DB, letterDraft(item.id, { listenerId: l.id, status: "withdrawn" }));
+    await radio("empty");
+    const html = await (await get("/", await newSession())).text();
+    expect(html).not.toContain("public-radios");
+    expect(html).not.toContain("お便りが届いた公開ラジオ");
   });
 });

@@ -5,8 +5,12 @@ import {
   getListener,
   getListenerByGoogleSub,
   getListenerBySlug,
+  listRecentPublicRadios,
   updateListener,
 } from "../../../src/worker/db/listeners";
+import { insertItem } from "../../../src/worker/db/items";
+import { insertLetter, setLetterStatus } from "../../../src/worker/db/letters";
+import { itemDraft, letterDraft } from "./helpers";
 import { resetDb } from "../../helpers/db";
 
 describe("listeners", () => {
@@ -83,5 +87,31 @@ describe("listeners", () => {
   it("lang can be en", async () => {
     const l = await createListener(env.DB);
     expect((await updateListener(env.DB, l.id, { lang: "en" }))?.lang).toBe("en");
+  });
+  it("listRecentPublicRadios: public stations by their newest public letter, newest first, cut at the limit", async () => {
+    const item = await insertItem(env.DB, itemDraft());
+    const tick = () => new Promise((r) => setTimeout(r, 3));
+    const mk = async (slug: string, over: Parameters<typeof updateListener>[2] = {}) =>
+      (await updateListener(env.DB, (await createListener(env.DB)).id, { stationSlug: slug, stationPublic: true, radioName: slug, place: "札幌", ...over }))!;
+    const a = await mk("aaa");
+    const b = await mk("bbb", { placeCountry: "JP", placeRegion: "13" });
+    const priv = await mk("ccc", { stationPublic: false });
+    const none = await mk("ddd");
+    const gone = await mk("eee");
+    const send = (l: { id: string }) => insertLetter(env.DB, letterDraft(item.id, { listenerId: l.id }));
+    await send(a);
+    await tick();
+    await send(b);
+    await tick();
+    await send(priv);
+    const withdrawn = await send(gone);
+    await setLetterStatus(env.DB, withdrawn.id, "withdrawn");
+    await tick();
+    await send(a);
+    expect(none.id).toBeTruthy();
+    const radios = await listRecentPublicRadios(env.DB, 5);
+    expect(radios.map((r) => r.slug)).toEqual(["aaa", "bbb"]);
+    expect(radios[1]).toMatchObject({ radioName: "bbb", placeCountry: "JP", placeRegion: "13" });
+    expect((await listRecentPublicRadios(env.DB, 1)).map((r) => r.slug)).toEqual(["aaa"]);
   });
 });

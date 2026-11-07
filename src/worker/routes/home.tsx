@@ -1,9 +1,10 @@
 import { Hono } from "hono";
 import { raw } from "hono/html";
-import { EpisodeRow, LetterCard, senderLine } from "../../views/components";
+import { EpisodeRow, LetterCard, senderLine, whoOf } from "../../views/components";
 import type { Variables } from "../auth/session";
 import { listArchive } from "../db/episodes";
 import { getPublicLetterWithTitle, listRecentPublicLetters } from "../db/letters";
+import { listRecentPublicRadios } from "../db/listeners";
 import type { Env } from "../env";
 import { tFor } from "../i18n/t";
 import { displayText } from "../letters/display";
@@ -15,6 +16,9 @@ export const home = new Hono<{ Bindings: Env; Variables: Variables }>();
 
 /** Programmes the listener heard, newest first, on the home. */
 const RECENT_EPISODES = 3;
+
+/** Public radios whose letters arrived most recently, on the home. */
+const PUBLIC_RADIOS = 5;
 
 /** Runs right after the hero, before it paints: a browser that has switched the radio on before sees the short hero. */
 /** A letter link's preview quotes the letter this far. */
@@ -30,10 +34,11 @@ home.get("/", async (c) => {
   // `/stations/mine?letter=`; the first `next` checks the rest. A public letter also gives the link its preview.
   const asked = c.req.query("letter") ?? "";
   const letter = asked.length > 0 && asked.length <= 100 ? asked : undefined;
-  const [recent, heard, shared] = await Promise.all([
+  const [recent, heard, shared, radios] = await Promise.all([
     listRecentPublicLetters(c.env.DB, 6),
     listArchive(c.env.DB, listener.id, RECENT_EPISODES),
     letter ? getPublicLetterWithTitle(c.env.DB, letter) : null,
+    listRecentPublicRadios(c.env.DB, PUBLIC_RADIOS),
   ]);
   const og = shared && letter
     ? { title: shared.title, description: Array.from(displayText(shared.letter, lang).main).slice(0, PREVIEW_CHARS).join(""), url: `${c.env.PUBLIC_ORIGIN}/?letter=${encodeURIComponent(letter)}` }
@@ -75,6 +80,18 @@ home.get("/", async (c) => {
               ))}
             </ul>
             <a href="/episodes">{t("home.seeAll")}</a>
+          </section>
+        )}
+        {radios.length > 0 && (
+          <section class="public-radios">
+            <h2>{t("home.publicRadios")}</h2>
+            <ul class="public-radio-list">
+              {radios.map((r) => (
+                <li>
+                  <a href={`/stations/s:${r.slug}`}>{whoOf(r, lang)}</a>
+                </li>
+              ))}
+            </ul>
           </section>
         )}
         {recent.length > 0 && (
