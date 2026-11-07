@@ -72,7 +72,7 @@ describe("prepareLetter", () => {
     const { letters } = await seed();
     expect(await prepareLetter(keyed, env.DB, letters[0]!.id, "ja")).toEqual({ units: 1, audio: 5, failed: 0 });
     expect(create).toHaveBeenCalledTimes(1);
-    expect(google).toHaveBeenCalledTimes(5);
+    expect(google).toHaveBeenCalledTimes(10); // each line is short, so it is synthesized twice
     expect(await unitOf(letters[0]!.id)).toMatchObject({ verified: true, audioReady: true });
   });
 
@@ -97,7 +97,7 @@ describe("prepareLetter", () => {
     create.mockImplementation(() => toolUse("write_unit", { intro: "どうぞお聴きください。", after: "いいお便りでした。" }));
     expect(await prepareLetter(keyed, env.DB, letters[0]!.id, "ja")).toEqual({ units: 1, audio: 3, failed: 0 });
     expect(await unitOf(letters[0]!.id)).toMatchObject({ verified: false, audioReady: false });
-    expect(google).toHaveBeenCalledTimes(3);
+    expect(google).toHaveBeenCalledTimes(6);
   });
 
   it("with no language named, makes the ja and the en unit and voices both", async () => {
@@ -109,7 +109,7 @@ describe("prepareLetter", () => {
     expect(await prepareLetter(keyed, env.DB, id)).toEqual({ units: 2, audio: 10, failed: 0 });
     expect(await unitOf(id)).toMatchObject({ intro: "静かな一曲です。", audioReady: true });
     expect((await getUnits(env.DB, [id], "en")).get(id)).toMatchObject({ intro: "A quiet piece.", verified: true, audioReady: true });
-    expect(google).toHaveBeenCalledTimes(10);
+    expect(google).toHaveBeenCalledTimes(20);
   });
 
   it("makes both units before any audio: ja unit, en unit, then the ja clips, then the en clips", async () => {
@@ -126,7 +126,7 @@ describe("prepareLetter", () => {
     });
     const head = vi.spyOn(env.BUCKET, "head");
     expect(await prepareLetter(keyed, env.DB, letters[0]!.id)).toEqual({ units: 2, audio: 10, failed: 0 });
-    expect(order).toEqual(["unit:ja", "unit:en", ...Array(10).fill("clip")]);
+    expect(order).toEqual(["unit:ja", "unit:en", ...Array(20).fill("clip")]);
     // The clips are asked for in the order ja (tts/v4/ja/...) then en.
     const langs = head.mock.calls.map((c) => String(c[0]).split("/")[2]);
     expect(langs.slice(0, 5)).toEqual(Array(5).fill("ja"));
@@ -138,7 +138,7 @@ describe("prepareLetter", () => {
     await prepareLetter(keyed, env.DB, letters[0]!.id, "ja");
     expect(await prepareLetter(keyed, env.DB, letters[0]!.id, "ja")).toEqual({ units: 0, audio: 0, failed: 0 });
     expect(create).toHaveBeenCalledTimes(1);
-    expect(google).toHaveBeenCalledTimes(5);
+    expect(google).toHaveBeenCalledTimes(10);
   });
 
   it("ignores a rejected letter, a reaction and an unknown id", async () => {
@@ -257,9 +257,9 @@ describe("prepareBatch", () => {
       await upsertUnit(env.DB, { letterId: l.id, lang: "en", intro: "A quiet piece.", after: "A lovely letter.", verified: true, audioReady: true });
       if (i > 0) await upsertUnit(env.DB, { letterId: l.id, lang: "ja", intro: `紹介${i}です。`, after: `感想${i}です。`, verified: true, audioReady: false, createdAt: later });
     }
-    // The first clip of the run fails, so the letter whose unit is made now stays first in the audio listing.
+    // The first clip of the run fails (a short line is made twice, so both of its attempts), so the letter whose unit is made now stays first in the audio listing.
     let calls = 0;
-    stubBoth(() => (++calls === 1 ? json({ error: "x" }, 500) : json({ audioContent: audio })));
+    stubBoth(() => (++calls <= 2 ? json({ error: "x" }, 500) : json({ audioContent: audio })));
     const r = await prepareBatch(keyed, env.DB, 3);
     expect(r).toMatchObject({ units: 1, remaining: { units: { ja: 0, en: 0 }, audio: { ja: 2, en: 0 } } });
     // Two of the three older units were voiced (they share created_at, so the listing orders them by id).
@@ -329,9 +329,9 @@ describe("prepareBatch", () => {
 
   it("stops making audio at the first limit answer, while units are still made", async () => {
     await seed(2);
-    const r = await prepareBatch({ ...keyed, CLOUD_TTS_GLOBAL_DAILY_LIMIT: "2" } as Env, env.DB, 20);
+    const r = await prepareBatch({ ...keyed, CLOUD_TTS_GLOBAL_DAILY_LIMIT: "4" } as Env, env.DB, 20);
     expect(r).toMatchObject({ units: 4, audio: 2, failed: 0, remaining: { units: { ja: 0, en: 0 }, audio: { ja: 2, en: 2 } } });
-    expect(google).toHaveBeenCalledTimes(2);
+    expect(google).toHaveBeenCalledTimes(4); // two short lines, two attempts each
   });
 
   it("skips busy letters without counting them toward the outage stop", async () => {
@@ -402,7 +402,7 @@ describe("prepareBatch", () => {
     await env.DB.prepare("INSERT INTO tts_audio (key, lang, voice, bytes, synth_count, created_at) VALUES (?, 'ja', 'male', 0, 6, ?)").bind(key, new Date(Date.now() - 48 * 3600_000).toISOString()).run();
     google.mockClear();
     await prepareBatch({ ...keyed, CLOUD_TTS_GLOBAL_DAILY_LIMIT: "1" } as Env, env.DB, 20);
-    expect(google).toHaveBeenCalledTimes(1);
+    expect(google).toHaveBeenCalledTimes(2); // the hand-over is short: two attempts
     expect((await env.DB.prepare("SELECT audio_ready AS a FROM units WHERE letter_id = ? AND lang = 'ja'").bind(l.id).first<{ a: number }>())?.a).toBe(0);
   });
 

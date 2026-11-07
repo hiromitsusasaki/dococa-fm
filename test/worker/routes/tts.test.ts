@@ -19,20 +19,22 @@ const report = { verbatim: true, sources: true, topical: true, pii: true, detail
 const GOOGLE = "https://texttospeech.googleapis.com/v1/text:synthesize";
 const sa = await makeServiceAccount();
 const keyed = { ...env, GOOGLE_TTS_SA_JSON: sa.json };
+/** Pads every fixture line past 40 code points, so each is synthesized once; a short line is made twice (tts/google.test.ts). */
+const LONG = "、今夜もゆっくりお付き合いください、どうぞよろしくお願いします、あたたかい飲み物を片手にどうぞ。";
 
 /** Global lines: 0 dj, 1 preview, 2 letter, 3 dj (second segment). */
 async function episodeFor(listenerId: string, cloudTts: boolean, verified = true): Promise<Episode> {
   const item = await insertItem(env.DB, itemDraft());
-  const stored = await insertLetter(env.DB, letterDraft(item.id, { body: "お便りです", bodyJa: "お便りです", radioName: "しずく", place: "松本" }));
-  const letter = { type: "letter" as const, letterId: stored.id, text: "お便りです", radioName: "しずく", place: "松本", kind: "letter" as const, sourceUrl: null, sourceAuthor: null };
+  const stored = await insertLetter(env.DB, letterDraft(item.id, { body: "お便りです" + LONG, bodyJa: "お便りです" + LONG, radioName: "しずく", place: "松本" }));
+  const letter = { type: "letter" as const, letterId: stored.id, text: "お便りです" + LONG, radioName: "しずく", place: "松本", kind: "letter" as const, sourceUrl: null, sourceAuthor: null };
   return insertEpisode(env.DB, {
     listenerId,
     cloudTts,
     verified,
     report,
     segments: [
-      { itemId: "a", slot: "near", lines: [{ type: "dj", text: "こんばんは" }, { type: "preview", url: "https://p/a.mp3", seconds: 30 }, letter] },
-      { itemId: "b", slot: "far", lines: [{ type: "dj", text: "つぎの曲です" }] },
+      { itemId: "a", slot: "near", lines: [{ type: "dj", text: "こんばんは" + LONG }, { type: "preview", url: "https://p/a.mp3", seconds: 30 }, letter] },
+      { itemId: "b", slot: "far", lines: [{ type: "dj", text: "つぎの曲です" + LONG }] },
     ],
   });
 }
@@ -50,14 +52,14 @@ afterEach(() => vi.unstubAllGlobals());
 describe("readings for the voice", () => {
   async function spokenEpisode(listenerId: string): Promise<Episode> {
     const item = await insertItem(env.DB, itemDraft());
-    const stored = await insertLetter(env.DB, letterDraft(item.id, { body: "PSYで踊った", bodyJa: "PSYで踊った", radioName: "しずく", place: "松本" }));
-    const letter = { type: "letter" as const, letterId: stored.id, text: "PSYで踊った", radioName: "しずく", place: "松本", kind: "letter" as const, sourceUrl: null, sourceAuthor: null };
+    const stored = await insertLetter(env.DB, letterDraft(item.id, { body: "PSYで踊った" + LONG, bodyJa: "PSYで踊った" + LONG, radioName: "しずく", place: "松本" }));
+    const letter = { type: "letter" as const, letterId: stored.id, text: "PSYで踊った" + LONG, radioName: "しずく", place: "松本", kind: "letter" as const, sourceUrl: null, sourceAuthor: null };
     return insertEpisode(env.DB, {
       listenerId,
       cloudTts: true,
       verified: true,
       report,
-      segments: [{ itemId: item.id, slot: "near", lines: [{ type: "dj", text: "PSYらしい一曲です。", spoken: "サイらしい一曲です。", unit: { letterId: stored.id, part: "intro" } }, letter] }],
+      segments: [{ itemId: item.id, slot: "near", lines: [{ type: "dj", text: "PSYらしい一曲です。" + LONG, spoken: "サイらしい一曲です。" + LONG, unit: { letterId: stored.id, part: "intro" } }, letter] }],
     });
   }
 
@@ -66,12 +68,12 @@ describe("readings for the voice", () => {
     const ep = await spokenEpisode(idOf(cookie));
     const { fn } = stubFetch([[GOOGLE, () => json({ audioContent: audio })]]);
     expect((await call(`/tts?episode=${ep.id}&line=0`, cookie)).status).toBe(200);
-    expect(JSON.parse(String(fn.mock.calls[0]![1]?.body)).input.text).toBe("サイらしい一曲です。");
-    expect(await env.BUCKET.get(await audioKey("ja", "male", "サイらしい一曲です。"))).not.toBeNull();
-    expect(await env.BUCKET.get(await audioKey("ja", "male", "PSYらしい一曲です。"))).toBeNull();
-    expect(await audioKey("ja", "male", "サイらしい一曲です。")).not.toBe(await audioKey("ja", "male", "PSYらしい一曲です。"));
+    expect(JSON.parse(String(fn.mock.calls[0]![1]?.body)).input.text).toBe("サイらしい一曲です。" + LONG);
+    expect(await env.BUCKET.get(await audioKey("ja", "male", "サイらしい一曲です。" + LONG))).not.toBeNull();
+    expect(await env.BUCKET.get(await audioKey("ja", "male", "PSYらしい一曲です。" + LONG))).toBeNull();
+    expect(await audioKey("ja", "male", "サイらしい一曲です。" + LONG)).not.toBe(await audioKey("ja", "male", "PSYらしい一曲です。" + LONG));
     expect((await call(`/tts?episode=${ep.id}&line=1`, cookie)).status).toBe(200);
-    expect(JSON.parse(String(fn.mock.calls[1]![1]?.body)).input.text).toBe("PSYで踊った");
+    expect(JSON.parse(String(fn.mock.calls[1]![1]?.body)).input.text).toBe("PSYで踊った" + LONG);
   });
 
   it("never sends the spoken text to the listener: the episode json and page show the written text only", async () => {
@@ -80,11 +82,11 @@ describe("readings for the voice", () => {
     const res = await call(`/episodes/${ep.id}.json`, cookie);
     expect(res.status).toBe(200);
     const body = await res.text();
-    expect(body).toContain("PSYらしい一曲です。");
+    expect(body).toContain("PSYらしい一曲です。" + LONG);
     expect(body).not.toContain("spoken");
     expect(body).not.toContain("サイ");
     const page = await (await call(`/episodes/${ep.id}`, cookie)).text();
-    expect(page).toContain("PSYらしい一曲です。");
+    expect(page).toContain("PSYらしい一曲です。" + LONG);
     expect(page).not.toContain("サイらしい");
   });
 });
@@ -106,8 +108,8 @@ describe("GET /tts", () => {
     expect(first.headers.get("cache-control")).toBe("private, max-age=86400");
     expect([...new Uint8Array(await first.arrayBuffer())]).toEqual([1, 2, 3]);
     expect(fn).toHaveBeenCalledTimes(1);
-    expect(JSON.parse(String(fn.mock.calls[0]![1]?.body)).input.text).toBe("つぎの曲です");
-    expect(await env.BUCKET.get(await audioKey("ja", "male", "つぎの曲です"))).not.toBeNull();
+    expect(JSON.parse(String(fn.mock.calls[0]![1]?.body)).input.text).toBe("つぎの曲です" + LONG);
+    expect(await env.BUCKET.get(await audioKey("ja", "male", "つぎの曲です" + LONG))).not.toBeNull();
 
     const second = await call(`/tts?episode=${ep.id}&line=3`, cookie);
     expect(second.status).toBe(200);
@@ -123,14 +125,14 @@ describe("GET /tts", () => {
     const body = JSON.parse(String(fn.mock.calls[0]![1]?.body));
     expect(body.voice.languageCode).toBe("en-US");
     expect(body.input.prompt).toBe(DJ_STYLE_PROMPT_EN);
-    expect(await env.BUCKET.get(await audioKey("en", "male", "つぎの曲です"))).not.toBeNull();
+    expect(await env.BUCKET.get(await audioKey("en", "male", "つぎの曲です" + LONG))).not.toBeNull();
   });
 
   it("reads a letter line by its global index", async () => {
     const { cookie, ep } = await setup();
     const { fn } = stubFetch([[GOOGLE, () => json({ audioContent: audio })]]);
     expect((await call(`/tts?episode=${ep.id}&line=2`, cookie)).status).toBe(200);
-    expect(JSON.parse(String(fn.mock.calls[0]![1]?.body)).input.text).toBe("お便りです");
+    expect(JSON.parse(String(fn.mock.calls[0]![1]?.body)).input.text).toBe("お便りです" + LONG);
   });
 
   it("answers 404 for another listener's episode", async () => {
@@ -194,7 +196,7 @@ describe("GET /tts", () => {
     stubFetch([[GOOGLE, () => json({}, 500)]]);
     expect((await call(`/tts?episode=${ep.id}&line=0`, cookie)).status).toBe(502);
     expect(JSON.stringify(errorSpy.mock.calls)).not.toContain("k-test");
-    expect(await env.BUCKET.get(await audioKey("ja", "male", "こんばんは"))).toBeNull();
+    expect(await env.BUCKET.get(await audioKey("ja", "male", "こんばんは" + LONG))).toBeNull();
   });
 
   it("answers 502 without a request or a stored clip when the service-account json is invalid", async () => {
@@ -204,7 +206,7 @@ describe("GET /tts", () => {
     expect(res.status).toBe(502);
     expect(await res.json()).toEqual({ error: "tts failed" });
     expect(fn).not.toHaveBeenCalled();
-    expect(await env.BUCKET.get(await audioKey("ja", "male", "こんばんは"))).toBeNull();
+    expect(await env.BUCKET.get(await audioKey("ja", "male", "こんばんは" + LONG))).toBeNull();
   });
 
   it("answers 502 and never calls the TTS endpoint when the token endpoint fails", async () => {
@@ -218,7 +220,7 @@ describe("GET /tts", () => {
     expect(res.status).toBe(502);
     expect(await res.json()).toEqual({ error: "tts failed" });
     expect(fn.mock.calls.map(([u]) => String(u))).toEqual(["https://oauth2.googleapis.com/token"]);
-    expect(await env.BUCKET.get(await audioKey("ja", "male", "こんばんは"))).toBeNull();
+    expect(await env.BUCKET.get(await audioKey("ja", "male", "こんばんは" + LONG))).toBeNull();
   });
 
   it("never logs the key when fetch itself throws", async () => {
@@ -253,7 +255,7 @@ describe("GET /tts", () => {
 
   it("finds the clip in R2 after winning the claim when the first read missed it", async () => {
     const { cookie, ep } = await setup();
-    const key = await audioKey("ja", "male", "つぎの曲です");
+    const key = await audioKey("ja", "male", "つぎの曲です" + LONG);
     // A claims, B misses R2, A puts and releases, B claims: the first read misses although the clip lands right after it.
     let reads = 0;
     const bucket = new Proxy(env.BUCKET, {
@@ -276,7 +278,7 @@ describe("GET /tts", () => {
 
   it("answers 503 with Retry-After when another request holds the claim and no clip appears", async () => {
     const { cookie, ep } = await setup();
-    await env.DB.prepare("INSERT INTO tts_claims (key, created_at) VALUES (?, ?)").bind(await audioKey("ja", "male", "つぎの曲です"), Date.now()).run();
+    await env.DB.prepare("INSERT INTO tts_claims (key, created_at) VALUES (?, ?)").bind(await audioKey("ja", "male", "つぎの曲です" + LONG), Date.now()).run();
     const { fn } = stubFetch([[GOOGLE, () => json({ audioContent: audio })]]);
     const res = await call(`/tts?episode=${ep.id}&line=3`, cookie);
     expect(res.status).toBe(503);
@@ -286,7 +288,7 @@ describe("GET /tts", () => {
 
   it("treats a claim older than a minute as free", async () => {
     const { cookie, ep } = await setup();
-    await env.DB.prepare("INSERT INTO tts_claims (key, created_at) VALUES (?, ?)").bind(await audioKey("ja", "male", "つぎの曲です"), Date.now() - 61_000).run();
+    await env.DB.prepare("INSERT INTO tts_claims (key, created_at) VALUES (?, ?)").bind(await audioKey("ja", "male", "つぎの曲です" + LONG), Date.now() - 61_000).run();
     const { fn } = stubFetch([[GOOGLE, () => json({ audioContent: audio })]]);
     expect((await call(`/tts?episode=${ep.id}&line=3`, cookie)).status).toBe(200);
     expect(fn).toHaveBeenCalledTimes(1);
