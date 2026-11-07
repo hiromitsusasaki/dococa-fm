@@ -10,7 +10,7 @@ import { listRecentReactionsToListener } from "../db/letters";
 import type { Env } from "../env";
 import { displayText } from "../letters/display";
 import { tFor } from "../i18n/t";
-import { stationUrl } from "../program/station";
+import { ensureStationSlug, stationUrl } from "../program/station";
 
 const FAVORITES_LIMIT = 20;
 const REACTIONS_LIMIT = 50;
@@ -20,7 +20,9 @@ const jstDate = (iso: string): string => new Date(Date.parse(iso) + JST_OFFSET_M
 export const me = new Hono<{ Bindings: Env; Variables: Variables }>();
 
 me.get("/me", requireSignin, async (c) => {
-  const listener = c.get("listener");
+  const signedIn = c.get("listener");
+  // As on /settings: a listener signed in before addresses were assigned gets one here; a failure renders without it.
+  const listener = !signedIn.stationSlug ? { ...signedIn, stationSlug: await ensureStationSlug(c.env.DB, signedIn).catch(() => null) } : signedIn;
   const lang = listener.lang;
   const t = tFor(lang);
   const favorites = await listFavorites(c.env.DB, listener.id, FAVORITES_LIMIT);

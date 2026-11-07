@@ -9,6 +9,7 @@ import type { Env } from "../env";
 import { tFor } from "../i18n/t";
 import { ensureStationSlug } from "../program/station";
 import { safeNext } from "../security/next";
+import type { Listener } from "../types";
 
 const OAUTH_COOKIE = "dfm_oauth";
 const OAUTH_PATH = "/auth/google";
@@ -70,9 +71,12 @@ authGoogle.get("/auth/google/callback", async (c) => {
   // or switched. A callback without a valid dfm_sid also leaves an orphan anonymous listener row behind.
   const current = c.get("listener");
   const existing = await getListenerByGoogleSub(c.env.DB, profile.sub);
+  /** The listener this callback signed in as; every one of them gets a public radio address. */
+  let signedIn: Listener;
   if (existing) {
     // The anonymous listener we leave behind stays as it was.
     if (existing.id !== current.id) await setSessionCookie(c, existing.id);
+    signedIn = existing;
   } else {
     // Never overwrite a listener that is already bound to another Google account.
     if (current.googleSub !== null) return c.redirect(FAILED, 303);
@@ -85,17 +89,20 @@ authGoogle.get("/auth/google/callback", async (c) => {
       // google_sub is UNIQUE: someone bound the same account between our lookup and this write.
     }
     if (bound) {
-      try {
-        await ensureStationSlug(c.env.DB, current);
-      } catch {
-        // Not fatal: /settings assigns the address when it is opened.
-      }
+      signedIn = current;
     } else {
       // Lost a race: either this account now belongs to a listener (switch to it), or this listener got bound to another account (fail).
       const winner = await getListenerByGoogleSub(c.env.DB, profile.sub);
       if (!winner) return c.redirect(FAILED, 303);
       if (winner.id !== current.id) await setSessionCookie(c, winner.id);
+      signedIn = winner;
     }
+  }
+  try {
+    // Listeners who signed in before addresses were assigned get theirs here; one they already have is kept.
+    await ensureStationSlug(c.env.DB, signedIn);
+  } catch {
+    // Not fatal: /settings and /me assign the address when they are opened.
   }
   return c.redirect(next, 303);
 });

@@ -247,6 +247,69 @@ describe("GET /auth/google/callback", () => {
     expect(sidOf(res)).toBe(owner.id);
     expect((await getListener(env.DB, currentId))?.googleSub).toBeNull();
   });
+
+  it("gives an existing Google listener without an address one, and leaves the session's anonymous listener alone", async () => {
+    const owner = await createListener(env.DB, { lang: "ja" });
+    await updateListener(env.DB, owner.id, { googleSub: "g-1", displayName: "Aiko" });
+    const sid = await newSession();
+    const currentId = sid.split("=")[1]!.split(".")[0]!;
+    const s = await start(sid);
+    stubGoogle({}, s.nonce);
+    await manual(`/auth/google/callback?code=abc&state=${s.state}`, s.cookie);
+    expect((await getListener(env.DB, owner.id))?.stationSlug).toMatch(/^radio-[0-9a-z]{6}$/);
+    expect((await getListener(env.DB, currentId))?.stationSlug).toBeNull();
+  });
+
+  it("keeps the address an existing Google listener already has", async () => {
+    const owner = await createListener(env.DB, { lang: "ja" });
+    await updateListener(env.DB, owner.id, { googleSub: "g-1", stationSlug: "my-radio" });
+    const s = await start(await newSession());
+    stubGoogle({}, s.nonce);
+    await manual(`/auth/google/callback?code=abc&state=${s.state}`, s.cookie);
+    expect((await getListener(env.DB, owner.id))?.stationSlug).toBe("my-radio");
+  });
+
+  it("gives the address to the listener this session already is when it signs in again", async () => {
+    const sid = await newSession();
+    const id = sid.split("=")[1]!.split(".")[0]!;
+    await updateListener(env.DB, id, { googleSub: "g-1" });
+    const s = await start(sid);
+    stubGoogle({}, s.nonce);
+    const res = await manual(`/auth/google/callback?code=abc&state=${s.state}`, s.cookie);
+    expect(res.headers.get("location")).toBe("/me");
+    expect((await getListener(env.DB, id))?.stationSlug).toMatch(/^radio-[0-9a-z]{6}$/);
+  });
+
+  it("signs in even when the address cannot be written", async () => {
+    const owner = await createListener(env.DB, { lang: "ja" });
+    await updateListener(env.DB, owner.id, { googleSub: "g-1" });
+    const s = await start(await newSession());
+    stubGoogle({}, s.nonce);
+    const spy = vi.spyOn(listeners, "setStationSlugIfNone").mockRejectedValue(new Error("d1 down"));
+    const res = await manual(`/auth/google/callback?code=abc&state=${s.state}`, s.cookie);
+    spy.mockRestore();
+    expect(res.headers.get("location")).toBe("/me");
+    expect(sidOf(res)).toBe(owner.id);
+    expect((await getListener(env.DB, owner.id))?.stationSlug).toBeNull();
+  });
+
+  it("switches to the race winner and gives it an address", async () => {
+    const owner = await createListener(env.DB, { lang: "ja" });
+    const s = await start(await newSession());
+    stubGoogle({}, s.nonce);
+    const real = listeners.getListenerByGoogleSub;
+    let calls = 0;
+    const spy = vi.spyOn(listeners, "getListenerByGoogleSub").mockImplementation(async (db, sub) => {
+      if (calls++ === 0) {
+        await updateListener(db, owner.id, { googleSub: sub });
+        return null;
+      }
+      return real(db, sub);
+    });
+    await manual(`/auth/google/callback?code=abc&state=${s.state}`, s.cookie);
+    spy.mockRestore();
+    expect((await getListener(env.DB, owner.id))?.stationSlug).toMatch(/^radio-[0-9a-z]{6}$/);
+  });
 });
 
 describe("POST /auth/signout", () => {

@@ -93,6 +93,17 @@ describe("GET /me", () => {
     expect(await (await get("/me", cookie)).text()).toContain("/stations/s:hiro-fm");
   });
 
+  it("gives a signed-in listener without an address one, and shows it once the station is public", async () => {
+    const cookie = await signedInSession();
+    await updateListener(env.DB, idOf(cookie), { stationPublic: true });
+    const html = await (await get("/me", cookie)).text();
+    const slug = (await env.DB.prepare("SELECT station_slug FROM listeners WHERE id = ?").bind(idOf(cookie)).first<{ station_slug: string | null }>())?.station_slug;
+    expect(slug).toMatch(/^radio-[0-9a-z]{6}$/);
+    expect(html).toContain(`/stations/s:${slug}`);
+    await get("/me", cookie);
+    expect((await env.DB.prepare("SELECT station_slug FROM listeners WHERE id = ?").bind(idOf(cookie)).first<{ station_slug: string }>())?.station_slug).toBe(slug);
+  });
+
   it("lists letters heard, with replay link, reactions and no counts", async () => {
     const cookie = await signedInSession();
     const me = idOf(cookie);
