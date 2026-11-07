@@ -9,10 +9,9 @@ import { canShare } from "./share";
  * `sender` is the first reader's name line; absent for a work nobody has written about. `letterId` is only on the row now on air, for the
  * reactions on the now-playing card; `shareable` is false for a reply or 私も (an echo of the listener's own letter), which has no page to share
  * and nothing to answer (the card shows no reactions),
- * and `shareText` is the short text a share goes out with;
- * `reading` too: how far down the segment's lines the voice is (0 at the first line, 1 at the last), drawn as a thin line that moves down the row.
+ * and `shareText` is the short text a share goes out with.
  */
-export type UpNextRow = { key: string; now: boolean; kind: string | null; title: string; creator: string; sender?: string; letterId?: string; imageUrl?: string | null; reading?: number; shareable?: boolean; shareText?: string };
+export type UpNextRow = { key: string; now: boolean; kind: string | null; title: string; creator: string; sender?: string; letterId?: string; imageUrl?: string | null; shareable?: boolean; shareText?: string };
 
 export type StationScreenProps = {
   str: (key: string) => string;
@@ -49,6 +48,8 @@ export type StationScreenProps = {
     /** The dial moved one detent (during the drag, before `dial`). */
     tick: () => void;
     watashimo: (letterId: string) => void;
+    /** A tap on the locked dial: the radio says what unlocks it. */
+    lockedTap: () => void;
     /** `profile`: the radio name and place typed in the form's optional line, only those filled in. */
     reply: (body: string, letterId: string, profile?: Record<string, string>) => Promise<boolean> | void;
     /** Opens the home's tour again (the face's quiet 「使い方」). */
@@ -101,7 +102,7 @@ export function StationScreen(p: StationScreenProps) {
             <span class="control-label">{str("station.volume")}</span>
           </label>
           {p.dial !== null && (
-            <label class={`knob knob-dial ${p.dialReady ? (p.woke ? "ready woke" : "ready") : "locked"}`} title={p.dialReady ? str("station.dialHelp") : undefined}>
+            <label class={`knob knob-dial ${p.dialReady ? (p.woke ? "ready woke" : "ready") : "locked"}`} title={p.dialReady ? str("station.dialHelp") : undefined} onClick={p.dialReady ? undefined : p.on.lockedTap}>
               <span class="dial-row">
                 <span class="dial-end">{str("station.dialNear")}</span>
                 <span class="knob-body" style={{ "--angle": angle(p.dial) }}>
@@ -129,9 +130,13 @@ export function StationScreen(p: StationScreenProps) {
                 </span>
                 <span class="dial-end">{str("station.dialFar")}</span>
               </span>
-              <span class="control-label" id={p.dialReady ? undefined : "dial-locked"}>
-                {str(p.dialReady ? "station.dial" : "station.dialLocked")}
-              </span>
+              <span class="control-label">{str("station.dial")}</span>
+              {/* The locked line is too long for the face: a tap shows it as a toast; assistive technology reads it here. */}
+              {!p.dialReady && (
+                <span class="sr-only" id="dial-locked">
+                  {str("station.dialLocked")}
+                </span>
+              )}
             </label>
           )}
         </div>
@@ -193,7 +198,6 @@ export function StationScreen(p: StationScreenProps) {
           <ul class="up-next">
             {p.upNext.map((r) => (
               <li key={r.key} class={r.now ? "now" : ""}>
-                {/* The on-air row's text is one box, so the reading line moves over the text only. */}
                 <span class="row-text">
                   <span class="tag">{str(r.now ? "station.now" : "station.next")}</span>
                   {r.now && isHttpUrl(r.imageUrl) && <img class="thumb" src={r.imageUrl} alt="" width="40" height="40" />}
@@ -201,7 +205,6 @@ export function StationScreen(p: StationScreenProps) {
                   <span class="title">{r.title}</span>
                   <span class="creator">{r.creator}</span>
                   {r.sender && <span class="sender">{r.sender}</span>}
-                  {r.reading !== undefined && <i class="reading" style={{ "--at": String(r.reading) }} aria-hidden="true"></i>}
                 </span>
               </li>
             ))}

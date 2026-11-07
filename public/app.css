@@ -593,10 +593,6 @@ a {
     box-shadow: 1px 2px 2px rgba(0, 0, 0, 0.35);
   }
 
-  .up-next li.now .reading {
-    transition: top 300ms ease-out;
-  }
-
   .pill.said {
     animation: swell 300ms ease-out;
   }
@@ -1067,14 +1063,12 @@ button.pill {
 }
 
 .up-next li.now {
-  /* Wider than the reading line (28px), so the line never crosses the row's picture. */
-  --now-pad: 36px;
   position: relative;
-  padding-left: var(--now-pad);
+  padding-left: 12px;
   border-left: 3px solid var(--coral);
 }
 
-/* A station row's text in one box (the row's own layout), so the reading line spans the text and not the buttons under it. */
+/* A station row's text in one box (the row's own layout), apart from the buttons under it. */
 .up-next .row-text {
   position: relative;
   display: flex;
@@ -1082,17 +1076,6 @@ button.pill {
   flex-wrap: wrap;
   justify-content: space-between;
   gap: 2px 10px;
-}
-
-/* The line being read: a thin line that moves down the on-air row's text as the segment goes on (--at, 0 to 1), over the coral rule. */
-.up-next li.now .reading {
-  position: absolute;
-  left: calc(-1 * var(--now-pad) - 3px);
-  width: 28px;
-  height: 1px;
-  top: calc(var(--at, 0) * (100% - 1px));
-  background: var(--lemon);
-  box-shadow: 0 0 4px var(--lemon);
 }
 
 .up-next li.now .tag {
@@ -2171,9 +2154,13 @@ body.embed .put h1 {
  * The dial before three letters (DESIGN.md「ダイヤル」): it keeps its shape but has no needle and a flat grey ring, a lock at its
  * centre, its ends at half strength, and does not turn. Awake, its ring lights coral; on waking, the needle sweeps in once.
  */
-.knob-dial.locked,
+/* A tap anywhere on the locked dial lands on the label (the disabled slider lets it through) and shows why it is locked. */
+.knob-dial.locked {
+  cursor: pointer;
+}
+
 .knob-dial.locked input[type="range"] {
-  cursor: not-allowed;
+  pointer-events: none;
 }
 
 .knob-dial.locked .knob-body i {
@@ -2184,11 +2171,17 @@ body.embed .put h1 {
   opacity: 0.5;
 }
 
-.knob-dial.locked .control-label {
-  max-width: 168px;
-  text-align: center;
-  /* Break at a phrase (after 「、」), not inside 「ダイヤル」; browsers without it break as before. */
-  word-break: auto-phrase;
+/* Read by assistive technology only (the locked dial's line). */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 .knob-dial.ready .knob-body {

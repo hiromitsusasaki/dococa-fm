@@ -538,8 +538,7 @@ export function mountStation(root: HTMLElement, opts: StationOptions) {
         const item = ep.items[s.itemId];
         if (!item) return;
         const first = s.lines.find((l): l is LetterLine => l.type === "letter");
-        const reading = s.lines.length > 1 ? Math.min(1, state.line / (s.lines.length - 1)) : 0;
-        rows.push({ key: `${ep.id}:${from + n}`, now, kind: item.kind ?? null, title: item.title, creator: item.creator, ...(first ? { sender: whoOf(first, str) } : {}), ...(now && first ? { letterId: first.letterId, shareable: first.kind !== "reply" && first.kind !== "watashimo", shareText: shareText(item.title, first, (k, p) => fmt(str(k), p ?? {})) } : {}), ...(now ? { imageUrl: item.imageUrl, reading } : {}) });
+        rows.push({ key: `${ep.id}:${from + n}`, now, kind: item.kind ?? null, title: item.title, creator: item.creator, ...(first ? { sender: whoOf(first, str) } : {}), ...(now && first ? { letterId: first.letterId, shareable: first.kind !== "reply" && first.kind !== "watashimo", shareText: shareText(item.title, first, (k, p) => fmt(str(k), p ?? {})) } : {}), ...(now ? { imageUrl: item.imageUrl } : {}) });
       });
     };
     // Off, limit and failed: the panel is empty and shows its hint, so nothing stale is listed.
@@ -584,6 +583,7 @@ export function mountStation(root: HTMLElement, opts: StationOptions) {
           if (state.power === "on" || state.power === "tuning") sounds.play("dial", state.volume);
         },
         watashimo: (letterId: string) => void react("watashimo", letterId),
+        lockedTap: () => toast(str("station.dialLocked")),
         reply: (body: string, letterId: string, profile?: Record<string, string>) => react("reply", letterId, body, profile),
         tour,
       },

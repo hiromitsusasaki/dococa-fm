@@ -677,8 +677,8 @@ describe("station: volume", () => {
     await vi.waitFor(() => expect(spoken).toEqual(["a1"]));
     await setVolume("50");
     expect(s.state().volume).toBe(0.5);
-    const clip = audios.find((a) => !a.loop)!;
-    const bed = audios.find((a) => a.loop)!;
+    const clip = audios.find((a) => !a.src.startsWith("/bed-"))!;
+    const bed = audios.find((a) => a.src.startsWith("/bed-"))!;
     expect(clip.volume).toBe(0.5);
     expect(bed.volume).toBeCloseTo(0.15);
     expect(localStorage.getItem("dfm.volume")).toBe("0.5");
@@ -1171,14 +1171,14 @@ describe("station: the dial wakes after three letters", () => {
   const toastText = () => document.body.querySelector(".toast")?.textContent ?? null;
   const awake = (v: object, dialReady: boolean) => json(200, { episode: v, station: { key: "mine", label: "Dococa FM" }, dialReady });
 
-  it("stays on the face but locked: no turning, a lock at its centre, the line in place of its name", async () => {
+  it("stays on the face but locked: no turning, a lock at its centre, its name kept, and a tap says what unlocks it", async () => {
     sessionStorage.clear();
     mountStation(root, opts({ stationKey: "mine", dial: 0.4, dialReady: false }));
     await flush();
     expect(knob().classList.contains("locked")).toBe(true);
     expect(knob().querySelector(".knob-lock")).not.toBeNull();
     expect([...knob().querySelectorAll(".dial-end")].map((e) => e.textContent)).toEqual(["小", "大"]);
-    expect(knob().querySelector(".control-label")!.textContent).toBe("お便りを 3 通送ると、ダイヤルが効きはじめます");
+    expect(knob().querySelector(".control-label")!.textContent).toBe("セレンディピティ");
     const input = el("dial") as HTMLInputElement;
     expect(input.disabled).toBe(true);
     // Assistive technology hears why: the slider is described by the locked line, and the turning help is gone.
@@ -1191,6 +1191,9 @@ describe("station: the dial wakes after three letters", () => {
     expect(toastText()).toBeNull();
     // The scale's needle rests in the middle while the dial does nothing.
     expect(root.querySelector<HTMLElement>(".scale")!.style.getPropertyValue("--needle")).toBe("50%");
+    // The line is too long for the face: a tap on the dial shows it as a toast.
+    knob().querySelector(".knob-body")!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    expect(toastText()).toBe("お便りを 3 通送ると、ダイヤルが効きはじめます");
   });
 
   it("wakes when the next episode says so: the ring lights, the needle sweeps in once, a toast says it works", async () => {
@@ -1794,24 +1797,22 @@ describe("station: small joys", () => {
       const s = mountStation(root, opts({ ttsUrl: "/tts" }));
       await power();
       await vi.waitFor(() => expect(audios.some((a) => a.src.startsWith("/tts?episode=epA&line=0"))).toBe(true));
-      const clip = audios.find((a) => !a.loop)!;
+      const clip = audios.find((a) => !a.src.startsWith("/bed-"))!;
       expect(clip.play).toHaveBeenCalled();
       expect(ctxs[0]!.tapped).toEqual(throws ? [] : [clip]);
       s.unmount();
     }
   });
 
-  it("a thin line in the on-air row moves down the segment's lines as they are read; the letter is not restyled", async () => {
+  it("the on-air row carries no moving reading line as the segment's lines are read; the letter is not restyled", async () => {
     nextReplies = [ok(epA())];
     autoEnd = false;
     mountStation(root, opts());
     await power();
-    const at = () => root.querySelector<HTMLElement>(".up-next li.now i.reading")?.style.getPropertyValue("--at");
-    await vi.waitFor(() => expect(at()).toBe("0"));
+    await vi.waitFor(() => expect(root.querySelector(".up-next li.now")).not.toBeNull());
     held.shift()!.onend?.();
     await vi.waitFor(() => expect(spoken).toEqual(["a1", "l1"]));
-    expect(at()).toBe("1");
-    expect(root.querySelectorAll(".up-next i.reading")).toHaveLength(1);
+    expect(root.querySelectorAll(".up-next i.reading")).toHaveLength(0);
     expect(root.querySelector(".player-letter")!.className).toBe("player-letter");
   });
 
