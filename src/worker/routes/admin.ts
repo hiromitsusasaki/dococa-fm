@@ -256,9 +256,13 @@ const letterSchema = z
     listenerId: z.string().min(1),
     itemId: z.string().min(1).optional(),
     url: z.string().max(2000).refine(isFetchableUrl, "url must be a public http(s) url").optional(),
-    body: z.string(),
+    // A reaction (`watashimo` or `reply`) hangs off `parentLetterId`; 私も has a fixed text, so it needs no body.
+    kind: z.enum(["letter", "reply", "watashimo"]).default("letter"),
+    parentLetterId: z.string().min(1).max(100).optional(),
+    body: z.string().optional(),
   })
-  .refine((v) => (v.itemId === undefined) !== (v.url === undefined), "give exactly one of itemId and url");
+  .refine((v) => (v.itemId === undefined) !== (v.url === undefined), "give exactly one of itemId and url")
+  .refine((v) => v.kind === "watashimo" || v.body !== undefined, "body is required");
 
 /**
  * A letter in the name of a demo account, through the same pipeline as `POST /letters`: the same checks,
@@ -267,15 +271,58 @@ const letterSchema = z
 admin.post("/admin/letters", async (c) => {
   const parsed = letterSchema.safeParse(await readJson(c));
   if (!parsed.success) return invalid(c, parsed.error);
-  const { listenerId, itemId, url, body } = parsed.data;
+  const { listenerId, itemId, url, body, kind, parentLetterId } = parsed.data;
   const listener = await getListener(c.env.DB, listenerId);
   if (!listener) return c.json({ error: "listener not found" }, 404);
   if (!listener.demo) return c.json({ error: "not a demo listener" }, 403);
-  const made = await createLetter(c.env, c.env.DB, listener, { itemId, url, body });
+  const made = await createLetter(c.env, c.env.DB, listener, { itemId, url, body: body ?? "", kind, parentLetterId });
   if (!made.ok) return c.json({ error: made.key, ...(made.reason ? { reason: made.reason } : {}) }, made.status);
-  defer(c, prepareLetter(c.env, c.env.DB, made.letter.id));
   defer(c, embedItems(c.env, c.env.DB, [made.itemId]));
+  // Reactions are fixed phrases or short replies and have no unit to make, as on the public route.
+  if (made.letter.kind === "letter") defer(c, prepareLetter(c.env, c.env.DB, made.letter.id));
   return c.json({ letterId: made.letter.id, itemId: made.itemId });
+});
+
+/** The demo accounts, for scripts that act in their name. Ids and public labels only. */
+admin.get("/admin/listeners.json", async (c) => {
+  const { results } = await c.env.DB.prepare("SELECT id, radio_name AS radioName FROM listeners WHERE demo = 1 ORDER BY created_at ASC, id ASC").all<{ id: string; radioName: string }>();
+  return c.json({ listeners: results });
+});
+
+const lettersJsonSchema = z.object({ limit: z.coerce.number().int().min(1).max(200).default(50), after: z.string().min(1).max(100).optional() });
+
+/**
+ * Public letters and found voices in id order after the `after` cursor, with who has reacted to each
+ * (the listener ids of its 私も and replies), so a script can tell which letters still lack a reaction.
+ */
+admin.get("/admin/letters.json", async (c) => {
+  const parsed = lettersJsonSchema.safeParse({ limit: c.req.query("limit"), after: c.req.query("after") });
+  if (!parsed.success) return invalid(c, parsed.error);
+  const { limit, after } = parsed.data;
+  const { results } = await c.env.DB.prepare(
+    `SELECT letters.id, letters.kind, letters.item_id AS itemId, letters.listener_id AS listenerId, letters.body, letters.radio_name AS radioName,
+            COALESCE(listeners.demo, 0) AS demo, items.title, items.creator
+     FROM letters JOIN items ON items.id = letters.item_id LEFT JOIN listeners ON listeners.id = letters.listener_id
+     WHERE letters.status = 'public' AND letters.kind IN ('letter', 'found') AND letters.id > ?
+     ORDER BY letters.id ASC LIMIT ?`,
+  )
+    .bind(after ?? "", limit)
+    .all<{ id: string; kind: string; itemId: string; listenerId: string | null; body: string; radioName: string; demo: number; title: string; creator: string }>();
+  const reactors = new Map<string, string[]>();
+  if (results.length > 0) {
+    const marks = results.map(() => "?").join(", ");
+    const rows = await c.env.DB.prepare(
+      `SELECT parent_letter_id AS parentId, listener_id AS listenerId FROM letters
+       WHERE status = 'public' AND kind IN ('watashimo', 'reply') AND listener_id IS NOT NULL AND parent_letter_id IN (${marks})`,
+    )
+      .bind(...results.map((r) => r.id))
+      .all<{ parentId: string; listenerId: string }>();
+    for (const r of rows.results) reactors.set(r.parentId, [...(reactors.get(r.parentId) ?? []), r.listenerId]);
+  }
+  return c.json({
+    letters: results.map((r) => ({ ...r, demo: r.demo === 1, reactorIds: reactors.get(r.id) ?? [] })),
+    next: results.length === limit ? results[results.length - 1]!.id : null,
+  });
 });
 
 const rejudgeSchema = z.object({ limit: z.number().int().min(1).max(50).default(20), after: z.string().min(1).max(100).optional() });

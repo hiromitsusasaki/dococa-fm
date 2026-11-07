@@ -113,6 +113,7 @@ pnpm typecheck
 | `pnpm eval:units` | 単位を Claude に採点させる（単位の見直し） |
 | `pnpm rejudge` | 公開済みのお便りを今の基準で判定し直す（お便りの選別） |
 | `pnpm seed` | デモ用のお便りを投入する（デモ用のお便り） |
+| `pnpm seed:reactions` | デモのペルソナに、公開中のお便りへ「私も」と一言を付けさせる（デモ用の反応） |
 | `pnpm collect` | 見つけた声の候補を集める（ローカルのみ） |
 | `pnpm db:migrate:local` / `pnpm db:migrate` | マイグレーションを開発 / 本番の D1 に当てる |
 
@@ -174,6 +175,14 @@ Spotify 連携は開発モードのため、許可リストに入っているア
 # items.txt: 作品の URL を 1 行ずつ。ADMIN_TOKEN と ANTHROPIC_API_KEY は .dev.vars に
 pnpm seed --items items.txt --personas 30 --dry-run   # 書かせるだけ。投入しない
 pnpm seed --items items.txt --personas 30             # 投入して、作品ページに原文が出ることを確かめる
+```
+
+投入したお便りには、デモのペルソナから「私も」（1〜2 人）と、半分ほどに一言（Claude が各ペルソナの言葉で 120 字以内）を付けられます。後から届いたお便りにも、同じコマンドを再実行すれば付きます（デモのペルソナの反応がまだ無いお便りだけが対象。反応者は本人以外で、1 通に同じ人は 2 度付かない）。ペルソナの反応も、デモ用の印が自動で付きます。
+
+```bash
+pnpm seed:reactions --origin https://dococafm.app --dry-run       # 一言を書かせて計画を出すだけ。投稿しない
+pnpm seed:reactions --origin https://dococafm.app --per 2         # 私も は 1 通に最大 2 人
+pnpm seed:reactions --origin https://dococafm.app --letters <id,...>   # このお便りだけ（id は GET /admin/letters.json で見られる）
 ```
 
 ### お便りの選別（運用）

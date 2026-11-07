@@ -527,3 +527,86 @@ describe("POST /admin/letters", () => {
     expect((await call("POST", "/admin/letters", { listenerId: real.id, itemId: item.id, body: "x" })).status).toBe(403);
   });
 });
+
+describe("admin reactions and lists", () => {
+  const withKey = { ...e, ANTHROPIC_API_KEY: "sk-test" };
+  const verdict = (input: unknown) => ({ content: [{ type: "tool_use", id: "j", name: "judge_letter", input }] });
+  const translation = (ja: string) => ({ content: [{ type: "tool_use", id: "t", name: "translate", input: { ja } }] });
+
+  async function demo(radioName: string) {
+    const res = await call("POST", "/admin/listeners", { radioName, place: "Oaxaca", demo: true });
+    return ((await res.json()) as { id: string }).id;
+  }
+  async function parentLetter() {
+    const item = await insertItem(env.DB, itemDraft());
+    const author = await createListener(env.DB, { radioName: "Real", place: "Tokyo" });
+    const letter = await insertLetter(env.DB, letterDraft(item.id, { listenerId: author.id, radioName: "Real" }));
+    return { item, letter, author };
+  }
+
+  it("posts a 私も for a demo listener with no body, marks it demo, and answers 409 on a repeat", async () => {
+    const { item, letter } = await parentLetter();
+    const listenerId = await demo("Marisol");
+    const post = () => call("POST", "/admin/letters", { listenerId, itemId: item.id, kind: "watashimo", parentLetterId: letter.id }, undefined, withKey);
+    const first = await post();
+    expect(first.status).toBe(200);
+    const reactions = (await listLettersForItem(env.DB, item.id)).filter((l) => l.kind === "watashimo");
+    expect(reactions).toHaveLength(1);
+    expect(reactions[0]).toMatchObject({ parentLetterId: letter.id, listenerId, demo: true });
+    expect((await post()).status).toBe(409);
+    expect(prepare.prepareLetter).not.toHaveBeenCalled();
+  });
+
+  it("posts a reply through moderation and turns it down when the judge does", async () => {
+    const { item, letter } = await parentLetter();
+    const listenerId = await demo("Marisol");
+    const create = stubAnthropic();
+    create.mockResolvedValueOnce(verdict({ ok: true })).mockResolvedValueOnce(translation("私も好きです"));
+    const ok = await call("POST", "/admin/letters", { listenerId, itemId: item.id, kind: "reply", parentLetterId: letter.id, body: "Me too" }, undefined, withKey);
+    expect(ok.status).toBe(200);
+    expect((await listLettersForItem(env.DB, item.id)).find((l) => l.kind === "reply")).toMatchObject({ body: "Me too", demo: true });
+    expect(prepare.prepareLetter).not.toHaveBeenCalled();
+
+    create.mockReset();
+    create.mockResolvedValue(verdict({ ok: false, reason: "personal" }));
+    const bad = await call("POST", "/admin/letters", { listenerId, itemId: item.id, kind: "reply", parentLetterId: letter.id, body: "x" }, undefined, withKey);
+    expect(bad.status).toBe(422);
+  });
+
+  it("refuses a reaction to a missing parent and a plain letter without a body", async () => {
+    const item = await insertItem(env.DB, itemDraft());
+    const listenerId = await demo("Marisol");
+    expect((await call("POST", "/admin/letters", { listenerId, itemId: item.id, kind: "watashimo", parentLetterId: "nope" }, undefined, withKey)).status).toBe(422);
+    expect((await call("POST", "/admin/letters", { listenerId, itemId: item.id }, undefined, withKey)).status).toBe(422);
+  });
+
+  it("lists the demo listeners behind the token", async () => {
+    const id = await demo("Marisol");
+    await createListener(env.DB, { radioName: "Real", place: "x" });
+    const res = await call("GET", "/admin/listeners.json");
+    expect(await res.json()).toEqual({ listeners: [{ id, radioName: "Marisol" }] });
+    expect((await call("GET", "/admin/listeners.json", undefined, {})).status).toBe(401);
+  });
+
+  it("lists public letters with their reactors and pages by cursor", async () => {
+    const { item, letter, author } = await parentLetter();
+    const second = await insertLetter(env.DB, letterDraft(item.id, { kind: "found", body: "found voice", bodyJa: "found voice", sourceUrl: "https://example.com/f", sourceAuthor: "a" }));
+    const rejected = await insertLetter(env.DB, letterDraft(item.id, { status: "rejected" }));
+    const marisol = await demo("Marisol");
+    await call("POST", "/admin/letters", { listenerId: marisol, itemId: item.id, kind: "watashimo", parentLetterId: letter.id }, undefined, withKey);
+
+    const res = await call("GET", "/admin/letters.json?limit=50");
+    const { letters, next } = (await res.json()) as { letters: { id: string; kind: string; listenerId: string | null; demo: boolean; reactorIds: string[]; title: string }[]; next: string | null };
+    expect(next).toBeNull();
+    expect(letters.map((l) => l.id).sort()).toEqual([letter.id, second.id].sort());
+    expect(letters.find((l) => l.id === letter.id)).toMatchObject({ kind: "letter", listenerId: author.id, demo: false, reactorIds: [marisol], title: item.title });
+    expect(letters.find((l) => l.id === second.id)).toMatchObject({ kind: "found", listenerId: null, demo: false, reactorIds: [] });
+    expect(letters.map((l) => l.id)).not.toContain(rejected.id);
+
+    const page = (await (await call("GET", "/admin/letters.json?limit=1")).json()) as { letters: { id: string }[]; next: string };
+    expect(page.letters).toHaveLength(1);
+    const rest = (await (await call("GET", `/admin/letters.json?limit=1&after=${page.next}`)).json()) as { letters: { id: string }[] };
+    expect(rest.letters[0]!.id).not.toBe(page.letters[0]!.id);
+    expect((await call("GET", "/admin/letters.json", undefined, {})).status).toBe(401);
+  });
+});
