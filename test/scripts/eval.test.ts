@@ -64,6 +64,40 @@ describe("sourcedStats", () => {
     expect(sourcedStats(e, items).unsourced).toEqual([]);
   });
 
+  it("does not count a particle or suffix glued to a creator as part of the name", () => {
+    const e = episode();
+    e.segments[0]!.lines.push({ type: "dj", text: "Miles Davisの演奏で、Miles Davisによる一曲です。" });
+    expect(sourcedStats(e, items).unsourced).toEqual([]);
+  });
+
+  it("accepts creators joined by と when each is a creator in the segment, and flags an unknown one", () => {
+    const duo = { ...items, i1: { title: "Blue in Green", creator: "Luis Fonsi, Daddy Yankee" } };
+    const e = episode();
+    e.segments[0]!.lines.push({ type: "dj", text: "Luis FonsiとDaddy Yankeeによる一曲。" }, { type: "dj", text: "Luis FonsiとJ Balvinによる一曲。" });
+    expect(sourcedStats(e, duo).unsourced).toEqual(["e1: segment 1 line 4: J Balvin"]);
+  });
+
+  it("accepts the sender's radio name and a found voice's author as sources, with a trailing さん", () => {
+    const e = episode();
+    e.segments[0]!.lines[1] = letter({ radioName: "Kimchi Cassette", kind: "found", sourceAuthor: "Hana Lee" });
+    e.segments[0]!.lines.push({ type: "dj", text: "Kimchi Cassetteさんからでした。Hana Leeさんの言葉です。" });
+    expect(sourcedStats(e, items).unsourced).toEqual([]);
+  });
+
+  it("still flags a person's name that matches no sender", () => {
+    const e = episode();
+    e.segments[0]!.lines.push({ type: "dj", text: "Ghost Writerさんからでした。" });
+    expect(sourcedStats(e, items).unsourced).toEqual(["e1: segment 1 line 3: Ghost Writer"]);
+  });
+
+  it("ignores a short all-caps acronym glued to Japanese (DJ, OPM, BGM) but not one standing alone", () => {
+    const e = episode();
+    e.segments[0]!.lines.push({ type: "dj", text: "DJセットのドロップや、OPMのバラード、BGMにも合います。" });
+    expect(sourcedStats(e, items).unsourced).toEqual([]);
+    e.segments[0]!.lines.push({ type: "dj", text: "それは XYZ という名前です。" });
+    expect(sourcedStats(e, items).unsourced).toEqual(["e1: segment 1 line 4: XYZ"]);
+  });
+
   it("skips fixed template lines and lines without any name", () => {
     const e = episode();
     e.segments[0]!.lines.push({ type: "dj", text: "「Kind of Blue」", fixed: true }, { type: "dj", text: "ここで一息。" });

@@ -37,14 +37,25 @@ const fold = (s: string) => s.normalize("NFKC").toLowerCase();
 /** Capitalised words that are not a title or a person: never flagged as unsourced. */
 const GENERIC = new Set(["dj", "fm", "ai", "youtube", "spotify", "dococa", "dococa fm", "tmdb", "mcp", "pwa"]);
 
-/** 「…」 and 『…』 spans, then runs of capitalised latin words in what is left (the DJ writes Japanese, so a capital marks a name). */
+const JAPANESE = /[\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Han}]/u;
+
+/**
+ * 「…」 and 『…』 spans, then runs of capitalised latin words in what is left (the DJ writes Japanese, so a capital marks a name).
+ * A run holds latin letters only, so a particle or suffix glued to a name (Ed Sheeranの, Kimchi Cassetteさん) is never part of it,
+ * and creators joined by と / & / and come out as separate names. A 2-4 letter all-caps token right before a Japanese
+ * character (DJセット, OPMのバラード) is a word, not a name.
+ */
 function namesIn(text: string): string[] {
   const names: string[] = [];
   const rest = text.normalize("NFKC").replace(/[「『]([^」』]+)[」』]/gu, (_, n: string) => {
     names.push(n.trim());
     return " ";
   });
-  for (const m of rest.matchAll(/\b[A-Z][\p{L}\p{N}'’.-]*(?:\s+[A-Z][\p{L}\p{N}'’.-]*)*/gu)) names.push(m[0]);
+  for (const m of rest.matchAll(/\b[A-Z][\p{Script=Latin}\p{N}'’.-]*(?:\s+[A-Z][\p{Script=Latin}\p{N}'’.-]*)*/gu)) {
+    const next = rest[m.index + m[0].length] ?? "";
+    if (/^[A-Z]{2,4}$/.test(m[0]) && JAPANESE.test(next)) continue;
+    names.push(m[0]);
+  }
   return names.filter((n) => Array.from(n).length >= 2 && !GENERIC.has(n.toLowerCase()));
 }
 
@@ -52,7 +63,7 @@ export type SourcedStats = { sourced: number; checked: number; unsourced: string
 
 /**
  * Of the model-written dj lines that name something (a quoted title or a capitalised latin name), how many
- * name only things that appear in the episode's works (title, creator) or letters (body, radio name, place).
+ * name only things that appear in the episode's works (title, creator) or letters (body, radio name, place, the found voice's author).
  * Lines without a name are not counted; `fixed` template lines are filled from data and not counted either.
  */
 export function sourcedStats(episode: EvalEpisode, items: Record<string, EvalItem>): SourcedStats {
@@ -60,7 +71,7 @@ export function sourcedStats(episode: EvalEpisode, items: Record<string, EvalIte
   for (const seg of episode.segments) {
     const item = items[seg.itemId];
     if (item) pool.push(fold(item.title), fold(item.creator));
-    for (const line of seg.lines) if (line.type === "letter") pool.push(fold(line.text), fold(line.radioName), fold(line.place));
+    for (const line of seg.lines) if (line.type === "letter") pool.push(fold(line.text), fold(line.radioName), fold(line.place), ...(line.sourceAuthor ? [fold(line.sourceAuthor)] : []));
   }
   const stats: SourcedStats = { sourced: 0, checked: 0, unsourced: [] };
   episode.segments.forEach((seg, si) =>
