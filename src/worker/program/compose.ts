@@ -89,8 +89,11 @@ export function composeEpisode(
   lang: Lang = "ja",
   /** The station the programme airs on: a public one bridges with neutral lines. */
   station: StationKey["kind"] = "mine",
-  /** Whether this programme is the first the listener hears on this visit: only then the DJ opens. */
-  { first: opens = true }: { first?: boolean } = {},
+  /**
+   * `first`: the first programme the listener hears on this visit: only then the DJ opens. `asked`: its first segment
+   * leads with the letter the listener asked for, so a first programme starts at that letter, with no opening or bridge.
+   */
+  { first: opens = true, asked = false }: { first?: boolean; asked?: boolean } = {},
 ): Segment[] {
   const spoken = (l: Letter): Unit | null => {
     const u = units?.get(l.id);
@@ -101,7 +104,7 @@ export function composeEpisode(
     if (!item) throw new Error(`item missing: ${p.itemId}`);
     if (p.letterIds.length === 0 && p.reactionIds.length === 0) throw new Error("segment without letters");
     const present = p.letterIds.flatMap((id) => letters.get(id) ?? []);
-    const lines: ScriptLine[] = [bridgeLine(bridgeBefore(opens && i === 0, p.slot, station), lang)];
+    const lines: ScriptLine[] = opens && asked && i === 0 ? [] : [bridgeLine(bridgeBefore(opens && i === 0, p.slot, station), lang)];
     // A unit's intro was written with its own letter in the prompt, so it airs only before that letter.
     const first = present[0];
     const intro = first ? (spoken(first)?.intro ?? "") : "";

@@ -199,6 +199,22 @@ describe("POST /stations/:key/next with the dial, first and a letter", () => {
     expect(episode.segments[0]!.lines.some((l) => l.type === "letter" && l.letterId === asked.id)).toBe(true);
   });
 
+  it("a first ask with a letter starts at that letter, with no opening; without one the DJ opens as before", async () => {
+    const cookie = await newSession();
+    await seedMine(cookie);
+    const writer = await createListener(env.DB);
+    const far = await insertItem(env.DB, itemDraft({ title: "asked", externalIds: { itunes: "902" } }));
+    const asked = await insertLetter(env.DB, letterDraft(far.id, { listenerId: writer.id, body: "挨拶なしで", bodyJa: "挨拶なしで" }));
+    const { episode } = (await (await send("mine", cookie, { dial: 0, first: true, letterId: asked.id })).json()) as Full;
+    const lines = episode.segments[0]!.lines;
+    expect(lines.some((l) => l.bridge === "bridge.open")).toBe(false);
+    expect(lines[0]!.bridge).toBeUndefined();
+    expect(lines.findIndex((l) => l.type === "letter")).toBeGreaterThan(0);
+    expect(lines.find((l) => l.type === "letter")!.letterId).toBe(asked.id);
+    const plain = (await (await send("mine", cookie, { dial: 0, first: true })).json()) as Full;
+    expect(plain.episode.segments[0]!.lines[0]!.bridge).toBe("bridge.open");
+  });
+
   it("picks as usual when the letter is the listener's own, and ignores a letter on the world station", async () => {
     const cookie = await newSession();
     const { mine, near } = await seedMine(cookie);

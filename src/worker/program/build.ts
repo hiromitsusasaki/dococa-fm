@@ -98,7 +98,9 @@ export async function buildEpisode(
 
   const readLetters = plan.flatMap((p) => p.letterIds.map((id) => letters.get(id)!));
   const units = readLetters.length > 0 ? await ensureUnits(env, db, readLetters, items, lang) : new Map<string, Unit>();
-  const compose = (u: ReadonlyMap<string, Unit> | null) => finish(composeEpisode(plan, u, letters, items, lang, opts.station?.kind ?? "mine", { first: opts.first ?? true }));
+  // The letter a card or link asked for, when it took the first seat: a first programme then starts right at it.
+  const asked = opts.letterId !== undefined && plan[0]?.letterIds[0] === opts.letterId;
+  const compose = (u: ReadonlyMap<string, Unit> | null) => finish(composeEpisode(plan, u, letters, items, lang, opts.station?.kind ?? "mine", { first: opts.first ?? true, asked }));
 
   const usable = (u: ReadonlyMap<string, Unit>) => [...u.values()].some((x) => x.verified);
   if (usable(units)) {

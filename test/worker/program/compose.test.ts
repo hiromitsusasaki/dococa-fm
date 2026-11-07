@@ -302,6 +302,13 @@ describe("bridges", () => {
     expect(firstOne!.lines[0]).toMatchObject({ bridge: "bridge.open" });
   });
 
+  it("a first programme that leads with an asked letter has no opening and no bridge; a later one keeps its slot bridge", () => {
+    const [firstOne] = composeEpisode([seg("i2", "far", ["a"])], null, letters, items, "ja", "mine", { first: true, asked: true });
+    expect(firstOne!.lines.some((l) => (l as { bridge?: string }).bridge !== undefined)).toBe(false);
+    const [later] = composeEpisode([seg("i2", "far", ["a"])], null, letters, items, "ja", "mine", { first: false, asked: true });
+    expect(later!.lines[0]).toMatchObject({ bridge: "bridge.far" });
+  });
+
   it("uses the listener's language for the bridge lines", () => {
     const [s] = composeEpisode([seg("i1", "near", ["a"])], null, letters, items, "en");
     expect(s!.lines[0]).toEqual({ type: "dj", text: t("bridge.open", undefined, "en"), fixed: true, bridge: "bridge.open" });
