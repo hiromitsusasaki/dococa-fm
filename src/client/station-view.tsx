@@ -195,8 +195,10 @@ function PanelReact({ id, sent, str, on }: { id: string; sent: Record<string, tr
         onSubmit={(e: Event) => {
           e.preventDefault();
           const ta = (e.currentTarget as HTMLFormElement).querySelector("textarea")!;
-          void Promise.resolve(on.reply(ta.value, id)).then((taken) => {
-            if (taken) ta.value = "";
+          const body = ta.value;
+          // Words typed while the post was on its way are a new draft: keep them.
+          void Promise.resolve(on.reply(body, id)).then((taken) => {
+            if (taken && ta.value === body) ta.value = "";
           });
         }}
       >

@@ -708,6 +708,24 @@ describe("station: on-air panel", () => {
     expect(calls).toEqual(["POST /letters", "POST /letters"]);
   });
 
+  it("keeps words typed in the on-air row while the reply was on its way", async () => {
+    nextReplies = [ok(epA()), ok(epB())];
+    autoEnd = false;
+    mountStation(root, opts());
+    await power();
+    await vi.waitFor(() => expect(spoken).toEqual(["a1"]));
+    let answer!: (r: Response) => void;
+    (fetch as unknown as ReturnType<typeof vi.fn>).mockImplementationOnce(() => new Promise<Response>((resolve) => (answer = resolve)));
+    const ta = root.querySelector<HTMLTextAreaElement>(".up-next li.now textarea")!;
+    ta.value = "a";
+    root.querySelector<HTMLFormElement>(".up-next li.now form")!.dispatchEvent(new CustomEvent("submit", { detail: {}, bubbles: true, cancelable: true }));
+    await flush();
+    ta.value = "b";
+    answer(new Response(null, { status: 200 }));
+    await flush();
+    expect(root.querySelector<HTMLTextAreaElement>(".up-next li.now textarea")!.value).toBe("b");
+  });
+
   it("a reply from the panel leaves the player card's reply input open", async () => {
     nextReplies = [ok(view("epL", [["a", [letter("L1", "l1")]]]))];
     autoEnd = false;
