@@ -32,9 +32,10 @@ const RADIO_ERROR_TEXT = { taken: "me.slugTaken", invalid: "me.slugInvalid", fai
 
 export const me = new Hono<{ Bindings: Env; Variables: Variables }>();
 
+/** `radioError`: a refused `POST /me/radio` re-renders the page; that answer assigns no address (it writes nothing to the radio). */
 async function renderMe(c: MeContext, signedIn: Listener, radioError?: RadioError) {
-  // A listener signed in before addresses were assigned gets one here; a failure renders without it.
-  const listener = !signedIn.stationSlug ? { ...signedIn, stationSlug: await ensureStationSlug(c.env.DB, signedIn).catch(() => null) } : signedIn;
+  // On `GET /me`, a listener signed in before addresses were assigned gets one here; a failure renders without it.
+  const listener = !signedIn.stationSlug && !radioError ? { ...signedIn, stationSlug: await ensureStationSlug(c.env.DB, signedIn).catch(() => null) } : signedIn;
   const lang = listener.lang;
   const t = tFor(lang);
   // Taken before the read: a reaction that lands while the page is made lights the dot again rather than going unseen.

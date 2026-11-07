@@ -369,6 +369,15 @@ describe("POST /me/radio", () => {
     expect(await rowOf(other)).toEqual({ pub: 1, slug: "my-radio" });
   });
 
+  it("a refused slug for a listener without an address assigns none", async () => {
+    const other = idOf(await signedInSession("Other"));
+    await updateListener(env.DB, other, { stationSlug: "my-radio" });
+    const cookie = await signedInSession("Hiro");
+    expect((await radio(cookie, { slug: "my-radio" })).status).toBe(422);
+    expect((await radio(cookie, { slug: "ab" })).status).toBe(422);
+    expect(await rowOf(idOf(cookie))).toEqual({ pub: 0, slug: null });
+  });
+
   it("422s for a slug that breaks the rule, an unknown public value or an empty post, and changes nothing", async () => {
     const cookie = await signedInSession();
     await updateListener(env.DB, idOf(cookie), { stationSlug: "hiro-fm" });
