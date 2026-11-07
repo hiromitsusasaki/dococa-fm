@@ -972,8 +972,15 @@ button.pill {
   margin: 0 0 var(--sp-2);
 }
 
+/* The right column: the send panel (home only) over the on-air panel. */
+.side {
+  display: grid;
+  gap: 22px;
+}
+
 /* Up next */
-.side h2 {
+.side h2,
+.recent-episodes h2 {
   margin: 0 0 var(--sp-2);
   color: var(--label);
   font-weight: 700;
@@ -1050,28 +1057,20 @@ button.pill {
   font-weight: 700;
 }
 
-.panel-react {
-  display: flex;
-  flex: 1 0 100%;
+/* The now-playing card's 一言: the box over its button; then the ways to share the letter. */
+.now .react .reply {
   flex-direction: column;
   align-items: flex-start;
-  gap: var(--sp-2);
-  margin-top: var(--sp-2);
 }
 
-.panel-react .share {
-  font-size: 12px;
-}
-
-.panel-reply {
+.react .share {
   display: flex;
-  flex-direction: column;
-  align-items: flex-start;
+  flex: 1 1 100%;
+  flex-wrap: wrap;
   gap: var(--sp-2);
-  width: 100%;
 }
 
-.panel-reply textarea {
+.react .reply textarea {
   width: 100%;
   padding: var(--sp-2) var(--sp-3);
   border: 1px solid var(--line-strong);
@@ -2043,12 +2042,12 @@ body.embed .put h1 {
   border-bottom: 5px solid transparent;
 }
 
-/* The send button opens the on-air panel; the welcome line on /me. */
-.side-send {
+/* The home's send panel: a heading, one line, the button that opens the send modal. */
+.send-panel p {
   margin: 0 0 var(--sp-3);
 }
 
-.side-send .button {
+.send-panel .button {
   display: flex;
   width: 100%;
   justify-content: center;

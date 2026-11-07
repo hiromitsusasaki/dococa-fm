@@ -130,7 +130,8 @@ describe("GET /", () => {
       ids.push(ep.id);
     }
     const html = await (await get("/", cookie)).text();
-    const section = html.slice(html.indexOf('<section class="recent-episodes">'), html.indexOf("</section>", html.indexOf('<section class="recent-episodes">')));
+    const section = html.slice(html.indexOf('<section class="panel recent-episodes">'), html.indexOf("</section>", html.indexOf('<section class="panel recent-episodes">')));
+    // A panel like the others: the rounded frame and its gradient rule (`.panel`), then the heading.
     expect(section).toContain("<h2>これまでの番組</h2>");
     // The rows are the on-air list's: the same classes in the same order, the whole row one link.
     expect(section).toContain('<ul class="up-next">');
@@ -228,7 +229,7 @@ describe("GET /", () => {
       expect(i, s).toBeGreaterThan(-1);
       return i;
     };
-    const order = [at('id="station"'), at('<section class="home">'), at('<dialog class="send-modal"'), at('<p class="muted">好きなものを'), at('<section class="recent-episodes">'), at('class="letter-cards"')];
+    const order = [at('id="station"'), at('<section class="home">'), at('<dialog class="send-modal"'), at('<p class="muted">好きなものを'), at('<section class="panel recent-episodes">'), at('class="letter-cards"')];
     expect([...order].sort((a, b) => a - b)).toEqual(order);
   });
 
@@ -252,9 +253,12 @@ describe("GET /", () => {
 
   it("sends a letter from a modal: a /put link the station script opens as a dialog, whose frame loads only when opened", async () => {
     const html = await (await get("/", await newSession())).text();
-    // The button itself is drawn by the radio's script, as the first thing in the on-air panel (station.test.ts).
+    // The button itself is drawn by the radio's script, in the send panel over the on-air panel (station.test.ts).
     expect(html).not.toContain("data-open-send");
     expect(html).toMatch(/"home\.put":"お便りを送る"/);
+    expect(html).toContain('"home.sendLead":"好きな曲・本・映画について、200 字まで。DJ が読み上げます。"');
+    // The share links on the now-playing card are drawn by the same script.
+    expect(html).toMatch(/"share\.x":"X で共有","share\.native":"共有","share\.text":"\{work\} · \{sender\}のお便り — Dococa FM"/);
     expect(html).toMatch(/<dialog class="send-modal" aria-label="お便りを送る"><form method="dialog" class="send-modal-bar"><button type="submit" class="quiet">閉じる<\/button><\/form><iframe data-src="\/put\?embed=1" title="お便りを送る"><\/iframe><\/dialog>/);
     expect(html).not.toMatch(/\ssrc="\/put\?embed=1"/);
   });

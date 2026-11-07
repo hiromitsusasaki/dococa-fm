@@ -23,7 +23,7 @@ export type StationOptions = {
   letterId?: string;
   /** A station with no history yet: show how to start, and do not fetch anything. */
   grow?: boolean;
-  /** The home: show the send button above the on-air list. */
+  /** The home: show the send panel above the on-air list. */
   send?: boolean;
   strings: Record<string, string>;
 };
@@ -39,7 +39,7 @@ export type StationState = {
 };
 
 type Reason = "limit" | "failed" | "empty";
-type State = StationState & { reason: Reason | null; loading: boolean; replyOpen: boolean; sent: Record<string, true>; sendFailed: boolean };
+type State = StationState & { reason: Reason | null; loading: boolean; sent: Record<string, true>; sendFailed: boolean };
 type Fetched = { ok: true; view: PlayerEpisode } | { ok: false; reason: Reason };
 
 const VOLUME_KEY = "dfm.volume";
@@ -113,7 +113,7 @@ export function mountStation(root: HTMLElement, opts: StationOptions) {
   const sounds = createSounds(() => breathe());
   const player = createLinePlayer({ voiceURI: opts.voiceURI, ttsUrl: opts.ttsUrl, lang: str("lang.code") === "en" ? "en" : "ja", onClip: (el) => sounds.listen(el) });
   const reactRoot = createRoot(root);
-  let state: State = { power: "off", volume: loadVolume(), current: null, seg: 0, line: 0, queue: [], reason: null, loading: false, replyOpen: false, sent: {}, sendFailed: false };
+  let state: State = { power: "off", volume: loadVolume(), current: null, seg: 0, line: 0, queue: [], reason: null, loading: false, sent: {}, sendFailed: false };
   let abort = new AbortController();
   let mounted = true;
   /** The episode being made for the queue, if any. */
@@ -281,7 +281,7 @@ export function mountStation(root: HTMLElement, opts: StationOptions) {
     }
     const [head, ...rest] = state.queue;
     if (head) {
-      setState({ current: head, seg: 0, line: 0, queue: rest, loading: false, replyOpen: false });
+      setState({ current: head, seg: 0, line: 0, queue: rest, loading: false });
       return true;
     }
     const reason = aheadFail ?? "failed";
@@ -299,7 +299,7 @@ export function mountStation(root: HTMLElement, opts: StationOptions) {
         const lines = ep.segments[i]!.lines;
         for (let j = i === startSeg ? startLine : 0; j < lines.length; j++) {
           if (signal.aborted) return;
-          if (i !== state.seg || j !== state.line) setState({ seg: i, line: j, replyOpen: false });
+          if (i !== state.seg || j !== state.line) setState({ seg: i, line: j });
           const line = lines[j]!;
           if (opts.listensUrl && line.type === "letter" && line.kind !== "reply") reportListen(opts.listensUrl, { episodeId: ep.id, letterId: line.letterId, segmentIndex: i });
           await player.play(ep, i, j, signal);
@@ -455,7 +455,7 @@ export function mountStation(root: HTMLElement, opts: StationOptions) {
     if (state.power !== "on" || !ep) return;
     abort.abort();
     abort = new AbortController();
-    if (state.seg + 1 < ep.segments.length) setState({ seg: state.seg + 1, line: 0, replyOpen: false });
+    if (state.seg + 1 < ep.segments.length) setState({ seg: state.seg + 1, line: 0 });
     else setState({ line: ep.segments[state.seg]!.lines.length });
     void run(abort.signal);
   }
@@ -469,18 +469,10 @@ export function mountStation(root: HTMLElement, opts: StationOptions) {
     setState({ volume: v });
   }
 
-  /** The letter's own page (the share page) to the clipboard; where there is no clipboard, shown to copy by hand. */
-  function share(id: string) {
-    const url = `${location.origin}/letters/${encodeURIComponent(id)}`;
-    const ask = () => void prompt(str("station.share"), url);
-    if (!navigator.clipboard?.writeText) return ask();
-    navigator.clipboard.writeText(url).then(() => toast(str("station.shared")), ask);
-  }
-
   /** Reactions on their way, so a second tap before the answer does not post twice. */
   const sending = new Set<string>();
-  /** True when the post was taken. `fromPlayer` closes the player card's reply input; the panel has its own. */
-  async function send(fields: Record<string, string>, key: string, fromPlayer: boolean): Promise<boolean> {
+  /** True when the post was taken. */
+  async function send(fields: Record<string, string>, key: string): Promise<boolean> {
     if (sending.has(key)) return false;
     sending.add(key);
     const taken = await postLetter(fields);
@@ -489,16 +481,16 @@ export function mountStation(root: HTMLElement, opts: StationOptions) {
       toast(str("player.sentToast"));
       if (state.power === "on") sounds.play("watashimo", state.volume);
     }
-    if (taken) setState({ sent: { ...state.sent, [key]: true }, ...(fromPlayer ? { replyOpen: false } : {}), sendFailed: false });
+    if (taken) setState({ sent: { ...state.sent, [key]: true }, sendFailed: false });
     else setState({ sendFailed: true });
     if (taken && key.startsWith("w:")) envelope(document, "float");
     return taken;
   }
 
-  /** The player card reacts to the letter being read; the on-air row names the segment's first letter (`panelLetterId`). */
-  function react(kind: "watashimo" | "reply", body?: string, panelLetterId?: string): Promise<boolean> {
-    const r = reactionOf(kind, state.current?.segments[state.seg]?.itemId, panelLetterId ?? letterNow()?.letterId, body);
-    return r ? send(r.fields, r.key, panelLetterId === undefined) : Promise.resolve(false);
+  /** The now-playing card reacts to the segment's first letter (the on-air row's `letterId`). */
+  function react(kind: "watashimo" | "reply", letterId: string, body?: string): Promise<boolean> {
+    const r = reactionOf(kind, state.current?.segments[state.seg]?.itemId, letterId, body);
+    return r ? send(r.fields, r.key) : Promise.resolve(false);
   }
 
   const lineNow = () => state.current?.segments[state.seg]?.lines[state.line];
@@ -549,7 +541,6 @@ export function mountStation(root: HTMLElement, opts: StationOptions) {
       original: letter ? state.current?.originals?.[letter.letterId] : undefined,
       djText: line?.type === "dj" ? line.text : null,
       upNext: upNextRows(),
-      replyOpen: state.replyOpen,
       sent: state.sent,
       on: {
         power: () => (state.power === "on" || state.power === "tuning" ? turnOff() : turnOn()),
@@ -558,10 +549,8 @@ export function mountStation(root: HTMLElement, opts: StationOptions) {
         tick: () => {
           if (state.power === "on" || state.power === "tuning") sounds.play("dial", state.volume);
         },
-        toggleReply: () => setState({ replyOpen: !state.replyOpen }),
-        watashimo: (letterId?: string) => void react("watashimo", undefined, letterId),
-        reply: (body: string, letterId?: string) => react("reply", body, letterId),
-        share,
+        watashimo: (letterId: string) => void react("watashimo", letterId),
+        reply: (body: string, letterId: string) => react("reply", letterId, body),
       },
     };
   }
@@ -595,7 +584,7 @@ export function mountStation(root: HTMLElement, opts: StationOptions) {
 }
 
 /**
- * The home's send modal: the button (drawn by this script, above the on-air list; without script the way to `/put` is the header's link) opens the `<dialog>`, whose frame loads `/put?embed=1`
+ * The home's send modal: the button (drawn by this script, in the send panel above the on-air list; without script the way to `/put` is the header's link) opens the `<dialog>`, whose frame loads `/put?embed=1`
  * on the first open and again after a letter is sent. The embedded sent page posts `dfm:sent`, which closes it after
  * `SENT_CLOSE_MS` so its confirmation is seen; Escape inside
  * the frame posts `dfm:close`; a message from any other origin or any other window is ignored. Escape on the page and the close button close it natively.

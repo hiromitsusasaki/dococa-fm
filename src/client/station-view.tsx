@@ -4,8 +4,9 @@ import { isHttpUrl, type LetterLine, outLabel, type PlayerItem, type PlayerOrigi
 import { onReleased } from "./reactions";
 
 /**
- * `sender` is the first reader's name line; absent for a work nobody has written about. `letterId` is only on the row now on air, for the reactions;
- * `shareable` is false for a reply or 私も (an echo of the listener's own letter), which has no page to share; `reading` too: how far down the segment's lines the voice is (0 at the first line, 1 at the last), drawn as a thin line that moves down the row.
+ * `sender` is the first reader's name line; absent for a work nobody has written about. `letterId` is only on the row now on air, for the
+ * reactions on the now-playing card; `shareable` is false for a reply or 私も (an echo of the listener's own letter), which has no page to share;
+ * `reading` too: how far down the segment's lines the voice is (0 at the first line, 1 at the last), drawn as a thin line that moves down the row.
  */
 export type UpNextRow = { key: string; now: boolean; kind: string | null; title: string; creator: string; sender?: string; letterId?: string; imageUrl?: string | null; reading?: number; shareable?: boolean };
 
@@ -22,7 +23,7 @@ export type StationScreenProps = {
   grow: boolean;
   /** A letter link is waiting for the switch: it says it plays from that letter. */
   primed: boolean;
-  /** The home: the on-air panel opens with the button that opens the send modal. */
+  /** The home: the right column opens with the send panel, whose button opens the send modal. */
   send: boolean;
   item: PlayerItem | undefined;
   itemId: string | undefined;
@@ -30,7 +31,6 @@ export type StationScreenProps = {
   original: PlayerOriginals[string] | undefined;
   djText: string | null;
   upNext: UpNextRow[];
-  replyOpen: boolean;
   sent: Record<string, true>;
   on: {
     power: () => void;
@@ -38,10 +38,8 @@ export type StationScreenProps = {
     dial: (value: string) => void;
     /** The dial moved one detent (during the drag, before `dial`). */
     tick: () => void;
-    toggleReply: () => void;
-    watashimo: (letterId?: string) => void;
-    reply: (body: string, letterId?: string) => Promise<boolean> | void;
-    share: (letterId: string) => void;
+    watashimo: (letterId: string) => void;
+    reply: (body: string, letterId: string) => Promise<boolean> | void;
   };
 };
 
@@ -55,6 +53,7 @@ export function StationScreen(p: StationScreenProps) {
     const label = outLabel(str, key);
     return label && isHttpUrl(href) ? [{ label, href }] : [];
   });
+  const onAir = p.upNext.find((r) => r.now && r.letterId);
   const meta = p.item ? [p.item.kind ? kindLabel(str, p.item.kind) : null, p.item.year ? String(p.item.year) : null].filter((x): x is string => x !== null) : [];
   return (
     <div class="station">
@@ -129,30 +128,6 @@ export function StationScreen(p: StationScreenProps) {
             {p.djText !== null && <p class="player-dj">{p.djText}</p>}
             {p.letter && <LetterQuote letter={p.letter} original={p.original} str={str} toggleKey="letter.showOriginal" />}
           </div>
-          {p.letter && (
-            <div class="react">
-              <button type="button" class={p.sent[`w:${p.letter.letterId}`] ? "pill hot said" : "pill hot"} data-action="watashimo" disabled={p.sent[`w:${p.letter.letterId}`] === true} onClick={() => p.on.watashimo()}>
-                {str(p.sent[`w:${p.letter.letterId}`] ? "player.sent" : "player.watashimo")}
-              </button>
-              <button type="button" class="pill" data-action="reply" aria-expanded={String(p.replyOpen)} onClick={p.on.toggleReply}>
-                {str(p.sent[`r:${p.letter.letterId}`] ? "player.sent" : "player.reply")}
-              </button>
-              {p.replyOpen && (
-                <form
-                  class="reply"
-                  onSubmit={(e: Event) => {
-                    e.preventDefault();
-                    p.on.reply((e.currentTarget as HTMLFormElement).querySelector("input")!.value);
-                  }}
-                >
-                  <input type="text" name="body" maxlength={200} aria-label={str("player.reply")} />
-                  <button type="submit" class="pill">
-                    {str("player.send")}
-                  </button>
-                </form>
-              )}
-            </div>
-          )}
           {links.length > 0 && (
             <div class="again" data-action="again">
               <p class="muted">{str("player.again")}</p>
@@ -167,65 +142,65 @@ export function StationScreen(p: StationScreenProps) {
               </ul>
             </div>
           )}
+          {onAir && <NowReact id={onAir.letterId!} shareable={onAir.shareable !== false} sent={p.sent} str={str} on={p.on} />}
         </section>
       )}
 
-      <aside class="side panel">
+      <aside class="side">
         {p.send && (
-          <p class="side-send">
+          <section class="panel send-panel">
+            <h2>{str("home.put")}</h2>
+            <p class="muted">{str("home.sendLead")}</p>
             <a class="button" href="/put" data-open-send>
               {str("home.put")}
             </a>
-          </p>
+          </section>
         )}
-        <h2>{str("station.panel")}</h2>
-        {p.upNext.length === 0 && p.power === "off" && !p.grow && <p class="muted">{str("station.offHint")}</p>}
-        <ul class="up-next">
-          {p.upNext.map((r) => (
-            <li key={r.key} class={r.now ? "now" : ""}>
-              {/* The on-air row's text is one box, so the reading line moves over the text only, not the buttons under it. */}
-              <span class="row-text">
-                <span class="tag">{str(r.now ? "station.now" : "station.next")}</span>
-                {r.now && isHttpUrl(r.imageUrl) && <img class="thumb" src={r.imageUrl} alt="" width="40" height="40" />}
-                {r.kind && <span class="kind">{kindLabel(str, r.kind)}</span>}
-                <span class="title">{r.title}</span>
-                <span class="creator">{r.creator}</span>
-                {r.sender && <span class="sender">{r.sender}</span>}
-                {r.reading !== undefined && <i class="reading" style={{ "--at": String(r.reading) }} aria-hidden="true"></i>}
-              </span>
-              {r.letterId && <PanelReact id={r.letterId} shareable={r.shareable !== false} sent={p.sent} str={str} on={p.on} />}
-            </li>
-          ))}
-        </ul>
-        {p.grow && (
-          <div class="grow">
-            <h2>{str("station.grow")}</h2>
-            <p>{str("station.growHelp")}</p>
-            <a class="pill hot" href="/start">
-              {str("station.growStart")}
-            </a>
-          </div>
-        )}
+        <section class="panel on-air">
+          <h2>{str("station.panel")}</h2>
+          {p.upNext.length === 0 && p.power === "off" && !p.grow && <p class="muted">{str("station.offHint")}</p>}
+          <ul class="up-next">
+            {p.upNext.map((r) => (
+              <li key={r.key} class={r.now ? "now" : ""}>
+                {/* The on-air row's text is one box, so the reading line moves over the text only. */}
+                <span class="row-text">
+                  <span class="tag">{str(r.now ? "station.now" : "station.next")}</span>
+                  {r.now && isHttpUrl(r.imageUrl) && <img class="thumb" src={r.imageUrl} alt="" width="40" height="40" />}
+                  {r.kind && <span class="kind">{kindLabel(str, r.kind)}</span>}
+                  <span class="title">{r.title}</span>
+                  <span class="creator">{r.creator}</span>
+                  {r.sender && <span class="sender">{r.sender}</span>}
+                  {r.reading !== undefined && <i class="reading" style={{ "--at": String(r.reading) }} aria-hidden="true"></i>}
+                </span>
+              </li>
+            ))}
+          </ul>
+          {p.grow && (
+            <div class="grow">
+              <h2>{str("station.grow")}</h2>
+              <p>{str("station.growHelp")}</p>
+              <a class="pill hot" href="/start">
+                {str("station.growStart")}
+              </a>
+            </div>
+          )}
+        </section>
       </aside>
     </div>
   );
 }
 
-/** 私も, the letter's link and 一言 for the letter on air, in the panel; they share `sent` with the player card. */
-function PanelReact({ id, shareable, sent, str, on }: { id: string; shareable: boolean; sent: Record<string, true>; str: (key: string) => string; on: StationScreenProps["on"] }) {
+/** 私も, 一言 and the letter's link for the segment's letter, on the now-playing card, through the whole segment. */
+function NowReact({ id, shareable, sent, str, on }: { id: string; shareable: boolean; sent: Record<string, true>; str: (key: string) => string; on: StationScreenProps["on"] }) {
   const said = sent[`w:${id}`] === true;
+  const url = `${location.origin}/letters/${encodeURIComponent(id)}`;
   return (
-    <div class="panel-react">
-      <button type="button" class={said ? "pill hot said" : "pill hot"} data-action="panel-watashimo" disabled={said} onClick={() => on.watashimo(id)}>
+    <div class="react">
+      <button type="button" class={said ? "pill hot said" : "pill hot"} data-action="watashimo" disabled={said} onClick={() => on.watashimo(id)}>
         {str(said ? "player.sent" : "player.watashimo")}
       </button>
-      {shareable && (
-        <button type="button" class="pill share" data-action="share" onClick={() => on.share(id)}>
-          {str("station.share")}
-        </button>
-      )}
       <form
-        class="panel-reply"
+        class="reply"
         onSubmit={(e: Event) => {
           e.preventDefault();
           const ta = (e.currentTarget as HTMLFormElement).querySelector("textarea")!;
@@ -241,6 +216,13 @@ function PanelReact({ id, shareable, sent, str, on }: { id: string; shareable: b
           {str(sent[`r:${id}`] ? "player.sent" : "player.reply")}
         </button>
       </form>
+      {shareable && (
+        <div class="share">
+          <button type="button" class="pill" data-copy={url} data-copied={str("station.shared")}>
+            {str("station.share")}
+          </button>
+        </div>
+      )}
     </div>
   );
 }

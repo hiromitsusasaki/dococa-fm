@@ -54,6 +54,10 @@ const strings: Record<string, string> = {
   "station.share": "リンクをコピー",
   "station.shared": "リンクをコピーしました",
   "home.put": "お便りを送る",
+  "home.sendLead": "好きな曲・本・映画について、200 字まで。DJ が読み上げます。",
+  "share.x": "X で共有",
+  "share.native": "共有",
+  "share.text": "{work} · {sender}のお便り — Dococa FM",
   "lang.confirmPlaying": "切り替えると再生が止まります。続けますか？",
   "letter.showOriginal": "原文を見る",
   "letter.who": "{name}さん",
@@ -231,20 +235,24 @@ describe("station: screen", () => {
     expect(root.textContent).toContain("セレンディピティ");
   });
 
-  it("the home's send button is the first thing in the on-air panel, ahead of its heading, and only where asked", async () => {
+  it("the home's right column opens with the send panel (heading, one line, the button), then the on-air panel; only where asked", async () => {
     mountStation(root, opts({ stationKey: "mine", send: true }));
     await flush();
-    const side = root.querySelector("aside.side")!;
-    expect(side.firstElementChild!.querySelector("a")!.getAttribute("href")).toBe("/put");
-    expect(side.firstElementChild!.querySelector("a")!.hasAttribute("data-open-send")).toBe(true);
-    expect(side.firstElementChild!.textContent).toBe("お便りを送る");
-    expect(side.firstElementChild!.nextElementSibling!.tagName).toBe("H2");
+    const [send, onAir] = [...root.querySelector("aside.side")!.children];
+    expect(send!.matches("section.panel.send-panel")).toBe(true);
+    expect(send!.querySelector("h2")!.textContent).toBe("お便りを送る");
+    expect(send!.querySelector("p")!.textContent).toBe("好きな曲・本・映画について、200 字まで。DJ が読み上げます。");
+    expect(send!.querySelector("a")!.getAttribute("href")).toBe("/put");
+    expect(send!.querySelector("a")!.hasAttribute("data-open-send")).toBe(true);
+    expect(onAir!.matches("section.panel")).toBe(true);
+    expect(onAir!.querySelector("h2")!.textContent).toBe("オンエア");
   });
 
   it("shows no send button on a station page that did not ask for it", async () => {
     mountStation(root, opts());
     await flush();
     expect(root.querySelector("[data-open-send]")).toBeNull();
+    expect(root.querySelector(".send-panel")).toBeNull();
   });
 
   it("remembers the first switch-on in dfm.seen, so the home can show its short hero next time", async () => {
@@ -725,15 +733,14 @@ describe("station: on-air panel", () => {
     expect(root.querySelector(".side")!.textContent).toContain("スイッチを入れると");
   });
 
-  it("says 私も from the on-air row once, for the segment's first letter, and the player shows it as sent", async () => {
+  it("says 私も from the now-playing card once, for the segment's first letter, while the DJ still speaks", async () => {
     nextReplies = [ok(epA()), ok(epB())];
     autoEnd = false;
     mountStation(root, opts());
     await power();
     await vi.waitFor(() => expect(spoken).toEqual(["a1"]));
     calls.length = 0;
-    const btn = () => root.querySelector<HTMLButtonElement>('.up-next li.now [data-action="panel-watashimo"]')!;
-    expect(root.querySelectorAll('.up-next li:not(.now) [data-action="panel-watashimo"]')).toHaveLength(0);
+    const btn = () => root.querySelector<HTMLButtonElement>('.now.panel [data-action="watashimo"]')!;
     btn().click();
     btn().click();
     await flush();
@@ -744,42 +751,27 @@ describe("station: on-air panel", () => {
     expect(btn().textContent).toContain("届けました");
   });
 
-  it("shows a 私も said in the panel as sent on the player card", async () => {
-    nextReplies = [ok(view("epL", [["a", [letter("L1", "l1")]]]))];
+  it("the on-air panel is the list only: no reactions and no share links on any row", async () => {
+    nextReplies = [ok(epA()), ok(epB())];
     autoEnd = false;
     mountStation(root, opts());
     await power();
-    await vi.waitFor(() => expect(spoken).toEqual(["l1"]));
-    root.querySelector<HTMLButtonElement>('.up-next li.now [data-action="panel-watashimo"]')!.click();
-    await flush();
-    expect((el("watashimo") as HTMLButtonElement).disabled).toBe(true);
-    expect(el("watashimo").textContent).toContain("届けました");
+    await vi.waitFor(() => expect(spoken).toEqual(["a1"]));
+    expect(root.querySelector(".up-next li.now")).not.toBeNull();
+    expect(root.querySelector(".side button, .side form, .side .share")).toBeNull();
   });
 
-  it("shows a 私も said in the player card as sent in the panel", async () => {
-    nextReplies = [ok(view("epL", [["a", [letter("L1", "l1")]]]))];
-    autoEnd = false;
-    mountStation(root, opts());
-    await power();
-    await vi.waitFor(() => expect(spoken).toEqual(["l1"]));
-    el("watashimo").click();
-    await flush();
-    const panel = root.querySelector<HTMLButtonElement>('.up-next li.now [data-action="panel-watashimo"]')!;
-    expect(panel.disabled).toBe(true);
-    expect(panel.textContent).toContain("届けました");
-  });
-
-  it("sends a reply typed in the on-air row", async () => {
+  it("sends a reply typed on the now-playing card", async () => {
     nextReplies = [ok(epA()), ok(epB())];
     autoEnd = false;
     mountStation(root, opts());
     await power();
     await vi.waitFor(() => expect(spoken).toEqual(["a1"]));
     calls.length = 0;
-    const ta = root.querySelector<HTMLTextAreaElement>(".up-next li.now textarea")!;
+    const ta = root.querySelector<HTMLTextAreaElement>(".now form.reply textarea")!;
     expect(ta.getAttribute("maxlength")).toBe("200");
     ta.value = "いい曲";
-    root.querySelector<HTMLFormElement>(".up-next li.now form")!.dispatchEvent(new CustomEvent("submit", { detail: {}, bubbles: true, cancelable: true }));
+    root.querySelector<HTMLFormElement>(".now form.reply")!.dispatchEvent(new CustomEvent("submit", { detail: {}, bubbles: true, cancelable: true }));
     await flush();
     expect(calls).toEqual(["POST /letters"]);
     const init = (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls.at(-1)![1];
@@ -788,12 +780,12 @@ describe("station: on-air panel", () => {
     expect(ta.value).toBe("");
     expect(ta.disabled).toBe(false);
     ta.value = "もう一言";
-    root.querySelector<HTMLFormElement>(".up-next li.now form")!.dispatchEvent(new CustomEvent("submit", { detail: {}, bubbles: true, cancelable: true }));
+    root.querySelector<HTMLFormElement>(".now form.reply")!.dispatchEvent(new CustomEvent("submit", { detail: {}, bubbles: true, cancelable: true }));
     await flush();
     expect(calls).toEqual(["POST /letters", "POST /letters"]);
   });
 
-  it("keeps words typed in the on-air row while the reply was on its way", async () => {
+  it("keeps words typed on the now-playing card while the reply was on its way", async () => {
     nextReplies = [ok(epA()), ok(epB())];
     autoEnd = false;
     mountStation(root, opts());
@@ -801,30 +793,14 @@ describe("station: on-air panel", () => {
     await vi.waitFor(() => expect(spoken).toEqual(["a1"]));
     let answer!: (r: Response) => void;
     (fetch as unknown as ReturnType<typeof vi.fn>).mockImplementationOnce(() => new Promise<Response>((resolve) => (answer = resolve)));
-    const ta = root.querySelector<HTMLTextAreaElement>(".up-next li.now textarea")!;
+    const ta = root.querySelector<HTMLTextAreaElement>(".now form.reply textarea")!;
     ta.value = "a";
-    root.querySelector<HTMLFormElement>(".up-next li.now form")!.dispatchEvent(new CustomEvent("submit", { detail: {}, bubbles: true, cancelable: true }));
+    root.querySelector<HTMLFormElement>(".now form.reply")!.dispatchEvent(new CustomEvent("submit", { detail: {}, bubbles: true, cancelable: true }));
     await flush();
     ta.value = "b";
     answer(new Response(null, { status: 200 }));
     await flush();
-    expect(root.querySelector<HTMLTextAreaElement>(".up-next li.now textarea")!.value).toBe("b");
-  });
-
-  it("a reply from the panel leaves the player card's reply input open", async () => {
-    nextReplies = [ok(view("epL", [["a", [letter("L1", "l1")]]]))];
-    autoEnd = false;
-    mountStation(root, opts());
-    await power();
-    await vi.waitFor(() => expect(spoken).toEqual(["l1"]));
-    el("reply").click();
-    await flush();
-    expect(root.querySelector("form.reply")).not.toBeNull();
-    const ta = root.querySelector<HTMLTextAreaElement>(".up-next li.now textarea")!;
-    ta.value = "いい曲";
-    root.querySelector<HTMLFormElement>(".up-next li.now form")!.dispatchEvent(new CustomEvent("submit", { detail: {}, bubbles: true, cancelable: true }));
-    await flush();
-    expect(root.querySelector("form.reply")).not.toBeNull();
+    expect(root.querySelector<HTMLTextAreaElement>(".now form.reply textarea")!.value).toBe("b");
   });
 
   it("a failed post can be tried again", async () => {
@@ -836,7 +812,7 @@ describe("station: on-air panel", () => {
     const real = fetch as unknown as ReturnType<typeof vi.fn>;
     const impl = real.getMockImplementation()!;
     real.mockImplementationOnce(() => Promise.reject(new Error("offline")));
-    const btn = () => root.querySelector<HTMLButtonElement>('.up-next li.now [data-action="panel-watashimo"]')!;
+    const btn = () => root.querySelector<HTMLButtonElement>('.now [data-action="watashimo"]')!;
     btn().click();
     await flush();
     expect(btn().disabled).toBe(false);
@@ -869,14 +845,14 @@ describe("station: on-air panel", () => {
     await vi.waitFor(() => expect(root.querySelectorAll(".up-next li.now")).toHaveLength(1));
   });
 
-  it("offers no reactions on a row whose segment has no letter", async () => {
+  it("offers no reactions on the card when the segment has no letter", async () => {
     nextReplies = [ok(epB()), ok(view("epV", [["c", [dj("v1")]]]))];
     autoEnd = false;
     mountStation(root, opts());
     await power();
     await vi.waitFor(() => expect(spoken).toEqual(["x1"]));
     expect(root.querySelector(".up-next li.now")).not.toBeNull();
-    expect(root.querySelector(".up-next li.now button")).toBeNull();
+    expect(root.querySelector(".now .react")).toBeNull();
   });
 });
 
@@ -902,9 +878,7 @@ describe("station: reactions", () => {
 
   it("sends a reply typed under the letter", async () => {
     await onLetter();
-    el("reply").click();
-    await flush();
-    root.querySelector<HTMLInputElement>("form.reply input")!.value = "いい曲";
+    root.querySelector<HTMLTextAreaElement>("form.reply textarea")!.value = "いい曲";
     root.querySelector<HTMLFormElement>("form.reply")!.dispatchEvent(new CustomEvent("submit", { detail: {}, bubbles: true, cancelable: true }));
     await flush();
     const init = (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls.at(-1)![1];
@@ -1351,7 +1325,7 @@ describe("station: the face explains itself", () => {
     mountStation(root, opts());
     await power();
     await vi.waitFor(() => expect(spoken).toEqual(["a1"]));
-    root.querySelector<HTMLButtonElement>('.up-next li.now [data-action="panel-watashimo"]')!.click();
+    root.querySelector<HTMLButtonElement>('.now [data-action="watashimo"]')!.click();
     await vi.waitFor(() => expect(toastText()).toBe("送りました"));
     expect(document.body.querySelectorAll(".toast")).toHaveLength(1);
     expect(document.body.querySelector(".toast")!.getAttribute("role")).toBe("status");
@@ -1428,14 +1402,14 @@ describe("station: a letter's link and sharing", () => {
       autoEnd = false;
       const s = mountStation(root, opts());
       await power();
-      await vi.waitFor(() => expect(root.querySelector(".up-next li.now .panel-react")).not.toBeNull());
-      expect(root.querySelector(".up-next button.share")).toBeNull();
-      expect(root.querySelector('.up-next [data-action="panel-watashimo"]')).not.toBeNull();
+      await vi.waitFor(() => expect(root.querySelector(".now .react")).not.toBeNull());
+      expect(root.querySelector(".now .share")).toBeNull();
+      expect(root.querySelector('.now [data-action="watashimo"]')).not.toBeNull();
       s.unmount();
     }
   });
 
-  it("the on-air row's share button copies the letter's page and toasts", async () => {
+  it("the now-playing card's copy button copies the letter's page and toasts", async () => {
     const writeText = vi.fn(() => Promise.resolve());
     setClipboard({ writeText });
     try {
@@ -1443,9 +1417,9 @@ describe("station: a letter's link and sharing", () => {
       autoEnd = false;
       mountStation(root, opts());
       await power();
-      await vi.waitFor(() => expect(root.querySelector(".up-next li.now button.share")).not.toBeNull());
-      expect(root.querySelectorAll(".up-next button.share")).toHaveLength(1);
-      const button = root.querySelector<HTMLButtonElement>(".up-next li.now button.share")!;
+      await vi.waitFor(() => expect(root.querySelector(".now .share [data-copy]")).not.toBeNull());
+      expect(root.querySelectorAll("[data-copy]")).toHaveLength(1);
+      const button = root.querySelector<HTMLButtonElement>(".now .share [data-copy]")!;
       expect(button.textContent).toBe("リンクをコピー");
       button.click();
       await flush();
@@ -1456,7 +1430,7 @@ describe("station: a letter's link and sharing", () => {
     }
   });
 
-  it("without the clipboard API the share button shows the link to copy by hand", async () => {
+  it("without the clipboard API the copy button shows the link to copy by hand", async () => {
     setClipboard(undefined);
     const ask = vi.fn(() => null);
     vi.stubGlobal("prompt", ask);
@@ -1464,8 +1438,8 @@ describe("station: a letter's link and sharing", () => {
     autoEnd = false;
     mountStation(root, opts());
     await power();
-    await vi.waitFor(() => expect(root.querySelector(".up-next li.now button.share")).not.toBeNull());
-    root.querySelector<HTMLButtonElement>(".up-next li.now button.share")!.click();
+    await vi.waitFor(() => expect(root.querySelector(".now .share [data-copy]")).not.toBeNull());
+    root.querySelector<HTMLButtonElement>(".now .share [data-copy]")!.click();
     await flush();
     expect(ask).toHaveBeenCalledWith("リンクをコピー", `${location.origin}/letters/L1`);
     expect(toastText()).toBeNull();
@@ -1651,7 +1625,6 @@ describe("station: small joys", () => {
     el("watashimo").click();
     await flush();
     expect(el("watashimo").className).toBe("pill hot said");
-    expect(el("panel-watashimo").className).toBe("pill hot said");
     expect(sounds().filter((p) => p.type === "sine")).toEqual([{ type: "sine", hz: 880, gain: 0.04 * 0.8 }]);
     const glyph = root.querySelector(".face .envelope.float")!;
     expect(glyph.querySelector("svg")).not.toBeNull();

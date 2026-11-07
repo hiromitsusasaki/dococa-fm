@@ -84,7 +84,7 @@ home.get("/", async (c) => {
           <a href="/start">{t("home.explainStart")}</a>
         </p>
         {heard.length > 0 && (
-          <section class="recent-episodes">
+          <section class="panel recent-episodes">
             <h2>{t("episode.archive")}</h2>
             <ul class="up-next">
               {heard.map((e) => (
