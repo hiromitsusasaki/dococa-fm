@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { forgetReportedListens, resumeAt } from "../../src/client/playback";
-import { mountStation, type StationOptions, wireSendModal } from "../../src/client/station";
+import { isNight, mountStation, type StationOptions, wireSendModal } from "../../src/client/station";
 
 const strings: Record<string, string> = {
   "station.onOff": "ラジオをつける / 止める",
@@ -1434,5 +1434,261 @@ describe("station: a letter's link and sharing", () => {
     await flush();
     expect(ask).toHaveBeenCalledWith("リンクをコピー", `${location.origin}/letters/L1`);
     expect(toastText()).toBeNull();
+  });
+});
+
+describe("station: small joys", () => {
+  type Played = { type: string; hz: number; gain: number };
+  class FakeCtx {
+    state = "running";
+    currentTime = 0;
+    destination = {};
+    played: Played[] = [];
+    tapped: unknown[] = [];
+    private last = { type: "", frequency: { value: 0 } };
+    constructor() {
+      ctxs.push(this);
+    }
+    resume = vi.fn(() => Promise.resolve());
+    createOscillator() {
+      const o = { type: "", frequency: { value: 0 }, connect: (g: unknown) => g, start() {}, stop() {} };
+      this.last = o;
+      return o;
+    }
+    createGain() {
+      const ctx = this;
+      return {
+        gain: { setValueAtTime: (v: number) => ctx.played.push({ type: ctx.last.type, hz: ctx.last.frequency.value, gain: v }), exponentialRampToValueAtTime() {} },
+        connect: (d: unknown) => d,
+      };
+    }
+    createMediaElementSource(el: unknown) {
+      if (tapThrows) throw new Error("already tapped");
+      this.tapped.push(el);
+      return { connect() {} };
+    }
+    createAnalyser() {
+      return { fftSize: 0, connect() {}, getByteTimeDomainData: (b: Uint8Array) => b.fill(160) };
+    }
+  }
+  let ctxs: FakeCtx[];
+  let tapThrows: boolean;
+  const sounds = () => ctxs.flatMap((c) => c.played);
+  const scale = () => root.querySelector<HTMLElement>(".scale")!;
+
+  beforeEach(() => {
+    ctxs = [];
+    tapThrows = false;
+    vi.stubGlobal("AudioContext", FakeCtx);
+    document.documentElement.removeAttribute("data-night");
+    document.documentElement.removeAttribute("data-on-air");
+  });
+  afterEach(() => vi.useRealTimers());
+
+  it("switching on lights the lamp and sweeps the needle once, which then drifts while on air", async () => {
+    nextReplies = [() => new Promise<Response>(() => {})];
+    mountStation(root, opts());
+    await flush();
+    expect(scale().className).toBe("scale");
+    expect(scale().style.getPropertyValue("--needle")).toBe("50%");
+    await power();
+    expect(scale().className).toBe("scale lit");
+    expect(root.querySelector(".face .live")).toBeNull();
+    expect(root.querySelector(".station-status")!.textContent).toBe("電波を探しています…");
+  });
+
+  it("on air the needle drifts and the ON AIR lamp is lit", async () => {
+    nextReplies = [ok(epA())];
+    autoEnd = false;
+    mountStation(root, opts({ stationKey: "mine", dial: 0.4 }));
+    expect(scale().style.getPropertyValue("--needle")).toBe("42%");
+    await power();
+    await vi.waitFor(() => expect(scale().className).toBe("scale lit sweep"));
+    expect(root.querySelector(".face .live")).not.toBeNull();
+  });
+
+  it("each detent of the dial moves the needle and clicks quietly, scaled by the volume, and only while the radio is on", async () => {
+    nextReplies = [ok(epA())];
+    autoEnd = false;
+    localStorage.setItem("dfm.volume", "0.5");
+    mountStation(root, opts({ stationKey: "mine", dial: 0.4 }));
+    const dial = el("dial") as HTMLInputElement;
+    const turn = (v: string) => {
+      dial.value = v;
+      dial.dispatchEvent(new Event("input", { bubbles: true }));
+    };
+    turn("0.5");
+    expect(scale().style.getPropertyValue("--needle")).toBe("50%");
+    expect(sounds()).toEqual([]);
+    await power();
+    await vi.waitFor(() => expect(spoken).toEqual(["a1"]));
+    const before = sounds().length;
+    turn("0.6");
+    turn("0.7");
+    expect(scale().style.getPropertyValue("--needle")).toBe("66%");
+    const clicks = sounds().slice(before);
+    expect(clicks).toHaveLength(2);
+    expect(clicks[0]).toEqual({ type: "square", hz: 1800, gain: 0.025 });
+    el("power").click();
+    await flush();
+    const off = sounds().length;
+    turn("0.8");
+    expect(sounds()).toHaveLength(off);
+  });
+
+  it("the switch clicks low on ON and on OFF, at the volume", async () => {
+    nextReplies = [ok(epA())];
+    autoEnd = false;
+    mountStation(root, opts());
+    await power();
+    expect(sounds()).toEqual([{ type: "triangle", hz: 110, gain: 0.08 * 0.8 }]);
+    expect(ctxs[0]!.resume).toHaveBeenCalled();
+    await vi.waitFor(() => expect(spoken).toEqual(["a1"]));
+    el("power").click();
+    await flush();
+    expect(sounds()).toHaveLength(2);
+    expect(sounds()[1]!.hz).toBe(110);
+  });
+
+  it("taps the cloud clip for the lamp, and a tap that throws still plays the clip", async () => {
+    for (const throws of [false, true]) {
+      tapThrows = throws;
+      ctxs = [];
+      audios = [];
+      root.innerHTML = "";
+      nextReplies = [ok({ ...epA(), cloudTts: true })];
+      const s = mountStation(root, opts({ ttsUrl: "/tts" }));
+      await power();
+      await vi.waitFor(() => expect(audios.some((a) => a.src.startsWith("/tts?episode=epA&line=0"))).toBe(true));
+      const clip = audios.find((a) => !a.loop)!;
+      expect(clip.play).toHaveBeenCalled();
+      expect(ctxs[0]!.tapped).toEqual(throws ? [] : [clip]);
+      s.unmount();
+    }
+  });
+
+  it("a thin line in the on-air row moves down the segment's lines as they are read; the letter is not restyled", async () => {
+    nextReplies = [ok(epA())];
+    autoEnd = false;
+    mountStation(root, opts());
+    await power();
+    const at = () => root.querySelector<HTMLElement>(".up-next li.now i.reading")?.style.getPropertyValue("--at");
+    await vi.waitFor(() => expect(at()).toBe("0"));
+    held.shift()!.onend?.();
+    await vi.waitFor(() => expect(spoken).toEqual(["a1", "l1"]));
+    expect(at()).toBe("1");
+    expect(root.querySelectorAll(".up-next i.reading")).toHaveLength(1);
+    expect(root.querySelector(".player-letter")!.className).toBe("player-letter");
+  });
+
+  it("a pressed card's picture flies to the radio once, then is gone; a second press meanwhile adds none", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    HTMLElement.prototype.scrollIntoView = vi.fn() as unknown as HTMLElement["scrollIntoView"];
+    nextReplies = [ok(epB()), ok(epB())];
+    autoEnd = false;
+    mountStation(root, opts({ stationKey: "mine" }));
+    const a = document.createElement("a");
+    a.href = "/stations/mine?letter=L5";
+    a.setAttribute("data-play-letter", "L5");
+    a.innerHTML = '<span class="letter-card-art"><img src="https://img/a.jpg" alt="" width="96" height="96" loading="lazy"></span>';
+    document.body.append(a);
+    const press = () => a.querySelector("img")!.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+    press();
+    press();
+    const flights = document.body.querySelectorAll("img.flight");
+    expect(flights).toHaveLength(1);
+    expect(flights[0]!.getAttribute("src")).toBe("https://img/a.jpg");
+    expect(flights[0]!.hasAttribute("loading")).toBe(false);
+    vi.advanceTimersByTime(400);
+    expect(document.body.querySelector(".flight")).toBeNull();
+    a.remove();
+  });
+
+  it("私も swells the pill, chimes once, and floats an envelope up from the face that goes after a second; no count", async () => {
+    nextReplies = [ok(epA())];
+    autoEnd = false;
+    mountStation(root, opts());
+    await power();
+    held.shift()!.onend?.();
+    await vi.waitFor(() => expect(el("watashimo")).not.toBeNull());
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    el("watashimo").click();
+    await flush();
+    expect(el("watashimo").className).toBe("pill hot said");
+    expect(el("panel-watashimo").className).toBe("pill hot said");
+    expect(sounds().filter((p) => p.type === "sine")).toEqual([{ type: "sine", hz: 880, gain: 0.04 * 0.8 }]);
+    const glyph = root.querySelector(".face .envelope.float")!;
+    expect(glyph.querySelector("svg")).not.toBeNull();
+    expect(glyph.textContent).toBe("");
+    vi.advanceTimersByTime(1000);
+    expect(root.querySelector(".face .envelope")).toBeNull();
+  });
+
+  it("a letter sent from the modal draws an envelope into the face as the modal closes", () => {
+    vi.useFakeTimers();
+    document.body.innerHTML =
+      '<section class="radio"><div class="face"></div></section><a class="button" href="/put" data-open-send>お便りを送る</a><dialog class="send-modal"><iframe data-src="/put?embed=1"></iframe></dialog>';
+    const dialog = document.querySelector("dialog")!;
+    const frame = document.querySelector("iframe")!;
+    Object.defineProperty(frame, "contentWindow", { value: {} as Window, configurable: true });
+    dialog.showModal = vi.fn() as unknown as HTMLDialogElement["showModal"];
+    dialog.close = vi.fn() as unknown as HTMLDialogElement["close"];
+    const unwire = wireSendModal(document);
+    document.querySelector("[data-open-send]")!.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+    window.dispatchEvent(new MessageEvent("message", { data: { type: "dfm:sent" }, origin: location.origin, source: frame.contentWindow }));
+    expect(document.querySelector(".envelope")).toBeNull();
+    vi.advanceTimersByTime(1500);
+    expect(document.querySelectorAll(".face .envelope.drawn")).toHaveLength(1);
+    vi.advanceTimersByTime(1400);
+    expect(document.querySelector(".envelope")).toBeNull();
+    unwire();
+  });
+
+  it("nothing flies or floats under prefers-reduced-motion", async () => {
+    vi.stubGlobal("matchMedia", (q: string) => ({ matches: q.includes("reduce"), addEventListener() {}, removeEventListener() {} }));
+    HTMLElement.prototype.scrollIntoView = vi.fn() as unknown as HTMLElement["scrollIntoView"];
+    nextReplies = [ok(epA())];
+    autoEnd = false;
+    mountStation(root, opts());
+    const a = document.createElement("a");
+    a.setAttribute("data-play-letter", "L5");
+    a.innerHTML = '<img src="https://img/a.jpg" alt="">';
+    document.body.append(a);
+    a.querySelector("img")!.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+    expect(document.querySelector(".flight")).toBeNull();
+    a.remove();
+    await vi.waitFor(() => expect(spoken).toEqual(["a1"]));
+    held.shift()!.onend?.();
+    await vi.waitFor(() => expect(el("watashimo")).not.toBeNull());
+    el("watashimo").click();
+    await flush();
+    expect(el("watashimo").disabled).toBe(true);
+    expect(document.querySelector(".envelope")).toBeNull();
+    // The sounds stay.
+    expect(sounds().some((p) => p.type === "sine")).toBe(true);
+  });
+
+  it("marks the page while on air, for the home's waves", async () => {
+    nextReplies = [ok(epA())];
+    autoEnd = false;
+    const s = mountStation(root, opts());
+    expect(document.documentElement.hasAttribute("data-on-air")).toBe(false);
+    await power();
+    await vi.waitFor(() => expect(document.documentElement.hasAttribute("data-on-air")).toBe(true));
+    el("power").click();
+    await flush();
+    expect(document.documentElement.hasAttribute("data-on-air")).toBe(false);
+    s.unmount();
+  });
+
+  it("late at night (23:00 to 04:59 on the device) the face goes one step warmer, checked again every hour", () => {
+    expect([22, 23, 0, 4, 5, 12].map((h) => isNight(new Date(2026, 10, 7, h, 30)))).toEqual([false, true, true, true, false, false]);
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval", "Date"] });
+    vi.setSystemTime(new Date(2026, 10, 7, 22, 30));
+    const s = mountStation(root, opts());
+    expect(document.documentElement.hasAttribute("data-night")).toBe(false);
+    vi.advanceTimersByTime(60 * 60 * 1000);
+    expect(document.documentElement.hasAttribute("data-night")).toBe(true);
+    s.unmount();
   });
 });

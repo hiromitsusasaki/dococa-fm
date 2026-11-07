@@ -1,6 +1,7 @@
 /** @jsxImportSource hono/jsx/dom */
 import { flushSync } from "hono/jsx/dom";
 import { createRoot } from "hono/jsx/dom/client";
+import { createSounds } from "./audio";
 import { bindMediaSession, createLinePlayer, fetchNext, type LetterLine, type PlayerEpisode, type PlayerItem, reportListen, resumeAt, type StoredPosition, syncMediaSession, whoOf } from "./playback";
 import { loadDial, postLetter, reactionOf, storeDial } from "./reactions";
 import { StationScreen, type UpNextRow } from "./station-view";
@@ -80,12 +81,37 @@ const playable = (v: unknown): v is PlayerEpisode => {
   return !!e && typeof e.id === "string" && Array.isArray(e.segments) && e.segments.length > 0 && typeof e.items === "object" && e.items !== null;
 };
 
+/** Under `prefers-reduced-motion` nothing moves (the sounds stay). */
+const still = (): boolean => typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+/** 23:00 to 04:59 on the device's clock: the face's lamp colour goes one step warmer. */
+export const isNight = (d: Date): boolean => d.getHours() >= 23 || d.getHours() < 5;
+const NIGHT_CHECK_MS = 60 * 60 * 1000;
+const markNight = () => document.documentElement.toggleAttribute("data-night", isNight(new Date()));
+
+const ENVELOPE = '<svg viewBox="0 0 24 16" aria-hidden="true"><path pathLength="1" d="M1.5 1.5h21v13h-21zM1.5 1.5 12 9l10.5-7.5"/></svg>';
+/** `float` rises from the face after a 私も; `drawn` is drawn into it after a letter is sent. How long each stays. */
+const GLYPH_MS = { float: 1000, drawn: 1400 } as const;
+
+/** One envelope of a kind at a time on the radio's face; none under reduced motion. No count, nothing to read. */
+export function envelope(doc: Document, kind: keyof typeof GLYPH_MS) {
+  const face = doc.querySelector(".radio .face");
+  if (!face || still()) return;
+  face.querySelector(`.envelope.${kind}`)?.remove();
+  const g = doc.createElement("span");
+  g.className = `envelope ${kind}`;
+  g.innerHTML = ENVELOPE;
+  face.append(g);
+  setTimeout(() => g.remove(), GLYPH_MS[kind]);
+}
+
 /** A left click no one has handled and without a modifier: one that would follow the link in this tab. */
 const plainClick = (e: MouseEvent): boolean => !e.defaultPrevented && e.button === 0 && !e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey;
 
 export function mountStation(root: HTMLElement, opts: StationOptions) {
   const str = (key: string) => opts.strings[key] ?? key;
-  const player = createLinePlayer({ voiceURI: opts.voiceURI, ttsUrl: opts.ttsUrl, lang: str("lang.code") === "en" ? "en" : "ja" });
+  const sounds = createSounds();
+  const player = createLinePlayer({ voiceURI: opts.voiceURI, ttsUrl: opts.ttsUrl, lang: str("lang.code") === "en" ? "en" : "ja", onClip: (el) => sounds.listen(el) });
   const reactRoot = createRoot(root);
   let state: State = { power: "off", volume: loadVolume(), current: null, seg: 0, line: 0, queue: [], reason: null, loading: false, replyOpen: false, sent: {}, sendFailed: false };
   let abort = new AbortController();
@@ -152,6 +178,27 @@ export function mountStation(root: HTMLElement, opts: StationOptions) {
       savePosition(opts.stationKey, { episodeId: state.current.id, seg: state.seg, line: state.line, ...(letterId ? { letterId } : {}) });
     }
     if (was.current !== state.current || was.seg !== state.seg || was.power !== state.power) syncMediaSession(itemOf(state.current, state.seg), state.power === "on");
+    if (was.power !== state.power) {
+      // The home's key visual sways its waves while the radio is on.
+      document.documentElement.toggleAttribute("data-on-air", state.power === "on");
+      breathe();
+    }
+  }
+
+  /** While on air, the ON AIR lamp follows the loudness of the cloud voice (±15 %); with no tapped clip it stays as it is. */
+  let lampFrame = 0;
+  function breathe() {
+    if (typeof cancelAnimationFrame === "function") cancelAnimationFrame(lampFrame);
+    if (state.power !== "on" || typeof requestAnimationFrame !== "function") return;
+    const step = () => {
+      if (!mounted || state.power !== "on") return;
+      const level = still() ? null : sounds.level();
+      const lamp = root.querySelector<HTMLElement>(".face .live");
+      if (level === null) lamp?.style.removeProperty("--voice");
+      else lamp?.style.setProperty("--voice", (0.85 + 0.3 * level).toFixed(2));
+      lampFrame = requestAnimationFrame(step);
+    };
+    lampFrame = requestAnimationFrame(step);
   }
 
   /** Asks for the next episode. The asked letter rides every ask until one is answered and used (see `begin`, `ensureAhead`). */
@@ -230,8 +277,9 @@ export function mountStation(root: HTMLElement, opts: StationOptions) {
 
   /** The current episode is done: go on with the queued one, or stop with the reason there is none. */
   async function advance(signal: AbortSignal): Promise<boolean> {
-    player.stopBed();
+    // A queued episode follows at once and its bed crosses this one; only a wait for one stops the bed.
     if (state.queue.length === 0) {
+      player.stopBed();
       setState({ loading: true });
       // A turn of the dial drops the ask being awaited and starts another: wait for that one instead.
       do {
@@ -310,7 +358,10 @@ export function mountStation(root: HTMLElement, opts: StationOptions) {
 
   function turnOn() {
     if (state.power === "on" || state.power === "tuning" || opts.grow) return;
+    // The context first: the clip element made by the player's unlock is tapped in it.
+    sounds.unlock();
     player.unlock();
+    sounds.play("switch", state.volume);
     try {
       localStorage.setItem(SEEN_KEY, "1");
     } catch {}
@@ -334,6 +385,7 @@ export function mountStation(root: HTMLElement, opts: StationOptions) {
     if (state.power === "off") return;
     abort.abort();
     player.stopBed();
+    sounds.play("switch", state.volume);
     setState({ power: "off", loading: false });
   }
 
@@ -356,12 +408,45 @@ export function mountStation(root: HTMLElement, opts: StationOptions) {
     root.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
+  /** The card's picture flies to the radio (FLIP, 300 ms), one at a time. The radio is scrolled to the top meanwhile, so it aims where the face will be. */
+  let flight: HTMLElement | null = null;
+  function fly(card: Element) {
+    const img = card.querySelector("img");
+    const face = root.querySelector(".radio .face");
+    if (!img || !face || flight || still()) return;
+    const from = img.getBoundingClientRect();
+    const to = face.getBoundingClientRect();
+    const max = document.documentElement.scrollHeight - innerHeight - scrollY;
+    const shift = Math.min(Math.max(root.getBoundingClientRect().top, -scrollY), Math.max(0, max));
+    const clone = img.cloneNode() as HTMLElement;
+    clone.className = "flight";
+    clone.removeAttribute("loading");
+    Object.assign(clone.style, { left: `${from.left}px`, top: `${from.top}px`, width: `${from.width}px`, height: `${from.height}px` });
+    document.body.append(clone);
+    flight = clone;
+    const size = 40;
+    const scale = from.width > 0 ? size / from.width : 1;
+    const dx = to.left + (to.width - size) / 2 - from.left;
+    const dy = to.top - shift + (to.height - size) / 2 - from.top;
+    const land = () => {
+      clone.remove();
+      if (flight === clone) flight = null;
+    };
+    clone.addEventListener("transitionend", land, { once: true });
+    setTimeout(land, 400);
+    requestAnimationFrame(() => {
+      clone.style.transform = `translate(${dx}px, ${dy}px) scale(${scale})`;
+      clone.style.opacity = "0.4";
+    });
+  }
+
   /** Cards keep their link for a new tab or no script; a plain click plays the letter here. */
   function onCardClick(e: MouseEvent) {
     const card = (e.target as Element | null)?.closest?.("[data-play-letter]");
     const id = card?.getAttribute("data-play-letter");
     if (!id || opts.grow || !root.isConnected || !plainClick(e)) return;
     e.preventDefault();
+    fly(card!);
     playLetter(id);
   }
 
@@ -408,9 +493,13 @@ export function mountStation(root: HTMLElement, opts: StationOptions) {
     sending.add(key);
     const taken = await postLetter(fields);
     sending.delete(key);
-    if (taken && key.startsWith("w:")) toast(str("player.sentToast"));
+    if (taken && key.startsWith("w:")) {
+      toast(str("player.sentToast"));
+      if (state.power === "on") sounds.play("watashimo", state.volume);
+    }
     if (taken) setState({ sent: { ...state.sent, [key]: true }, ...(fromPlayer ? { replyOpen: false } : {}), sendFailed: false });
     else setState({ sendFailed: true });
+    if (taken && key.startsWith("w:")) envelope(document, "float");
     return taken;
   }
 
@@ -433,7 +522,8 @@ export function mountStation(root: HTMLElement, opts: StationOptions) {
         const item = ep.items[s.itemId];
         if (!item) return;
         const first = s.lines.find((l): l is LetterLine => l.type === "letter");
-        rows.push({ key: `${ep.id}:${from + n}`, now, kind: item.kind ?? null, title: item.title, creator: item.creator, ...(first ? { sender: whoOf(first, str) } : {}), ...(now && first ? { letterId: first.letterId } : {}), ...(now ? { imageUrl: item.imageUrl } : {}) });
+        const reading = s.lines.length > 1 ? Math.min(1, state.line / (s.lines.length - 1)) : 0;
+        rows.push({ key: `${ep.id}:${from + n}`, now, kind: item.kind ?? null, title: item.title, creator: item.creator, ...(first ? { sender: whoOf(first, str) } : {}), ...(now && first ? { letterId: first.letterId } : {}), ...(now ? { imageUrl: item.imageUrl, reading } : {}) });
       });
     };
     // Off, limit and failed: the panel is empty and shows its hint, so nothing stale is listed.
@@ -473,6 +563,9 @@ export function mountStation(root: HTMLElement, opts: StationOptions) {
         power: () => (state.power === "on" || state.power === "tuning" ? turnOff() : turnOn()),
         volume: setVolume,
         dial: turnDial,
+        tick: () => {
+          if (state.power === "on" || state.power === "tuning") sounds.play("dial", state.volume);
+        },
         toggleReply: () => setState({ replyOpen: !state.replyOpen }),
         watashimo: (letterId?: string) => void react("watashimo", undefined, letterId),
         reply: (body: string, letterId?: string) => react("reply", body, letterId),
@@ -484,6 +577,8 @@ export function mountStation(root: HTMLElement, opts: StationOptions) {
   bindMediaSession({ play: turnOn, pause: turnOff, next: skip });
   document.addEventListener("click", onCardClick);
   document.addEventListener("submit", onLangSubmit);
+  markNight();
+  const nightTimer = setInterval(markNight, NIGHT_CHECK_MS);
   setState({});
 
   return {
@@ -492,7 +587,10 @@ export function mountStation(root: HTMLElement, opts: StationOptions) {
       mounted = false;
       clearTimeout(dialTimer);
       clearTimeout(toastTimer);
+      clearInterval(nightTimer);
       toastEl?.remove();
+      flight?.remove();
+      document.documentElement.removeAttribute("data-on-air");
       document.removeEventListener("click", onCardClick);
       document.removeEventListener("submit", onLangSubmit);
       abort.abort();
@@ -533,7 +631,11 @@ export function wireSendModal(doc: Document = document): () => void {
     clearTimeout(closing);
     if (type === "dfm:close") return dialog.close();
     fresh = false;
-    closing = setTimeout(() => dialog.close(), SENT_CLOSE_MS);
+    // Drawn as the modal goes, so it is seen on the face and not behind the backdrop.
+    closing = setTimeout(() => {
+      dialog.close();
+      envelope(doc, "drawn");
+    }, SENT_CLOSE_MS);
   };
   doc.addEventListener("click", open);
   window.addEventListener("message", sent);

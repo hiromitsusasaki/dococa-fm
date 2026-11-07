@@ -24,6 +24,9 @@ const PUBLIC_RADIOS = 5;
 /** A letter link's preview quotes the letter this far. */
 const PREVIEW_CHARS = 80;
 
+/** Four arcs over the radio in the key visual (both crops are the same 3:2 picture). */
+const KV_WAVES = "M582 504A34 34 0 0 0 522 504M610 489A66 66 0 0 0 494 489M639 474A98 98 0 0 0 465 474M667 459A130 130 0 0 0 437 459";
+
 const HERO_COMPACT = `try{if(localStorage.getItem("dfm.seen"))document.currentScript.previousElementSibling.classList.add("compact")}catch(e){}`;
 
 home.get("/", async (c) => {
@@ -49,10 +52,16 @@ home.get("/", async (c) => {
         <h1 class="wordmark">{t("app.name")}</h1>
         <p class="tagline">{t("app.tagline")}</p>
       </div>
-      <picture class="kv">
-        <source media="(max-width: 760px)" srcset="/kv-mobile.jpg" />
-        <img src="/kv.jpg" alt={t("home.kvAlt")} width="1280" height="853" loading="eager" fetchpriority="high" />
-      </picture>
+      <div class="kv">
+        <picture>
+          <source media="(max-width: 760px)" srcset="/kv-mobile.jpg" />
+          <img src="/kv.jpg" alt={t("home.kvAlt")} width="1280" height="853" loading="eager" fetchpriority="high" />
+        </picture>
+        {/* The radio's waves, drawn over the picture's own: they sway while the radio is on (html[data-on-air]). */}
+        <svg class="kv-waves" viewBox="0 0 1280 853" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+          <path d={KV_WAVES} />
+        </svg>
+      </div>
     </section>
   );
   const heroBoot = <script>{raw(HERO_COMPACT)}</script>;

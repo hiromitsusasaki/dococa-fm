@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { createBed } from "../../src/client/audio";
+import { BED_FADE_MS, createBed, createSounds } from "../../src/client/audio";
 import { createLinePlayer, forgetReportedListens } from "../../src/client/playback";
 import { mountPlayer, type PlayerEpisode } from "../../src/client/player";
 
@@ -231,8 +231,8 @@ describe("player", () => {
       audios.find((a) => a.src === src)!.fire("ended");
     }
     await vi.waitFor(() => expect(audios.some((a) => a.src === "/tts?episode=ep1&line=2")).toBe(true));
-    // one element for clips, one for the bed
-    expect(audioCtor).toBe(2);
+    // one element for clips, two for the bed (a new episode's bed crosses the old one)
+    expect(audioCtor).toBe(3);
   });
 
   it("asks /tts for the stored line when the page left lines out", async () => {
@@ -727,6 +727,8 @@ describe("createBed", () => {
     vi.spyOn(Math, "random").mockImplementation(() => values[i++ % values.length]);
   };
   const bedEl = () => audios.find((a) => a.loop)!;
+  /** The bed last started: with two elements, the one a crossfade brought in. */
+  const bedNow = () => [...log].reverse().find((l) => l.startsWith("play:/bed-"))!.slice("play:".length);
 
   beforeEach(() => {
     audios.length = 0;
@@ -749,10 +751,10 @@ describe("createBed", () => {
     rand([0, 0, 0.99, 0.99]);
     const bed = createBed({ urls });
     bed.start();
-    const seen = [bedEl().src];
+    const seen = [bedNow()];
     for (let i = 0; i < 3; i++) {
       bed.next();
-      seen.push(bedEl().src);
+      seen.push(bedNow());
     }
     seen.slice(1).forEach((u, i) => expect(u).not.toBe(seen[i]));
   });
@@ -773,16 +775,135 @@ describe("createBed", () => {
     expect(bedEl().volume).toBeCloseTo(0.15);
   });
 
+  it("a new episode's bed crosses the playing one over 1.5 s, equal power, at the listener's level", () => {
+    vi.useFakeTimers();
+    try {
+      rand([0, 0.99]);
+      const bed = createBed({ urls });
+      bed.setVolume(0.5);
+      bed.start();
+      const [old] = audios.filter((a) => a.loop);
+      bed.next();
+      const loops = audios.filter((a) => a.loop);
+      expect(loops).toHaveLength(2);
+      const incoming = loops[1]!;
+      expect(incoming.src).toBe("/bed-5.mp3");
+      expect(incoming.paused).toBe(false);
+      expect(incoming.volume).toBe(0);
+      vi.advanceTimersByTime(BED_FADE_MS / 2);
+      expect(old!.volume).toBeCloseTo(0.15 * Math.SQRT1_2, 3);
+      expect(incoming.volume).toBeCloseTo(0.15 * Math.SQRT1_2, 3);
+      expect(old!.paused).toBe(false);
+      vi.advanceTimersByTime(BED_FADE_MS / 2);
+      expect(old!.paused).toBe(true);
+      expect(incoming.volume).toBeCloseTo(0.15);
+      bed.stop();
+      expect(incoming.paused).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("a new episode while no bed plays only changes the url, without a fade", () => {
+    vi.useFakeTimers();
+    try {
+      rand([0, 0.99]);
+      const bed = createBed({ urls });
+      bed.start();
+      bed.stop();
+      bed.next();
+      expect(audios.filter((a) => a.loop)).toHaveLength(1);
+      expect(bedEl().src).toBe("/bed-5.mp3");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("unlock readies both bed elements inside the tap", () => {
+    const bed = createBed({ urls });
+    bed.unlock();
+    const loops = audios.filter((a) => a.loop);
+    expect(loops).toHaveLength(2);
+    for (const a of loops) expect(a.play).toHaveBeenCalledTimes(1);
+  });
+
   it("the line player changes the bed only when the episode changes", async () => {
     rand([0, 0]);
     const lp = createLinePlayer({ voiceURI: "mine", ttsUrl: null });
     const ac = new AbortController();
     const ep = (id: string) => ({ ...one, id });
     await lp.play(ep("e1"), 0, 0, ac.signal);
-    const first = bedEl().src;
+    const first = bedNow();
     await lp.play(ep("e1"), 0, 1, ac.signal);
-    expect(bedEl().src).toBe(first);
+    expect(bedNow()).toBe(first);
     await lp.play(ep("e2"), 0, 0, ac.signal);
-    expect(bedEl().src).not.toBe(first);
+    expect(bedNow()).not.toBe(first);
+  });
+});
+
+describe("createSounds", () => {
+  const made: Array<{ resume: ReturnType<typeof vi.fn>; tapped: unknown[] }> = [];
+  class Ctx {
+    state = "running";
+    currentTime = 0;
+    destination = {};
+    tapped: unknown[] = [];
+    resume = vi.fn(() => Promise.resolve());
+    constructor() {
+      made.push(this);
+    }
+    createMediaElementSource(el: unknown) {
+      this.tapped.push(el);
+      return { connect() {} };
+    }
+    createAnalyser() {
+      return { fftSize: 0, connect() {}, getByteTimeDomainData: (b: Uint8Array) => b.fill(160) };
+    }
+  }
+  beforeEach(() => {
+    made.length = 0;
+    vi.stubGlobal("AudioContext", Ctx);
+  });
+
+  it("makes no context and no sound before the tap, and none without Web Audio", () => {
+    const s = createSounds();
+    s.play("dial", 1);
+    s.listen({ paused: false } as HTMLMediaElement);
+    expect(made).toHaveLength(0);
+    vi.stubGlobal("AudioContext", undefined);
+    s.unlock();
+    s.play("switch", 1);
+    expect(s.level()).toBeNull();
+  });
+
+  it("taps an element once and reads its loudness only while it plays", () => {
+    const s = createSounds();
+    s.unlock();
+    const el = { paused: false } as HTMLMediaElement;
+    expect(s.level()).toBeNull();
+    s.listen(el);
+    s.listen(el);
+    expect(made[0]!.tapped).toEqual([el]);
+    expect(s.level()).toBeCloseTo(1);
+    (el as { paused: boolean }).paused = true;
+    expect(s.level()).toBeNull();
+  });
+
+  it("waits for a suspended context to run before tapping, and never taps on iOS", async () => {
+    const s = createSounds();
+    s.unlock();
+    made[0]!.state = "suspended";
+    const el = { paused: false } as HTMLMediaElement;
+    s.listen(el);
+    expect(made[0]!.tapped).toEqual([]);
+    (made[0] as unknown as { state: string }).state = "running";
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(made[0]!.tapped).toEqual([el]);
+    vi.stubGlobal("navigator", { userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X)", platform: "iPhone", maxTouchPoints: 5 });
+    const ios = createSounds();
+    ios.unlock();
+    ios.listen({ paused: false } as HTMLMediaElement);
+    expect(made[1]!.tapped).toEqual([]);
   });
 });

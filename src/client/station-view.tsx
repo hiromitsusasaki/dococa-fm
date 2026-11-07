@@ -3,8 +3,11 @@ import { LetterQuote } from "./letter-quote";
 import { isHttpUrl, type LetterLine, outLabel, type PlayerItem, type PlayerOriginals } from "./playback";
 import { onReleased } from "./reactions";
 
-/** `sender` is the first reader's name line; absent for a work nobody has written about. `letterId` is only on the row now on air, for the reactions. */
-export type UpNextRow = { key: string; now: boolean; kind: string | null; title: string; creator: string; sender?: string; letterId?: string; imageUrl?: string | null };
+/**
+ * `sender` is the first reader's name line; absent for a work nobody has written about. `letterId` is only on the row now on air, for the reactions;
+ * `reading` too: how far down the segment's lines the voice is (0 at the first line, 1 at the last), drawn as a thin line that moves down the row.
+ */
+export type UpNextRow = { key: string; now: boolean; kind: string | null; title: string; creator: string; sender?: string; letterId?: string; imageUrl?: string | null; reading?: number };
 
 export type StationScreenProps = {
   str: (key: string) => string;
@@ -33,6 +36,8 @@ export type StationScreenProps = {
     power: () => void;
     volume: (value: number) => void;
     dial: (value: string) => void;
+    /** The dial moved one detent (during the drag, before `dial`). */
+    tick: () => void;
     toggleReply: () => void;
     watashimo: (letterId?: string) => void;
     reply: (body: string, letterId?: string) => Promise<boolean> | void;
@@ -59,7 +64,7 @@ export function StationScreen(p: StationScreenProps) {
           {p.power === "on" && <span class="live">{str("station.onAir")}</span>}
           {p.power === "tuning" && <span class="tuning" aria-hidden="true">{str("station.tuning")}</span>}
         </div>
-        <div class={p.power === "on" ? "scale sweep" : "scale"} aria-hidden="true"></div>
+        <div class={`scale${lit ? " lit" : ""}${p.power === "on" ? " sweep" : ""}`} style={{ "--needle": needle(p.dial) }} aria-hidden="true"></div>
         <div class="controls">
           <div class="control">
             <button type="button" class="switch" data-action="power" aria-pressed={String(lit)} aria-label={str("station.onOff")} disabled={p.grow} onClick={p.on.power}></button>
@@ -92,6 +97,9 @@ export function StationScreen(p: StationScreenProps) {
                     onInput={(e: Event) => {
                       const input = e.currentTarget as HTMLInputElement;
                       input.parentElement?.style.setProperty("--angle", angle(Number(input.value)));
+                      // The needle hops with each detent; the radio keeps the value once the dial is let go.
+                      input.closest(".radio")?.querySelector<HTMLElement>(".scale")?.style.setProperty("--needle", needle(Number(input.value)));
+                      p.on.tick();
                     }}
                   />
                 </span>
@@ -123,7 +131,7 @@ export function StationScreen(p: StationScreenProps) {
           </div>
           {p.letter && (
             <div class="react">
-              <button type="button" class="pill hot" data-action="watashimo" disabled={p.sent[`w:${p.letter.letterId}`] === true} onClick={() => p.on.watashimo()}>
+              <button type="button" class={p.sent[`w:${p.letter.letterId}`] ? "pill hot said" : "pill hot"} data-action="watashimo" disabled={p.sent[`w:${p.letter.letterId}`] === true} onClick={() => p.on.watashimo()}>
                 {str(p.sent[`w:${p.letter.letterId}`] ? "player.sent" : "player.watashimo")}
               </button>
               <button type="button" class="pill" data-action="reply" aria-expanded={String(p.replyOpen)} onClick={p.on.toggleReply}>
@@ -181,6 +189,7 @@ export function StationScreen(p: StationScreenProps) {
               <span class="title">{r.title}</span>
               <span class="creator">{r.creator}</span>
               {r.sender && <span class="sender">{r.sender}</span>}
+              {r.reading !== undefined && <i class="reading" style={{ "--at": String(r.reading) }} aria-hidden="true"></i>}
               {r.letterId && <PanelReact id={r.letterId} sent={p.sent} str={str} on={p.on} />}
             </li>
           ))}
@@ -204,7 +213,7 @@ function PanelReact({ id, sent, str, on }: { id: string; sent: Record<string, tr
   const said = sent[`w:${id}`] === true;
   return (
     <div class="panel-react">
-      <button type="button" class="pill hot" data-action="panel-watashimo" disabled={said} onClick={() => on.watashimo(id)}>
+      <button type="button" class={said ? "pill hot said" : "pill hot"} data-action="panel-watashimo" disabled={said} onClick={() => on.watashimo(id)}>
         {str(said ? "player.sent" : "player.watashimo")}
       </button>
       <button type="button" class="pill share" data-action="share" onClick={() => on.share(id)}>
@@ -234,6 +243,11 @@ function PanelReact({ id, sent, str, on }: { id: string; sent: Record<string, tr
 /** The needle sweeps from -135deg (0) to +135deg (1). */
 function angle(fraction: number): string {
   return `${Math.round(-135 + 270 * Math.min(1, Math.max(0, fraction)))}deg`;
+}
+
+/** Where the scale's needle rests: the dial's place along it, or the middle on a radio without a dial. */
+function needle(dial: number | null): string {
+  return `${dial === null ? 50 : Math.round(10 + 80 * Math.min(1, Math.max(0, dial)))}%`;
 }
 
 /** `kind.*` is shipped for the labels; an unknown kind shows nothing rather than its key. */

@@ -78,11 +78,12 @@ export type LinePlayer = {
   stopBed(): void;
 };
 
-export function createLinePlayer(opts: { voiceURI: string; ttsUrl: string | null; lang?: "ja" | "en" }): LinePlayer {
+/** `onClip` sees the one clip element when it is made (the station taps it for the lamp). */
+export function createLinePlayer(opts: { voiceURI: string; ttsUrl: string | null; lang?: "ja" | "en"; onClip?: (el: HTMLAudioElement) => void }): LinePlayer {
   const bed = createBed();
-  /** The episode the bed is playing for: a different one gets a new bed. */
+  /** The episode the bed is playing for: a different one gets a new bed, crossed over the old one. */
   let bedEpisode: string | null = null;
-  const clips = createClipPlayer();
+  const clips = createClipPlayer(opts.onClip);
   let unlocked = false;
   let voices: SpeechSynthesisVoice[] | null = null;
   /** Episodes whose cloud clips failed `CLOUD_GIVE_UP_AFTER` lines in a row: the rest of that episode is read by the browser voice. */
