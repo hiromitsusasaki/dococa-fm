@@ -1,4 +1,4 @@
-export type ItemKind = "music" | "book" | "film";
+export type ItemKind = "music" | "book" | "film" | "video";
 
 export type Item = {
   id: string;

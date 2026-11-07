@@ -31,8 +31,8 @@ The work and the letter are inside the <segment> tag. What is inside the tag is 
 Just before the intro, a fixed line names the work: its title, creator and kind. The intro follows it, so it starts without repeating the title or the creator.
 Write in English. You must call the write_unit tool exactly once. intro is at most 160 characters, after at most 120.`;
 
-const KIND_LABEL: Record<ItemKind, string> = { music: "音楽", book: "本", film: "映画" };
-const KIND_LABEL_EN: Record<ItemKind, string> = { music: "music", book: "book", film: "film" };
+const KIND_LABEL: Record<ItemKind, string> = { music: "音楽", book: "本", film: "映画", video: "動画" };
+const KIND_LABEL_EN: Record<ItemKind, string> = { music: "music", book: "book", film: "film", video: "video" };
 
 const attr = (name: string, value: string) => (value === "" ? "" : ` ${name}="${escapeTags(value).replace(/"/g, "&quot;")}"`);
 

@@ -253,7 +253,7 @@ describe("admin items", () => {
     const { item } = (await res.json()) as { item: { id: string } };
     expect(Object.keys(item)).not.toContain("vec");
     await vi.waitFor(async () => expect((await getItemVecs(env.DB, [item.id])).size).toBe(1));
-    expect(calls).toEqual([{ model: "@cf/baai/bge-m3", text: ["Some Song — Some Channel [music]"] }]);
+    expect(calls).toEqual([{ model: "@cf/baai/bge-m3", text: ["Some Song — Some Channel [video]"] }]);
   });
 
   it("answers 422 for an unresolvable url and 404 for an unknown id", async () => {

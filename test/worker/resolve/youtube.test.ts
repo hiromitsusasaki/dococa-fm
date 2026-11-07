@@ -10,11 +10,11 @@ const video = (id: string, title: string, channelTitle = "Miles Davis - Topic") 
 });
 
 describe("searchYouTube", () => {
-  it("asks search.list for five videos and maps them to music drafts with the watch link", async () => {
+  it("asks search.list for five videos and maps them to video drafts with the watch link", async () => {
     const { calls, fn } = stubFetch([["https://www.googleapis.com/youtube/v3/search", () => json({ items: [video("abc123", "Blue in Green")] })]]);
     expect(await searchYouTube("blue in green", "YT-KEY")).toEqual([
       {
-        kind: "music",
+        kind: "video",
         title: "Blue in Green",
         creator: "Miles Davis - Topic",
         year: null,

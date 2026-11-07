@@ -74,7 +74,7 @@ describe("resolveUrl", () => {
       ["https://itunes.apple.com/search", () => json({ results: [itunesTrack(20, "Song", "Artist")] })],
     ]);
     const draft = await resolveUrl(url, testEnv);
-    expect(draft).toMatchObject({ outLinks: { youtube: url }, externalIds: { itunes: "20", youtube: "dQw4w9WgXcQ" } });
+    expect(draft).toMatchObject({ kind: "video", outLinks: { youtube: url }, externalIds: { itunes: "20", youtube: "dQw4w9WgXcQ" } });
     expect(calls()[1]).toContain("term=Song+Artist");
     expect(Object.keys(draft!.externalIds)).toEqual(["youtube", "itunes"]);
   });
@@ -103,7 +103,7 @@ describe("resolveUrl", () => {
       ["https://itunes.apple.com/search", () => json({ results: [itunesTrack(40, "So"), itunesTrack(41, " S o ")] })],
     ]);
     const draft = await resolveUrl(url, testEnv);
-    expect(draft).toMatchObject({ title: "Someone - Sometimes (Live)", externalIds: { youtube: "abcdefghijk" } });
+    expect(draft).toMatchObject({ kind: "video", title: "Someone - Sometimes (Live)", externalIds: { youtube: "abcdefghijk" } });
     expect(draft!.externalIds.itunes).toBeUndefined();
   });
 
@@ -113,7 +113,7 @@ describe("resolveUrl", () => {
       ["https://itunes.apple.com/search", () => json({ results: [] })],
     ]);
     expect(await resolveUrl("https://youtu.be/abcdefghijk", testEnv)).toMatchObject({
-      kind: "music",
+      kind: "video",
       creator: "Artist",
       previewUrl: null,
       imageUrl: "https://i.ytimg.com/x.jpg",

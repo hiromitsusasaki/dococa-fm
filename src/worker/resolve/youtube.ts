@@ -21,7 +21,7 @@ export async function searchYouTube(q: string, key: string): Promise<ItemDraft[]
     if (!id || !title) return [];
     return [
       {
-        kind: "music",
+        kind: "video",
         title,
         creator: unescapeHtml(v.snippet?.channelTitle ?? ""),
         year: null,

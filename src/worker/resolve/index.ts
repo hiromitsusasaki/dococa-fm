@@ -37,7 +37,7 @@ async function orEmpty(search: Promise<ItemDraft[]>): Promise<ItemDraft[]> {
   }
 }
 
-const searchers = (q: string, env: Env): Record<ItemKind, () => Promise<ItemDraft[]>> => ({
+const searchers = (q: string, env: Env): Record<Exclude<ItemKind, "video">, () => Promise<ItemDraft[]>> => ({
   music: () => searchItunes(q),
   book: () => searchBooks(q, env.GOOGLE_BOOKS_API_KEY),
   film: () => searchTmdb(q, env.TMDB_API_KEY),
@@ -81,6 +81,8 @@ async function youtubeSearchAllowed(env: Env, now: Date = new Date()): Promise<b
 export async function searchByText(q: string, kind: ItemKind | "any", env: Env, opts: { limit?: number; youtube?: boolean } = {}): Promise<ItemDraft[]> {
   const limit = opts.limit ?? MAX_RESULTS;
   const by = searchers(q, env);
+  // Videos are only searched inside "any", where the daily YouTube budget is counted.
+  if (kind === "video") return [];
   if (kind !== "any") return (await orEmpty(by[kind]())).slice(0, limit);
   const youtube = opts.youtube && env.YOUTUBE_API_KEY && (await youtubeSearchAllowed(env)) ? [() => searchYouTube(q, env.YOUTUBE_API_KEY)] : [];
   const results = await Promise.all([by.music, by.book, by.film, ...youtube].map((search) => orEmpty(search())));
@@ -160,7 +162,8 @@ async function resolveOembed(provider: "spotify" | "youtube", parsed: ParsedUrl,
     outLinks: {},
     externalIds: {},
   };
-  return withOrigin(base, parsed, url);
+  // Whatever a pasted YouTube link matched on iTunes, the work the owner pasted is the video.
+  return withOrigin(provider === "youtube" ? { ...base, kind: "video" } : base, parsed, url);
 }
 
 async function resolveOgp(parsed: ParsedUrl, url: string, env: Env, isbn?: string): Promise<ItemDraft | null> {
