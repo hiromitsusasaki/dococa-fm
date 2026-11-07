@@ -254,11 +254,11 @@ describe("selectProgram", () => {
       expect(bySlot(mid, "near")).toBe(3);
     });
 
-    it("ignores a reaction whose parent letter is no longer public", async () => {
+    it.each(["rejected", "withdrawn"] as const)("ignores a reaction whose parent letter is %s", async (status) => {
       const f = await buildFixture();
       const { x, mine } = await addOwnLetterWithReaction(f, new Date(Date.now() - 60_000).toISOString());
       await insertLetter(env.DB, letterDraft(x.id, { kind: "watashimo", listenerId: f.b.id, parentLetterId: mine.id }));
-      await setLetterStatus(env.DB, mine.id, "rejected");
+      await setLetterStatus(env.DB, mine.id, status);
       // The fixture's own watashimo on item 0 is newer too, so only item 0 may lead.
       for (const seed of ["s", "t", "u", "v", "w", "x", "y", "z"]) {
         const p = await selectProgram(env.DB, { ...f.a, dial: 0.3 }, { seed });
@@ -644,5 +644,81 @@ describe("selectProgram never airs the same work twice in a row", () => {
     await episodeOf(f.a.id, ago(120_000), [f.items[1]!]);
     await episodeOf(f.a.id, ago(60_000), [f.items[9]!]);
     for (const seed of seeds) expect((await selectProgram(env.DB, f.a, { size: 1, seed, dial: 1 }))[0]?.itemId).toBe(f.items[1]);
+  });
+});
+
+describe("selectProgram at a cold start spreads the places", () => {
+  beforeEach(() => resetDb(env.DB));
+  const seeds = ["s", "t", "u", "v", "w", "x", "y", "z"];
+
+  /** Four works per country, each with one letter from that country, by someone else. */
+  async function shelves(countries: (string | null)[]) {
+    const writer = await createListener(env.DB);
+    const countryOf = new Map<string, string | null>();
+    for (const country of countries) {
+      for (let n = 0; n < 4; n++) {
+        const id = (await insertItem(env.DB, itemDraft({ title: `${country}-${n}` }))).id;
+        const l = await insertLetter(env.DB, letterDraft(id, { listenerId: writer.id, body: `${country} ${n}`, placeCountry: country }));
+        countryOf.set(l.id, country);
+      }
+    }
+    return countryOf;
+  }
+
+  /** The pick aired as a `mine` episode made at `at`, its first letter read first. */
+  const aired = (listenerId: string, at: number, itemId: string, letterIds: string[]) =>
+    insertEpisode(env.DB, {
+      listenerId,
+      segments: [{
+        itemId,
+        slot: "far",
+        lines: letterIds.map((letterId) => ({ type: "letter" as const, letterId, text: "x", radioName: "r", place: "p", kind: "letter" as const, sourceUrl: null, sourceAuthor: null })),
+      }],
+      verified: true,
+      report: REPORT,
+      station: "mine",
+      createdAt: new Date(Date.now() - 60_000 + at * 1000).toISOString(),
+    });
+
+  it("three picks in a row for a fresh listener come from three countries", async () => {
+    const countryOf = await shelves(["JP", "US", "FR"]);
+    for (const seed of seeds) {
+      const me = await createListener(env.DB);
+      const heard: (string | null | undefined)[] = [];
+      for (let n = 0; n < 3; n++) {
+        const p = await selectProgram(env.DB, me, { size: 1, seed: `${seed}${n}`, dial: 0.5 });
+        expect(p).toHaveLength(1);
+        heard.push(countryOf.get(p[0]!.letterIds[0]!));
+        await aired(me.id, n, p[0]!.itemId, p[0]!.letterIds);
+      }
+      expect(new Set(heard).size).toBe(3);
+    }
+  });
+
+  it("a pool with one country still answers", async () => {
+    await shelves(["JP"]);
+    const me = await createListener(env.DB);
+    for (let n = 0; n < 3; n++) {
+      const p = await selectProgram(env.DB, me, { size: 1, seed: `s${n}`, dial: 0.5 });
+      expect(p).toHaveLength(1);
+      await aired(me.id, n, p[0]!.itemId, p[0]!.letterIds);
+    }
+  });
+
+  it("a letter without a country is never left out, and a fresh country's letter is read first", async () => {
+    const countryOf = await shelves(["JP", "US", null]);
+    const writer = await createListener(env.DB);
+    // A work with letters from Japan and France: France leads once Japan aired.
+    const both = (await insertItem(env.DB, itemDraft({ title: "both" }))).id;
+    for (const country of ["JP", "FR"]) countryOf.set((await insertLetter(env.DB, letterDraft(both, { listenerId: writer.id, body: `both ${country}`, placeCountry: country }))).id, country);
+    const jp = [...countryOf].find(([, c]) => c === "JP")![0];
+    const us = [...countryOf].find(([, c]) => c === "US")![0];
+    for (const seed of seeds) {
+      const me = await createListener(env.DB);
+      await aired(me.id, 0, "x", [jp]);
+      await aired(me.id, 1, "y", [us]);
+      const p = await selectProgram(env.DB, me, { size: 1, seed, dial: 0.5 });
+      expect(["FR", null]).toContain(countryOf.get(p[0]!.letterIds[0]!));
+    }
   });
 });

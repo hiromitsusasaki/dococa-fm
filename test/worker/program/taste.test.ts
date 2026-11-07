@@ -7,7 +7,7 @@ import { insertLetter } from "../../../src/worker/db/letters";
 import { createListener } from "../../../src/worker/db/listeners";
 import { recordListen } from "../../../src/worker/db/listens";
 import { seededRng } from "../../../src/worker/program/select";
-import { farness, pickByDial, tasteOf } from "../../../src/worker/program/taste";
+import { farness, pickByDial, standingOf, tasteOf } from "../../../src/worker/program/taste";
 import { angled } from "../../helpers/ai";
 import { resetDb } from "../../helpers/db";
 import { itemDraft, letterDraft } from "../db/helpers";
@@ -93,5 +93,22 @@ describe("tasteOf", () => {
     await setItemVec(env.DB, i.id, angled(0));
     await upsertHistory(env.DB, [{ listenerId: me.id, itemId: i.id, source: "spotify", occurredAt: null, rank: 1 }]);
     expect(await tasteOf(env.DB, me)).toBeNull();
+  });
+});
+
+describe("standingOf", () => {
+  it("is blank only before any favourite or listen, vectors or not", async () => {
+    const me = await createListener(env.DB);
+    expect(await standingOf(env.DB, me)).toEqual({ taste: null, blank: true });
+    const heardItem = await insertItem(env.DB, itemDraft({ externalIds: {} }));
+    const letter = await insertLetter(env.DB, letterDraft(heardItem.id, { body: "x" }));
+    const ep = await insertEpisode(env.DB, { listenerId: me.id, segments: [], verified: true, report: { verbatim: true, sources: true, topical: true, pii: true, details: [] } });
+    await recordListen(env.DB, { listenerId: me.id, episodeId: ep.id, letterId: letter.id, segmentIndex: 0 });
+    expect(await standingOf(env.DB, me)).toEqual({ taste: null, blank: false });
+
+    const other = await createListener(env.DB);
+    const fav = await insertItem(env.DB, itemDraft({ externalIds: {} }));
+    await upsertHistory(env.DB, [{ listenerId: other.id, itemId: fav.id, source: "manual", occurredAt: null, rank: 1 }]);
+    expect(await standingOf(env.DB, other)).toEqual({ taste: null, blank: false });
   });
 });

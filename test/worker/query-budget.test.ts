@@ -30,6 +30,8 @@ const PER_UNIT = 7;
  * ids not cached in the isolate) and the exclusions. Without a taste it costs the two taste reads and stops.
  */
 const DISTANCE_EXTRA = 3;
+/** A cold start (no taste yet) reads the letters from the countries the last two segments did not lead with. */
+const COLD_START_EXTRA = 1;
 
 const track = (id: number, name: string) => ({ trackId: id, trackName: name, artistName: "Someone", releaseDate: "2001-01-01T00:00:00Z" });
 
@@ -108,14 +110,14 @@ describe("D1 statements per request", () => {
     expect(keyed.count()).toBeLessThan(EPISODE_MAKING_UNITS_BUDGET);
   });
 
-  it(`POST /stations/mine/next by distance adds at most ${DISTANCE_EXTRA} statements and stays under ${EPISODE_BUDGET}`, async () => {
-    const measure = async (withVectors: boolean) => {
+  it(`POST /stations/mine/next by distance adds at most ${DISTANCE_EXTRA} statements, a cold start ${COLD_START_EXTRA}, and both stay under ${EPISODE_BUDGET}`, async () => {
+    const measure = async (withVectors: boolean, withFavourite = true) => {
       await resetDb(env.DB);
       await seedWorld();
       const cookie = await newSession();
       const me = cookie.split("=")[1]!.split(".")[0]!;
       const fav = await insertItem(env.DB, itemDraft({ title: "favourite", externalIds: { itunes: "777" } }));
-      await upsertHistory(env.DB, [{ listenerId: me, itemId: fav.id, source: "manual", occurredAt: null, rank: 1 }]);
+      if (withFavourite) await upsertHistory(env.DB, [{ listenerId: me, itemId: fav.id, source: "manual", occurredAt: null, rank: 1 }]);
       if (withVectors) {
         // Written straight to the table so the isolate's vector cache is cold: the worst case.
         const { results } = await env.DB.prepare("SELECT id FROM items ORDER BY id").all<{ id: string }>();
@@ -136,7 +138,11 @@ describe("D1 statements per request", () => {
     expect(byDistance).toBeGreaterThanOrEqual(byPools);
     expect(byDistance).toBeLessThanOrEqual(byPools + DISTANCE_EXTRA);
     expect(byDistance).toBeLessThan(EPISODE_BUDGET);
-  });
+    const coldStart = await measure(false, false);
+    expect(coldStart).toBe(byPools + COLD_START_EXTRA);
+    expect(coldStart).toBeLessThan(EPISODE_BUDGET);
+    // Three seeded databases in one test: give it room on a loaded machine.
+  }, 15_000);
 
   it("GET / reads one more statement for a signed-in listener (the reaction notice) and one more for a letter link", async () => {
     await seedWorld();

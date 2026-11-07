@@ -87,17 +87,17 @@ export const EXCLUDED_SQL = `SELECT item_id, 'heard' AS why FROM (${HEARD_RECENT
 export const STATION_EXCLUDED_SQL = `SELECT item_id, 'aired' AS why FROM (${episodeItemsSql("?2", STATION_RECENT_EPISODES)})
   UNION ALL SELECT item_id, 'latest' AS why FROM (${episodeItemsSql("?2", 1)})`;
 
-/** The vectors of up to 50 favourites, in `listFavorites`' order (keep the predicate and ORDER in step). */
+/** The vectors of up to 50 favourites, in `listFavorites`' order (keep the predicate and ORDER in step); null for a work without one. */
 export const TASTE_FAVORITES_SQL = `SELECT i.vec FROM
     (SELECT h.item_id FROM history h WHERE h.listener_id = ?1 AND h.source IN ('manual', 'url')
      ORDER BY h.rank IS NULL, h.rank ASC, h.occurred_at DESC, h.item_id LIMIT 50) f
-  JOIN items i ON i.id = f.item_id WHERE i.vec IS NOT NULL`;
+  JOIN items i ON i.id = f.item_id`;
 
-/** The vectors of up to 20 works whose letters the listener heard most recently. */
+/** The vectors of up to 20 works whose letters the listener heard most recently; null for a work without one. */
 export const TASTE_HEARD_SQL = `SELECT i.vec FROM
     (SELECT l.item_id, MAX(s.heard_at) AS at FROM listens s JOIN letters l ON l.id = s.letter_id
      WHERE s.listener_id = ?1 GROUP BY l.item_id ORDER BY at DESC, l.item_id LIMIT 20) h
-  JOIN items i ON i.id = h.item_id WHERE i.vec IS NOT NULL`;
+  JOIN items i ON i.id = h.item_id`;
 
 /** Letters the DJ may read for the chosen items (?2…): other people's text, never reactions. */
 export const letterIdsSql = (items: number): string => `SELECT l.id, l.item_id FROM letters l
@@ -109,3 +109,24 @@ export const OWNER_FAVORITES_SQL = `SELECT h.item_id FROM history h
   WHERE h.listener_id = ?1 AND h.source IN ('manual', 'url')
   ORDER BY h.rank IS NULL, h.rank ASC, h.occurred_at DESC, h.item_id
   LIMIT 200`;
+
+/** The letter read first in each of the listener's last two segments on their own station (verified episodes, newest first). */
+const LAST_TWO_LEADS = `SELECT (SELECT json_extract(ln.value, '$.letterId') FROM json_each(seg.value, '$.lines') ln
+      WHERE json_extract(ln.value, '$.type') = 'letter' ORDER BY ln.key LIMIT 1) AS letter_id
+  FROM (SELECT segments, created_at, id FROM episodes WHERE listener_id = ?1 AND station = 'mine' AND verified = 1 ORDER BY created_at DESC, id DESC LIMIT 2) e,
+    json_each(e.segments) seg
+  ORDER BY e.created_at DESC, e.id DESC, seg.key DESC
+  LIMIT 2`;
+
+/**
+ * A cold start (no taste yet): the letters the DJ may read (as `letterIdsSql`) whose sender's country is not one of
+ * those the listener's last two segments led with. A letter without a country code (older rows) is never left out.
+ * Only chooses: no country, distance or count leaves the selector.
+ */
+export const FRESH_PLACE_LETTERS_SQL = `WITH recent AS (
+    SELECT l.place_country FROM (${LAST_TWO_LEADS}) r JOIN letters l ON l.id = r.letter_id WHERE l.place_country IS NOT NULL
+  )
+  SELECT l.id, l.item_id FROM letters l
+  WHERE ${OTHERS_TEXT} AND ${NOT_ME}
+    AND (l.place_country IS NULL OR l.place_country NOT IN (SELECT place_country FROM recent))
+  ORDER BY l.item_id, l.id`;

@@ -3,7 +3,8 @@ import type { Listener } from "../types";
 import { TASTE_FAVORITES_SQL, TASTE_HEARD_SQL } from "./select-sql";
 import type { Slot } from "./select";
 
-async function meanOf(db: D1Database, sql: string, listenerId: string): Promise<Float32Array | null> {
+/** The mean of the rows' vectors (null when none has one), and whether the query found any row at all. */
+async function meanOf(db: D1Database, sql: string, listenerId: string): Promise<{ mean: Float32Array | null; any: boolean }> {
   const { results } = await db.prepare(sql).bind(listenerId).all<{ vec: unknown }>();
   let sum: Float32Array | null = null;
   for (const r of results) {
@@ -13,15 +14,24 @@ async function meanOf(db: D1Database, sql: string, listenerId: string): Promise<
     if (v.length !== sum.length) continue;
     for (let i = 0; i < v.length; i++) sum[i] = (sum[i] as number) + (v[i] as number);
   }
-  return sum ? normalise(sum) : null;
+  return { mean: sum ? normalise(sum) : null, any: results.length > 0 };
 }
 
 /**
  * Where the listener stands: the mean of the vectors of up to 50 favourites (the order `listFavorites` gives), else of
- * up to 20 works they heard most recently, as a unit vector; null when none of those has a vector.
+ * up to 20 works they heard most recently, as a unit vector; null when none of those has a vector. `blank`: the
+ * listener has no favourite and has heard nothing yet (a cold start), whether or not the works have vectors.
  */
+export async function standingOf(db: D1Database, listener: Pick<Listener, "id">): Promise<{ taste: Float32Array | null; blank: boolean }> {
+  const favourites = await meanOf(db, TASTE_FAVORITES_SQL, listener.id);
+  if (favourites.mean) return { taste: favourites.mean, blank: false };
+  const heard = await meanOf(db, TASTE_HEARD_SQL, listener.id);
+  return { taste: heard.mean, blank: !favourites.any && !heard.any };
+}
+
+/** The listener's taste alone (see `standingOf`). */
 export async function tasteOf(db: D1Database, listener: Pick<Listener, "id">): Promise<Float32Array | null> {
-  return (await meanOf(db, TASTE_FAVORITES_SQL, listener.id)) ?? (await meanOf(db, TASTE_HEARD_SQL, listener.id));
+  return (await standingOf(db, listener)).taste;
 }
 
 /**
