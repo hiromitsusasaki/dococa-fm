@@ -2,22 +2,45 @@
 
 > 新しいセッションはまずここを読む。更新はタスクの区切りごと（最新を上に）。
 
-## 2026-11-07 Phase 5 完了（最終レビューの修正まで・ローカル）。次は本人作業 → デプロイ
+## 2026-11-07 Phase 6 完了（最終レビュー前・ローカル）。次は本人作業 → デプロイ
 
-Phase 5（TTS の見張りと指示文・ヘッダの言語切替・オンエアの欄・設定の整理と `radio-xxxxxx`・自作の BGM・ホームの作り替え・説明ページ・締めのドキュメント）の Task 1〜8 は main にコミット済み（push していない）。本番は Phase 4 の状態のままなので、下の本人作業を上から順に済ませる。
+Phase 6（ラジオの面・ホームとヘッダ・お便りの直リンクと反応の点・取り下げと公開ラジオの一覧・冷えた入口・デモの反応・冒頭の一行・読み・お便りの共有ページ・動画の種類・5 曲の BGM・about の挿絵・費用のメモ）の Task 1〜5、7〜12 は main にコミット済み（push していない）。Task 6（cookie の無い GET でリスナー行を作らない）だけ、ハッカソン後に回す（本人了承待ち）。全体レビュー（Claude と Codex）の指摘は、返ってきたら本人に見せてから直す。本番は Phase 5 のままなので、下の本人作業を上から順に済ませる。
 
-### 本人作業（Phase 5 のデプロイ。この順）
+### 本人作業（Phase 6 のデプロイ。この順）
 
-- [ ] `pnpm db:migrate`（0021: 音声の鍵 v4。`tts_audio` を空にし `units.audio_ready` を戻す。当日の TTS 上限カウンタも空になる（本番は `CLOUD_TTS_GLOBAL_DAILY_LIMIT=8000` のまま）ので、日本時間の日の早いうちに当てるか、prepare の回数を見ながら進める）。
+- [ ] `pnpm db:migrate`（0022 `reactions_seen`、0023 `units_lead`: **単位を全部消す**、0024 `readings`、0025 `video_kind`: YouTube の作品を `video` に）。
 - [ ] `pnpm run deploy`。
-- [ ] `/admin/prepare` のループ（`{"limit":8}` 程度で、`remaining.audio` が ja/en とも 0 になったら止める。約 700 行、上限の内）。`remaining.gaveUp` は、合成を諦めた行を含む単位の数で、その行からその回の終わりまではブラウザの声が読む（`audio` には数えない）。諦めた行をもう一度試すときは、`pnpm wrangler d1 execute dococa --remote --command "DELETE FROM tts_audio WHERE synth_count >= 6 AND bytes = 0"` のあと `pnpm wrangler d1 execute dococa --remote --command "UPDATE units SET audio_ready = 0 WHERE audio_ready = 2"` を流して、またループする（1 通だけなら `/admin/units` の 👎 で作り直しても 0 に戻る。ただしお便りの本文の行は作り直しでも変わらないので、その行の `tts_audio` は消す）。最初の 1〜2 回で `failed` が増えるなら、英語の見張りが新しい遅めの指示文に対して厳しすぎる可能性がある。`src/worker/tts/google.ts` の `SECONDS_PER_OTHER_CHAR`（かな・漢字以外の 1 文字）を 0.125 → 0.14 に緩めて再デプロイ。
+- [ ] `/admin/prepare` のループを 2 回。1 回目は `remaining.units` が ja/en とも 0 になるまで（Claude 約 200 回）、2 回目は `remaining.audio` が 0 になるまで（約 1,000 行。`gaveUp` は、ブラウザの声が読む行を含む単位の数）。上限は `CLOUD_TTS_GLOBAL_DAILY_LIMIT`（本番は 8000）の内。コストは [docs/cost.md](cost.md)。
+- [ ] デモの反応を付ける。先に `read -rs PROD_ADMIN_TOKEN` で本番のトークンをシェルに読み込み、`ADMIN_TOKEN="$PROD_ADMIN_TOKEN" pnpm seed:reactions --origin https://dococafm.app --dry-run`（書かせるだけ）で確かめてから、本番の `--per 2`。あとで自分のお便りに付けるなら `--letters <id,...>`。
+- [ ] 聴いて確かめる: 冒頭の一行「…という曲の紹介です」、読み（PSY → サイ、大船渡 → オオフナト）、「別の人」、5 曲の BGM が回ごとにランダムに変わること（音量は `src/client/audio.ts` の `BED_VOLUME`）、ブラウザの声への切り替えが回ぜんぶではなく行ごとになったこと。
+- [ ] 画面を確かめる: ホーム（「お便りを送る」がオンエアの欄の上、「これまでの番組」の行、お便りが届いた公開ラジオ、2 回目の訪問でヒーローが畳まれる、サインイン済みのヘッダを 390px と 1120px で）、`/letters/<id>` の共有ページと X の Card Validator（player カードは許可が要ることがある）、`/?letter=<id>` のリンク、反応の点、`/me` の取り下げ、`/about` の挿絵。iPhone の Safari で、埋め込みプレイヤーの最初のタップで声が出るか。
+- [ ] 任意: あとで `pnpm wrangler secret delete CLOUD_TTS_GLOBAL_DAILY_LIMIT` で既定の 3000 に戻す。
+
+### ハッカソン後
+
+- Task 6: cookie の無い GET でリスナー行を作らない（クローラーで行が増える。`SECURITY.md` の既知の制限）。
+- Cloudflare 側の防御: WAF のマネージドルールと Bot Fight Mode（検証済みボットは許可して、OGP のクローラーを通す）、書き込みの経路（`POST /letters`、`/stations/*/next`、`/start`、`/admin/*`）だけ Managed Challenge、IP ごとの Rate Limiting ルール。
+- 1 日 1 回の放送（日本時間の深夜の Cron で、お便りは翌日に読まれる）: [docs/broadcast.md](broadcast.md)。
+- 費用の削減: 英語の単位の遅延生成、判定と翻訳を Haiku に（`CLAUDE_MODEL_JUDGE`）、音声の鍵の分割、再試行の上限: [docs/cost.md](cost.md)。
+- Chirp 3 HD を別の TTS として足す（読みを `yomigana` のカスタム発音で渡す）。`TTS_PROVIDER` の切り替えの後ろに置く。
+- 本人が選ぶ UI の細かい直し（楽しさの項目）。
+
+## 2026-11-07 Phase 5 完了（本番に反映済み）
+
+Phase 5（TTS の見張りと指示文・ヘッダの言語切替・オンエアの欄・設定の整理と `radio-xxxxxx`・自作の BGM・ホームの作り替え・説明ページ・締めのドキュメント）の Task 1〜8 は main にコミット済み。本番には 2026-11-07 に反映済み（Phase 5 と音声の鍵 v4。0021 まで当て、`/admin/prepare` で音声を作り直した）。下の本人作業は済んだものを残してある。
+
+### 本人作業（Phase 5 のデプロイ。反映は済み。聴く・見る確認は本人がまだ）
+
+- [x] `pnpm db:migrate`（0021: 音声の鍵 v4。`tts_audio` を空にし `units.audio_ready` を戻す。当日の TTS 上限カウンタも空になる（本番は `CLOUD_TTS_GLOBAL_DAILY_LIMIT=8000` のまま）ので、日本時間の日の早いうちに当てるか、prepare の回数を見ながら進める）。
+- [x] `pnpm run deploy`。
+- [x] `/admin/prepare` のループ（`{"limit":8}` 程度で、`remaining.audio` が ja/en とも 0 になったら止める。約 700 行、上限の内）。`remaining.gaveUp` は、合成を諦めた行を含む単位の数で、その行からその回の終わりまではブラウザの声が読む（`audio` には数えない）。諦めた行をもう一度試すときは、`pnpm wrangler d1 execute dococa --remote --command "DELETE FROM tts_audio WHERE synth_count >= 6 AND bytes = 0"` のあと `pnpm wrangler d1 execute dococa --remote --command "UPDATE units SET audio_ready = 0 WHERE audio_ready = 2"` を流して、またループする（1 通だけなら `/admin/units` の 👎 で作り直しても 0 に戻る。ただしお便りの本文の行は作り直しでも変わらないので、その行の `tts_audio` は消す）。最初の 1〜2 回で `failed` が増えるなら、英語の見張りが新しい遅めの指示文に対して厳しすぎる可能性がある。`src/worker/tts/google.ts` の `SECONDS_PER_OTHER_CHAR`（かな・漢字以外の 1 文字）を 0.125 → 0.14 に緩めて再デプロイ。
 - [ ] 聴いて確かめる: 冒頭の挨拶（指示文が読まれていないか）、日本語と英語の回の話し方、BGM の音量感（声の 16 dB ほど下。大きい/小さいなら `src/client/audio.ts` の `BED_VOLUME`）。
 - [ ] 画面を確かめる: ヘッダの言語切替、ホーム（ダイヤル、カードを押して即再生、送るモーダル、直近 3 番組）、`/settings`（公開 URL）、`/about`。
 - [ ] 任意: あとで `pnpm wrangler secret delete CLOUD_TTS_GLOBAL_DAILY_LIMIT` で既定の 3000 に戻す。
 
 ## Phase 6 の進み（計画: `docs/superpowers/plans/2026-11-07-dococa-fm-phase6.md`、設計: 追記 N）
 
-2026-11-07 のサービス仕様レビューのプロダクトと UI/UX の項目（本人がすべて採用）。7 タスク。終わったら migration 0022 → deploy。
+2026-11-07 のサービス仕様レビューのプロダクトと UI/UX の項目（本人がすべて採用）に、本人の追加（冒頭の一行・読み・共有ページ・動画・BGM・挿絵）を足した。デプロイは上の本人作業（migration 0022〜0025 → deploy → `/admin/prepare` のループ）。
 
 | Task | 内容 | 状態 |
 |---|---|---|
@@ -26,13 +49,14 @@ Phase 5（TTS の見張りと指示文・ヘッダの言語切替・オンエア
 | Task 3 | お便りの直リンク `/?letter=`・リンクのコピー・新しい反応の点（0022） | 完了（2026-11-07。`/?letter=` は形だけ見て `data-letter`、公開のお便りなら OGP（1 文足す）。点はヘッダが `/me` のリンクを描くときだけ 1 文読む（サインイン済みの GET だけ。JSON は読まない）。`/me` を開くと読む前の時刻で既読にし、`/me` 自身には点を出さない。共有ボタンは `/letters/<id>` をコピー、クリップボードが無ければ `prompt`。station.js gzip 5.46 kB） |
 | Task 4 | 送ったお便りの非公開（`withdrawn`）・公開ラジオの一覧 | 完了（2026-11-07。`POST /letters/:id/withdraw` は自分の種類 `letter` の公開のお便りだけを 1 回の UPDATE で `withdrawn` にし、他人のもの・一言・私も・無い id は 404、匿名はサインインへ。読む側はどれも `status = 'public'` で絞っていたので、`withdrawn` は `rejected` と同じく画面・選別・音声・番組・共有ページから消える（コードの変更は型と書き込みだけ）。`/me` に「送ったお便り」の欄（作品名・先頭 60 字・日付・確認つきの「非公開にする」）。ホームに「お便りが届いた公開ラジオ」（最新の公開のお便りが新しい順に最大 5 つ、名前と お住まい だけ、数字なし、無ければ節ごと出さない）） |
 | Task 5 | 冷えた入口（お住まいの国を散らす） | 完了（2026-11-07。お気に入りも聴いた記録も無く、自分の作品に誰も書いていないリスナーの `mine` の 1 席だけ。直近 2 セグメントの最初のお便りの国と違う国のお便りがある作品を、同じ新しさの中で先にし、そのお便りを最初に読む。国コードの無いお便りは外さない。残りが無ければ今まで通り。D1 は冷えた入口だけ 1 文増える） |
-| Task 6 | cookie の無い GET でリスナー行を作らない | 未着手 |
-| Task 8 | デモの反応（デモのペルソナから「私も」と一言。あとから送られたお便りにも付けられる） | 未着手 |
+| Task 6 | cookie の無い GET でリスナー行を作らない | ハッカソン後に回す（本人了承待ち） |
+| Task 8 | デモの反応（デモのペルソナから「私も」と一言。あとから送られたお便りにも付けられる） | 完了（コードは 2026-11-07。本番への投入はデプロイ後に本人が `pnpm seed:reactions`。上の本人作業） |
+| BGM | Suno の 5 曲を回ごとにランダムに（`scripts/make-beds.sh`） | 完了 |
 | Task 9 | 種類ごとの冒頭の一行（「…という曲の紹介です」。0023 で単位を作り直す） | 完了（2026-11-07。冒頭の一行は単位が無い・検証に落ちたお便りにも言う。intro の最初の一文が題名を言うと `lead:` で言い直させる） |
 | Task 10 | 読み方（台本係が読みを返し、読み上げだけ変える。PSY → サイ。0024） | 完了（2026-11-07。日本語の単位だけ。読みは冒頭の一行・intro・after の音声にだけ効き、画面・プレイヤーの JSON・お便りは書いたまま。「別の方」→「別の人」。Task 9 のレビューの題名の語境界・`lead:` の言い直しのテスト・prepare のコメントも直した） |
 | Task 11 | お便りの共有ページ `/letters/:id`（OGP・X の player カード・埋め込みプレイヤー・公開の音声経路） | 完了（2026-11-07。`/letters/:id/player` だけ枠に入れられる（`frame-ancestors *`、`X-Frame-Options` なし）。プレイヤー・`lines.json`・`audio/:n` はセッション外。行は `unitSegment` と同じで、位置は 冒頭 0・紹介 1・手渡し 2・お便り 3・ひとこと 4、検証済みの単位が無ければ 2 と 3 だけ。言語はお便りの言語。`embed.js` は gzip 0.55 kB） |
-| Task 7 | 締め（`docs/cost.md`・status・README・SECURITY・DESIGN） | 未着手 |
 | Task 12 | YouTube の作品は「動画」（種類 `video`、0025） | 完了 |
+| Task 7 | 締め（`docs/cost.md`・status・README・SECURITY・DESIGN） | 完了（2026-11-07。`docs/cost.md` はお便り 1 通あたりの費用・日次の上限・削れるところ） |
 
 - 決定（Task 5）: 「冷えた入口」は好みの読み（`standingOf`）でお気に入りの行も聴いた記録も無いこと（ベクトルの有無は問わない）、かつ近く・隣の棚が空のとき。国は各セグメントで最初に読んだお便りの `letters.place_country` で比べ、繰り返さない規則（新しさの順位）を先に守る。国も距離も件数も選ぶのに使うだけで、外には出さない。
 - 決定（Task 9）: 作品の紹介の前に、定型の一行「{作者}の「{題名}」という{曲/本/映画/動画}の紹介です。」（英語は "Here is “{title}”, a song by {creator}."）を言う。作者が空なら作者を言わない形。作品のデータを埋めるだけで、Claude の文ではない。セグメントの最初のお便りの前に 1 回だけ、単位の有無にかかわらず言う（単位が無いときも作品の名前が聞こえるように）。DJ の intro はその続きとして題名と作者を繰り返さずに始め、最初の一文に題名があれば検証が `lead:` で落とし、1 回言い直させる。今の intro は題名から始まるものが多いので、0023 で単位を全部消して作り直す（👍 はまだ無い）。
