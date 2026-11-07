@@ -47,7 +47,12 @@ async function seed(n = 1, over: Partial<Parameters<typeof letterDraft>[1]> = {}
   await env.DB.prepare("UPDATE items SET reading_ja = '{}' WHERE id = ?").bind(item.id).run();
   const letters: Letter[] = [];
   for (let i = 0; i < n; i++) {
-    letters.push(await insertLetter(env.DB, letterDraft(item.id, { radioName: `しずく${i}`, place: "松本", body: `雨の日に聴きました${i}。`, bodyJa: `雨の日に聴きました${i}。`, ...over })));
+    const letter = await insertLetter(env.DB, letterDraft(item.id, { radioName: `しずく${i}`, place: "松本", body: `雨の日に聴きました${i}。`, bodyJa: `雨の日に聴きました${i}。`, ...over }));
+    // `insertLetter` stamps the current millisecond and a random id, so letters seeded back to back tie on `created_at`
+    // and the oldest-first listings would order them by id. A second apart keeps "letter 0 is first" true.
+    const createdAt = new Date(Date.UTC(2026, 0, 1, 0, 0, i)).toISOString();
+    await env.DB.prepare("UPDATE letters SET created_at = ? WHERE id = ?").bind(createdAt, letter.id).run();
+    letters.push({ ...letter, createdAt });
   }
   return { item, letters };
 }
