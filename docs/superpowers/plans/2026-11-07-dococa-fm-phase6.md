@@ -197,6 +197,13 @@
 
 ---
 
+### Task 12: YouTube works are 「動画」 (owner request 2026-11-07)
+
+**Files:** `src/types.ts` (`ItemKind` gains `video`), `src/worker/resolve/youtube.ts` (+ oEmbed resolution: kind `video`), `src/worker/db/items.ts`, i18n `kind.video` ja「動画」/ en "Video", every `switch` on kind (grep `"film"`; lead templates already exist: `script.lead.video`), `migrations/0025_video_kind.sql` (`UPDATE items SET kind = 'video' WHERE external_ids LIKE '%youtube%' OR out_links LIKE '%youtube.com%' OR out_links LIKE '%youtu.be%';` — 6 rows in production), README (0001〜0025), docs/status.md; tests for the resolver, the lead and the kind label.
+- [ ] Tests first; implement; `pnpm test`/`typecheck`/`build`; commit `feat: youtube works are videos`.
+
+---
+
 ### Task 7: Close-out: cost notes and docs
 
 **Files:**
