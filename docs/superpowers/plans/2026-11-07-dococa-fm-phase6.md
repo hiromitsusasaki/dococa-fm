@@ -204,6 +204,30 @@
 
 ---
 
+### Task 13: Small joys in the radio's interactions (owner adopted all 12 items, 2026-11-07)
+
+**Restraint rules (binding):** one motion at a time, each ≤ 300 ms; the only continuous motions are the needle while on and the ON AIR lamp breathing with the voice; at most three sounds (switch, dial, 私も), all scaled by the volume knob, silent while off, default quiet; everything off under `prefers-reduced-motion` (sounds stay); no numbers/ranks anywhere; letter text never restyled beyond a thin underline on the line being read. `station.js` budget rises to 8 kB gzip for this task.
+
+**Files:** `src/client/station.tsx`, `station-view.tsx`, `playback.ts`, `audio.ts` (bed crossfade; Web Audio clicks; analyser), `public/app.css`, `src/views/components.tsx` (card FLIP hook), i18n (none expected), `docs/DESIGN.md` (a 「動きと音」 section listing the rules above), `docs/status.md`; tests `test/client/*`.
+
+Items:
+1. **Switch-on**: ON AIR lamp lights over 600 ms with one flicker; the scale needle sweeps left→right once and settles; synced with 「電波を探しています…」.
+2. **Dial detents**: the needle hops per tick while the knob turns; a 10 ms square-wave "カチ" from Web Audio (OscillatorNode), gain = 0.05 × volume; none while off.
+3. **Lamp breathes with the voice**: an AnalyserNode on the clip `<audio>` drives the ON AIR lamp's brightness (±15%); no new meter; disabled silently where the Web Audio graph cannot attach (cross-origin or iOS quirks) — never breaks playback.
+4. **Volume knob feel**: the knob tilts 2° while dragged, the needle's shadow shifts (CSS only).
+5. **The line being read glows**: in the on-air 「いま」 row, the line currently spoken (lead/intro/hand-over/letter/after) gets a thin underline moving down as playback advances (the player knows the line index); the letter text itself unchanged.
+6. **Card flies to the radio**: on a card press, the card's picture shrinks and moves to the face's thumbnail over 300 ms (FLIP: measure both rects, transform, transition), one at a time; then the existing play-from-letter path.
+7. **私も answer**: the pill swells once (scale 1.08 → 1), and a small envelope glyph floats up from the face for 1 s and fades; no count.
+8. **After sending from the modal**: on `dfm:sent`, an envelope glyph is drawn into the face over 400 ms alongside the existing toast.
+9. **Bed crossfade** on episode change: two `<audio>` elements, 1.5 s equal-power crossfade; `BED_VOLUME` scaling unchanged.
+10. **Switch click sound**: a low 20 ms click on ON and OFF (same Web Audio path as item 2).
+11. **Late-night warmth**: between 23:00 and 04:59 device time, the face's accent token shifts one step warmer (one CSS variable on `html[data-night]`), set at load and re-checked hourly.
+12. **Hero waves**: the key visual's radio-wave lines (an SVG overlay with one path, drawn above the KV only on the home) sway slowly while the radio is on; still when off.
+
+- [ ] Tests first for the state-driven parts (items 1 lamp/needle classes, 2 click calls, 5 line index → class, 6 FLIP invoked once, 7/8 glyph element appears and is removed, 9 two elements and the fade schedule with fake timers, 10 click on power, 11 the night attribute from a fake clock). Browser check at 390 and 1120 (dark): `docs/screenshots/2026-11-07-p6-joy-*.png`; record a short note of what you saw move. Commit per group: `feat: switch, needle and lamp`, `feat: dial and switch sounds`, `feat: line glow and card flight`, `feat: envelope glyphs`, `feat: bed crossfade and night warmth`.
+
+---
+
 ### Task 7: Close-out: cost notes and docs
 
 **Files:**
