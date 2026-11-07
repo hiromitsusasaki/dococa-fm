@@ -21,6 +21,8 @@ export type StationOptions = {
   letterId?: string;
   /** A station with no history yet: show how to start, and do not fetch anything. */
   grow?: boolean;
+  /** The home: show the send button above the on-air list. */
+  send?: boolean;
   strings: Record<string, string>;
 };
 
@@ -45,6 +47,8 @@ const DEFAULT_VOLUME = 0.8;
 const DIAL_SETTLE_MS = 300;
 const TOAST_MS = 2500;
 const HINT_KEY = "dfm.dialHinted";
+/** Set at the first switch-on; the home then shows its hero short (wordmark and tagline only) on later visits. */
+const SEEN_KEY = "dfm.seen";
 
 function loadVolume(): number {
   try {
@@ -307,6 +311,9 @@ export function mountStation(root: HTMLElement, opts: StationOptions) {
   function turnOn() {
     if (state.power === "on" || state.power === "tuning" || opts.grow) return;
     player.unlock();
+    try {
+      localStorage.setItem(SEEN_KEY, "1");
+    } catch {}
     abort.abort();
     abort = new AbortController();
     const finished = state.power === "limit" || state.power === "failed";
@@ -356,6 +363,13 @@ export function mountStation(root: HTMLElement, opts: StationOptions) {
     if (!id || opts.grow || !root.isConnected || !plainClick(e)) return;
     e.preventDefault();
     playLetter(id);
+  }
+
+  /** The header's language switch reloads the page and so stops the radio: ask first, but only while it is on. */
+  function onLangSubmit(e: Event) {
+    const form = e.target as Element | null;
+    if (!root.isConnected || !form?.hasAttribute?.("data-confirm") || (state.power !== "on" && state.power !== "tuning")) return;
+    if (!confirm(str("lang.confirmPlaying"))) e.preventDefault();
   }
 
   /** Lock-screen "next": skip to the next work, or to the next episode from the last one. */
@@ -437,6 +451,7 @@ export function mountStation(root: HTMLElement, opts: StationOptions) {
       volume: state.volume,
       dial: opts.stationKey === "mine" ? dial : null,
       grow: opts.grow === true,
+      send: opts.send === true,
       item: itemOf(state.current, state.seg),
       itemId: state.current?.segments[state.seg]?.itemId,
       letter,
@@ -458,6 +473,7 @@ export function mountStation(root: HTMLElement, opts: StationOptions) {
 
   bindMediaSession({ play: turnOn, pause: turnOff, next: skip });
   document.addEventListener("click", onCardClick);
+  document.addEventListener("submit", onLangSubmit);
   setState({});
 
   return {
@@ -468,6 +484,7 @@ export function mountStation(root: HTMLElement, opts: StationOptions) {
       clearTimeout(toastTimer);
       toastEl?.remove();
       document.removeEventListener("click", onCardClick);
+      document.removeEventListener("submit", onLangSubmit);
       abort.abort();
       player.stopBed();
       reactRoot.unmount();
@@ -533,6 +550,7 @@ function boot() {
     ...(Number.isFinite(dial) ? { dial } : {}),
     ...(el.dataset.letter ? { letterId: el.dataset.letter } : {}),
     grow: el.dataset.grow === "1",
+    send: el.dataset.send === "1",
     strings,
   });
 }

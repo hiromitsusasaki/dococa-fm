@@ -28,7 +28,7 @@ async function resolve({ DB: db, PUBLIC_ORIGIN }: Pick<Env, "DB" | "PUBLIC_ORIGI
 }
 
 /** What the station player needs to know: the labels it shows, as `t()` values, since `t()` is server-only. */
-const STATION_KEY = /^(station\.|player\.|out\.|kind\.|letter\.(who|whoPlace|whoDemo|showOriginal)|lang\.code$|listener\.(?:anonymous|demo)$)/;
+const STATION_KEY = /^(station\.|player\.|out\.|kind\.|letter\.(who|whoPlace|whoDemo|showOriginal)|lang\.(code|confirmPlaying)$|home\.put$|listener\.(?:anonymous|demo)$)/;
 const stationStrings = (lang: Lang): Record<string, string> =>
   Object.fromEntries(Object.keys(ja).filter((k) => STATION_KEY.test(k)).map((k) => [k, tFor(lang)(k as keyof typeof ja)]));
 
@@ -56,10 +56,12 @@ export type StationPageProps = {
   top?: unknown;
   /** A letter the listener came to hear (`/stations/mine?letter=`): the first request asks for it. */
   letter?: string;
+  /** The home: the radio's on-air panel opens with the 「お便りを送る」 button, which opens the send modal. */
+  send?: boolean;
 };
 
 /** The station screen: the player mounts into `#station` and takes everything it needs from its data attributes. */
-export function StationPage({ stationKey, label, lang, listener, path, voice, dial, grow, title, og, children, hideName, top, letter }: StationPageProps) {
+export function StationPage({ stationKey, label, lang, listener, path, voice, dial, grow, title, og, children, hideName, top, letter, send }: StationPageProps) {
   return (
     <Layout title={title ?? label} script="station" lang={lang} listener={listener} path={path} og={og}>
       <main class="station-page">
@@ -77,6 +79,7 @@ export function StationPage({ stationKey, label, lang, listener, path, voice, di
           data-dial={String(dial)}
           data-grow={grow ? "1" : "0"}
           data-letter={letter}
+          data-send={send ? "1" : undefined}
         ></div>
         <script type="application/json" id="station-i18n">
           {rawHtml(jsonForScript(stationStrings(lang)))}

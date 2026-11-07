@@ -45,4 +45,21 @@ describe("shared layout", () => {
     expect(en).toMatch(/<button[^>]*value="en"[^>]*aria-pressed="true"/);
     expect(en).toMatch(/<button[^>]*value="ja"[^>]*aria-pressed="false"/);
   });
+
+  it("gives the language switch short labels and a confirm marker, for the client to ask before it stops the radio", async () => {
+    const html = await (await get("/put", await newSession())).text();
+    const form = html.match(/<form[^>]*class="lang-toggle"[\s\S]*?<\/form>/)?.[0] ?? "";
+    expect(form).toContain("data-confirm");
+    expect(form).toContain('<span class="full" aria-hidden="true">日本語</span><span class="short" aria-hidden="true">JA</span>');
+    expect(form).toContain('<span class="short" aria-hidden="true">EN</span>');
+    // The button keeps its full name for assistive technology whichever label shows.
+    expect(form).toMatch(/<button[^>]*value="en"[^>]*aria-label="English"/);
+  });
+
+  it("gives every theme button a short label for a phone: sun, moon and the device word", async () => {
+    const html = await (await get("/put", await newSession())).text();
+    const group = html.match(/<div class="theme-toggle"[\s\S]*?<\/div>/)?.[0] ?? "";
+    for (const short of ["☀︎", "☾", "端末"]) expect(group).toContain(`<span class="short" aria-hidden="true">${short}</span>`);
+    expect((group.match(/class="full"/g) ?? []).length).toBe(3);
+  });
 });

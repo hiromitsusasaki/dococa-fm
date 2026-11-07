@@ -17,6 +17,8 @@ export type StationScreenProps = {
   volume: number;
   dial: number | null;
   grow: boolean;
+  /** The home: the on-air panel opens with the button that opens the send modal. */
+  send: boolean;
   item: PlayerItem | undefined;
   itemId: string | undefined;
   letter: LetterLine | null;
@@ -158,6 +160,13 @@ export function StationScreen(p: StationScreenProps) {
       )}
 
       <aside class="side panel">
+        {p.send && (
+          <p class="side-send">
+            <a class="button" href="/put" data-open-send>
+              {str("home.put")}
+            </a>
+          </p>
+        )}
         <h2>{str("station.panel")}</h2>
         {p.upNext.length === 0 && p.power === "off" && !p.grow && <p class="muted">{str("station.offHint")}</p>}
         <ul class="up-next">

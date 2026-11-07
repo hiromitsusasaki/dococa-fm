@@ -255,17 +255,40 @@ a {
   color: var(--paper);
 }
 
-.theme-toggle .short {
+.theme-toggle .short,
+.lang-toggle .short {
   display: none;
 }
 
+/* On a phone the switches show their short labels, so the header stays within two rows. */
 @media (max-width: 480px) {
-  .theme-toggle .full {
+  .theme-toggle .full,
+  .lang-toggle .full {
     display: none;
   }
 
-  .theme-toggle .short {
+  .theme-toggle .short,
+  .lang-toggle .short {
     display: inline;
+  }
+
+  .site-header {
+    gap: 0 var(--sp-3);
+  }
+
+  /* Row one: wordmark and the two switches; row two: the links. */
+  .site-header nav {
+    order: 3;
+    flex: 1 0 100%;
+    gap: 0 var(--sp-3);
+  }
+
+  .site-header .site-user {
+    display: none;
+  }
+
+  .lang-toggle {
+    margin-right: 0;
   }
 }
 
@@ -323,6 +346,16 @@ a {
   object-fit: cover;
   border-radius: 16px;
   box-shadow: 0 14px 34px rgba(10, 20, 40, 0.25);
+}
+
+/* Seen before: wordmark and tagline only, on every width. */
+.hero.compact {
+  grid-template-columns: 1fr;
+  padding: 14px 20px;
+}
+
+.hero.compact .kv {
+  display: none;
 }
 
 .tagline {
@@ -1640,22 +1673,23 @@ body.embed .put {
   margin: 0;
 }
 
-.recent-episodes ul {
-  display: grid;
-  margin: 0;
+/* The rows are the on-air list's (.up-next li); here the whole row is one link, so the padding moves onto it. */
+.recent-episodes .up-next li {
   padding: 0;
-  list-style: none;
 }
 
-.recent-episodes li a {
-  display: block;
-  padding: var(--sp-3) 0;
-  border-top: 1px solid var(--line);
+.up-next .row-link {
+  display: flex;
+  flex: 1 1 100%;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 2px 10px;
+  padding: 10px 0;
   color: var(--ink);
   text-decoration: none;
 }
 
-.recent-episodes li a:hover {
+.up-next .row-link:hover .title {
   text-decoration: underline;
 }
 
@@ -1725,4 +1759,51 @@ body.embed .put h1 {
   border-left: 7px solid var(--on-magenta);
   border-top: 5px solid transparent;
   border-bottom: 5px solid transparent;
+}
+
+/* The send button opens the on-air panel; the welcome line on /me. */
+.side-send {
+  margin: 0 0 var(--sp-3);
+}
+
+.side-send .button {
+  display: flex;
+  width: 100%;
+  justify-content: center;
+}
+
+.notice {
+  margin: 0 0 var(--sp-4);
+  padding: var(--sp-3);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-md);
+  background: var(--panel);
+  overflow-wrap: anywhere;
+}
+
+/* The send modal fills a phone: the close button stays at the top right whatever the frame shows. */
+@media (max-width: 480px) {
+  dialog.send-modal {
+    width: 100dvw;
+    height: 100dvh;
+    border: 0;
+    border-radius: 0;
+  }
+
+  .send-modal-bar {
+    position: fixed;
+    top: 0;
+    right: 0;
+    z-index: 1;
+    padding: var(--sp-1);
+    border: 0;
+    background: transparent;
+  }
+
+  .send-modal-bar button {
+    border: 1px solid var(--line-strong);
+    border-radius: var(--r-pill);
+    background: var(--panel);
+    color: var(--ink);
+  }
 }

@@ -1,10 +1,12 @@
 import { Hono } from "hono";
-import { LetterCard, senderLine } from "../../views/components";
+import { raw } from "hono/html";
+import { EpisodeRow, LetterCard, senderLine } from "../../views/components";
 import type { Variables } from "../auth/session";
-import { type ArchiveSender, listArchive } from "../db/episodes";
+import { listArchive } from "../db/episodes";
 import { listRecentPublicLetters } from "../db/letters";
 import type { Env } from "../env";
-import { type Lang, tFor } from "../i18n/t";
+import { tFor } from "../i18n/t";
+import type { Item } from "../types";
 import { stationLabel } from "../program/station";
 import { StationPage } from "./stations";
 
@@ -13,12 +15,8 @@ export const home = new Hono<{ Bindings: Env; Variables: Variables }>();
 /** Programmes the listener heard, newest first, on the home. */
 const RECENT_EPISODES = 3;
 
-/** A heard programme's line: its first work and who sent the first letter (a found voice by its source's author). */
-function episodeLine(title: string | null, sender: ArchiveSender | null, lang: Lang): string {
-  const t = tFor(lang);
-  const work = title ?? t("episode.untitled");
-  return sender ? `${work} · ${senderLine(sender, lang)}` : work;
-}
+/** Runs right after the hero, before it paints: a browser that has switched the radio on before sees the short hero. */
+const HERO_COMPACT = `try{if(localStorage.getItem("dfm.seen"))document.currentScript.previousElementSibling.classList.add("compact")}catch(e){}`;
 
 home.get("/", async (c) => {
   const listener = c.get("listener");
@@ -37,12 +35,10 @@ home.get("/", async (c) => {
       </picture>
     </section>
   );
+  const heroBoot = <script>{raw(HERO_COMPACT)}</script>;
   return c.html(
-    <StationPage stationKey="mine" title={t("app.name")} label={stationLabel({ kind: "mine" }, "", lang)} lang={lang} listener={listener} path="/" voice={listener.voice} dial={listener.dial} grow={false} hideName top={hero}>
+    <StationPage stationKey="mine" title={t("app.name")} label={stationLabel({ kind: "mine" }, "", lang)} lang={lang} listener={listener} path="/" voice={listener.voice} dial={listener.dial} grow={false} hideName top={<>{hero}{heroBoot}</>} send>
       <section class="home">
-        <p>
-          <a class="button" href="/put" data-open-send>{t("home.put")}</a>
-        </p>
         {/* The station script opens this over the page, so the radio keeps playing; the frame loads on the first open. */}
         <dialog class="send-modal" aria-label={t("put.title")}>
           <form method="dialog" class="send-modal-bar">
@@ -55,19 +51,17 @@ home.get("/", async (c) => {
           {lang === "en" && " "}
           <a href="/start">{t("home.explainStart")}</a>
         </p>
-        <section class="recent-episodes">
-          <h2>{t("episode.archive")}</h2>
-          {heard.length > 0 && (
-            <ul>
+        {heard.length > 0 && (
+          <section class="recent-episodes">
+            <h2>{t("episode.archive")}</h2>
+            <ul class="up-next">
               {heard.map((e) => (
-                <li>
-                  <a href={`/episodes/${e.id}`}>{episodeLine(e.title, e.sender, lang)}</a>
-                </li>
+                <EpisodeRow id={e.id} kind={e.kind as Item["kind"] | null} title={e.title} creator={e.creator} imageUrl={e.imageUrl} sender={e.sender ? senderLine(e.sender, lang) : null} lang={lang} />
               ))}
             </ul>
-          )}
-          <a href="/episodes">{t("home.seeAll")}</a>
-        </section>
+            <a href="/episodes">{t("home.seeAll")}</a>
+          </section>
+        )}
         {recent.length > 0 && (
           <section>
             <h2>{t("home.recent")}</h2>

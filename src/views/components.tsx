@@ -227,3 +227,24 @@ export function LetterList({ itemId, letters, lang }: { itemId: string; letters:
     </>
   );
 }
+
+/**
+ * A heard programme as a row of the on-air list: the same classes and order as the station's `.up-next` rows
+ * (picture, kind, title, creator, sender), made on the server because the home renders them without the radio's script.
+ * The whole row is the link to the programme.
+ */
+export function EpisodeRow({ id, kind, title, creator, imageUrl, sender, lang }: { id: string; kind: Item["kind"] | null; title: string | null; creator: string | null; imageUrl: string | null; sender: string | null; lang: Lang }) {
+  const t = tFor(lang);
+  const kindText = kind ? t(`kind.${kind}`) : "";
+  return (
+    <li>
+      <a class="row-link" href={`/episodes/${id}`}>
+        {imageUrl && /^https?:\/\//i.test(imageUrl) && <img class="thumb" src={imageUrl} alt="" width="40" height="40" loading="lazy" />}
+        {kindText && <span class="kind">{kindText}</span>}
+        <span class="title">{title ?? t("episode.untitled")}</span>
+        {creator && <span class="creator">{creator}</span>}
+        {sender && <span class="sender">{sender}</span>}
+      </a>
+    </li>
+  );
+}

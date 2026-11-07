@@ -99,10 +99,10 @@ export type ArchiveSender = { radioName: string; place: string; placeCountry?: s
  * first letter (taken from the stored lines, so no further query; null when the first segment reads none). Only a
  * letter or a found voice names the sender: a reply or 私も read in that segment is someone reacting, not the sender.
  */
-export async function listArchive(db: D1Database, listenerId: string, limit: number): Promise<Array<{ id: string; createdAt: string; title: string | null; sender: ArchiveSender | null }>> {
+export async function listArchive(db: D1Database, listenerId: string, limit: number): Promise<Array<{ id: string; createdAt: string; title: string | null; kind: string | null; creator: string | null; imageUrl: string | null; sender: ArchiveSender | null }>> {
   const { results } = await db
     .prepare(
-      `SELECT e.id, e.created_at, i.title,
+      `SELECT e.id, e.created_at, i.title, i.kind, i.creator, i.image_url,
          (SELECT l.value FROM json_each(e.segments, '$[0].lines') AS l WHERE json_extract(l.value, '$.type') = 'letter' AND json_extract(l.value, '$.kind') IN ('letter', 'found') LIMIT 1) AS first_letter
        FROM episodes e
        LEFT JOIN items i ON i.id = json_extract(e.segments, '$[0].itemId')
@@ -110,8 +110,8 @@ export async function listArchive(db: D1Database, listenerId: string, limit: num
        ORDER BY e.created_at DESC, e.id DESC LIMIT ?`,
     )
     .bind(listenerId, limit)
-    .all<{ id: string; created_at: string; title: string | null; first_letter: string | null }>();
-  return results.map((r) => ({ id: r.id, createdAt: r.created_at, title: r.title ?? null, sender: senderOf(r.first_letter) }));
+    .all<{ id: string; created_at: string; title: string | null; kind: string | null; creator: string | null; image_url: string | null; first_letter: string | null }>();
+  return results.map((r) => ({ id: r.id, createdAt: r.created_at, title: r.title ?? null, kind: r.kind ?? null, creator: r.creator ?? null, imageUrl: r.image_url ?? null, sender: senderOf(r.first_letter) }));
 }
 
 function senderOf(json: string | null): ArchiveSender | null {

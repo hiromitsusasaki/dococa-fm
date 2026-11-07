@@ -191,7 +191,7 @@ describe("home and bookmarklet", () => {
   it("sends a brand-new listener from the home page to /start", async () => {
     const html = await (await get("/", await signedInSession())).text();
     expect(html).not.toMatch(/<form[^>]*action="\/episodes"/);
-    expect(html).toMatch(/好きなものを 3 つ送ると、あなたの好みに近いお便りが流れてきます。<a href="\/start">始める<\/a>/);
+    expect(html).toMatch(/好きなものを 3 つ登録すると、あなたの好みに近いお便りが流れてきます。<a href="\/start">始める<\/a>/);
   });
 
   it("puts the bookmarklet itself on /put and a link to it on /settings", async () => {

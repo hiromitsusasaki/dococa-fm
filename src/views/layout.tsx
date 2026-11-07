@@ -6,7 +6,16 @@ import type { Listener } from "../worker/types";
 type LayoutProps = { title: string; children?: Child; /** The client entry to load: `player` or `station`. */
   script?: "player" | "station"; lang?: Lang;
   /** Link-preview tags, for pages meant to be shared. */
-  og?: { title: string; description: string; url: string };
+  og?: {
+    title: string;
+    description: string;
+    url: string;
+    type?: "website" | "article";
+    image?: string;
+    audio?: string;
+    /** An X card; `player` plays `player` (an https page that may be framed) in the timeline. */
+    twitter?: { card: "player"; player: string; width: number; height: number };
+  };
   /** Shown inside a frame on another page of the site (the send modal): no header. */
   embed?: boolean;
 } & (
@@ -53,24 +62,21 @@ function SiteHeader({ listener, path, lang }: { listener?: Listener; path?: stri
           ))}
       </nav>
       {listener && (
-        <form method="post" action="/lang" class="lang-toggle" role="group" aria-label={t("lang.label")}>
+        <form method="post" action="/lang" class="lang-toggle" role="group" aria-label={t("lang.label")} data-confirm>
           <input type="hidden" name="next" value={path ?? "/"} />
           {LANGS.map((l) => (
-            <button type="submit" name="lang" value={l} aria-pressed={String(lang === l)} lang={l}>{t(`lang.${l}`)}</button>
+            <button type="submit" name="lang" value={l} aria-pressed={String(lang === l)} lang={l} aria-label={t(`lang.${l}`)}>
+              <span class="full" aria-hidden="true">{t(`lang.${l}`)}</span>
+              <span class="short" aria-hidden="true">{t(`lang.${l}Short`)}</span>
+            </button>
           ))}
         </form>
       )}
       <div class="theme-toggle" role="group" aria-label={t("theme.label")}>
         {THEMES.map((mode) => (
           <button type="button" data-theme-set={mode} aria-pressed="false" title={t(`theme.${mode}`)} aria-label={t(`theme.${mode}`)}>
-            {mode === "auto" ? (
-              <>
-                <span class="full" aria-hidden="true">{t("theme.auto")}</span>
-                <span class="short" aria-hidden="true">{t("theme.autoShort")}</span>
-              </>
-            ) : (
-              t(`theme.${mode}`)
-            )}
+            <span class="full" aria-hidden="true">{t(`theme.${mode}`)}</span>
+            <span class="short" aria-hidden="true">{t(`theme.${mode}Short`)}</span>
           </button>
         ))}
       </div>
@@ -93,7 +99,17 @@ export function Layout({ title, children, script, lang = "ja", listener, path, o
             <meta property="og:title" content={og.title} />
             <meta property="og:description" content={og.description} />
             <meta property="og:url" content={og.url} />
-            <meta property="og:type" content="website" />
+            <meta property="og:type" content={og.type ?? "website"} />
+            {og.image && <meta property="og:image" content={og.image} />}
+            {og.audio && <meta property="og:audio" content={og.audio} />}
+            {og.twitter && (
+              <>
+                <meta name="twitter:card" content={og.twitter.card} />
+                <meta name="twitter:player" content={og.twitter.player} />
+                <meta name="twitter:player:width" content={String(og.twitter.width)} />
+                <meta name="twitter:player:height" content={String(og.twitter.height)} />
+              </>
+            )}
           </>
         )}
         <link rel="manifest" href="/manifest.webmanifest" />

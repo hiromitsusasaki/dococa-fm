@@ -35,8 +35,11 @@ describe("GET /", () => {
     expect(html).toContain("世界のどこかにいる誰かの好きなものが聴こえてくるラジオ");
     expect(html).not.toMatch(/<form[^>]*action="\/episodes"/);
     expect(html).not.toContain("あなたのラジオをつける");
-    expect(html).toContain('href="/episodes"');
+    // Nothing heard yet: no archive link either.
+    expect(html).not.toContain('href="/episodes"');
     expect(html).toMatch(/href="\/put"[^>]*>お便りを送る/);
+    // The radio's script puts the send button above the on-air list; the page only asks for it.
+    expect(html).toContain('data-send="1"');
     expect(html).toContain("いま届いているお便り");
     expect(html).not.toContain("最近の作品");
     expect((html.match(/class="letter-card"/g) ?? []).length).toBe(6);
@@ -99,7 +102,7 @@ describe("GET /", () => {
 
   it("explains how the radio leans to the listener's taste, with the way to /start, for every listener", async () => {
     const cookie = await newSession();
-    const explain = '<p class="muted">好きなものを 3 つ送ると、あなたの好みに近いお便りが流れてきます。<a href="/start">始める</a></p>';
+    const explain = '<p class="muted">好きなものを 3 つ登録すると、あなたの好みに近いお便りが流れてきます。<a href="/start">始める</a></p>';
     expect(await (await get("/", cookie)).text()).toContain(explain);
     const item = await insertItem(env.DB, itemDraft());
     const id = cookie.split("=")[1]!.split(".")[0]!;
@@ -108,7 +111,7 @@ describe("GET /", () => {
     expect(html).toContain(explain);
     expect(html).not.toContain("あなたのラジオをつける");
     const en = await (await SELF.fetch(`${BASE}/`, { headers: { "accept-language": "en" } })).text();
-    expect(en).toContain('<p class="muted">Send three things you love and the letters drift closer to your taste. <a href="/start">Start</a></p>');
+    expect(en).toContain('<p class="muted">Register three things you love and the letters drift closer to your taste. <a href="/start">Start</a></p>');
   });
 
   it("lists the three latest programmes the listener heard, by work and sender, then the archive link; a new listener gets the link only", async () => {
@@ -127,16 +130,43 @@ describe("GET /", () => {
     const html = await (await get("/", cookie)).text();
     const section = html.slice(html.indexOf('<section class="recent-episodes">'), html.indexOf("</section>", html.indexOf('<section class="recent-episodes">')));
     expect(section).toContain("<h2>これまでの番組</h2>");
-    expect(section).toContain(`<a href="/episodes/${ids[3]}">番組の曲3 · 送り主3さん（札幌）</a>`);
-    expect(section).toContain(`<a href="/episodes/${ids[1]}">番組の曲1 · 送り主1さん（札幌）</a>`);
+    // The rows are the on-air list's: the same classes in the same order, the whole row one link.
+    expect(section).toContain('<ul class="up-next">');
+    expect(section).toContain(`<li><a class="row-link" href="/episodes/${ids[3]}">`);
+    expect(section).toContain('<span class="kind">音楽</span><span class="title">番組の曲3</span><span class="creator">');
+    expect(section).toContain('<span class="sender">送り主3さん（札幌）</span>');
+    expect(section).toContain(`href="/episodes/${ids[1]}"`);
     expect(section).not.toContain(ids[0]);
+    expect(section).not.toContain("<h3");
+    expect(section.match(/<li>/g)).toHaveLength(3);
     expect(section.indexOf(ids[3]!)).toBeLessThan(section.indexOf(ids[2]!));
     expect(section).toContain('<a href="/episodes">すべて見る</a>');
     expect(section).not.toMatch(/\d+\s*(件|人|位|回)/);
 
+    // A listener who has heard nothing gets no section: no heading and no link to an empty archive.
     const fresh = await (await get("/", await newSession())).text();
-    const empty = fresh.slice(fresh.indexOf('<section class="recent-episodes">'), fresh.indexOf("</section>", fresh.indexOf('<section class="recent-episodes">')));
-    expect(empty).toBe('<section class="recent-episodes"><h2>これまでの番組</h2><a href="/episodes">すべて見る</a>');
+    expect(fresh).not.toContain("recent-episodes");
+    expect(fresh).not.toContain("これまでの番組");
+    expect(fresh).not.toContain('href="/episodes"');
+  });
+
+  it("shows the work's picture on a programme row when it has one, and no picture element when it has none", async () => {
+    const cookie = await newSession();
+    const listenerId = cookie.split("=")[1]!.split(".")[0]!;
+    await get("/", cookie);
+    const withArt = await insertItem(env.DB, itemDraft({ title: "絵のある曲", externalIds: { itunes: "pa" }, imageUrl: "https://example.com/p.jpg" }));
+    const noArt = await insertItem(env.DB, itemDraft({ title: "絵のない曲", externalIds: { itunes: "pb" }, imageUrl: null }));
+    for (const [n, it] of [withArt, noArt].entries()) {
+      const l = await insertLetter(env.DB, letterDraft(it.id, { body: "便り", bodyJa: "便り" }));
+      const line = { type: "letter" as const, letterId: l.id, text: "便り", radioName: "送り主", place: "札幌", kind: "letter" as const, sourceUrl: null, sourceAuthor: null };
+      const ep = await insertEpisode(env.DB, { listenerId, segments: [{ itemId: it.id, slot: "near" as const, lines: [line] }], verified: true, report: {} as Episode["report"], createdAt: `2026-11-0${n + 1}T00:00:00.000Z` });
+      await recordListen(env.DB, { listenerId, episodeId: ep.id, letterId: l.id, segmentIndex: 0 });
+    }
+    const html = await (await get("/", cookie)).text();
+    const rows = [...html.matchAll(/<li><a class="row-link"[\s\S]*?<\/a><\/li>/g)].map((m) => m[0]);
+    expect(rows).toHaveLength(2);
+    expect(rows[1]).toContain('<img class="thumb" src="https://example.com/p.jpg" alt="" width="40" height="40"');
+    expect(rows[0]).not.toContain("<img");
   });
 
   it("names the letter's sender in a recent programme, never someone who replied to it", async () => {
@@ -152,22 +182,29 @@ describe("GET /", () => {
     await recordListen(env.DB, { listenerId, episodeId: both.id, letterId: l.id, segmentIndex: 0 });
     await recordListen(env.DB, { listenerId, episodeId: only.id, letterId: r.id, segmentIndex: 0 });
     const html = await (await get("/", cookie)).text();
-    expect(html).toContain(`<a href="/episodes/${both.id}">返信のある曲 · 送り主さん（札幌）</a>`);
-    expect(html).toContain(`<a href="/episodes/${only.id}">返信のある曲</a>`);
+    const row = (id: string) => html.match(new RegExp(`<li><a class="row-link" href="/episodes/${id}">[\\s\\S]*?</a></li>`))?.[0] ?? "";
+    expect(row(both.id)).toContain('<span class="sender">送り主さん（札幌）</span>');
+    expect(row(only.id)).toContain("返信のある曲");
+    expect(row(only.id)).not.toContain('class="sender"');
     expect(html).not.toContain("返した人");
   });
 
-  it("orders the home: send, explanation, recent programmes, then the letter cards", async () => {
+  it("orders the home: the radio, the send dialog, explanation, recent programmes, then the letter cards", async () => {
     const cookie = await newSession();
+    const listenerId = cookie.split("=")[1]!.split(".")[0]!;
+    await get("/", cookie);
     const it = await insertItem(env.DB, itemDraft());
-    await insertLetter(env.DB, letterDraft(it.id, { body: "順番の便り", bodyJa: "順番の便り" }));
+    const l = await insertLetter(env.DB, letterDraft(it.id, { body: "順番の便り", bodyJa: "順番の便り" }));
+    const line = { type: "letter" as const, letterId: l.id, text: "順番の便り", radioName: "送り主", place: "札幌", kind: "letter" as const, sourceUrl: null, sourceAuthor: null };
+    const ep = await insertEpisode(env.DB, { listenerId, segments: [{ itemId: it.id, slot: "near" as const, lines: [line] }], verified: true, report: {} as Episode["report"] });
+    await recordListen(env.DB, { listenerId, episodeId: ep.id, letterId: l.id, segmentIndex: 0 });
     const html = await (await get("/", cookie)).text();
     const at = (s: string) => {
       const i = html.indexOf(s);
       expect(i, s).toBeGreaterThan(-1);
       return i;
     };
-    const order = [at('<section class="home">'), at("data-open-send"), at('<dialog class="send-modal"'), at('<p class="muted">好きなものを'), at('<section class="recent-episodes">'), at('class="letter-cards"')];
+    const order = [at('id="station"'), at('<section class="home">'), at('<dialog class="send-modal"'), at('<p class="muted">好きなものを'), at('<section class="recent-episodes">'), at('class="letter-cards"')];
     expect([...order].sort((a, b) => a - b)).toEqual(order);
   });
 
@@ -191,7 +228,9 @@ describe("GET /", () => {
 
   it("sends a letter from a modal: a /put link the station script opens as a dialog, whose frame loads only when opened", async () => {
     const html = await (await get("/", await newSession())).text();
-    expect(html).toMatch(/<a class="button" href="\/put" data-open-send="true">お便りを送る<\/a>/);
+    // The button itself is drawn by the radio's script, as the first thing in the on-air panel (station.test.ts).
+    expect(html).not.toContain("data-open-send");
+    expect(html).toMatch(/"home\.put":"お便りを送る"/);
     expect(html).toMatch(/<dialog class="send-modal" aria-label="お便りを送る"><form method="dialog" class="send-modal-bar"><button type="submit" class="quiet">閉じる<\/button><\/form><iframe data-src="\/put\?embed=1" title="お便りを送る"><\/iframe><\/dialog>/);
     expect(html).not.toMatch(/\ssrc="\/put\?embed=1"/);
   });
@@ -217,5 +256,19 @@ describe("GET /", () => {
     const html = await (await get("/stations/world", await newSession())).text();
     expect(html).not.toContain('class="hero"');
     expect(html).toContain('class="station-name"');
+  });
+
+  it("shows the short hero from the second visit on: a script right after the hero reads dfm.seen before paint", async () => {
+    const html = await (await get("/", await newSession())).text();
+    const hero = html.indexOf('<section class="hero">');
+    const after = html.slice(html.indexOf("</section>", hero), html.indexOf('id="station"'));
+    expect(after).toContain('localStorage.getItem("dfm.seen")');
+    expect(after).toContain('classList.add("compact")');
+  });
+
+  it("links to no world station anywhere on screen", async () => {
+    const cookie = await newSession();
+    const page = (await (await get("/", cookie)).text()).replace(/<script[\s\S]*?<\/script>/g, "");
+    expect(page).not.toContain("/stations/world");
   });
 });
