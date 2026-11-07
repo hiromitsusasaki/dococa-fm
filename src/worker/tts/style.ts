@@ -6,8 +6,8 @@
  *
  * Written as an instruction ("read the following…"), as Google's examples are: the descriptive form was read
  * aloud as text on every short line in production (2026-11-06). The imperative form still is, rarely, which
- * `spokeThePrompt` in google.ts catches by the clip's length. The English prompt was not seen read aloud in
- * its descriptive form and was read in an imperative one, so it keeps its form.
+ * `spokeThePrompt` in google.ts catches by the clip's length. The English prompt is read aloud less often in
+ * its descriptive form (3 of 194 clips on 2026-11-07) than it was in an imperative one, so it keeps its form.
  */
 export const DJ_STYLE_PROMPT =
   "次の文を、深夜の都会の FM の男性 DJ のように読んでください。落ち着いて澄んだ、自然で簡潔な話し方で。テンポは急がず、抑揚は軽く、声を張らず、粘らず、母音を伸ばさず、誇張しないでください。";
