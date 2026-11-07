@@ -28,6 +28,8 @@ const letterSchema = z.object({
   body: z.string().default(""),
   parentLetterId: z.string().max(100).optional(),
   kind: z.enum(["letter", "reply", "watashimo"]).default("letter"),
+  /** Sent from the home's send modal: the answer stays in the frame. */
+  embed: z.literal("1").optional(),
 });
 type LetterForm = z.infer<typeof letterSchema>;
 
@@ -37,7 +39,7 @@ export const letters = new Hono<{ Bindings: Env; Variables: Variables }>();
 async function putError(c: AppContext, form: Partial<LetterForm>, error: string, status: 404 | 422 | 429 | 409 | 503, draft?: ItemDraft | null) {
   const card = form.itemId ? await getItem(c.env.DB, form.itemId) : (draft ?? null);
   const itemId = card && form.itemId ? form.itemId : undefined;
-  return c.html(<PutPage listener={c.get("listener")} bookmarklet={bookmarkletCode(c.env.PUBLIC_ORIGIN)} card={card} itemId={itemId} url={form.url} body={form.body} error={error} />, status);
+  return c.html(<PutPage listener={c.get("listener")} bookmarklet={bookmarkletCode(c.env.PUBLIC_ORIGIN)} card={card} itemId={itemId} url={form.url} body={form.body} error={error} embed={form.embed === "1"} />, status);
 }
 
 /** Only a new letter needs an account; 私も and a reply stay open to anonymous listeners. */
@@ -61,7 +63,7 @@ letters.post(
       defer(c, embedItems(c.env, c.env.DB, [result.itemId]));
       // Reactions are fixed phrases and have no unit to make.
       if (result.letter.kind === "letter") defer(c, prepareLetter(c.env, c.env.DB, result.letter.id));
-      return c.redirect(`/items/${result.itemId}`, 303);
+      return c.redirect(form.embed === "1" ? `/put?embed=1&sent=${encodeURIComponent(result.itemId)}` : `/items/${result.itemId}`, 303);
     }
     const message = result.reason ? `${t(result.key)} ${t(`letters.reason.${result.reason}` as keyof typeof ja)}` : t(result.key);
     return putError(c, form, message, result.status, result.draft);

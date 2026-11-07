@@ -434,6 +434,36 @@ export function mountStation(root: HTMLElement, opts: StationOptions) {
   };
 }
 
+/**
+ * The home's send modal: the button (a plain `/put` link without script) opens the `<dialog>`, whose frame loads `/put?embed=1`
+ * on the first open and again after a letter is sent. The embedded sent page posts `dfm:sent`, which closes it; a message from
+ * any other origin is ignored. Escape and the close button close it natively.
+ */
+export function wireSendModal(doc: Document = document): () => void {
+  const dialog = doc.querySelector<HTMLDialogElement>("dialog.send-modal");
+  const frame = dialog?.querySelector("iframe");
+  if (!dialog || !frame || typeof dialog.showModal !== "function") return () => {};
+  let fresh = false;
+  const open = (e: MouseEvent) => {
+    if (!(e.target as Element | null)?.closest?.("[data-open-send]") || e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+    e.preventDefault();
+    if (!fresh) frame.src = frame.dataset.src ?? "/put?embed=1";
+    fresh = true;
+    dialog.showModal();
+  };
+  const sent = (e: MessageEvent) => {
+    if (e.origin !== location.origin || (e.data as { type?: unknown } | null)?.type !== "dfm:sent") return;
+    fresh = false;
+    dialog.close();
+  };
+  doc.addEventListener("click", open);
+  window.addEventListener("message", sent);
+  return () => {
+    doc.removeEventListener("click", open);
+    window.removeEventListener("message", sent);
+  };
+}
+
 function boot() {
   const el = document.getElementById("station");
   if (!el) return;
@@ -454,4 +484,7 @@ function boot() {
   });
 }
 
-if (typeof document !== "undefined") boot();
+if (typeof document !== "undefined") {
+  boot();
+  wireSendModal();
+}

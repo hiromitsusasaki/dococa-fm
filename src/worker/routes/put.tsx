@@ -1,4 +1,5 @@
 import { type Context, Hono } from "hono";
+import { raw } from "hono/html";
 import { BookmarkletHelp, bookmarkletCode } from "../../views/bookmarklet";
 import { ItemCard, whoOf } from "../../views/components";
 import { Layout } from "../../views/layout";
@@ -36,7 +37,18 @@ export type PutPageProps = {
   /** The title searched for, and what came back (absent when nothing was searched or the search was refused). */
   q?: string;
   results?: SearchResult[];
+  /** Inside the home's send modal (`?embed=1`): no header, and every link and form inside the page keeps the frame. */
+  embed?: boolean;
 };
+
+/** A path on the send page, kept inside the modal's frame when the page is embedded. */
+export const putHref = (path: string, embed: boolean | undefined): string => (embed ? `${path}${path.includes("?") ? "&" : "?"}embed=1` : path);
+
+/** The hidden field that keeps a form's answer inside the frame. */
+const EmbedField = ({ embed }: { embed?: boolean }) => (embed ? <input type="hidden" name="embed" value="1" /> : null);
+
+/** What the sent state tells the home page: close the modal. Only the site's own origin receives it. */
+const SENT_MESSAGE = `try{window.parent.postMessage({type:"dfm:sent"},location.origin)}catch(e){}`;
 
 const SEARCH_RESULTS = 10;
 const MAX_QUERY = 200;
@@ -44,16 +56,16 @@ const LISTED = 30;
 /** With a filter, more rows are read so the filter reaches past the first page. */
 const LISTED_FOR_FILTER = 200;
 
-function PickLink({ item }: { item: Item }) {
+function PickLink({ item, embed }: { item: Item; embed?: boolean }) {
   return (
-    <a href={`/put?itemId=${item.id}`}>
+    <a href={putHref(`/put?itemId=${item.id}`, embed)}>
       {item.imageUrl && <img src={item.imageUrl} alt="" width="48" height="48" loading="lazy" />}
       <span class="history-title">{item.title}</span> <span class="history-creator">{item.creator}</span>
     </a>
   );
 }
 
-function Favorites({ listener, history, picker, pick }: Pick<PutPageProps, "listener" | "history" | "picker" | "pick">) {
+function Favorites({ listener, history, picker, pick, embed }: Pick<PutPageProps, "listener" | "history" | "picker" | "pick" | "embed">) {
   const t = tFor(listener.lang);
   const lists = picker ?? { favorites: [], top: [], recent: [] };
   const any = lists.favorites.length + lists.top.length + lists.recent.length + (history?.length ?? 0) > 0;
@@ -62,6 +74,7 @@ function Favorites({ listener, history, picker, pick }: Pick<PutPageProps, "list
     <section class="put-way put-history">
       <h3>{t("put.fromFavorites")}</h3>
       <form method="get" action="/put" class="put-filter">
+        <EmbedField embed={embed} />
         <label>
           <span>{t("put.filterFavorites")}</span>
           <input type="search" name="pick" value={pick ?? ""} />
@@ -72,7 +85,7 @@ function Favorites({ listener, history, picker, pick }: Pick<PutPageProps, "list
       {lists.favorites.length > 0 && (
         <section class="put-favorites">
           <h4>{t("put.favorites")}</h4>
-          <ul>{lists.favorites.map((item) => <li><PickLink item={item} /></li>)}</ul>
+          <ul>{lists.favorites.map((item) => <li><PickLink item={item} embed={embed} /></li>)}</ul>
         </section>
       )}
       {(lists.top.length > 0 || lists.recent.length > 0) && <h4>{t("put.fromHistory")}</h4>}
@@ -83,8 +96,9 @@ function Favorites({ listener, history, picker, pick }: Pick<PutPageProps, "list
             <ul>
               {items.map((item) => (
                 <li>
-                  <PickLink item={item} />
+                  <PickLink item={item} embed={embed} />
                   <form method="post" action="/put/register" class="put-register">
+                    <EmbedField embed={embed} />
                     <input type="hidden" name="itemId" value={item.id} />
                     <button type="submit">{t("put.register")}</button>
                   </form>
@@ -97,25 +111,26 @@ function Favorites({ listener, history, picker, pick }: Pick<PutPageProps, "list
       {history && history.length > 0 && (
         <section>
           <h4>{t("put.fromHistory")}</h4>
-          <ul>{history.map((item) => <li><PickLink item={item} /></li>)}</ul>
+          <ul>{history.map((item) => <li><PickLink item={item} embed={embed} /></li>)}</ul>
         </section>
       )}
     </section>
   );
 }
 
-function Search({ listener, q, results }: Pick<PutPageProps, "listener" | "q" | "results">) {
+function Search({ listener, q, results, embed }: Pick<PutPageProps, "listener" | "q" | "results" | "embed">) {
   const t = tFor(listener.lang);
   return (
     <section class="put-way put-search" id="search">
       <h3>{t("put.searchTitle")}</h3>
       {listener.googleSub === null ? (
         <p class="put-signin">
-          {t("put.searchNeedsSignin")} <a href={`/auth/google?next=${encodeURIComponent("/put")}`}>{t("signin.google")}</a>
+          {t("put.searchNeedsSignin")} <a href={`/auth/google?next=${encodeURIComponent(embed ? "/" : "/put")}`} target={embed ? "_top" : undefined}>{t("signin.google")}</a>
         </p>
       ) : (
         <>
           <form method="get" action="/put" class="put-search-form">
+            <EmbedField embed={embed} />
             <input type="search" name="q" value={q ?? ""} placeholder={t("put.searchPlaceholder")} aria-label={t("put.searchTitle")} maxlength={MAX_QUERY} required />
             <button type="submit">{t("put.searchSubmit")}</button>
           </form>
@@ -124,7 +139,7 @@ function Search({ listener, q, results }: Pick<PutPageProps, "listener" | "q" | 
             <ul class="put-results">
               {results.map(({ item, href }) => (
                 <li>
-                  <a href={href}>
+                  <a href={putHref(href, embed)}>
                     <ItemCard item={item} heading="h4" lang={listener.lang} />
                   </a>
                 </li>
@@ -138,13 +153,13 @@ function Search({ listener, q, results }: Pick<PutPageProps, "listener" | "q" | 
 }
 
 export function PutPage(props: PutPageProps) {
-  const { listener, bookmarklet, card, itemId, url, body, error, history, questions = [], imported, picker, pick, q, results } = props;
+  const { listener, bookmarklet, card, itemId, url, body, error, history, questions = [], imported, picker, pick, q, results, embed } = props;
   const lang = listener.lang;
   const t = tFor(lang);
   const here = itemId ? `/put?itemId=${itemId}` : url ? `/put?url=${encodeURIComponent(url)}` : "/put";
   const chosen = Boolean(card || itemId);
   return (
-    <Layout title={t("put.title")} lang={lang} listener={listener} path={here}>
+    <Layout title={t("put.title")} lang={lang} listener={listener} path={here} embed={embed}>
       <main class="put">
         <h1>{t("put.title")}</h1>
         {error && <p class="form-error" role="alert">{error}</p>}
@@ -155,6 +170,7 @@ export function PutPage(props: PutPageProps) {
           <section class="put-way">
             <h3>{t("put.pasteUrl")}</h3>
             <form method="get" action="/put" class="put-url">
+              <EmbedField embed={embed} />
               <label>
                 <span>{t("put.url")}</span>
                 <input type="url" name="url" value={url ?? ""} />
@@ -162,18 +178,19 @@ export function PutPage(props: PutPageProps) {
               <button type="submit">{t("put.resolve")}</button>
             </form>
           </section>
-          {!chosen && <Favorites listener={listener} history={history} picker={picker} pick={pick} />}
-          <Search listener={listener} q={q} results={results} />
+          {!chosen && <Favorites listener={listener} history={history} picker={picker} pick={pick} embed={embed} />}
+          <Search listener={listener} q={q} results={results} embed={embed} />
         </section>
         {chosen && (
           <section class="panel put-write">
             <h2>{t("put.write")}</h2>
             {listener.googleSub === null ? (
               <p class="put-signin" role="status">
-                {t("signin.needed")} <a href={`/auth/google?next=${encodeURIComponent(here)}`}>{t("signin.google")}</a>
+                {t("signin.needed")} <a href={`/auth/google?next=${encodeURIComponent(embed ? "/" : here)}`} target={embed ? "_top" : undefined}>{t("signin.google")}</a>
               </p>
             ) : (
               <form method="post" action="/letters" class="put-form">
+                <EmbedField embed={embed} />
                 {questions.length > 0 && (
                   <section class="put-questions">
                     <h3>{t("put.questions")}</h3>
@@ -191,7 +208,7 @@ export function PutPage(props: PutPageProps) {
                   <small>{t("put.bodyHelp")}</small>
                 </label>
                 <p class="put-from">
-                  {t("put.from")}: {whoOf(listener, lang)} <a href="/settings">{t("put.editSettings")}</a>
+                  {t("put.from")}: {whoOf(listener, lang)} <a href="/settings" target={embed ? "_top" : undefined}>{t("put.editSettings")}</a>
                   <br />
                   <small>{t("put.fromHelp")}</small>
                 </p>
@@ -205,6 +222,28 @@ export function PutPage(props: PutPageProps) {
           <BookmarkletHelp code={bookmarklet} lang={lang} heading="h3" />
         </section>
       </main>
+    </Layout>
+  );
+}
+
+/** The embedded page after a letter is taken: it says so, links to the work, and tells the home page to close the modal. */
+export function PutSentPage({ listener, item }: { listener: Listener; item: Item | null }) {
+  const lang = listener.lang;
+  const t = tFor(lang);
+  return (
+    <Layout title={t("put.title")} lang={lang} listener={listener} path="/put" embed>
+      <main class="put put-sent">
+        <h1 role="status">{t("put.sent")}</h1>
+        <p>
+          {item && (
+            <a href={`/items/${item.id}`} target="_top">
+              {t("put.sentSee")}
+            </a>
+          )}{" "}
+          <a href={putHref("/put", true)}>{t("put.another")}</a>
+        </p>
+      </main>
+      <script>{raw(SENT_MESSAGE)}</script>
     </Layout>
   );
 }
@@ -235,7 +274,7 @@ export const put = new Hono<AppEnv>();
 
 const limitSearch = searchRateLimit((c) => {
   const listener = c.get("listener");
-  return c.html(<PutPage listener={listener} bookmarklet={bookmarkletCode(c.env.PUBLIC_ORIGIN)} card={null} q={queryOf(c, "q")} error={tFor(listener.lang)("search.tooMany")} />, 429);
+  return c.html(<PutPage listener={listener} bookmarklet={bookmarkletCode(c.env.PUBLIC_ORIGIN)} card={null} q={queryOf(c, "q")} error={tFor(listener.lang)("search.tooMany")} embed={c.req.query("embed") === "1"} />, 429);
 });
 
 put.get("/put", limitSearch, async (c) => {
@@ -244,15 +283,18 @@ put.get("/put", limitSearch, async (c) => {
   const bookmarklet = bookmarkletCode(c.env.PUBLIC_ORIGIN);
   const itemId = c.req.query("itemId");
   const url = c.req.query("url")?.trim();
+  const embed = c.req.query("embed") === "1";
+  const sent = c.req.query("sent");
+  if (embed && sent !== undefined) return c.html(<PutSentPage listener={listener} item={sent ? await getItem(c.env.DB, sent) : null} />);
   if (itemId) {
     const item = await getItem(c.env.DB, itemId);
-    if (!item) return c.html(<PutPage listener={listener} bookmarklet={bookmarklet} card={null} error={t("put.notFound")} />, 404);
+    if (!item) return c.html(<PutPage embed={embed} listener={listener} bookmarklet={bookmarklet} card={null} error={t("put.notFound")} />, 404);
     const questions = (await isInHistory(c.env.DB, listener.id, item.id)) ? await elicitQuestions(c.env, item, listener) : [];
-    return c.html(<PutPage listener={listener} bookmarklet={bookmarklet} card={item} itemId={item.id} questions={questions} />);
+    return c.html(<PutPage embed={embed} listener={listener} bookmarklet={bookmarklet} card={item} itemId={item.id} questions={questions} />);
   }
   if (url) {
     const draft = await resolveUrl(url, c.env);
-    return c.html(<PutPage listener={listener} bookmarklet={bookmarklet} card={draft} url={url} error={draft ? undefined : t("put.notFound")} />);
+    return c.html(<PutPage embed={embed} listener={listener} bookmarklet={bookmarklet} card={draft} url={url} error={draft ? undefined : t("put.notFound")} />);
   }
   const pick = queryOf(c, "pick");
   const q = queryOf(c, "q");
@@ -265,10 +307,10 @@ put.get("/put", limitSearch, async (c) => {
   if (signedIn) {
     const [favorites, fromSpotify] = await Promise.all([listFavorites(c.env.DB, listener.id, limit), listImported(c.env.DB, listener.id, limit)]);
     const picker = { favorites: keep(favorites), top: keep(fromSpotify.top), recent: keep(fromSpotify.recent) };
-    return c.html(<PutPage listener={listener} bookmarklet={bookmarklet} card={null} picker={picker} pick={pick} q={q} results={results} imported={imported} />);
+    return c.html(<PutPage embed={embed} listener={listener} bookmarklet={bookmarklet} card={null} picker={picker} pick={pick} q={q} results={results} imported={imported} />);
   }
   const history = keep(await listHistory(c.env.DB, listener.id, limit));
-  return c.html(<PutPage listener={listener} bookmarklet={bookmarklet} card={null} history={history} pick={pick} q={q} imported={imported} />);
+  return c.html(<PutPage embed={embed} listener={listener} bookmarklet={bookmarklet} card={null} history={history} pick={pick} q={q} imported={imported} />);
 });
 
 /** Makes an imported candidate a favourite (it then shows on the public station and /me), then on to writing the letter. */
@@ -278,5 +320,5 @@ put.post("/put/register", requireSignin, async (c) => {
   const itemId = typeof form.itemId === "string" ? form.itemId : "";
   if (!itemId || !(await isInHistory(c.env.DB, listener.id, itemId))) return c.notFound();
   await upsertHistory(c.env.DB, [{ listenerId: listener.id, itemId, source: "manual", occurredAt: null, rank: null }]);
-  return c.redirect(`/put?itemId=${encodeURIComponent(itemId)}`, 303);
+  return c.redirect(putHref(`/put?itemId=${encodeURIComponent(itemId)}`, form.embed === "1"), 303);
 });

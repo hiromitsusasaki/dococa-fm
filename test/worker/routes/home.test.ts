@@ -125,6 +125,13 @@ describe("GET /", () => {
     expect(html).toContain("<title>Dococa FM</title>");
   });
 
+  it("sends a letter from a modal: a /put link the station script opens as a dialog, whose frame loads only when opened", async () => {
+    const html = await (await get("/", await newSession())).text();
+    expect(html).toMatch(/<a class="button" href="\/put" data-open-send="true">お便りを送る<\/a>/);
+    expect(html).toMatch(/<dialog class="send-modal" aria-label="お便りを送る"><form method="dialog" class="send-modal-bar"><button type="submit" class="quiet">閉じる<\/button><\/form><iframe data-src="\/put\?embed=1" title="お便りを送る"><\/iframe><\/dialog>/);
+    expect(html).not.toMatch(/\ssrc="\/put\?embed=1"/);
+  });
+
   it("opens with the hero: wordmark h1, tagline and the key visual with its alt", async () => {
     const html = await (await get("/", await newSession())).text();
     expect(html).toContain('class="hero"');

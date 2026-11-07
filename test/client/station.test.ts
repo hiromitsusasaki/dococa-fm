@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { forgetReportedListens, resumeAt } from "../../src/client/playback";
-import { mountStation, type StationOptions } from "../../src/client/station";
+import { mountStation, type StationOptions, wireSendModal } from "../../src/client/station";
 
 const strings: Record<string, string> = {
   "station.onOff": "ラジオをつける / 止める",
@@ -1074,5 +1074,58 @@ describe("station: a letter card plays on this radio", () => {
     const s = mountStation(root, opts({ stationKey: "mine" }));
     s.unmount();
     expect(press(card("L1"))).toBe(true);
+  });
+});
+
+describe("the home's send modal", () => {
+  let unwire: () => void;
+  let dialog: HTMLDialogElement;
+  let frame: HTMLIFrameElement;
+  let showModal: ReturnType<typeof vi.fn>;
+  let close: ReturnType<typeof vi.fn>;
+
+  beforeEach(() => {
+    document.body.innerHTML =
+      '<a class="button" href="/put" data-open-send>お便りを送る</a><dialog class="send-modal"><form method="dialog"><button type="submit">閉じる</button></form><iframe data-src="/put?embed=1" title="お便りを送る"></iframe></dialog>';
+    dialog = document.querySelector("dialog")!;
+    frame = document.querySelector("iframe")!;
+    showModal = vi.fn();
+    close = vi.fn();
+    dialog.showModal = showModal as unknown as HTMLDialogElement["showModal"];
+    dialog.close = close as unknown as HTMLDialogElement["close"];
+    unwire = wireSendModal(document);
+  });
+  afterEach(() => unwire());
+
+  const press = (init: MouseEventInit = {}) => document.querySelector("[data-open-send]")!.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, ...init }));
+  const message = (data: unknown, origin: string) => window.dispatchEvent(new MessageEvent("message", { data, origin }));
+
+  it("the button opens the dialog instead of leaving the page, and the frame loads only then", () => {
+    expect(frame.getAttribute("src")).toBeNull();
+    expect(press()).toBe(false);
+    expect(showModal).toHaveBeenCalledTimes(1);
+    expect(frame.getAttribute("src")).toBe("/put?embed=1");
+  });
+
+  it("a modified click still opens /put in a new tab", () => {
+    expect(press({ metaKey: true })).toBe(true);
+    expect(showModal).not.toHaveBeenCalled();
+  });
+
+  it("closes on dfm:sent from its own origin, and loads a fresh page on the next open", () => {
+    press();
+    frame.setAttribute("src", "/put?embed=1&sent=x");
+    message({ type: "dfm:sent" }, location.origin);
+    expect(close).toHaveBeenCalledTimes(1);
+    press();
+    expect(frame.getAttribute("src")).toBe("/put?embed=1");
+  });
+
+  it("ignores the same message from another origin, and other messages", () => {
+    press();
+    message({ type: "dfm:sent" }, "https://evil.example");
+    message({ type: "other" }, location.origin);
+    message(null, location.origin);
+    expect(close).not.toHaveBeenCalled();
   });
 });

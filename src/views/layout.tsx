@@ -7,6 +7,8 @@ type LayoutProps = { title: string; children?: Child; /** The client entry to lo
   script?: "player" | "station"; lang?: Lang;
   /** Link-preview tags, for pages meant to be shared. */
   og?: { title: string; description: string; url: string };
+  /** Shown inside a frame on another page of the site (the send modal): no header. */
+  embed?: boolean;
 } & (
   /** With the session's listener the header needs the current path, so its sign-in link comes back here. */
   | { listener: Listener; path: string }
@@ -74,7 +76,7 @@ function SiteHeader({ listener, path, lang }: { listener?: Listener; path?: stri
 }
 
 /** `lang` is the listener's; pages outside the session (admin, health) leave it at Japanese. */
-export function Layout({ title, children, script, lang = "ja", listener, path, og }: LayoutProps) {
+export function Layout({ title, children, script, lang = "ja", listener, path, og, embed = false }: LayoutProps) {
   const t = tFor(lang);
   return (
     <html lang={lang}>
@@ -99,8 +101,8 @@ export function Layout({ title, children, script, lang = "ja", listener, path, o
         <link rel="stylesheet" href="/app.css" />
         <script>{raw(THEME_BOOT)}</script>
       </head>
-      <body>
-        <SiteHeader listener={listener} path={path} lang={lang} />
+      <body class={embed ? "embed" : undefined}>
+        {!embed && <SiteHeader listener={listener} path={path} lang={lang} />}
         {children}
         <script>{raw(THEME_WIRE)}</script>
         {script && (

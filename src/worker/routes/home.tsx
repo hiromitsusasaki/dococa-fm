@@ -32,8 +32,15 @@ home.get("/", async (c) => {
       <section class="home">
         <p>{active ? <a class="button" href="/stations/mine">{t("home.listen")}</a> : <a class="button" href="/start">{t("home.start")}</a>}</p>
         <p>
-          <a class="button" href="/put">{t("home.put")}</a>
+          <a class="button" href="/put" data-open-send>{t("home.put")}</a>
         </p>
+        {/* The station script opens this over the page, so the radio keeps playing; the frame loads on the first open. */}
+        <dialog class="send-modal" aria-label={t("put.title")}>
+          <form method="dialog" class="send-modal-bar">
+            <button type="submit" class="quiet">{t("home.close")}</button>
+          </form>
+          <iframe data-src="/put?embed=1" title={t("put.title")}></iframe>
+        </dialog>
         <p>
           <a href="/episodes">{t("episode.archive")}</a>
         </p>

@@ -134,6 +134,9 @@ describe("imported candidates and /put/register", () => {
     expect(res.headers.get("location")).toBe(`/put?itemId=${item.id}`);
     const favs = await listFavorites(env.DB, id, 10);
     expect(favs.map((f) => [f.itemId, f.rank])).toEqual([[item.id, 3]]);
+    // From the home's send modal the letter screen stays in the frame.
+    const framed = await postForm("/put/register", cookie, { itemId: item.id, embed: "1" });
+    expect(framed.headers.get("location")).toBe(`/put?itemId=${item.id}&embed=1`);
   });
 
   it("404s for an item that is not in this listener's history", async () => {

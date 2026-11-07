@@ -47,6 +47,19 @@ describe("POST /letters", () => {
     expect(l!.bodyEn).toBe("[en] translated");
   });
 
+  it("from the home's send modal: the answer stays in the frame, as its sent state; an error keeps the frame too", async () => {
+    const item = await seedItem();
+    const cookie = await signedInSession();
+    const res = await postForm("/letters", cookie, { itemId: item.id, body: "モーダルから", embed: "1" });
+    expect(res.status).toBe(303);
+    expect(res.headers.get("location")).toBe(`/put?embed=1&sent=${item.id}`);
+    const bad = await postForm("/letters", cookie, { itemId: item.id, body: "", embed: "1" });
+    expect(bad.status).toBe(422);
+    const html = await bad.text();
+    expect(html).not.toContain('class="site-header"');
+    expect(html).toContain('<input type="hidden" name="embed" value="1"/>');
+  });
+
   it("judges the work's title and creator in the same moderation call", async () => {
     const item = await insertItem(env.DB, itemDraft({ title: "宣伝<タイトル>", creator: "誰かのチャンネル" }));
     const res = await postForm("/letters", await signedInSession(), { itemId: item.id, body: "いい曲" });

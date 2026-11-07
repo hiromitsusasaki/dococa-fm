@@ -1534,3 +1534,59 @@ button:disabled,
   gap: var(--sp-1);
   color: var(--ink-2);
 }
+
+/* The home's send modal: /put?embed=1 in a frame over the page, so the radio keeps playing. */
+dialog.send-modal {
+  width: min(44rem, calc(100vw - 32px));
+  height: min(52rem, calc(100dvh - 32px));
+  max-width: none;
+  max-height: none;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--r-panel);
+  background: var(--paper);
+  color: var(--ink);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+
+dialog.send-modal[open] {
+  display: flex;
+  flex-direction: column;
+}
+
+dialog.send-modal::backdrop {
+  background: rgba(10, 16, 30, 0.55);
+}
+
+.send-modal-bar {
+  display: flex;
+  justify-content: flex-end;
+  padding: var(--sp-1) var(--sp-2);
+  border-bottom: 1px solid var(--line);
+  background: var(--panel);
+}
+
+.send-modal-bar button {
+  min-height: 44px;
+  padding: 0 var(--sp-4);
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
+}
+
+dialog.send-modal iframe {
+  flex: 1;
+  width: 100%;
+  border: 0;
+  background: var(--paper);
+}
+
+/* Inside the frame: no header, so the page starts at its own heading. */
+body.embed {
+  padding-bottom: var(--sp-6);
+}
+
+body.embed .put {
+  padding-top: var(--sp-4);
+}
