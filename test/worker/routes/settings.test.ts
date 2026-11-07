@@ -159,7 +159,7 @@ describe("settings", () => {
     const cookie = cookieOf(await SELF.fetch(`${BASE}/settings`));
     const html = await (await SELF.fetch(`${BASE}/settings`, { headers: { cookie } })).text();
     expect(html).not.toContain('name="dial"');
-    expect(html).not.toContain("セレンディピティ");
+    expect(html).not.toContain("新しい出会い");
     const res = await postForm("/settings", cookie, { radioName: "ヒロ", dial: "0.9" });
     expect(res.status).toBe(303);
     const row = await env.DB.prepare("SELECT radio_name, dial FROM listeners").first<{ radio_name: string; dial: number }>();

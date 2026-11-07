@@ -181,7 +181,7 @@ export const ja = {
   "station.onOff": "ラジオをつける / 止める",
   "station.onAir": "ON AIR",
   "station.volume": "音量",
-  "station.dial": "セレンディピティ",
+  "station.dial": "新しい出会い",
   "station.dialHelp": "右に回すほど、思いがけない出会いが増えます",
   "station.dialNear": "小",
   "station.dialFar": "大",

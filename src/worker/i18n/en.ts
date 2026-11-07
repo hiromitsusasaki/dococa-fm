@@ -184,7 +184,7 @@ export const en: Record<keyof typeof ja, string> = {
   "station.onOff": "Turn the radio on / Stop",
   "station.onAir": "ON AIR",
   "station.volume": "Volume",
-  "station.dial": "Serendipity",
+  "station.dial": "New encounters",
   "station.dialHelp": "Turn it right for more unexpected encounters",
   "station.dialNear": "Low",
   "station.dialFar": "High",

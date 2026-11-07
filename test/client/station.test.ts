@@ -24,7 +24,7 @@ const strings: Record<string, string> = {
   "station.off": "止める",
   "station.onAir": "ON AIR",
   "station.volume": "音量",
-  "station.dial": "セレンディピティ",
+  "station.dial": "新しい出会い",
   "station.nowPlaying": "いま流れている",
   "station.panel": "オンエア",
   "station.now": "いま",
@@ -238,7 +238,7 @@ describe("station: screen", () => {
     mountStation(root, opts({ stationKey: "mine", dial: 0.4 }));
     await flush();
     expect((el("dial") as HTMLInputElement).value).toBe("0.4");
-    expect(root.textContent).toContain("セレンディピティ");
+    expect(root.textContent).toContain("新しい出会い");
   });
 
   it("the home's right column opens with the send panel (heading, one line, the button), then the on-air panel; only where asked", async () => {
@@ -1178,7 +1178,7 @@ describe("station: the dial wakes after three letters", () => {
     expect(knob().classList.contains("locked")).toBe(true);
     expect(knob().querySelector(".knob-lock")).not.toBeNull();
     expect([...knob().querySelectorAll(".dial-end")].map((e) => e.textContent)).toEqual(["小", "大"]);
-    expect(knob().querySelector(".control-label")!.textContent).toBe("セレンディピティ");
+    expect(knob().querySelector(".control-label")!.textContent).toBe("新しい出会い");
     const input = el("dial") as HTMLInputElement;
     expect(input.disabled).toBe(true);
     // Assistive technology hears why: the slider is described by the locked line, and the turning help is gone.
@@ -1209,7 +1209,7 @@ describe("station: the dial wakes after three letters", () => {
     expect(knob().classList.contains("ready")).toBe(true);
     expect(knob().classList.contains("woke")).toBe(true);
     expect((el("dial") as HTMLInputElement).disabled).toBe(false);
-    expect(knob().querySelector(".control-label")!.textContent).toBe("セレンディピティ");
+    expect(knob().querySelector(".control-label")!.textContent).toBe("新しい出会い");
     expect(toastText()).toBe("ダイヤルが効くようになりました");
     expect(localStorage.getItem("dfm.dialLocked")).toBeNull();
   });

@@ -15,7 +15,7 @@ describe("t", () => {
 
   it("has the station vocabulary", () => {
     expect(t("station.on")).toBe("ラジオをつける");
-    expect(t("station.dial")).toBe("セレンディピティ");
+    expect(t("station.dial")).toBe("新しい出会い");
   });
 });
 
@@ -31,7 +31,7 @@ describe("english", () => {
 
   it("reads the vocabulary of the design doc", () => {
     expect(t("station.on", undefined, "en")).toBe("Turn the radio on");
-    expect(t("station.dial", undefined, "en")).toBe("Serendipity");
+    expect(t("station.dial", undefined, "en")).toBe("New encounters");
     expect(t("station.nowPlaying", undefined, "en")).toBe("Now playing");
     expect(t("letter.showOriginal", undefined, "en")).toBe("Show original");
     expect(t("station.public", { name: "Hiro" }, "en")).toBe("Hiro's radio");
