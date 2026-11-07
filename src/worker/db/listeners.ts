@@ -137,11 +137,3 @@ export async function bindGoogleSub(db: D1Database, id: string, googleSub: strin
   return (res.meta.changes ?? 0) > 0;
 }
 
-/** Whether the listener has played or written anything yet, without reading either list. */
-export async function hasActivity(db: D1Database, id: string): Promise<boolean> {
-  const row = await db
-    .prepare("SELECT EXISTS (SELECT 1 FROM history WHERE listener_id = ?1) OR EXISTS (SELECT 1 FROM letters WHERE listener_id = ?1) AS any")
-    .bind(id)
-    .first<{ any: number }>();
-  return row?.any === 1;
-}

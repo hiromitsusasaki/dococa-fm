@@ -1,20 +1,32 @@
 import { Hono } from "hono";
-import { LetterCard } from "../../views/components";
+import { LetterCard, whoOf } from "../../views/components";
 import type { Variables } from "../auth/session";
+import { type ArchiveSender, listArchive } from "../db/episodes";
 import { listRecentPublicLetters } from "../db/letters";
-import { hasActivity } from "../db/listeners";
 import type { Env } from "../env";
-import { tFor } from "../i18n/t";
+import { type Lang, tFor } from "../i18n/t";
 import { stationLabel } from "../program/station";
 import { StationPage } from "./stations";
 
 export const home = new Hono<{ Bindings: Env; Variables: Variables }>();
 
+/** Programmes the listener heard, newest first, on the home. */
+const RECENT_EPISODES = 3;
+
+/** A heard programme's line: its first work and who sent the first letter (a found voice by its source's author). */
+function episodeLine(title: string | null, sender: ArchiveSender | null, lang: Lang): string {
+  const t = tFor(lang);
+  const work = title ?? t("episode.untitled");
+  if (!sender) return work;
+  const from = sender.kind === "found" ? `${t("item.source")}: ${sender.sourceAuthor ?? ""}` : whoOf(sender, lang);
+  return `${work} · ${from}`;
+}
+
 home.get("/", async (c) => {
   const listener = c.get("listener");
   const lang = listener.lang;
   const t = tFor(lang);
-  const [recent, active] = await Promise.all([listRecentPublicLetters(c.env.DB, 6), hasActivity(c.env.DB, listener.id)]);
+  const [recent, heard] = await Promise.all([listRecentPublicLetters(c.env.DB, 6), listArchive(c.env.DB, listener.id, RECENT_EPISODES)]);
   const hero = (
     <section class="hero">
       <div class="copy">
@@ -30,7 +42,6 @@ home.get("/", async (c) => {
   return c.html(
     <StationPage stationKey="mine" title={t("app.name")} label={stationLabel({ kind: "mine" }, "", lang)} lang={lang} listener={listener} path="/" voice={listener.voice} dial={listener.dial} grow={false} hideName top={hero}>
       <section class="home">
-        <p>{active ? <a class="button" href="/stations/mine">{t("home.listen")}</a> : <a class="button" href="/start">{t("home.start")}</a>}</p>
         <p>
           <a class="button" href="/put" data-open-send>{t("home.put")}</a>
         </p>
@@ -41,9 +52,24 @@ home.get("/", async (c) => {
           </form>
           <iframe data-src="/put?embed=1" title={t("put.title")}></iframe>
         </dialog>
-        <p>
-          <a href="/episodes">{t("episode.archive")}</a>
+        <p class="muted">
+          {t("home.explain")}
+          {lang === "en" && " "}
+          <a href="/start">{t("home.explainStart")}</a>
         </p>
+        <section class="recent-episodes">
+          <h2>{t("episode.archive")}</h2>
+          {heard.length > 0 && (
+            <ul>
+              {heard.map((e) => (
+                <li>
+                  <a href={`/episodes/${e.id}`}>{episodeLine(e.title, e.sender, lang)}</a>
+                </li>
+              ))}
+            </ul>
+          )}
+          <a href="/episodes">{t("home.seeAll")}</a>
+        </section>
         {recent.length > 0 && (
           <section>
             <h2>{t("home.recent")}</h2>

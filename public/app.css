@@ -1590,3 +1590,36 @@ body.embed {
 body.embed .put {
   padding-top: var(--sp-4);
 }
+
+/* The home's three latest heard programmes, then the way to the archive. No numbers. */
+.recent-episodes {
+  display: grid;
+  gap: var(--sp-2);
+}
+
+.recent-episodes h2 {
+  margin: 0;
+}
+
+.recent-episodes ul {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.recent-episodes li a {
+  display: block;
+  padding: var(--sp-3) 0;
+  border-top: 1px solid var(--line);
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.recent-episodes li a:hover {
+  text-decoration: underline;
+}
+
+.recent-episodes > a {
+  justify-self: start;
+}

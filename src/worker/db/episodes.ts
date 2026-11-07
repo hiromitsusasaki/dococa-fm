@@ -90,21 +90,46 @@ export async function latestVerifiedEpisodeOn(db: D1Database, listenerId: string
   return row ? rowToEpisode(row) : null;
 }
 
+/** Who sent the first letter of an archived episode, as the episode stored it (the name line is made by the caller). */
+export type ArchiveSender = { radioName: string; place: string; placeCountry?: string; placeRegion?: string; kind: string; sourceAuthor: string | null; demo?: true };
+
 /**
  * The archive rows in one query: each verified episode the listener heard something in (a `listens` row; an episode
- * fetched ahead and never played is left out), newest first, with the title of its first work.
+ * fetched ahead and never played is left out), newest first, with the title of its first work and the sender of its
+ * first letter (taken from the stored lines, so no further query; null when the first segment reads none).
  */
-export async function listArchive(db: D1Database, listenerId: string, limit: number): Promise<Array<{ id: string; createdAt: string; title: string | null }>> {
+export async function listArchive(db: D1Database, listenerId: string, limit: number): Promise<Array<{ id: string; createdAt: string; title: string | null; sender: ArchiveSender | null }>> {
   const { results } = await db
     .prepare(
-      `SELECT e.id, e.created_at, i.title FROM episodes e
+      `SELECT e.id, e.created_at, i.title,
+         (SELECT l.value FROM json_each(e.segments, '$[0].lines') AS l WHERE json_extract(l.value, '$.type') = 'letter' LIMIT 1) AS first_letter
+       FROM episodes e
        LEFT JOIN items i ON i.id = json_extract(e.segments, '$[0].itemId')
        WHERE e.listener_id = ? AND e.verified = 1 AND EXISTS (SELECT 1 FROM listens WHERE listener_id = e.listener_id AND episode_id = e.id)
        ORDER BY e.created_at DESC, e.id DESC LIMIT ?`,
     )
     .bind(listenerId, limit)
-    .all<{ id: string; created_at: string; title: string | null }>();
-  return results.map((r) => ({ id: r.id, createdAt: r.created_at, title: r.title ?? null }));
+    .all<{ id: string; created_at: string; title: string | null; first_letter: string | null }>();
+  return results.map((r) => ({ id: r.id, createdAt: r.created_at, title: r.title ?? null, sender: senderOf(r.first_letter) }));
+}
+
+function senderOf(json: string | null): ArchiveSender | null {
+  if (!json) return null;
+  try {
+    const l = JSON.parse(json) as Partial<ArchiveSender>;
+    if (typeof l.radioName !== "string" || typeof l.place !== "string" || typeof l.kind !== "string") return null;
+    return {
+      radioName: l.radioName,
+      place: l.place,
+      ...(typeof l.placeCountry === "string" ? { placeCountry: l.placeCountry } : {}),
+      ...(typeof l.placeRegion === "string" ? { placeRegion: l.placeRegion } : {}),
+      kind: l.kind,
+      sourceAuthor: typeof l.sourceAuthor === "string" ? l.sourceAuthor : null,
+      ...(l.demo === true ? { demo: true as const } : {}),
+    };
+  } catch {
+    return null;
+  }
 }
 
 export async function countEpisodesToday(db: D1Database, listenerId: string, now: Date = new Date()): Promise<number> {
