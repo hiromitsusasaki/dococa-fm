@@ -112,8 +112,11 @@ export function envelope(doc: Document, kind: keyof typeof GLYPH_MS) {
 /** A left click no one has handled and without a modifier: one that would follow the link in this tab. */
 const plainClick = (e: MouseEvent): boolean => !e.defaultPrevented && e.button === 0 && !e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey;
 
-/** The tour's parts, in the owner's order (2026-11-07): what works without an account first, sign-in last. */
-const TOUR = [".radio .control", ".knob-dial", ".now", ".on-air"];
+/**
+ * The tour's parts, in the owner's order (2026-11-07): what works without an account first, sign-in last. The now-playing card shows
+ * only while a letter plays: until then its step rings the on-air heading (the first match in the page's order wins).
+ */
+const TOUR = [".radio .control", ".knob-dial", ".now, .on-air h2", ".on-air"];
 const SIGNIN = '.site-header a[href^="/auth/google"]';
 
 export function mountStation(root: HTMLElement, opts: StationOptions) {
@@ -586,7 +589,8 @@ export function mountStation(root: HTMLElement, opts: StationOptions) {
   markNight();
   const nightTimer = setInterval(markNight, NIGHT_CHECK_MS);
   setState({});
-  // A first visit to the home, or `/?tour=1` (the about page's 「使い方」); never over the send modal.
+  // A first visit to the home, or `/?tour=1` (the about page's 「使い方」); never over the send modal. A letter link came to hear
+  // that letter: the tour waits, unmarked, for the next visit.
   if (opts.send && !document.querySelector("dialog[open]")) {
     const url = new URL(location.href);
     const asked = url.searchParams.has("tour");
@@ -594,7 +598,7 @@ export function mountStation(root: HTMLElement, opts: StationOptions) {
       url.searchParams.delete("tour");
       history.replaceState(history.state, "", url);
     }
-    if (asked || !tourDone()) tour();
+    if (asked || (!tourDone() && !opts.letterId)) tour();
   }
 
   return {

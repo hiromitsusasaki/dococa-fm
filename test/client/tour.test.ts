@@ -166,6 +166,35 @@ describe("the tour on the home", () => {
     expect(location.search).toBe("");
   });
 
+  it("a first visit through a letter link is left to the letter; the tour waits for the next visit", () => {
+    mount({ letterId: "L1" });
+    expect(bubble()).toBeNull();
+    expect(localStorage.getItem(TOUR_KEY)).toBeNull();
+    station!.unmount();
+    history.replaceState(null, "", "/?tour=1");
+    mount({ letterId: "L1" });
+    expect(text()).toBe(strings["station.tour1"]);
+  });
+
+  it("step 3 rings the on-air heading while the card is not on the page, the now-playing card when it is", () => {
+    mount();
+    nextButton().click();
+    nextButton().click();
+    expect(text()).toBe(strings["station.tour3"]);
+    const hole = document.querySelector(".tour-hole")!;
+    expect(hole.classList.contains("none")).toBe(false);
+    const at = vi.spyOn(document.querySelector(".on-air h2")!, "getBoundingClientRect");
+    window.dispatchEvent(new Event("resize"));
+    expect(at).toHaveBeenCalled();
+    skipButton().click();
+    station!.unmount();
+    document.body.innerHTML = '<section class="now panel"></section><aside><section class="panel on-air"><h2>オンエア</h2></section></aside>';
+    const steps = [{ at: ".now, .on-air h2", title: "t", text: "x" }];
+    const card = vi.spyOn(document.querySelector(".now")!, "getBoundingClientRect");
+    startTour(steps, labels);
+    expect(card).toHaveBeenCalled();
+  });
+
   it("the quiet 使い方 on the face opens it again", () => {
     localStorage.setItem(TOUR_KEY, "done");
     mount();
