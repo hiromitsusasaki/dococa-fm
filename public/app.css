@@ -1,23 +1,23 @@
 /* Dococa FM: retro-future / city-pop. Tokens and parts follow docs/DESIGN.md and docs/design/station-mock.html. Colours come only from tokens. */
 :root {
-  --paper: #e9f1f8;
-  --panel: #ffffff;
-  --ink: #141b31;
-  --ink-2: #44506b;
-  --line: rgba(20, 27, 49, 0.16);
-  --line-strong: #c9d2df;
+  --paper: #e4e9f1;
+  --panel: #f6f7fa;
+  --ink: #1f2430;
+  --ink-2: #505a6d;
+  --line: rgba(20, 27, 49, 0.22);
+  --line-strong: #b9c3d3;
   --haze: rgba(20, 27, 49, 0.06);
   --aqua: #1fb3a7;
   --sky: #3f9fff;
   --coral: #ff6f7a;
   --magenta: #e0409a;
   --lemon: #ffd24d;
-  --hero: #ffffff;
+  --hero: #f6f7fa;
   --knob: radial-gradient(circle at 35% 30%, #ffffff, #e9eef5 60%, #c9d3e0);
   --shadow: 0 18px 40px rgba(20, 40, 70, 0.12);
   --on-magenta: #141b31;
   --label: #c93d4d;
-  --magenta-text: #c8287d;
+  --magenta-text: #c0247a;
   --lamp-glow: rgba(255, 216, 107, 0.55);
   --lemon-night: #ffb547;
   color-scheme: light;
