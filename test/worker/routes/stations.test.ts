@@ -350,6 +350,8 @@ describe("GET /stations/:key (page)", () => {
     expect(i18n["kind.music"]).toBeDefined();
     expect(i18n["out.spotify"]).toBeDefined();
     expect(i18n["home.start"]).toBeUndefined();
+    // The 一言 form's errors and the share texts are drawn by the player, so their strings come with it.
+    for (const key of ["reply.addName", "reply.invalidName", "settings.radioName", "share.x", "share.native", "share.text", "share.textFound", "share.textFoundNoAuthor"]) expect(i18n[key], key).toEqual(expect.any(String));
     expect(html).toContain("<title>Dococa FM</title>");
   });
 
