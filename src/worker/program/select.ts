@@ -1,6 +1,6 @@
 import { getItemVecs } from "../db/items";
 import { getLetter } from "../db/letters";
-import type { Listener } from "../types";
+import type { Letter, Listener } from "../types";
 import { ECHO_SQL, EXCLUDED_SQL, FAR_SQL, FRESH_PLACE_LETTERS_SQL, letterIdsSql, NEAR_SQL, NEIGHBOR_SQL, OWNER_FAVORITES_SQL, STATION_EXCLUDED_SQL } from "./select-sql";
 import { type StationKey, stationColumn } from "./station";
 import { farness, pickByDial, standingOf } from "./taste";
@@ -128,16 +128,25 @@ async function publicProgram(db: D1Database, listener: Listener, ownerId: string
 }
 
 /**
- * The letter a listener asked to hear (a link to it): it must be someone else's public letter, or a found voice with
- * its source, and still readable. Its item takes the first seat with that letter read first. Anything else: null.
+ * Whether a listener may ask to hear this letter (a link to it): someone else's public letter, or a found voice with
+ * its source, still readable for them. With the readable letters of its work; null for anything else.
  */
-async function askedLetter(db: D1Database, listener: Listener, letterId: string, rng: () => number): Promise<{ itemId: string; letterIds: string[] } | null> {
-  const l = await getLetter(db, letterId);
-  if (!l || l.status !== "public" || l.listenerId === listener.id) return null;
+async function readableAsked(db: D1Database, listener: Listener, l: Letter): Promise<string[] | null> {
+  if (l.status !== "public" || l.listenerId === listener.id) return null;
   const sourced = Boolean(l.sourceUrl?.trim()) && Boolean(l.sourceAuthor?.trim());
   if (!(l.kind === "letter" || (l.kind === "found" && sourced))) return null;
   const readable = (await letterIdsByItem(db, listener.id, [l.itemId])).get(l.itemId) ?? [];
-  if (!readable.includes(l.id)) return null;
+  return readable.includes(l.id) ? readable : null;
+}
+
+/** Whether the letter a link names would take the first seat for this listener (the home primes the radio only then). */
+export const canAskLetter = async (db: D1Database, listener: Listener, l: Letter): Promise<boolean> => (await readableAsked(db, listener, l)) !== null;
+
+/** The letter a listener asked to hear (see `readableAsked`): its item takes the first seat with that letter read first. Anything else: null. */
+async function askedLetter(db: D1Database, listener: Listener, letterId: string, rng: () => number): Promise<{ itemId: string; letterIds: string[] } | null> {
+  const l = await getLetter(db, letterId);
+  const readable = l ? await readableAsked(db, listener, l) : null;
+  if (!l || !readable) return null;
   const others = shuffle(readable.filter((id) => id !== l.id), rng);
   return { itemId: l.itemId, letterIds: [l.id, ...others].slice(0, MAX_LETTERS_PER_SEGMENT) };
 }

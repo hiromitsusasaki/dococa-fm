@@ -298,14 +298,34 @@ describe("GET /", () => {
 });
 
 describe("GET /?letter=", () => {
-  it("primes the home radio with the letter, by its shape only", async () => {
+  it("primes the home radio with someone else's public letter, and keeps it in the language switch's return path", async () => {
     const cookie = await newSession();
-    const html = await (await get("/?letter=abc-123", cookie)).text();
-    expect(html).toMatch(/<div[^>]*id="station"[^>]*data-letter="abc-123"/);
+    const it = await insertItem(env.DB, itemDraft({ title: "届いた曲", externalIds: { itunes: "pr1" } }));
+    const l = await insertLetter(env.DB, letterDraft(it.id));
+    const html = await (await get(`/?letter=${l.id}`, cookie)).text();
+    expect(html).toMatch(new RegExp(`<div[^>]*id="station"[^>]*data-letter="${l.id}"`));
     expect(html).toContain('data-station-key="mine"');
+    expect(html).toContain(`<input type="hidden" name="next" value="/?letter=${l.id}"`);
     expect(await (await get("/", cookie)).text()).not.toContain("data-letter");
     expect(await (await get(`/?letter=${"x".repeat(101)}`, cookie)).text()).not.toContain("data-letter");
     expect(await (await get("/?letter=", cookie)).text()).not.toContain("data-letter");
+  });
+
+  it("renders the ordinary home for the viewer's own letter, a letter no longer public, a reaction or an unknown id", async () => {
+    const cookie = await newSession();
+    const me = cookie.split("=")[1]!.split(".")[0]!;
+    await get("/", cookie);
+    const it = await insertItem(env.DB, itemDraft({ title: "届かない曲", externalIds: { itunes: "pr2" } }));
+    const own = await insertLetter(env.DB, letterDraft(it.id, { listenerId: me }));
+    const withdrawn = await insertLetter(env.DB, letterDraft(it.id, { status: "withdrawn" }));
+    const rejected = await insertLetter(env.DB, letterDraft(it.id, { status: "rejected" }));
+    const parent = await insertLetter(env.DB, letterDraft(it.id));
+    const reply = await insertLetter(env.DB, letterDraft(it.id, { kind: "reply", parentLetterId: parent.id, body: "一言", bodyJa: "一言" }));
+    for (const id of [own.id, withdrawn.id, rejected.id, reply.id, "abc-123"]) {
+      const html = await (await get(`/?letter=${id}`, cookie)).text();
+      expect(html, id).not.toContain("data-letter");
+      expect(html, id).toContain('<input type="hidden" name="next" value="/"');
+    }
   });
 
   it("previews a public letter with its work's title and the letter's first 80 characters", async () => {
@@ -328,7 +348,7 @@ describe("GET /?letter=", () => {
     for (const id of [hidden.id, reply.id, "nope"]) {
       const html = await (await get(`/?letter=${id}`, cookie)).text();
       expect(html).not.toContain("og:title");
-      expect(html).toContain(`data-letter="${id}"`);
+      expect(html).not.toContain("data-letter");
     }
     expect(await (await get("/", cookie)).text()).not.toContain("og:title");
   });

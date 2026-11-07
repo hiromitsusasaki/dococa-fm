@@ -9,6 +9,7 @@ import type { Env } from "../env";
 import { tFor } from "../i18n/t";
 import { displayText } from "../letters/display";
 import type { Item } from "../types";
+import { canAskLetter } from "../program/select";
 import { stationLabel } from "../program/station";
 import { StationPage } from "./stations";
 
@@ -33,18 +34,20 @@ home.get("/", async (c) => {
   const listener = c.get("listener");
   const lang = listener.lang;
   const t = tFor(lang);
-  // A letter's link (`/?letter=`): the radio waits for the switch and then starts from it. Only its shape is checked here, as on
-  // `/stations/mine?letter=`; the first `next` checks the rest. A public letter also gives the link its preview.
+  // A letter's link (`/?letter=`): the radio waits for the switch and then starts from it, only when the letter would take
+  // the first seat (someone else's public letter, readable for this listener, as the first `next` checks); otherwise the
+  // home is the ordinary one. A public letter also gives the link its preview.
   const asked = c.req.query("letter") ?? "";
-  const letter = asked.length > 0 && asked.length <= 100 ? asked : undefined;
+  const wanted = asked.length > 0 && asked.length <= 100 ? asked : undefined;
   const [recent, heard, shared, radios] = await Promise.all([
     listRecentPublicLetters(c.env.DB, 6),
     listArchive(c.env.DB, listener.id, RECENT_EPISODES),
-    letter ? getPublicLetterWithTitle(c.env.DB, letter) : null,
+    wanted ? getPublicLetterWithTitle(c.env.DB, wanted) : null,
     listRecentPublicRadios(c.env.DB, PUBLIC_RADIOS),
   ]);
-  const og = shared && letter
-    ? { title: shared.title, description: Array.from(displayText(shared.letter, lang).main).slice(0, PREVIEW_CHARS).join(""), url: `${c.env.PUBLIC_ORIGIN}/?letter=${encodeURIComponent(letter)}` }
+  const letter = shared && wanted && (await canAskLetter(c.env.DB, listener, shared.letter)) ? wanted : undefined;
+  const og = shared && wanted
+    ? { title: shared.title, description: Array.from(displayText(shared.letter, lang).main).slice(0, PREVIEW_CHARS).join(""), url: `${c.env.PUBLIC_ORIGIN}/?letter=${encodeURIComponent(wanted)}` }
     : undefined;
   const hero = (
     <section class="hero">
@@ -66,7 +69,7 @@ home.get("/", async (c) => {
   );
   const heroBoot = <script>{raw(HERO_COMPACT)}</script>;
   return c.html(
-    <StationPage stationKey="mine" title={t("app.name")} label={stationLabel({ kind: "mine" }, "", lang)} lang={lang} listener={listener} path="/" voice={listener.voice} dial={listener.dial} grow={false} hideName top={<>{hero}{heroBoot}</>} send letter={letter} og={og}>
+    <StationPage stationKey="mine" title={t("app.name")} label={stationLabel({ kind: "mine" }, "", lang)} lang={lang} listener={listener} path={letter ? `/?letter=${encodeURIComponent(letter)}` : "/"} voice={listener.voice} dial={listener.dial} grow={false} hideName top={<>{hero}{heroBoot}</>} send letter={letter} og={og}>
       <section class="home">
         {/* The station script opens this over the page, so the radio keeps playing; the frame loads on the first open. */}
         <dialog class="send-modal" aria-label={t("put.title")}>
