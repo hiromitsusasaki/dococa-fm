@@ -8,10 +8,14 @@ const rowToUnit = (r: Row): Unit => ({
   lang: r.lang as Unit["lang"],
   intro: r.intro as string,
   after: r.after as string,
+  ...(typeof r.readings === "string" && r.readings !== "[]" ? { readings: JSON.parse(r.readings) as NonNullable<Unit["readings"]> } : {}),
   verified: r.verified === 1,
   audioReady: r.audio_ready === 1,
   createdAt: r.created_at as string,
 });
+
+/** The readings column: NULL when there are none. */
+const readingsJson = (readings: Unit["readings"]): string | null => (readings?.length ? JSON.stringify(readings) : null);
 
 /** D1 binds at most 100 parameters per statement; one is the language. */
 const IN_CHUNK = 90;
@@ -40,12 +44,12 @@ export async function upsertUnit(db: D1Database, u: Omit<Unit, "createdAt"> & { 
   const unit: Unit = { ...u, createdAt: u.createdAt ?? new Date().toISOString() };
   await db
     .prepare(
-      `INSERT INTO units (letter_id, lang, intro, after, verified, audio_ready, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)
-       ON CONFLICT(letter_id, lang) DO UPDATE SET intro = excluded.intro, after = excluded.after, verified = excluded.verified,
+      `INSERT INTO units (letter_id, lang, intro, after, readings, verified, audio_ready, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(letter_id, lang) DO UPDATE SET intro = excluded.intro, after = excluded.after, readings = excluded.readings, verified = excluded.verified,
          audio_ready = excluded.audio_ready, created_at = excluded.created_at
        WHERE units.verified = 0`,
     )
-    .bind(unit.letterId, unit.lang, unit.intro, unit.after, unit.verified ? 1 : 0, unit.audioReady ? 1 : 0, unit.createdAt)
+    .bind(unit.letterId, unit.lang, unit.intro, unit.after, readingsJson(unit.readings), unit.verified ? 1 : 0, unit.audioReady ? 1 : 0, unit.createdAt)
     .run();
   return unit;
 }
@@ -198,7 +202,7 @@ export async function listLikedUnits(db: D1Database, lang: Unit["lang"], limit: 
  * made today is first noted in `unit_remakes`, so the call that made it still counts toward today's cap. One batch:
  * when it fails, the old row is as it was.
  */
-export async function replaceUnit(db: D1Database, u: Pick<Unit, "letterId" | "lang" | "intro" | "after">, now: Date = new Date()): Promise<void> {
+export async function replaceUnit(db: D1Database, u: Pick<Unit, "letterId" | "lang" | "intro" | "after" | "readings">, now: Date = new Date()): Promise<void> {
   const at = now.toISOString();
   await db.batch([
     db
@@ -206,9 +210,9 @@ export async function replaceUnit(db: D1Database, u: Pick<Unit, "letterId" | "la
       .bind(at, u.letterId, u.lang, jstDayStartIso(now)),
     db
       .prepare(
-        `INSERT INTO units (letter_id, lang, intro, after, verified, audio_ready, created_at) VALUES (?, ?, ?, ?, 1, 0, ?)
-         ON CONFLICT(letter_id, lang) DO UPDATE SET intro = excluded.intro, after = excluded.after, verified = 1, audio_ready = 0, created_at = excluded.created_at`,
+        `INSERT INTO units (letter_id, lang, intro, after, readings, verified, audio_ready, created_at) VALUES (?, ?, ?, ?, ?, 1, 0, ?)
+         ON CONFLICT(letter_id, lang) DO UPDATE SET intro = excluded.intro, after = excluded.after, readings = excluded.readings, verified = 1, audio_ready = 0, created_at = excluded.created_at`,
       )
-      .bind(u.letterId, u.lang, u.intro, u.after, at),
+      .bind(u.letterId, u.lang, u.intro, u.after, readingsJson(u.readings), at),
   ]);
 }

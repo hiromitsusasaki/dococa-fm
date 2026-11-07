@@ -24,6 +24,13 @@ const segments: Segment[] = [
 ];
 
 describe("publicView", () => {
+  it("leaves out a dj line's spoken text, which only the voice reads", () => {
+    const spoken: Segment[] = [{ itemId: "i1", slot: "near", lines: [{ type: "dj", text: "PSYの曲", spoken: "サイの曲", fixed: true }, read("a")] }];
+    const view = publicView(spoken, byId([letter({ id: "a" })]));
+    expect(view.segments[0]!.lines[0]).toEqual({ type: "dj", text: "PSYの曲", fixed: true });
+    expect(spoken[0]!.lines[0]).toHaveProperty("spoken", "サイの曲");
+  });
+
   it("keeps everything while every letter is public, with stored indices in order", () => {
     const letters = byId(["a", "f", "r", "b"].map((id) => letter({ id })));
     const view = publicView(segments, letters);

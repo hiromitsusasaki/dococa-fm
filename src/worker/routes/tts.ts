@@ -24,7 +24,9 @@ tts.get("/tts", ttsIpRateLimit, ttsListenerRateLimit, async (c) => {
   // A letter rejected since the episode was made, or the line that introduced it, is no longer voiced.
   if (!(await loadPublicEpisode(c.env.DB, episode)).storedIndex.includes(line)) return c.notFound();
 
-  const ensured = await ensureAudio(c.env, c.env.DB, { text: target.text, lang: episode.lang, voice: voiceOf(c.env) });
+  // A dj line is voiced as it is said (`spoken`: names as their readings); a letter as written.
+  const said = target.type === "dj" ? (target.spoken ?? target.text) : target.text;
+  const ensured = await ensureAudio(c.env, c.env.DB, { text: said, lang: episode.lang, voice: voiceOf(c.env) });
   if (!ensured.ok) {
     if (ensured.reason === "limit") return c.json({ error: "tts limit" }, 503);
     if (ensured.reason === "busy") return c.json({ error: "tts busy" }, 503, { "retry-after": "2" });

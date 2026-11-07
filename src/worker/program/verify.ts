@@ -1,7 +1,7 @@
 import { isCountryName, regionLabels } from "../geo/place-label";
 import { t, type Lang } from "../i18n/t";
 import type { Item, Letter, Listener, Segment, VerifyReport } from "../types";
-import { FIXED_TEMPLATES } from "./compose";
+import { applyReadings, FIXED_TEMPLATES, itemReadings } from "./compose";
 import { ADDRESS, EMAIL, normalizeText as norm, PHONE, POSTAL, URL_RE } from "./pii-patterns";
 import { maskDataYears, TOPICAL } from "./topical-words";
 import { ANNOUNCE_EN, maskDataYearsEn, MEASURE_EN, PLAYBACK_EN, TOPICAL_EN, YEAR_EN } from "./verify-en";
@@ -93,6 +93,41 @@ function restatesTitle(text: string, item: Item | undefined): boolean {
   return new RegExp(`(?<![\\p{Script=Latin}\\p{N}])${escapeRe(title)}(?![\\p{Script=Latin}\\p{N}])`, "u").test(head);
 }
 
+/** The longest written text a reading may stand for (`READING_TEXT_MAX` in the unit), in code points. */
+const READING_SPAN = 40;
+/** One run of katakana in what the voice says: a reading, or katakana the line itself has. */
+const KATAKANA_RUN = /[\p{Script=Katakana}ー・]+/gu;
+
+/**
+ * Whether `spoken` is `text` with some names replaced by katakana readings and nothing else: every stretch of
+ * `spoken` outside its katakana runs is `text`'s own, in order, and each katakana run stands either for itself or
+ * for 1 to `READING_SPAN` code points of `text`. A reading cannot add a word that is not katakana. Walked as the set
+ * of reachable positions in `text`, so it never backtracks.
+ */
+function onlyReadings(text: string, spoken: string): boolean {
+  const cps = Array.from(text);
+  const parts: { s: string[]; reading: boolean }[] = [];
+  let at = 0;
+  for (const m of spoken.matchAll(KATAKANA_RUN)) {
+    if (m.index > at) parts.push({ s: Array.from(spoken.slice(at, m.index)), reading: false });
+    parts.push({ s: Array.from(m[0]), reading: true });
+    at = m.index + m[0].length;
+  }
+  if (at < spoken.length) parts.push({ s: Array.from(spoken.slice(at)), reading: false });
+  const startsAt = (pos: number, s: string[]) => pos + s.length <= cps.length && s.every((c, i) => cps[pos + i] === c);
+  let reach = new Set([0]);
+  for (const part of parts) {
+    const next = new Set<number>();
+    for (const pos of reach) {
+      if (startsAt(pos, part.s)) next.add(pos + part.s.length);
+      if (part.reading) for (let n = 1; n <= READING_SPAN && pos + n <= cps.length; n++) next.add(pos + n);
+    }
+    if (next.size === 0) return false;
+    reach = next;
+  }
+  return reach.has(cps.length);
+}
+
 /**
  * Lower-cases, then replaces every title and creator with one sentinel code point, in letters and dj
  * lines alike: the DJ may name the work in any case, but a name cannot pad a window, and a copied
@@ -138,6 +173,8 @@ function senderTerms(l: Letter): string[] {
  * no format characters, collapsed spaces). Lines marked `fixed` are our templates filled with names, places
  * and sources that are shown on screen anyway, so they get only the account and quote checks, and the quote
  * check sees only the filled-in values, never the template wording.
+ * A Japanese dj line's `spoken` (names replaced by katakana readings) gets every check its `text` gets, and must be
+ * that text with names swapped for katakana and nothing else (`reading:`); an English line never has one.
  * A detail reads `{check}: segment {i} line {j}: {term}` and never carries the dj line itself.
  */
 export function verifyEpisode(
@@ -194,70 +231,89 @@ export function verifyEpisode(
         return;
       }
       if (line.type !== "dj") return;
-      const text = norm(line.text);
-      if (!line.fixed) {
-        // Titles and creators are data, not talk: 「今夜はブギー・バック」 or 「千本桜」 may be named.
-        const talk = mask(text);
-        const dated = rules.maskYears(talk, years);
-        const day = dated.match(rules.topical) ?? (rules.year ? dated.match(rules.year) : null);
-        if (day) {
+      // What the voice says is held to the same rules as what the screen shows; a detail found in both is noted once.
+      const seen = new Set<string>();
+      const push = (d: string) => {
+        if (seen.has(d)) return;
+        seen.add(d);
+        details.push(d);
+      };
+      if (line.spoken !== undefined) {
+        const item = items.get(seg.itemId);
+        const written = norm(item ? applyReadings(line.text, itemReadings(item)) : line.text);
+        if (lang !== "ja" || !onlyReadings(written, norm(line.spoken))) {
           topical = false;
-          details.push(`topical: ${at}: ${day[0]}`);
-        }
-        const count = talk.match(rules.measure);
-        if (count) {
-          topical = false;
-          details.push(`measure: ${at}: ${count[0]}`);
-        }
-        const own = line.unit?.part === "intro" ? letters.get(line.unit.letterId) : undefined;
-        if (own && senderTerms(own).some((term) => mask(text).includes(term))) {
-          topical = false;
-          // Never the name itself: details reach the logs.
-          details.push(`intro: ${at}: names the sender`);
-        }
-        if (line.unit?.part === "intro" && restatesTitle(text, items.get(seg.itemId))) {
-          topical = false;
-          details.push(`lead: ${at}: restates the title`);
+          push(`reading: ${at}: the voice says more than the line's names`);
         }
       }
-      const play = !line.fixed ? mask(text).match(rules.playback) : null;
-      if (play) {
-        topical = false;
-        details.push(`playback: ${at}: ${play[0]}`);
-      }
-      // A segment that reads no letter (a reply counts as one) must not hand over to a reader with nothing to read.
-      if (!line.fixed && !hasLetter && rules.announce.test(text)) {
-        topical = false;
-        details.push(`announce: ${at}: hands over to a letter in a segment with none`);
-      }
-      if (!line.fixed && EMAIL.test(text)) {
-        pii = false;
-        details.push(`pii: ${at}: email address`);
-      }
-      if (!line.fixed && PHONE.test(text)) {
-        pii = false;
-        details.push(`pii: ${at}: phone number`);
-      }
-      if (!line.fixed && URL_RE.test(text)) {
-        pii = false;
-        details.push(`pii: ${at}: url`);
-      }
-      if (!line.fixed && POSTAL.test(text)) {
-        pii = false;
-        details.push(`pii: ${at}: postal code`);
-      }
-      if (!line.fixed && ADDRESS.test(text)) {
-        pii = false;
-        details.push(`pii: ${at}: street address`);
-      }
-      if (secrets.some((s) => text.includes(s))) {
-        pii = false;
-        details.push(`pii: ${at}: listener account`);
-      }
-      if (rules.windows(mask(line.fixed ? filledValues(text, lang) : text)).some((w) => quotes.has(w))) {
-        pii = false;
-        details.push(`pii: ${at}: quotes a letter`);
-      }
+      const check = (said: string, isSpoken: boolean) => {
+        const text = norm(said);
+        if (!line.fixed) {
+          // Titles and creators are data, not talk: 「今夜はブギー・バック」 or 「千本桜」 may be named.
+          const talk = mask(text);
+          const dated = rules.maskYears(talk, years);
+          const day = dated.match(rules.topical) ?? (rules.year ? dated.match(rules.year) : null);
+          if (day) {
+            topical = false;
+            push(`topical: ${at}: ${day[0]}`);
+          }
+          const count = talk.match(rules.measure);
+          if (count) {
+            topical = false;
+            push(`measure: ${at}: ${count[0]}`);
+          }
+          const own = line.unit?.part === "intro" ? letters.get(line.unit.letterId) : undefined;
+          if (own && senderTerms(own).some((term) => mask(text).includes(term))) {
+            topical = false;
+            // Never the name itself: details reach the logs.
+            push(`intro: ${at}: names the sender`);
+          }
+          if (!isSpoken && line.unit?.part === "intro" && restatesTitle(text, items.get(seg.itemId))) {
+            topical = false;
+            push(`lead: ${at}: restates the title`);
+          }
+        }
+        const play = !line.fixed ? mask(text).match(rules.playback) : null;
+        if (play) {
+          topical = false;
+          push(`playback: ${at}: ${play[0]}`);
+        }
+        // A segment that reads no letter (a reply counts as one) must not hand over to a reader with nothing to read.
+        if (!line.fixed && !hasLetter && rules.announce.test(text)) {
+          topical = false;
+          push(`announce: ${at}: hands over to a letter in a segment with none`);
+        }
+        if (!line.fixed && EMAIL.test(text)) {
+          pii = false;
+          push(`pii: ${at}: email address`);
+        }
+        if (!line.fixed && PHONE.test(text)) {
+          pii = false;
+          push(`pii: ${at}: phone number`);
+        }
+        if (!line.fixed && URL_RE.test(text)) {
+          pii = false;
+          push(`pii: ${at}: url`);
+        }
+        if (!line.fixed && POSTAL.test(text)) {
+          pii = false;
+          push(`pii: ${at}: postal code`);
+        }
+        if (!line.fixed && ADDRESS.test(text)) {
+          pii = false;
+          push(`pii: ${at}: street address`);
+        }
+        if (secrets.some((s) => text.includes(s))) {
+          pii = false;
+          push(`pii: ${at}: listener account`);
+        }
+        if (rules.windows(mask(line.fixed ? filledValues(text, lang) : text)).some((w) => quotes.has(w))) {
+          pii = false;
+          push(`pii: ${at}: quotes a letter`);
+        }
+      };
+      check(line.text, false);
+      if (line.spoken !== undefined) check(line.spoken, true);
     });
   });
 

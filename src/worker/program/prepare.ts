@@ -38,16 +38,18 @@ async function run(env: Env, db: D1Database, letterId: string, lang: Unit["lang"
   if (!item) return out;
 
   let unit = (await getUnits(db, [letter.id], lang)).get(letter.id) ?? null;
+  let made = false;
   if (!unit) {
     if (!steps.unit || !hasClaude(env)) return out;
     if (await unitCapReached(env, db)) {
       out.unitHalted = true;
       return out;
     }
-    const made = await makeUnit(env, db, letter, item, lang);
+    const result = await makeUnit(env, db, letter, item, lang);
     // Another run is making this unit: skipped, neither a failure nor a miss.
-    if (made === "busy") return out;
-    unit = made;
+    if (result === "busy") return out;
+    unit = result;
+    made = true;
     if (!unit) {
       out.failed++;
       out.unitFailed = true;
@@ -58,7 +60,13 @@ async function run(env: Env, db: D1Database, letterId: string, lang: Unit["lang"
   if (!steps.audio) return out;
 
   // An unverified unit is never spoken, so only the fixed lead, the hand-over and the letter are voiced for it.
-  const texts = unitSegment(unit.verified ? unit : null, letter, item, lang).lines.flatMap((l) => (l.type === "dj" || l.type === "letter") && l.text !== "" ? [l.text] : []);
+  // The voice says each dj line's `spoken` when it has one, so that is the clip made. The work is read again when the
+  // unit was just made: making it may have stored the work's readings.
+  const voiced = made && !item.readingJa ? ((await getItem(db, item.id)) ?? item) : item;
+  const texts = unitSegment(unit.verified ? unit : null, letter, voiced, lang).lines.flatMap((l) => {
+    const said = l.type === "dj" ? (l.spoken ?? l.text) : l.type === "letter" ? l.text : "";
+    return said !== "" ? [said] : [];
+  });
   const voice = voiceOf(env);
   let complete = true;
   let gaveUp = false;

@@ -10,6 +10,8 @@ export type Item = {
   previewUrl: string | null;
   outLinks: Record<string, string>;
   externalIds: Record<string, string>;
+  /** How the Japanese voice says the title and creator, in katakana; absent when the voice reads them as written. */
+  readingJa?: { title?: string; creator?: string };
   createdAt: string;
 };
 
@@ -76,15 +78,23 @@ export type HistoryRow = {
   rank: number | null;
 };
 
-/** The DJ's talk for one letter in one language, made once and reused by every programme that reads it. */
-export type Unit = { letterId: string; lang: "ja" | "en"; intro: string; after: string; verified: boolean; audioReady: boolean; createdAt: string };
+/** A name as written and as the Japanese voice says it (katakana). */
+export type Reading = { text: string; reading: string };
+
+/**
+ * The DJ's talk for one letter in one language, made once and reused by every programme that reads it.
+ * `readings`: how the Japanese voice says names in the talk; absent when none.
+ */
+export type Unit = { letterId: string; lang: "ja" | "en"; intro: string; after: string; readings?: Reading[]; verified: boolean; audioReady: boolean; createdAt: string };
 
 export type ScriptLine =
   /**
    * `fixed` marks a line built from a template and data (names, places), never written by the model.
    * `unit` marks a line taken from the unit of that letter, so the line goes when the letter is hidden.
+   * `spoken`: what the Japanese voice says when it differs from `text` (names replaced by their readings); it never
+   * leaves the server, and the screen shows `text`. A letter line has none: a letter is voiced as written.
    */
-  | { type: "dj"; text: string; fixed?: true; bridge?: string; unit?: { letterId: string; part: "intro" | "after" } }
+  | { type: "dj"; text: string; spoken?: string; fixed?: true; bridge?: string; unit?: { letterId: string; part: "intro" | "after" } }
   | {
       type: "letter";
       letterId: string;

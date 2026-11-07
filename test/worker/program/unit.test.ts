@@ -1,6 +1,6 @@
 import { env } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { insertItem } from "../../../src/worker/db/items";
+import { getItem, insertItem } from "../../../src/worker/db/items";
 import { insertLetter } from "../../../src/worker/db/letters";
 import { getUnits, setUnitLiked, upsertUnit } from "../../../src/worker/db/units";
 import type { Env } from "../../../src/worker/env";
@@ -8,7 +8,7 @@ import { t } from "../../../src/worker/i18n/t";
 import { DJ_SYSTEM_EN } from "../../../src/worker/program/script";
 import { ensureUnits, makeUnit, UNIT_CLAIM_TTL_MS, unitSegment, writeUnitLines } from "../../../src/worker/program/unit";
 import { claimTts, releaseTts } from "../../../src/worker/tts/claim";
-import type { Item, Letter } from "../../../src/worker/types";
+import type { Item, Letter, Unit } from "../../../src/worker/types";
 import { expectInstructedTool, stubAnthropic, toolUse } from "../../helpers/anthropic";
 import { resetDb } from "../../helpers/db";
 import { itemDraft, letterDraft } from "../db/helpers";
@@ -296,6 +296,84 @@ describe("makeUnit", () => {
     create.mockResolvedValue({ content: [{ type: "text", text: "はい" }] });
     expect(await makeUnit(keyed, env.DB, f.letter, f.item, "ja")).toBeNull();
     expect((await getUnits(env.DB, [f.letter.id], "ja")).size).toBe(0);
+  });
+});
+
+describe("readings for the voice", () => {
+  const psyDraft = () => itemDraft({ title: "Gangnam Style", creator: "PSY" });
+  async function psy(): Promise<{ item: Item; letter: Letter }> {
+    const it = await insertItem(env.DB, psyDraft());
+    const l = await insertLetter(env.DB, letterDraft(it.id, { radioName: "しずく", place: "松本", body: "夏に踊りました。", bodyJa: "夏に踊りました。" }));
+    return { item: it, letter: l };
+  }
+  const reply = (over: Record<string, unknown> = {}) =>
+    toolUse("write_unit", { intro: "PSYらしい明るい一曲です。", after: "いい夏でしたね。", readings: [{ text: "PSY", reading: "サイ" }], titleReading: "", creatorReading: "サイ", ...over });
+
+  it("offers readings, titleReading and creatorReading in Japanese, explained in the prompt, and none in English", async () => {
+    create.mockResolvedValue(lines());
+    await writeUnitLines(keyed, { item: item(), letter: letter(), lang: "ja" });
+    const props = create.mock.calls[0]![0].tools[0].input_schema;
+    expect(Object.keys(props.properties)).toEqual(["intro", "after", "readings", "titleReading", "creatorReading"]);
+    expect(props.required).toEqual(["intro", "after", "readings", "titleReading", "creatorReading"]);
+    expect(props.properties.readings.items.additionalProperties).toBe(false);
+    expect(content(0)).toContain("その読みをカタカナで readings・titleReading・creatorReading に入れる");
+    await writeUnitLines(keyed, { item: item(), letter: letter({ bodyEn: "x" }), lang: "en" });
+    const en = create.mock.calls[1]![0].tools[0].input_schema;
+    expect(Object.keys(en.properties)).toEqual(["intro", "after"]);
+    expect(en.required).toEqual(["intro", "after"]);
+  });
+
+  it("stores the unit's readings and the work's creator reading, and the segment speaks them while the text stays", async () => {
+    const f = await psy();
+    create.mockResolvedValue(reply());
+    const u = await makeUnit(keyed, env.DB, f.letter, f.item, "ja");
+    expect(u).toMatchObject({ verified: true, readings: [{ text: "PSY", reading: "サイ" }] });
+    const stored = (await getItem(env.DB, f.item.id))!;
+    expect(stored.readingJa).toEqual({ creator: "サイ" });
+    const seg = unitSegment(u as Unit, f.letter, stored, "ja");
+    expect(seg.lines[0]).toMatchObject({ text: "PSYの「Gangnam Style」という曲の紹介です。", spoken: "サイの「Gangnam Style」という曲の紹介です。" });
+    expect(seg.lines[1]).toMatchObject({ text: "PSYらしい明るい一曲です。", spoken: "サイらしい明るい一曲です。" });
+    expect(seg.lines.find((l) => l.type === "letter")).not.toHaveProperty("spoken");
+    expect(seg.lines[4]).not.toHaveProperty("spoken");
+  });
+
+  it("keeps the work's reading once it has one", async () => {
+    const f = await psy();
+    await env.DB.prepare("UPDATE items SET reading_ja = ? WHERE id = ?").bind(JSON.stringify({ creator: "サイー" }), f.item.id).run();
+    create.mockResolvedValue(reply());
+    await makeUnit(keyed, env.DB, f.letter, (await getItem(env.DB, f.item.id))!, "ja");
+    expect((await getItem(env.DB, f.item.id))!.readingJa).toEqual({ creator: "サイー" });
+  });
+
+  it.each([
+    ["not in any line", { text: "BTS", reading: "ビーティーエス" }],
+    ["a reading not in katakana", { text: "PSY", reading: "さい" }],
+    ["kana alone", { text: "らしい", reading: "ラシイ" }],
+    ["a text over 40 characters", { text: "A".repeat(41), reading: "エー" }],
+  ])("drops a reading %s, and the unit still stands", async (_why, r) => {
+    const f = await psy();
+    create.mockResolvedValue(reply({ readings: [r], creatorReading: "" }));
+    const u = await makeUnit(keyed, env.DB, f.letter, f.item, "ja");
+    expect(u).toMatchObject({ verified: true });
+    expect(u).not.toHaveProperty("readings");
+    expect((await getItem(env.DB, f.item.id))!).not.toHaveProperty("readingJa");
+  });
+
+  it("keeps at most 8 readings", async () => {
+    const f = await psy();
+    const names = Array.from({ length: 10 }, (_, i) => `N${i}`);
+    create.mockResolvedValue(reply({ intro: `${names.join("、")}の一曲です。`, readings: names.map((text) => ({ text, reading: "エヌ" })), creatorReading: "" }));
+    const u = await makeUnit(keyed, env.DB, f.letter, f.item, "ja");
+    expect((u as Unit).readings).toHaveLength(8);
+  });
+
+  it("ignores readings in an English unit", async () => {
+    const f = await psy();
+    create.mockResolvedValue(reply({ intro: "A bright PSY song.", after: "What a summer." }));
+    const u = await makeUnit(keyed, env.DB, { ...f.letter, bodyEn: "We danced." }, f.item, "en");
+    expect(u).toMatchObject({ verified: true });
+    expect(u).not.toHaveProperty("readings");
+    expect((await getItem(env.DB, f.item.id))!).not.toHaveProperty("readingJa");
   });
 });
 

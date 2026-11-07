@@ -9,7 +9,7 @@ import type { Item, Letter } from "../../../src/worker/types";
 import { stubAnthropic, toolUse } from "../../helpers/anthropic";
 import { resetBucket } from "../../helpers/bucket";
 import { claimTts } from "../../../src/worker/tts/claim";
-import { audioKey } from "../../../src/worker/tts/audio";
+import { audioKey, voiceOf } from "../../../src/worker/tts/audio";
 import { replaceUnit } from "../../../src/worker/db/units";
 import { resetDb } from "../../helpers/db";
 import { json } from "../../helpers/fetch";
@@ -69,6 +69,20 @@ describe("prepareLetter", () => {
     expect(create).toHaveBeenCalledTimes(1);
     expect(google).toHaveBeenCalledTimes(5);
     expect(await unitOf(letters[0]!.id)).toMatchObject({ verified: true, audioReady: true });
+  });
+
+  it("voices the spoken text of the lead and the talk, with the readings the new unit gave, and the letter as written", async () => {
+    const it = await insertItem(env.DB, itemDraft({ title: "Gangnam Style", creator: "PSY" }));
+    const l = await insertLetter(env.DB, letterDraft(it.id, { radioName: "しずく", place: "松本", body: "PSYで踊った夏。", bodyJa: "PSYで踊った夏。" }));
+    create.mockResolvedValue(toolUse("write_unit", { intro: "PSYらしい明るい一曲です。", after: "いい夏でしたね。", readings: [{ text: "PSY", reading: "サイ" }], titleReading: "", creatorReading: "サイ" }));
+    expect(await prepareLetter(keyed, env.DB, l.id, "ja")).toEqual({ units: 1, audio: 5, failed: 0 });
+    const has = async (text: string) => (await env.BUCKET.head(await audioKey("ja", voiceOf(keyed), text))) !== null;
+    expect(await has("サイの「Gangnam Style」という曲の紹介です。")).toBe(true);
+    expect(await has("PSYの「Gangnam Style」という曲の紹介です。")).toBe(false);
+    expect(await has("サイらしい明るい一曲です。")).toBe(true);
+    expect(await has("PSYらしい明るい一曲です。")).toBe(false);
+    expect(await has("PSYで踊った夏。")).toBe(true);
+    expect(await unitOf(l.id)).toMatchObject({ verified: true, audioReady: true });
   });
 
   it("voices only the lead, the hand-over and the letter for a unit that failed verification", async () => {

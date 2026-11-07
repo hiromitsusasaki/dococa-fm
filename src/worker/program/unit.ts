@@ -1,10 +1,11 @@
 import { claude, escapeTags, hasClaude, model, oneLine } from "../claude/client";
+import { setItemReading } from "../db/items";
 import { countUnitsToday, getUnits, listLikedUnits, replaceUnit, upsertUnit } from "../db/units";
 import type { Env } from "../env";
 import { limitFrom } from "../limits";
 import { claimTts, releaseTts } from "../tts/claim";
-import type { Item, Letter, Segment, Unit } from "../types";
-import { leadLine, letterLines, type UnitLines } from "./compose";
+import type { Item, Letter, Reading, Segment, Unit } from "../types";
+import { leadLine, letterLines, speechReadings, type UnitLines } from "./compose";
 import { DJ_SYSTEM, DJ_SYSTEM_EN, letterTag, retryNote, workTag } from "./script";
 import { verifyEpisode } from "./verify";
 
@@ -12,6 +13,10 @@ export type { UnitLines } from "./compose";
 
 export const INTRO_MAX = 160;
 export const AFTER_MAX = 120;
+/** Readings kept from one reply; more are dropped. */
+export const READINGS_MAX = 8;
+/** Code points of a reading's written text, and of a reading. */
+export const READING_TEXT_MAX = 40;
 /** Replies out of shape are asked for again, up to this many calls. */
 const ATTEMPTS = 3;
 /** Checks rephrased lines can fix; verbatim and sources failures come from the data. */
@@ -48,8 +53,20 @@ const TOOL = {
         description: `作品を紹介する。送り主の名前と土地は言わない（手渡しは別の定型が言う）。お便りの引用も要約もしない。再生や視聴を促す言い方はしない。${INTRO_MAX} 字以内`,
       },
       after: { type: "string", description: `お便りへの短い感想。次のお便りの中身には触れない（つなぎは定型が言う）。${AFTER_MAX} 字以内` },
+      readings: {
+        type: "array",
+        description: `音声が読み間違えそうな固有名（英字の略称・アーティスト名・難読の漢字など）の読み。text は intro・after・題名・作者のどれかにそのまま出てくる書き方、reading はカタカナだけ。画面には書いたままが出て、音声だけが reading を言う。読み間違えそうな名前だけ、${READINGS_MAX} 個まで。無ければ空の配列`,
+        items: {
+          type: "object",
+          properties: { text: { type: "string", description: `書いたままの名前。${READING_TEXT_MAX} 字以内` }, reading: { type: "string", description: "カタカナの読み（例: PSY → サイ）" } },
+          required: ["text", "reading"],
+          additionalProperties: false,
+        },
+      },
+      titleReading: { type: "string", description: "題名を音声が読み間違えそうなときだけ、そのカタカナの読み。不要なら空文字" },
+      creatorReading: { type: "string", description: "作者名を音声が読み間違えそうなときだけ、そのカタカナの読み（例: PSY → サイ）。不要なら空文字" },
     },
-    required: ["intro", "after"],
+    required: ["intro", "after", "readings", "titleReading", "creatorReading"],
     additionalProperties: false,
   },
 };
@@ -60,6 +77,8 @@ const TOOL_EN = {
   description: "Return the introduction of the work said before this letter (intro) and a short reaction said after it (after)",
   input_schema: {
     ...TOOL.input_schema,
+    // English is voiced as written: no readings.
+    required: ["intro", "after"],
     properties: {
       intro: {
         type: "string",
@@ -101,6 +120,7 @@ function userMessage(input: UnitInput): string {
     "お便りと見つけた声は、別の読み上げ役が原文のまま読みます。送り主の名前と土地は、その前に定型文が言います。",
     "あなたは引用も要約もせず、intro で作品を紹介し、after でお便りの内容に短く反応します。",
     `直前に『${escapeTags(leadLine(input.item, "ja").text)}』と告げてある。intro はその続きで、題名と作者を繰り返さずに始める。`,
+    "音声合成が読み間違えそうな固有名（英字の略称やアーティスト名、難読の漢字）があれば、その読みをカタカナで readings・titleReading・creatorReading に入れる。読み間違えそうな名前だけでよく、intro と after は書いたままの表記で書く。",
   ];
   const retry = input.retryNotes?.length ? ["", retryNote(input.retryNotes)] : [];
   const segment = ["<segment>", workTag(input.item), letterTag(input.letter), "</segment>"].join("\n");
@@ -110,16 +130,75 @@ function userMessage(input: UnitInput): string {
 /** A line in shape: a string, not blank, at most `max` code points. A blank line is asked for again like a missing one. */
 const within = (v: unknown, max: number): v is string => typeof v === "string" && v.trim() !== "" && Array.from(v).length <= max;
 
-/** The tool's input as unit lines, or null when it is missing or out of shape. */
-function parse(content: { type: string; name?: string; input?: unknown }[]): UnitLines | null {
-  const block = content.find((b) => b.type === "tool_use" && b.name === TOOL.name);
-  const input = block?.input as { intro?: unknown; after?: unknown } | undefined;
-  if (!within(input?.intro, INTRO_MAX) || !within(input?.after, AFTER_MAX)) return null;
-  return { intro: input.intro, after: input.after };
+/** Katakana only (with ー, ・ and spaces between words), at most `READING_TEXT_MAX` code points. */
+const KATAKANA = /^[\p{Script=Katakana}ー・][\p{Script=Katakana}ー・ 　]*$/u;
+const isReading = (v: unknown): v is string => typeof v === "string" && KATAKANA.test(v.trim()) && Array.from(v.trim()).length <= READING_TEXT_MAX;
+/** Kana alone is read as written: a reading is for a name with Latin letters, digits or kanji in it. */
+const NEEDS_READING = /[^\p{Script=Hiragana}\p{Script=Katakana}ー・\s]/u;
+
+/** Unit lines and the work's readings, as one Japanese reply gives them. */
+export type WrittenUnit = UnitLines & { titleReading?: string; creatorReading?: string };
+
+/**
+ * The readings worth keeping, in the reply's order: a written text of up to `READING_TEXT_MAX` code points that is not
+ * kana alone and appears verbatim in the intro, the after, the title or the creator, with a katakana reading; at most
+ * `READINGS_MAX`, one per text. Anything else is dropped, never failed: a unit is fine without readings.
+ */
+function keptReadings(raw: unknown, said: string[]): Reading[] {
+  if (!Array.isArray(raw)) return [];
+  const out = new Map<string, string>();
+  for (const r of raw as { text?: unknown; reading?: unknown }[]) {
+    if (out.size >= READINGS_MAX) break;
+    const text = typeof r?.text === "string" ? r.text.trim() : "";
+    if (text === "" || Array.from(text).length > READING_TEXT_MAX || !NEEDS_READING.test(text) || out.has(text)) continue;
+    if (!isReading(r.reading) || !said.some((s) => s.includes(text))) continue;
+    out.set(text, r.reading.trim());
+  }
+  return [...out].map(([text, reading]) => ({ text, reading }));
 }
 
-/** One Claude call with the single tool `write_unit` { intro, after }; retried up to 3 times when the reply is out of shape. */
-export async function writeUnitLines(env: Env, input: UnitInput): Promise<UnitLines> {
+/** The tool's input as unit lines, or null when it is missing or out of shape. Readings are Japanese only. */
+function parse(content: { type: string; name?: string; input?: unknown }[], item: Item, lang: Unit["lang"]): WrittenUnit | null {
+  const block = content.find((b) => b.type === "tool_use" && b.name === TOOL.name);
+  const input = block?.input as { intro?: unknown; after?: unknown; readings?: unknown; titleReading?: unknown; creatorReading?: unknown } | undefined;
+  if (!within(input?.intro, INTRO_MAX) || !within(input?.after, AFTER_MAX)) return null;
+  const lines = { intro: input.intro, after: input.after };
+  if (lang !== "ja") return lines;
+  const title = item.title;
+  const creator = item.creator.trim();
+  const kept = keptReadings(input.readings, [lines.intro, lines.after, title, creator]);
+  // A reading given for the whole title or creator in `readings` is the work's reading too, and the other way round.
+  const titleReading = title !== "" && isReading(input.titleReading) ? input.titleReading.trim() : kept.find((r) => r.text === title)?.reading;
+  const creatorReading = creator !== "" && isReading(input.creatorReading) ? input.creatorReading.trim() : kept.find((r) => r.text === creator)?.reading;
+  const own = new Map(kept.map((r) => [r.text, r.reading]));
+  const fits = (text: string) => text !== "" && Array.from(text).length <= READING_TEXT_MAX && !own.has(text);
+  if (titleReading && fits(title)) own.set(title, titleReading);
+  if (creatorReading && fits(creator)) own.set(creator, creatorReading);
+  // Only what the talk says: the lead is voiced with the work's readings.
+  const readings = [...own].filter(([text]) => lines.intro.includes(text) || lines.after.includes(text)).map(([text, reading]) => ({ text, reading }));
+  return { ...lines, ...(readings.length ? { readings } : {}), ...(titleReading ? { titleReading } : {}), ...(creatorReading ? { creatorReading } : {}) };
+}
+
+/** The work's readings from a reply, as the item would carry them; undefined when the reply gave none. */
+function readingOf(written: WrittenUnit): Item["readingJa"] {
+  if (!written.titleReading && !written.creatorReading) return undefined;
+  return { ...(written.titleReading ? { title: written.titleReading } : {}), ...(written.creatorReading ? { creator: written.creatorReading } : {}) };
+}
+
+/**
+ * The work as this unit is voiced: its stored readings, or the ones the reply gave when it has none yet (they are
+ * stored with the unit), so the unit is checked as it will air.
+ */
+const voicedItem = (item: Item, written: WrittenUnit): Item => {
+  const reading = readingOf(written);
+  return item.readingJa || !reading ? item : { ...item, readingJa: reading };
+};
+
+/**
+ * One Claude call with the single tool `write_unit` { intro, after, readings, titleReading, creatorReading }; retried
+ * up to 3 times when the reply is out of shape.
+ */
+export async function writeUnitLines(env: Env, input: UnitInput): Promise<WrittenUnit> {
   const client = claude(env);
   const content = userMessage(input);
   for (let attempt = 0; attempt < ATTEMPTS; attempt++) {
@@ -131,15 +210,18 @@ export async function writeUnitLines(env: Env, input: UnitInput): Promise<UnitLi
       tool_choice: { type: "auto" },
       messages: [{ role: "user", content }],
     });
-    const lines = parse(res.content);
+    const lines = parse(res.content, input.item, input.lang);
     if (lines) return lines;
   }
   throw new Error("dj unit invalid");
 }
 
-/** The one-segment layout a unit is verified and voiced with: [lead(fixed), intro?, hand-over(fixed), letter, after?]. No bridges. */
+/**
+ * The one-segment layout a unit is verified and voiced with: [lead(fixed), intro?, hand-over(fixed), letter, after?].
+ * No bridges. Japanese dj lines carry `spoken` where the unit's or the work's readings change what the voice says.
+ */
 export function unitSegment(unit: UnitLines | null, letter: Letter, item: Item, lang: Unit["lang"]): Segment {
-  return { itemId: item.id, slot: "near", lines: [leadLine(item, lang), ...letterLines(letter, unit, true, lang)] };
+  return { itemId: item.id, slot: "near", lines: [leadLine(item, lang), ...letterLines(letter, unit, true, lang, speechReadings(unit, item, lang))] };
 }
 
 function verifyUnit(lines: UnitLines, letter: Letter, item: Item, lang: Unit["lang"]): { ok: boolean; details: string[] } {
@@ -195,7 +277,8 @@ export async function remakeUnit(env: Env, db: D1Database, letter: Letter, item:
     const written = await writeChecked(env, db, letter, item, lang);
     if (!written?.ok) return "failed";
     try {
-      await replaceUnit(db, { letterId: letter.id, lang, intro: written.lines.intro, after: written.lines.after });
+      await replaceUnit(db, { letterId: letter.id, lang, intro: written.lines.intro, after: written.lines.after, readings: written.lines.readings });
+      await storeItemReading(db, item, written.lines);
     } catch (e) {
       // The name only: a D1 error message can quote the statement and its bound values, which carry the lines.
       console.warn("[dococa] dj unit could not be stored", e instanceof Error ? e.name : "unknown error");
@@ -207,20 +290,29 @@ export async function remakeUnit(env: Env, db: D1Database, letter: Letter, item:
   }
 }
 
-/** write → verify, with one retry on the retryable details. Null when Claude is unavailable (an API error, or replies out of shape). */
-async function writeChecked(env: Env, db: D1Database, letter: Letter, item: Item, lang: Unit["lang"]): Promise<{ lines: UnitLines; ok: boolean } | null> {
-  let lines: UnitLines;
+/** The work's readings from the reply, stored when the work has none yet; a work that has them keeps them. */
+async function storeItemReading(db: D1Database, item: Item, written: WrittenUnit): Promise<void> {
+  const reading = readingOf(written);
+  if (reading && !item.readingJa) await setItemReading(db, item.id, reading);
+}
+
+/**
+ * write → verify, with one retry on the retryable details. Null when Claude is unavailable (an API error, or replies
+ * out of shape). The lines are verified as they will air: with their readings, and the work's.
+ */
+async function writeChecked(env: Env, db: D1Database, letter: Letter, item: Item, lang: Unit["lang"]): Promise<{ lines: WrittenUnit; ok: boolean } | null> {
+  let lines: WrittenUnit;
   let ok: boolean;
   const examples = await likedIntros(db, lang);
   try {
     lines = await writeUnitLines(env, { item, letter, lang, examples });
-    let check = verifyUnit(lines, letter, item, lang);
+    let check = verifyUnit(lines, letter, voicedItem(item, lines), lang);
     if (!check.ok) {
       console.warn("[dococa] dj unit failed verification", check.details.join("; "));
       const retryNotes = check.details.filter((d) => RETRYABLE.test(d));
       if (retryNotes.length > 0) {
         lines = await writeUnitLines(env, { item, letter, lang, retryNotes, examples });
-        check = verifyUnit(lines, letter, item, lang);
+        check = verifyUnit(lines, letter, voicedItem(item, lines), lang);
         if (!check.ok) console.warn("[dococa] dj unit failed verification again", check.details.join("; "));
       }
     }
@@ -243,7 +335,8 @@ async function writeAndStore(env: Env, db: D1Database, letter: Letter, item: Ite
   if (!written) return null;
   const { lines, ok } = written;
   try {
-    await upsertUnit(db, { letterId: letter.id, lang, intro: lines.intro, after: lines.after, verified: ok, audioReady: false });
+    await upsertUnit(db, { letterId: letter.id, lang, intro: lines.intro, after: lines.after, ...(lines.readings ? { readings: lines.readings } : {}), verified: ok, audioReady: false });
+    if (ok) await storeItemReading(db, item, lines);
     return (await getUnits(db, [letter.id], lang)).get(letter.id) ?? null;
   } catch (e) {
     // The name only: a D1 error message can quote the statement and its bound values, which carry the lines.

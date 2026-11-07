@@ -194,4 +194,16 @@ describe("the units feedback loop", () => {
     expect((await getUnits(env.DB, [l.id], "ja")).get(l.id)).toMatchObject({ intro: "新しい紹介", after: "新しい感想", verified: true, audioReady: false });
     expect((await getUnits(env.DB, [l.id], "en")).get(l.id)?.intro).toBe("静かな一曲です。");
   });
+
+  it("stores readings with a unit and with a remake, and leaves them out when there are none", async () => {
+    const item = await insertItem(env.DB, itemDraft());
+    const l = await insertLetter(env.DB, letterDraft(item.id));
+    await upsertUnit(env.DB, unit(l.id, { readings: [{ text: "PSY", reading: "サイ" }] }));
+    expect((await getUnits(env.DB, [l.id], "ja")).get(l.id)?.readings).toEqual([{ text: "PSY", reading: "サイ" }]);
+    await replaceUnit(env.DB, { letterId: l.id, lang: "ja", intro: "新しい紹介", after: "新しい感想" });
+    expect((await getUnits(env.DB, [l.id], "ja")).get(l.id)).not.toHaveProperty("readings");
+    const row = await env.DB.prepare("SELECT readings FROM units WHERE letter_id = ?").bind(l.id).first<{ readings: string | null }>();
+    expect(row?.readings).toBeNull();
+  });
 });
+

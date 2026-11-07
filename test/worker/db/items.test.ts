@@ -1,6 +1,6 @@
 import { env } from "cloudflare:workers";
 import { beforeEach, describe, expect, it } from "vitest";
-import { countItemsWithoutVec, findItemByExternalId, getItem, getItemVecs, insertItem, listItemsWithoutVec, searchItems, setItemVec, VEC_DIMS } from "../../../src/worker/db/items";
+import { countItemsWithoutVec, findItemByExternalId, getItem, getItemVecs, insertItem, listItemsWithoutVec, searchItems, setItemReading, setItemVec, VEC_DIMS } from "../../../src/worker/db/items";
 import { angled } from "../../helpers/ai";
 import { resetDb } from "../../helpers/db";
 import { itemDraft } from "./helpers";
@@ -82,5 +82,16 @@ describe("items", () => {
     expect(await listItemsWithoutVec(env.DB, 10)).toEqual([fresh.id, old.id]);
     expect(await listItemsWithoutVec(env.DB, 1)).toEqual([fresh.id]);
     expect(await countItemsWithoutVec(env.DB)).toBe(2);
+  });
+
+  it("stores the work's reading only while it has none, and reads it back", async () => {
+    const it = await insertItem(env.DB, itemDraft({ creator: "PSY" }));
+    expect(await getItem(env.DB, it.id)).not.toHaveProperty("readingJa");
+    await setItemReading(env.DB, it.id, {});
+    expect(await getItem(env.DB, it.id)).not.toHaveProperty("readingJa");
+    await setItemReading(env.DB, it.id, { creator: "サイ" });
+    expect((await getItem(env.DB, it.id))!.readingJa).toEqual({ creator: "サイ" });
+    await setItemReading(env.DB, it.id, { title: "カンナムスタイル", creator: "ピーエスワイ" });
+    expect((await getItem(env.DB, it.id))!.readingJa).toEqual({ creator: "サイ" });
   });
 });

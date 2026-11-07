@@ -34,7 +34,7 @@ describe("bridgeBefore", () => {
 
 describe("bridgeLine", () => {
   it("is a fixed dj line made from the template", () => {
-    expect(bridgeLine("bridge.sameWork", "ja")).toEqual({ type: "dj", text: "同じ作品に、別の方からもお便りが届いています。", fixed: true, bridge: "bridge.sameWork" });
+    expect(bridgeLine("bridge.sameWork", "ja")).toEqual({ type: "dj", text: "同じ作品に、別の人からもお便りが届いています。", fixed: true, bridge: "bridge.sameWork" });
     expect(bridgeLine("bridge.close", "en")).toEqual({ type: "dj", text: t("bridge.close", undefined, "en"), fixed: true, bridge: "bridge.close" });
   });
 

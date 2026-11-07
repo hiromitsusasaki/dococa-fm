@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { t } from "../../../src/worker/i18n/t";
 import { BRIDGE_KEYS } from "../../../src/worker/program/bridge";
-import { composeEpisode, FIXED_TEMPLATES, leadLine, read, siteName } from "../../../src/worker/program/compose";
+import { applyReadings, composeEpisode, FIXED_TEMPLATES, leadLine, read, siteName } from "../../../src/worker/program/compose";
 import { verifyEpisode } from "../../../src/worker/program/verify";
 import type { Unit } from "../../../src/worker/types";
 import { byId, item, letter, listener } from "./fixtures";
@@ -45,7 +45,7 @@ describe("composeEpisode", () => {
       { type: "dj", text: "函館にお住まいの、みなとさんからのお便りです。", fixed: true },
       { type: "letter", letterId: "a", text: plain.bodyJa, radioName: "みなと", place: "函館", kind: "letter", sourceUrl: null, sourceAuthor: null },
       { type: "dj", text: "おわり", unit: { letterId: "a", part: "after" } },
-      { type: "dj", text: "同じ作品に、別の方からもお便りが届いています。", fixed: true, bridge: "bridge.sameWork" },
+      { type: "dj", text: "同じ作品に、別の人からもお便りが届いています。", fixed: true, bridge: "bridge.sameWork" },
       // The second letter of a work has no intro of its own: the first letter's introduced the work.
       { type: "dj", text: "ネットで見つけた声です。@jazzcatさん、YouTubeのコメントから。", fixed: true },
       { type: "letter", letterId: "f", text: "故郷を思い出す。", radioName: "", place: "", kind: "found", sourceUrl: "https://www.youtube.com/watch?v=x", sourceAuthor: "@jazzcat" },
@@ -387,5 +387,44 @@ describe("lead line", () => {
     const titled = letter({ id: "t", body: "Blue in Greenを夜中に聴いて泣いた。", bodyJa: "Blue in Greenを夜中に聴いて泣いた。" });
     const segs = composeEpisode([{ itemId: "i1", slot: "near", letterIds: ["t"], reactionIds: [] }], null, byId([titled]), items);
     expect(verifyEpisode(segs, byId([titled]), listener(), items)).toMatchObject({ topical: true, pii: true, details: [] });
+  });
+});
+
+describe("readings for the voice", () => {
+  const psy = item({ id: "p1", title: "Gangnam Style", creator: "PSY", readingJa: { creator: "サイ" } });
+  const fan = letter({ id: "g", itemId: "p1", body: "PSYで踊った夏。", bodyJa: "PSYで踊った夏。" });
+  const plan = [{ itemId: "p1", slot: "near" as const, letterIds: ["g"], reactionIds: [] }];
+  const u = { ...unit("g", "PSYらしい明るい一曲です。", "Gangnam Styleで踊った夏、いいですね。"), readings: [{ text: "Gangnam Style", reading: "カンナムスタイル" }] };
+
+  it("replaces exact strings, the longest first, in one pass", () => {
+    expect(applyReadings("PSYとPSY2", [{ text: "PSY", reading: "サイ" }, { text: "PSY2", reading: "サイツー" }])).toBe("サイとサイツー");
+    expect(applyReadings("サイのPSY", [{ text: "PSY", reading: "サイ" }, { text: "サイ", reading: "X" }])).toBe("Xのサイ");
+    expect(applyReadings("静かな曲", [])).toBe("静かな曲");
+  });
+
+  it("gives the lead, the intro and the after a spoken text with the readings, and keeps the written text", () => {
+    const [seg] = composeEpisode(plan, unitsOf(u), byId([fan]), byId([psy]));
+    const lines = seg!.lines.slice(1);
+    expect(lines[0]).toEqual({ type: "dj", text: "PSYの「Gangnam Style」という曲の紹介です。", spoken: "サイの「Gangnam Style」という曲の紹介です。", fixed: true });
+    expect(lines[1]).toEqual({ type: "dj", text: "PSYらしい明るい一曲です。", spoken: "サイらしい明るい一曲です。", unit: { letterId: "g", part: "intro" } });
+    expect(lines[4]).toEqual({ type: "dj", text: "Gangnam Styleで踊った夏、いいですね。", spoken: "カンナムスタイルで踊った夏、いいですね。", unit: { letterId: "g", part: "after" } });
+  });
+
+  it("never gives a letter line or a hand-over a spoken text, even when they carry the name", () => {
+    const [seg] = composeEpisode(plan, unitsOf(u), byId([fan]), byId([psy]));
+    for (const l of seg!.lines) if (l.type === "letter" || (l.type === "dj" && l.fixed && !l.text.includes("紹介"))) expect(l).not.toHaveProperty("spoken");
+    expect(seg!.lines.find((l) => l.type === "letter")).toMatchObject({ text: "PSYで踊った夏。" });
+  });
+
+  it("gives no spoken text when no reading applies, nor in English", () => {
+    const [ja] = composeEpisode([{ itemId: "i1", slot: "near", letterIds: ["a"], reactionIds: [] }], unitsOf(unit("a", "静かな一曲です。", "いいですね。")), letters, items);
+    expect(ja!.lines.some((l) => l.type === "dj" && "spoken" in l)).toBe(false);
+    const [en] = composeEpisode(plan, unitsOf({ ...u, lang: "en" }), byId([fan]), byId([psy]), "en");
+    expect(en!.lines.some((l) => l.type === "dj" && "spoken" in l)).toBe(false);
+  });
+
+  it("composes lines that pass the verifier", () => {
+    const segs = composeEpisode(plan, unitsOf(u), byId([fan]), byId([psy]));
+    expect(verifyEpisode(segs, byId([fan]), listener(), byId([psy])).details).toEqual([]);
   });
 });

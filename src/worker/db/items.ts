@@ -13,6 +13,7 @@ export function rowToItem(r: Row): Item {
     previewUrl: (r.preview_url as string | null) ?? null,
     outLinks: JSON.parse(r.out_links as string),
     externalIds: JSON.parse(r.external_ids as string),
+    ...(typeof r.reading_ja === "string" ? { readingJa: JSON.parse(r.reading_ja) as NonNullable<Item["readingJa"]> } : {}),
     createdAt: r.created_at as string,
   };
 }
@@ -51,6 +52,16 @@ export async function insertItems(db: D1Database, items: Item[]): Promise<void> 
     stmts.push(db.prepare(`INSERT INTO items ${ITEM_COLUMNS} VALUES ${rows}`).bind(...chunk.flatMap(itemValues)));
   }
   await db.batch(stmts);
+}
+
+/**
+ * Stores how the Japanese voice says the work's title and creator, only while the work has no reading yet: the
+ * first unit that supplies one sets it, so every programme says the work the same way. Nothing when both are absent.
+ */
+export async function setItemReading(db: D1Database, id: string, reading: NonNullable<Item["readingJa"]>): Promise<void> {
+  const value: NonNullable<Item["readingJa"]> = { ...(reading.title ? { title: reading.title } : {}), ...(reading.creator ? { creator: reading.creator } : {}) };
+  if (Object.keys(value).length === 0) return;
+  await db.prepare("UPDATE items SET reading_ja = ? WHERE id = ? AND reading_ja IS NULL").bind(JSON.stringify(value), id).run();
 }
 
 export async function getItem(db: D1Database, id: string): Promise<Item | null> {

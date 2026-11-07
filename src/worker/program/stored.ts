@@ -30,6 +30,13 @@ export type PublicView = {
   storedIndex: number[];
 };
 
+/** The line as the screen shows it: a dj line without `spoken`. */
+function written(line: ScriptLine): ScriptLine {
+  if (line.type !== "dj" || line.spoken === undefined) return line;
+  const { spoken: _spoken, ...shown } = line;
+  return shown;
+}
+
 /** A fixed line that is not a bridge: the hand-over before a letter (sender, found voice's source, reply's 一言). */
 const isHandOver = (l: ScriptLine | undefined): boolean => l?.type === "dj" && l.fixed === true && l.bridge === undefined;
 
@@ -40,6 +47,8 @@ const isHandOver = (l: ScriptLine | undefined): boolean => l?.type === "dj" && l
  * about a letter nobody hears. DJ talk of older episodes carries no unit mark and stays. A segment left with
  * none of the letters it read (replies aside) is dropped whole, since its DJ talk answered them. 私も reactions carry no letter id in the script and stay.
  * Only talk airs: a preview clip left in an older episode is dropped too (its stored index is skipped, not renumbered).
+ * Every exit to the listener goes through here, so a dj line's `spoken` is left out: the screen shows `text`, and the
+ * voice (`GET /tts`) reads `spoken` from the stored episode.
  */
 export function publicView(segments: Segment[], letters: ReadonlyMap<string, Letter>): PublicView {
   const out: Segment[] = [];
@@ -82,7 +91,7 @@ export function publicView(segments: Segment[], letters: ReadonlyMap<string, Let
       const lines: ScriptLine[] = [];
       seg.lines.forEach((line, i) => {
         if (!keep[i] || line.type === "preview") return;
-        lines.push(line);
+        lines.push(written(line));
         storedIndex.push(base + i);
       });
       out.push({ ...seg, lines });

@@ -506,7 +506,6 @@ describe("verifyEpisode intro after the lead", () => {
     const lines: ScriptLine[] = [fixedDj("Miles Davisの「Blue in Green」という曲の紹介です。"), read(plain), { type: "dj", text: "Blue in Greenはいい曲です。", unit: { letterId: plain.id, part: "after" } }];
     expect(verifyEpisode([{ itemId: "i1", slot: "near", lines }], byId([plain]), me, new Map([["i1", item()]])).details).toEqual([]);
   });
-
   it("matches a Latin title as whole words only, and a CJK title as a substring", () => {
     expect(run("Sometimes a song finds you.", "en", "Time")).toEqual([]);
     expect(run("A brainy little record.", "en", "Rain")).toEqual([]);
@@ -514,5 +513,36 @@ describe("verifyEpisode intro after the lead", () => {
     expect(run("静かなTimeです。", "ja", "Time")).toEqual(["lead: segment 1 line 1: restates the title"]);
     expect(run("Timelessな一曲です。", "ja", "Time")).toEqual([]);
     expect(run("夜の千本桜のような一曲です。", "ja", "千本桜")).toEqual(["lead: segment 1 line 1: restates the title"]);
+  });
+});
+
+describe("verifyEpisode spoken lines", () => {
+  const dj = (text: string, spoken: string): ScriptLine => ({ type: "dj", text, spoken, unit: { letterId: plain.id, part: "after" } });
+  const run = (line: ScriptLine, lang: "ja" | "en" = "ja", it = item({ title: "Gangnam Style", creator: "PSY" })) =>
+    verifyEpisode([{ itemId: "i1", slot: "near", lines: [read(plain), line] }], byId([plain]), me, new Map([["i1", it]]), lang);
+
+  it("passes a line whose spoken text swaps names for katakana readings", () => {
+    expect(run(dj("PSYらしい明るさです。", "サイらしい明るさです。")).details).toEqual([]);
+    expect(run(dj("PSYのGangnam Styleは、カラフルです。", "サイのカンナムスタイルは、カラフルです。")).details).toEqual([]);
+  });
+
+  it("passes a lead whose spoken text says the work's own readings", () => {
+    const lead: ScriptLine = { type: "dj", text: "PSYの「Gangnam Style」という曲の紹介です。", spoken: "サイの「カンナムスタイル」という曲の紹介です。", fixed: true };
+    expect(run(lead, "ja", item({ title: "Gangnam Style", creator: "PSY", readingJa: { title: "カンナムスタイル", creator: "サイ" } })).details).toEqual([]);
+  });
+
+  it("fails a spoken text that says words the line does not have", () => {
+    const r = run(dj("PSYらしい明るさです。", "サイらしい明るさです。ぜひ聴いてね"));
+    expect(r.topical).toBe(false);
+    expect(r.details).toContain("reading: segment 1 line 2: the voice says more than the line's names");
+  });
+
+  it("holds the spoken text to the talk rules, defensively, even when the screen text passes", () => {
+    const r = run(dj("PSYらしい明るさです。", "ランキングらしい明るさです。"));
+    expect(r.details).toContain("measure: segment 1 line 2: ランキング");
+  });
+
+  it("fails a spoken text on an English line", () => {
+    expect(run(dj("A bright PSY song.", "A bright サイ song."), "en").details).toContain("reading: segment 1 line 2: the voice says more than the line's names");
   });
 });

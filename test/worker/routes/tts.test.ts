@@ -47,6 +47,48 @@ beforeEach(async () => {
 });
 afterEach(() => vi.unstubAllGlobals());
 
+describe("readings for the voice", () => {
+  async function spokenEpisode(listenerId: string): Promise<Episode> {
+    const item = await insertItem(env.DB, itemDraft());
+    const stored = await insertLetter(env.DB, letterDraft(item.id, { body: "PSYで踊った", bodyJa: "PSYで踊った", radioName: "しずく", place: "松本" }));
+    const letter = { type: "letter" as const, letterId: stored.id, text: "PSYで踊った", radioName: "しずく", place: "松本", kind: "letter" as const, sourceUrl: null, sourceAuthor: null };
+    return insertEpisode(env.DB, {
+      listenerId,
+      cloudTts: true,
+      verified: true,
+      report,
+      segments: [{ itemId: item.id, slot: "near", lines: [{ type: "dj", text: "PSYらしい一曲です。", spoken: "サイらしい一曲です。", unit: { letterId: stored.id, part: "intro" } }, letter] }],
+    });
+  }
+
+  it("synthesizes a dj line's spoken text, under its own key, and a letter as written", async () => {
+    const cookie = await newSession();
+    const ep = await spokenEpisode(idOf(cookie));
+    const { fn } = stubFetch([[GOOGLE, () => json({ audioContent: audio })]]);
+    expect((await call(`/tts?episode=${ep.id}&line=0`, cookie)).status).toBe(200);
+    expect(JSON.parse(String(fn.mock.calls[0]![1]?.body)).input.text).toBe("サイらしい一曲です。");
+    expect(await env.BUCKET.get(await audioKey("ja", "male", "サイらしい一曲です。"))).not.toBeNull();
+    expect(await env.BUCKET.get(await audioKey("ja", "male", "PSYらしい一曲です。"))).toBeNull();
+    expect(await audioKey("ja", "male", "サイらしい一曲です。")).not.toBe(await audioKey("ja", "male", "PSYらしい一曲です。"));
+    expect((await call(`/tts?episode=${ep.id}&line=1`, cookie)).status).toBe(200);
+    expect(JSON.parse(String(fn.mock.calls[1]![1]?.body)).input.text).toBe("PSYで踊った");
+  });
+
+  it("never sends the spoken text to the listener: the episode json and page show the written text only", async () => {
+    const cookie = await newSession();
+    const ep = await spokenEpisode(idOf(cookie));
+    const res = await call(`/episodes/${ep.id}.json`, cookie);
+    expect(res.status).toBe(200);
+    const body = await res.text();
+    expect(body).toContain("PSYらしい一曲です。");
+    expect(body).not.toContain("spoken");
+    expect(body).not.toContain("サイ");
+    const page = await (await call(`/episodes/${ep.id}`, cookie)).text();
+    expect(page).toContain("PSYらしい一曲です。");
+    expect(page).not.toContain("サイらしい");
+  });
+});
+
 describe("GET /tts", () => {
   async function setup(cloudTts = true, verified = true) {
     const cookie = await newSession();

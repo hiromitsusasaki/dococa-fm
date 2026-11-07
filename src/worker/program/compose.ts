@@ -2,7 +2,7 @@ import { placeLabel } from "../geo/place-label";
 import { t } from "../i18n/t";
 import type { Lang } from "../i18n/t";
 import { siteLabel } from "../letters/label";
-import type { Item, Letter, ScriptLine, Segment, Unit } from "../types";
+import type { Item, Letter, Reading, ScriptLine, Segment, Unit } from "../types";
 import { BRIDGE_KEYS, bridgeBefore, bridgeLine } from "./bridge";
 import type { Selection } from "./select";
 import type { StationKey } from "./station";
@@ -12,8 +12,44 @@ export type SegmentPlan = Selection & { reactionIds: string[] };
 /** Reactions read per segment; the rest wait for a later episode. */
 export const MAX_REACTIONS = 3;
 
-/** A line the model wrote for this letter's unit. */
-const unitLine = (text: string, letterId: string, part: "intro" | "after"): ScriptLine => ({ type: "dj", text, unit: { letterId, part } });
+const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/**
+ * The text as the voice says it: every reading's `text` replaced by its `reading`, exact strings, the longest
+ * first, in one pass (a reading is never itself replaced again). The text itself when there is nothing to replace.
+ */
+export function applyReadings(text: string, readings: readonly Reading[]): string {
+  const byText = new Map(readings.filter((r) => r.text !== "").map((r) => [r.text, r.reading]));
+  if (byText.size === 0) return text;
+  const re = new RegExp([...byText.keys()].sort((a, b) => b.length - a.length).map(escapeRe).join("|"), "gu");
+  return text.replace(re, (m) => byText.get(m) ?? m);
+}
+
+/** The work's own readings as `Reading`s: its title and creator as written, and as the voice says them. */
+export function itemReadings(item: Item): Reading[] {
+  const r = item.readingJa;
+  return [
+    ...(r?.title && item.title !== "" ? [{ text: item.title, reading: r.title }] : []),
+    ...(r?.creator && item.creator.trim() !== "" ? [{ text: item.creator.trim(), reading: r.creator }] : []),
+  ];
+}
+
+/**
+ * The readings a unit's lines are voiced with in `lang`: the unit's own, then the work's, which win for its title
+ * and creator so every programme says the work alike. English has none: the voice reads English as written.
+ */
+export function speechReadings(unit: Pick<Unit, "readings"> | null, item: Item, lang: Lang): Reading[] {
+  if (lang !== "ja") return [];
+  const byText = new Map<string, string>();
+  for (const r of [...(unit?.readings ?? []), ...itemReadings(item)]) byText.set(r.text, r.reading);
+  return [...byText].map(([text, reading]) => ({ text, reading }));
+}
+
+/** A line the model wrote for this letter's unit, with `spoken` when a reading changes what the voice says. */
+function unitLine(text: string, letterId: string, part: "intro" | "after", readings: readonly Reading[] = []): ScriptLine {
+  const spoken = applyReadings(text, readings);
+  return { type: "dj", text, ...(spoken !== text ? { spoken } : {}), unit: { letterId, part } };
+}
 /** A line from a template and data, never from the model. */
 const fixed = (text: string): ScriptLine => ({ type: "dj", text, fixed: true });
 
@@ -28,11 +64,17 @@ export const FIXED_TEMPLATES = [
   ...BRIDGE_KEYS,
 ] as const;
 
-/** The fixed line that names the work by its kind before the DJ talks about it: its own title and creator, never the model's words. */
+/**
+ * The fixed line that names the work by its kind before the DJ talks about it: its own title and creator, never the
+ * model's words. In Japanese, `spoken` fills the same template with the work's readings, when it has any.
+ */
 export function leadLine(item: Item, lang: Lang = "ja"): Extract<ScriptLine, { type: "dj" }> {
   const creator = item.creator.trim();
-  const text = creator === "" ? t(`script.lead.${item.kind}.noCreator`, { title: item.title }, lang) : t(`script.lead.${item.kind}`, { title: item.title, creator }, lang);
-  return { type: "dj", text, fixed: true };
+  const fill = (title: string, by: string) => (creator === "" ? t(`script.lead.${item.kind}.noCreator`, { title }, lang) : t(`script.lead.${item.kind}`, { title, creator: by }, lang));
+  const text = fill(item.title, creator);
+  const r = lang === "ja" ? item.readingJa : undefined;
+  const spoken = r ? fill(r.title || item.title, r.creator || creator) : text;
+  return { type: "dj", text, ...(spoken !== text ? { spoken } : {}), fixed: true };
 }
 
 /** Where a found voice was found, said aloud; the same label the screens show. */
@@ -74,18 +116,18 @@ export function handOver(l: Letter, lang: Lang = "ja"): ScriptLine {
   return fixed(l.radioName === "" ? t("script.readingOnly", undefined, lang) : t("script.letterFrom", { who: who(l, lang) }, lang));
 }
 
-/** The DJ's two lines for one letter, as a unit carries them. */
-export type UnitLines = Pick<Unit, "intro" | "after">;
+/** The DJ's two lines for one letter, and the readings they are voiced with, as a unit carries them. */
+export type UnitLines = Pick<Unit, "intro" | "after" | "readings">;
 
 /**
  * One letter as it airs: the unit's intro (when asked for), the fixed hand-over, the letter verbatim, the
- * unit's after. With no unit the DJ says the hand-over only.
+ * unit's after. With no unit the DJ says the hand-over only. `readings` (see `speechReadings`) voice the unit's lines only.
  */
-export function letterLines(l: Letter, unit: UnitLines | null, withIntro: boolean, lang: Lang = "ja"): ScriptLine[] {
+export function letterLines(l: Letter, unit: UnitLines | null, withIntro: boolean, lang: Lang = "ja", readings: readonly Reading[] = []): ScriptLine[] {
   const lines: ScriptLine[] = [];
-  if (unit && withIntro && unit.intro !== "") lines.push(unitLine(unit.intro, l.id, "intro"));
+  if (unit && withIntro && unit.intro !== "") lines.push(unitLine(unit.intro, l.id, "intro", readings));
   lines.push(handOver(l, lang), read(l, lang));
-  if (unit && unit.after !== "") lines.push(unitLine(unit.after, l.id, "after"));
+  if (unit && unit.after !== "") lines.push(unitLine(unit.after, l.id, "after", readings));
   return lines;
 }
 
@@ -124,11 +166,13 @@ export function composeEpisode(
     // The lead names the work once, before the first letter, with or without a unit.
     const first = present[0];
     if (first) lines.push(leadLine(item, lang));
-    const intro = first ? (spoken(first)?.intro ?? "") : "";
-    if (first && intro !== "") lines.push(unitLine(intro, first.id, "intro"));
+    const firstUnit = first ? spoken(first) : null;
+    const intro = firstUnit?.intro ?? "";
+    if (first && intro !== "") lines.push(unitLine(intro, first.id, "intro", speechReadings(firstUnit, item, lang)));
     present.forEach((l, n) => {
       if (n > 0) lines.push(bridgeLine("bridge.sameWork", lang));
-      lines.push(...letterLines(l, spoken(l), false, lang));
+      const u = spoken(l);
+      lines.push(...letterLines(l, u, false, lang, speechReadings(u, item, lang)));
     });
     for (const id of p.reactionIds.slice(0, MAX_REACTIONS)) {
       const l = letters.get(id);
