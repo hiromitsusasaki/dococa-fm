@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import { raw as rawHtml } from "hono/html";
+import { PlaceFields } from "../../views/components";
 import { Layout } from "../../views/layout";
 import type { Variables } from "../auth/session";
 import { getVerifiedEpisode, latestVerifiedEpisodeOn } from "../db/episodes";
@@ -28,7 +29,7 @@ async function resolve({ DB: db, PUBLIC_ORIGIN }: Pick<Env, "DB" | "PUBLIC_ORIGI
 }
 
 /** What the station player needs to know: the labels it shows, as `t()` values, since `t()` is server-only. */
-const STATION_KEY = /^(station\.|player\.|out\.|kind\.|letter\.(who|whoPlace|whoDemo|showOriginal)|lang\.(code|confirmPlaying)$|home\.(?:put|sendLead)$|share\.(?:x|native|text)$|listener\.(?:anonymous|demo)$)/;
+const STATION_KEY = /^(station\.|player\.|out\.|kind\.|letter\.(who|whoPlace|whoDemo|showOriginal)|lang\.(code|confirmPlaying)$|home\.(?:put|sendLead)$|share\.(?:x|native|text)$|reply\.addName$|settings\.radioName$|listener\.(?:anonymous|demo)$)/;
 const stationStrings = (lang: Lang): Record<string, string> =>
   Object.fromEntries(Object.keys(ja).filter((k) => STATION_KEY.test(k)).map((k) => [k, tFor(lang)(k as keyof typeof ja)]));
 
@@ -80,10 +81,12 @@ export function StationPage({ stationKey, label, lang, listener, path, voice, di
           data-grow={grow ? "1" : "0"}
           data-letter={letter}
           data-send={send ? "1" : undefined}
+          data-ask-name={listener.radioName ? undefined : "1"}
         ></div>
         <script type="application/json" id="station-i18n">
           {rawHtml(jsonForScript(stationStrings(lang)))}
         </script>
+        {!listener.radioName && <PlaceFields lang={lang} />}
         {children}
       </main>
     </Layout>

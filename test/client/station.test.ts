@@ -58,6 +58,8 @@ const strings: Record<string, string> = {
   "share.x": "X で共有",
   "share.native": "共有",
   "share.text": "{work} · {sender}のお便り — Dococa FM",
+  "reply.addName": "ラジオネームとお住まいを添える（任意）",
+  "settings.radioName": "ラジオネーム",
   "lang.confirmPlaying": "切り替えると再生が止まります。続けますか？",
   "letter.showOriginal": "原文を見る",
   "letter.who": "{name}さん",
@@ -889,6 +891,67 @@ describe("station: reactions", () => {
     await onLetter();
     expect(root.querySelector(".react")!.textContent).toContain("私も");
     expect(root.querySelector('[data-action="again"] a')!.getAttribute("href")).toBe("https://open.spotify.com/a");
+  });
+});
+
+describe("station: a name and place before a reply", () => {
+  const template =
+    '<template id="place-fields"><label><span>国</span><select name="placeCountry"><option value="">選ばない</option><option value="JP">日本</option></select></label><label><span>都道府県・州</span><select name="placeRegion"><option value="">選ばない</option><option value="32">島根県</option></select></label></template>';
+  const onLetter = async (askName: boolean) => {
+    document.body.insertAdjacentHTML("beforeend", template);
+    // The page's own cloner (PlaceFields' script), as the server draws it.
+    const clone = (e: Event) => {
+      const d = e.target as HTMLDetailsElement;
+      const slot = d.querySelector?.(".place-slot");
+      if (d.open && d.matches("details.reply-name") && slot && !slot.firstElementChild) slot.append((document.getElementById("place-fields") as HTMLTemplateElement).content.cloneNode(true));
+    };
+    document.addEventListener("toggle", clone, true);
+    nextReplies = [ok(view("epL", [["a", [dj("d1"), letter("L1", "l1")]]]))];
+    autoEnd = false;
+    mountStation(root, opts({ askName }));
+    await power();
+    await vi.waitFor(() => expect(spoken).toEqual(["d1"]));
+    calls.length = 0;
+    return () => document.removeEventListener("toggle", clone, true);
+  };
+  const submit = () => root.querySelector<HTMLFormElement>(".now form.reply")!.dispatchEvent(new CustomEvent("submit", { detail: {}, bubbles: true, cancelable: true }));
+
+  it("offers the collapsed line only to a listener without a radio name", async () => {
+    (await onLetter(false))();
+    expect(root.querySelector(".now details.reply-name")).toBeNull();
+  });
+
+  it("sends the name and the place picked from the page's lists with the reply, keeps them through a redraw, then stops asking", async () => {
+    const off = await onLetter(true);
+    const details = root.querySelector<HTMLDetailsElement>(".now form.reply details.reply-name")!;
+    expect(details.open).toBe(false);
+    expect(details.querySelector("summary")!.textContent).toBe("ラジオネームとお住まいを添える（任意）");
+    details.open = true;
+    details.dispatchEvent(new Event("toggle"));
+    held.shift()!.onend?.();
+    await vi.waitFor(() => expect(spoken).toEqual(["d1", "l1"]));
+    // The radio redrew the card on the next line: the lists cloned into it are still there.
+    root.querySelector<HTMLInputElement>('.now input[name="radioName"]')!.value = "しずく";
+    root.querySelector<HTMLSelectElement>('.now select[name="placeCountry"]')!.value = "JP";
+    root.querySelector<HTMLSelectElement>('.now select[name="placeRegion"]')!.value = "32";
+    root.querySelector<HTMLTextAreaElement>(".now form.reply textarea")!.value = "いい曲";
+    submit();
+    await flush();
+    const init = (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls.at(-1)![1];
+    expect(Object.fromEntries(new URLSearchParams(String(init.body)))).toEqual({ kind: "reply", body: "いい曲", itemId: "a", parentLetterId: "L1", radioName: "しずく", placeCountry: "JP", placeRegion: "32" });
+    expect(root.querySelector(".now details.reply-name")).toBeNull();
+    off();
+  });
+
+  it("a reply without a name goes as before, and the line stays for next time", async () => {
+    const off = await onLetter(true);
+    root.querySelector<HTMLTextAreaElement>(".now form.reply textarea")!.value = "いい曲";
+    submit();
+    await flush();
+    const init = (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls.at(-1)![1];
+    expect(Object.fromEntries(new URLSearchParams(String(init.body)))).toEqual({ kind: "reply", body: "いい曲", itemId: "a", parentLetterId: "L1" });
+    expect(root.querySelector(".now details.reply-name")).not.toBeNull();
+    off();
   });
 });
 

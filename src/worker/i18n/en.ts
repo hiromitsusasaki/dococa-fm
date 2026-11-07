@@ -296,4 +296,5 @@ export const en: Record<keyof typeof ja, string> = {
   "share.x": "Share on X",
   "share.native": "Share",
   "share.text": "{work} · a letter from {sender} — Dococa FM",
+  "reply.addName": "Add your radio name and place (optional)",
 };

@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { ItemCard, LetterSource, LetterText, ReactionForms, ReportForm, isHttpUrl, senderLine, whoOf } from "../../views/components";
+import { ItemCard, LetterSource, LetterText, PlaceFields, ReactionForms, ReportForm, isHttpUrl, senderLine, whoOf } from "../../views/components";
 import { Layout } from "../../views/layout";
 import { currentPath } from "../auth/require-signin";
 import type { Variables } from "../auth/session";
@@ -130,7 +130,8 @@ letterPage.get("/letters/:id", async (c) => {
           <LetterText letter={letter} lang={lang} />
           {letter.kind === "found" ? <LetterSource letter={letter} lang={lang} /> : <p class="letter-who">{whoOf(letter, lang)}</p>}
           <div class="letter-actions">
-            <ReactionForms letterId={letter.id} itemId={item.id} lang={lang} />
+            <ReactionForms letterId={letter.id} itemId={item.id} lang={lang} askName={!listener.radioName} />
+            {!listener.radioName && <PlaceFields lang={lang} />}
             <ReportForm letterId={letter.id} lang={lang} />
           </div>
         </article>

@@ -25,7 +25,7 @@ items.get("/items/:id", async (c) => {
         <p>
           <a class="button" href={`/put?itemId=${item.id}`}>{t("item.putLetter")}</a>
         </p>
-        <LetterList itemId={item.id} letters={letters} lang={lang} />
+        <LetterList itemId={item.id} letters={letters} lang={lang} askName={!listener.radioName} />
       </main>
     </Layout>,
   );

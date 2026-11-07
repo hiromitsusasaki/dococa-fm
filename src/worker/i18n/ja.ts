@@ -293,4 +293,5 @@ export const ja = {
   "share.x": "X で共有",
   "share.native": "共有",
   "share.text": "{work} · {sender}のお便り — Dococa FM",
+  "reply.addName": "ラジオネームとお住まいを添える（任意）",
 } as const;

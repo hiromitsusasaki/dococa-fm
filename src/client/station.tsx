@@ -26,6 +26,8 @@ export type StationOptions = {
   grow?: boolean;
   /** The home: show the send panel above the on-air list. */
   send?: boolean;
+  /** The listener has no radio name: the 一言 form offers to add one, until a reply carries it. */
+  askName?: boolean;
   strings: Record<string, string>;
 };
 
@@ -40,7 +42,7 @@ export type StationState = {
 };
 
 type Reason = "limit" | "failed" | "empty";
-type State = StationState & { reason: Reason | null; loading: boolean; sent: Record<string, true>; sendFailed: boolean };
+type State = StationState & { reason: Reason | null; loading: boolean; sent: Record<string, true>; sendFailed: boolean; askName: boolean };
 type Fetched = { ok: true; view: PlayerEpisode } | { ok: false; reason: Reason };
 
 const VOLUME_KEY = "dfm.volume";
@@ -114,7 +116,7 @@ export function mountStation(root: HTMLElement, opts: StationOptions) {
   const sounds = createSounds(() => breathe());
   const player = createLinePlayer({ voiceURI: opts.voiceURI, ttsUrl: opts.ttsUrl, lang: str("lang.code") === "en" ? "en" : "ja", onClip: (el) => sounds.listen(el) });
   const reactRoot = createRoot(root);
-  let state: State = { power: "off", volume: loadVolume(), current: null, seg: 0, line: 0, queue: [], reason: null, loading: false, sent: {}, sendFailed: false };
+  let state: State = { power: "off", volume: loadVolume(), current: null, seg: 0, line: 0, queue: [], reason: null, loading: false, sent: {}, sendFailed: false, askName: opts.askName === true };
   let abort = new AbortController();
   let mounted = true;
   /** The episode being made for the queue, if any. */
@@ -472,7 +474,7 @@ export function mountStation(root: HTMLElement, opts: StationOptions) {
 
   /** Reactions on their way, so a second tap before the answer does not post twice. */
   const sending = new Set<string>();
-  /** True when the post was taken. */
+  /** True when the post was taken. A reply that carried a radio name named the listener: the form stops asking. */
   async function send(fields: Record<string, string>, key: string): Promise<boolean> {
     if (sending.has(key)) return false;
     sending.add(key);
@@ -482,16 +484,16 @@ export function mountStation(root: HTMLElement, opts: StationOptions) {
       toast(str("player.sentToast"));
       if (state.power === "on") sounds.play("watashimo", state.volume);
     }
-    if (taken) setState({ sent: { ...state.sent, [key]: true }, sendFailed: false });
+    if (taken) setState({ sent: { ...state.sent, [key]: true }, sendFailed: false, ...(fields.radioName ? { askName: false } : {}) });
     else setState({ sendFailed: true });
     if (taken && key.startsWith("w:")) envelope(document, "float");
     return taken;
   }
 
   /** The now-playing card reacts to the segment's first letter (the on-air row's `letterId`). */
-  function react(kind: "watashimo" | "reply", letterId: string, body?: string): Promise<boolean> {
+  function react(kind: "watashimo" | "reply", letterId: string, body?: string, profile: Record<string, string> = {}): Promise<boolean> {
     const r = reactionOf(kind, state.current?.segments[state.seg]?.itemId, letterId, body);
-    return r ? send(r.fields, r.key) : Promise.resolve(false);
+    return r ? send({ ...r.fields, ...profile }, r.key) : Promise.resolve(false);
   }
 
   const lineNow = () => state.current?.segments[state.seg]?.lines[state.line];
@@ -542,6 +544,7 @@ export function mountStation(root: HTMLElement, opts: StationOptions) {
       original: letter ? state.current?.originals?.[letter.letterId] : undefined,
       djText: line?.type === "dj" ? line.text : null,
       upNext: upNextRows(),
+      askName: state.askName,
       sent: state.sent,
       on: {
         power: () => (state.power === "on" || state.power === "tuning" ? turnOff() : turnOn()),
@@ -551,7 +554,7 @@ export function mountStation(root: HTMLElement, opts: StationOptions) {
           if (state.power === "on" || state.power === "tuning") sounds.play("dial", state.volume);
         },
         watashimo: (letterId: string) => void react("watashimo", letterId),
-        reply: (body: string, letterId: string) => react("reply", letterId, body),
+        reply: (body: string, letterId: string, profile?: Record<string, string>) => react("reply", letterId, body, profile),
       },
     };
   }
@@ -647,6 +650,7 @@ function boot() {
     ...(el.dataset.letter ? { letterId: el.dataset.letter } : {}),
     grow: el.dataset.grow === "1",
     send: el.dataset.send === "1",
+    askName: el.dataset.askName === "1",
     strings,
   });
 }

@@ -13,6 +13,21 @@ beforeEach(() => resetDb(env.DB));
 const idOf = (cookie: string): string => cookie.slice(cookie.indexOf("=") + 1).split(".")[0]!;
 
 describe("GET /items/:id", () => {
+  it("offers a nameless listener a collapsed name and place under each reply form, with the place lists once per page; never to a named one", async () => {
+    const item = await insertItem(env.DB, itemDraft());
+    await insertLetter(env.DB, letterDraft(item.id, { body: "一通目" }));
+    await insertLetter(env.DB, letterDraft(item.id, { body: "二通目" }));
+    const cookie = await newSession();
+    const html = await (await get(`/items/${item.id}`, cookie)).text();
+    expect(html.match(/<details class="reply-name"><summary>ラジオネームとお住まいを添える（任意）<\/summary><label><span>ラジオネーム<\/span><input type="text" name="radioName" maxlength="20"\/><\/label><div class="place-slot"><\/div><\/details><button type="submit">返す<\/button><\/form>/g)).toHaveLength(2);
+    expect(html.match(/<template id="place-fields">/g)).toHaveLength(1);
+    expect(html).toMatch(/<template id="place-fields">[\s\S]*<select name="placeCountry">[\s\S]*<option value="JP">日本<\/option>[\s\S]*<select name="placeRegion">[\s\S]*<optgroup label="日本"><option value="01">北海道<\/option>[\s\S]*<\/template>/);
+    await updateListener(env.DB, idOf(cookie), { radioName: "しずく" });
+    const named = await (await get(`/items/${item.id}`, cookie)).text();
+    expect(named).not.toContain("reply-name");
+    expect(named).not.toContain("place-fields");
+  });
+
   it("404 for a missing item", async () => {
     expect((await get("/items/nope", await newSession())).status).toBe(404);
   });

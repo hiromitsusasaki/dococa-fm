@@ -34,6 +34,8 @@ export type StationScreenProps = {
   original: PlayerOriginals[string] | undefined;
   djText: string | null;
   upNext: UpNextRow[];
+  /** The listener has no radio name yet: the 一言 form offers to add one (and a place, from the page's `#place-fields`). */
+  askName: boolean;
   sent: Record<string, true>;
   on: {
     power: () => void;
@@ -42,7 +44,8 @@ export type StationScreenProps = {
     /** The dial moved one detent (during the drag, before `dial`). */
     tick: () => void;
     watashimo: (letterId: string) => void;
-    reply: (body: string, letterId: string) => Promise<boolean> | void;
+    /** `profile`: the radio name and place typed in the form's optional line, only those filled in. */
+    reply: (body: string, letterId: string, profile?: Record<string, string>) => Promise<boolean> | void;
   };
 };
 
@@ -145,7 +148,7 @@ export function StationScreen(p: StationScreenProps) {
               </ul>
             </div>
           )}
-          {onAir && <NowReact id={onAir.letterId!} share={onAir.shareable === false ? null : (onAir.shareText ?? "")} sent={p.sent} str={str} on={p.on} />}
+          {onAir && <NowReact id={onAir.letterId!} askName={p.askName} share={onAir.shareable === false ? null : (onAir.shareText ?? "")} sent={p.sent} str={str} on={p.on} />}
         </section>
       )}
 
@@ -197,7 +200,7 @@ export function StationScreen(p: StationScreenProps) {
  * 私も, 一言 and the ways to share for the segment's letter, on the now-playing card, through the whole segment. `share` is the short
  * text, or null for a letter with no page. The share sheet's button shows where the browser has one; `wireShare` handles its click and the copy.
  */
-function NowReact({ id, share, sent, str, on }: { id: string; share: string | null; sent: Record<string, true>; str: (key: string) => string; on: StationScreenProps["on"] }) {
+function NowReact({ id, askName, share, sent, str, on }: { id: string; askName: boolean; share: string | null; sent: Record<string, true>; str: (key: string) => string; on: StationScreenProps["on"] }) {
   const said = sent[`w:${id}`] === true;
   const url = `${location.origin}/letters/${encodeURIComponent(id)}`;
   return (
@@ -209,15 +212,32 @@ function NowReact({ id, share, sent, str, on }: { id: string; share: string | nu
         class="reply"
         onSubmit={(e: Event) => {
           e.preventDefault();
-          const ta = (e.currentTarget as HTMLFormElement).querySelector("textarea")!;
+          const form = e.currentTarget as HTMLFormElement;
+          const ta = form.querySelector("textarea")!;
           const body = ta.value;
+          const profile: Record<string, string> = {};
+          for (const name of PROFILE) {
+            const v = (form.elements.namedItem(name) as HTMLInputElement | null)?.value.trim();
+            if (v) profile[name] = v;
+          }
           // Words typed while the post was on its way are a new draft: keep them.
-          void Promise.resolve(on.reply(body, id)).then((taken) => {
+          void Promise.resolve(on.reply(body, id, profile)).then((taken) => {
             if (taken && ta.value === body) ta.value = "";
           });
         }}
       >
         <textarea name="body" maxlength={200} rows={2} aria-label={str("player.replyLabel")}></textarea>
+        {askName && (
+          // The place lists are cloned into the slot when the line opens (the page's script); the radio leaves the slot's children alone.
+          <details class="reply-name">
+            <summary>{str("reply.addName")}</summary>
+            <label>
+              <span>{str("settings.radioName")}</span>
+              <input type="text" name="radioName" maxlength={20} />
+            </label>
+            <div class="place-slot"></div>
+          </details>
+        )}
         <button type="submit" class="pill">
           {str(sent[`r:${id}`] ? "player.sent" : "player.reply")}
         </button>
@@ -238,6 +258,8 @@ function NowReact({ id, share, sent, str, on }: { id: string; share: string | nu
     </div>
   );
 }
+
+const PROFILE = ["radioName", "placeCountry", "placeRegion"] as const;
 
 /** The needle sweeps from -135deg (0) to +135deg (1). */
 function angle(fraction: number): string {

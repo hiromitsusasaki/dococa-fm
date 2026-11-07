@@ -3,6 +3,8 @@ import { displayText } from "../worker/letters/display";
 import { type Lang, tFor } from "../worker/i18n/t";
 import { ja } from "../worker/i18n/ja";
 import { whoLine } from "../worker/letters/label";
+import { COUNTRIES, REGIONS } from "../worker/geo/places";
+import { raw } from "hono/html";
 import { shareSender, xIntentUrl } from "./share";
 
 type CardItem = Pick<Item, "kind" | "title" | "creator" | "year" | "imageUrl">;
@@ -143,7 +145,64 @@ function Reaction({ r, lang }: { r: Letter; lang: Lang }) {
 }
 
 /** The 私も and 一言 forms under a letter. */
-export function ReactionForms({ letterId, itemId, lang }: { letterId: string; itemId: string; lang: Lang }) {
+/** Opening a reply's name line clones the page's place selects into it, once; without script the name still goes. */
+const PLACE_CLONE = `document.addEventListener("toggle",function(e){var d=e.target,t=document.getElementById("place-fields");if(!t||!d.open||!d.matches||!d.matches("details.reply-name"))return;var s=d.querySelector(".place-slot");if(s&&!s.firstElementChild)s.append(t.content.cloneNode(true))},true);`;
+
+/**
+ * The country and region selects, drawn once per page into `<template id="place-fields">` for the nameless listener's reply forms
+ * (the lists are long, so not once per form). Regions only for Japan and the US.
+ */
+export function PlaceFields({ lang }: { lang: Lang }) {
+  const t = tFor(lang);
+  const name = (p: { ja: string; en: string }) => (lang === "ja" ? p.ja : p.en);
+  return (
+    <>
+      <template id="place-fields">
+        <label>
+          <span>{t("settings.placeCountry")}</span>
+          <select name="placeCountry">
+            <option value="">{t("settings.placeNone")}</option>
+            {COUNTRIES.map((c) => (
+              <option value={c.code}>{name(c)}</option>
+            ))}
+          </select>
+        </label>
+        <label>
+          <span>{t("settings.placeRegion")}</span>
+          <select name="placeRegion">
+            <option value="">{t("settings.placeNone")}</option>
+            {(["JP", "US"] as const).map((code) => (
+              <optgroup label={name(COUNTRIES.find((c) => c.code === code)!)}>
+                {REGIONS[code].map((r) => (
+                  <option value={r.code}>{name(r)}</option>
+                ))}
+              </optgroup>
+            ))}
+          </select>
+        </label>
+      </template>
+      <script>{raw(PLACE_CLONE)}</script>
+    </>
+  );
+}
+
+/** The collapsed 「ラジオネームとお住まいを添える（任意）」 line of a nameless listener's reply form; the page carries `PlaceFields`. */
+export function ReplyName({ lang }: { lang: Lang }) {
+  const t = tFor(lang);
+  return (
+    <details class="reply-name">
+      <summary>{t("reply.addName")}</summary>
+      <label>
+        <span>{t("settings.radioName")}</span>
+        <input type="text" name="radioName" maxlength={20} />
+      </label>
+      <div class="place-slot"></div>
+    </details>
+  );
+}
+
+/** `askName`: the viewer has no radio name yet, so the reply form offers to add one. */
+export function ReactionForms({ letterId, itemId, lang, askName = false }: { letterId: string; itemId: string; lang: Lang; askName?: boolean }) {
   const t = tFor(lang);
   return (
     <>
@@ -159,6 +218,7 @@ export function ReactionForms({ letterId, itemId, lang }: { letterId: string; it
         <input type="hidden" name="kind" value="reply" />
         <input type="hidden" name="parentLetterId" value={letterId} />
         <input type="text" name="body" maxlength={200} placeholder={t("reaction.replyPlaceholder")} aria-label={t("reaction.reply")} />
+        {askName && <ReplyName lang={lang} />}
         <button type="submit">{t("reaction.replySubmit")}</button>
       </form>
     </>
@@ -216,7 +276,7 @@ export function LetterCard({ letter, item, lang, viewerId }: { letter: Letter; i
   );
 }
 
-function LetterRow({ letter, reactions, itemId, lang }: { letter: Letter; reactions: Letter[]; itemId: string; lang: Lang }) {
+function LetterRow({ letter, reactions, itemId, lang, askName }: { letter: Letter; reactions: Letter[]; itemId: string; lang: Lang; askName: boolean }) {
   const t = tFor(lang);
   return (
     <li class="letter" id={`letter-${letter.id}`}>
@@ -225,7 +285,7 @@ function LetterRow({ letter, reactions, itemId, lang }: { letter: Letter; reacti
       {letter.kind === "found" && <LetterSource letter={letter} lang={lang} />}
       {reactions.length > 0 && <ul class="reactions">{reactions.map((r) => <Reaction r={r} lang={lang} />)}</ul>}
       <div class="letter-actions">
-        <ReactionForms letterId={letter.id} itemId={itemId} lang={lang} />
+        <ReactionForms letterId={letter.id} itemId={itemId} lang={lang} askName={askName} />
         <ReportForm letterId={letter.id} lang={lang} />
       </div>
     </li>
@@ -233,13 +293,13 @@ function LetterRow({ letter, reactions, itemId, lang }: { letter: Letter; reacti
 }
 
 /** Letters oldest first, found voices in their own section, reactions under their parent. No counts anywhere. */
-export function LetterList({ itemId, letters, lang }: { itemId: string; letters: Letter[]; lang: Lang }) {
+export function LetterList({ itemId, letters, lang, askName = false }: { itemId: string; letters: Letter[]; lang: Lang; askName?: boolean }) {
   const t = tFor(lang);
   const reactionsOf = (id: string) => letters.filter((l) => l.parentLetterId === id);
   const top = letters.filter((l) => l.parentLetterId === null);
   const mine = top.filter((l) => l.kind !== "found");
   const found = top.filter((l) => l.kind === "found");
-  const render = (l: Letter) => <LetterRow letter={l} reactions={reactionsOf(l.id)} itemId={itemId} lang={lang} />;
+  const render = (l: Letter) => <LetterRow letter={l} reactions={reactionsOf(l.id)} itemId={itemId} lang={lang} askName={askName} />;
   return (
     <>
       <section class="letters">
@@ -252,6 +312,7 @@ export function LetterList({ itemId, letters, lang }: { itemId: string; letters:
           <ul>{found.map(render)}</ul>
         </section>
       )}
+      {askName && top.length > 0 && <PlaceFields lang={lang} />}
     </>
   );
 }

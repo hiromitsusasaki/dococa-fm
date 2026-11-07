@@ -2184,6 +2184,44 @@ body.embed .put h1 {
   border-bottom: 5px solid transparent;
 }
 
+/* A nameless listener's optional radio name and place, folded under the 一言 (the place lists are cloned in when it opens). */
+.reply-name {
+  flex: 1 1 100%;
+  width: 100%;
+  color: var(--ink-2);
+  font-size: 13px;
+}
+
+.reply-name summary {
+  cursor: pointer;
+}
+
+.reply-name label {
+  display: grid;
+  gap: 4px;
+  margin-top: var(--sp-2);
+}
+
+.reply-name input,
+.reply-name select {
+  min-height: 40px;
+  padding: 6px 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-md);
+  background: var(--panel);
+  color: var(--ink);
+  font: inherit;
+}
+
+/* On an item or letter page the reply form is one row: the line folds under it. */
+.letter-actions form:has(.reply-name) {
+  flex-wrap: wrap;
+}
+
+.letter-actions .reply-name {
+  order: 1;
+}
+
 /* The home's send panel: a heading, one line, the button that opens the send modal. */
 .send-panel p {
   margin: 0 0 var(--sp-3);

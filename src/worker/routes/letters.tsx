@@ -8,6 +8,8 @@ import { currentPath, requireSignin } from "../auth/require-signin";
 import type { Variables } from "../auth/session";
 import { embedItems } from "../ai/embed";
 import { getItem } from "../db/items";
+import { updateListener } from "../db/listeners";
+import { isValidPlace, profileFields, profilePatch } from "../listener-profile";
 import { displayText } from "../letters/display";
 import { getLetter, insertReport, insertTakedown, listReactionsForLetter } from "../db/letters";
 import type { Env } from "../env";
@@ -30,7 +32,12 @@ const letterSchema = z.object({
   kind: z.enum(["letter", "reply", "watashimo"]).default("letter"),
   /** Sent from the home's send modal: the answer stays in the frame. */
   embed: z.literal("1").optional(),
+  /** A nameless listener's optional name and place, sent with a reply; checked as `/settings` checks them. */
+  radioName: z.string().max(200).optional(),
+  placeCountry: z.string().max(10).optional(),
+  placeRegion: z.string().max(10).optional(),
 });
+const profileSchema = z.object(profileFields).refine(isValidPlace);
 type LetterForm = z.infer<typeof letterSchema>;
 
 export const letters = new Hono<{ Bindings: Env; Variables: Variables }>();
@@ -56,8 +63,15 @@ letters.post(
   }),
   async (c) => {
     const form = c.req.valid("form");
-    const t = tFor(c.get("listener").lang);
-    const result = await createLetter(c.env, c.env.DB, c.get("listener"), form);
+    let listener = c.get("listener");
+    const t = tFor(listener.lang);
+    // Kept on the listener before the reply is made, so the reply (and later ones) carry it. Once named, the fields are ignored.
+    if (form.kind === "reply" && !listener.radioName && (form.radioName?.trim() || form.placeCountry?.trim())) {
+      const profile = profileSchema.safeParse({ radioName: form.radioName ?? "", placeCountry: form.placeCountry ?? "", placeRegion: form.placeRegion ?? "" });
+      if (!profile.success) return putError(c, form, t("settings.invalid"), 422);
+      listener = (await updateListener(c.env.DB, listener.id, profilePatch(listener, profile.data))) ?? listener;
+    }
+    const result = await createLetter(c.env, c.env.DB, listener, form);
     if (result.ok) {
       // The work may be new: its vector is made after the answer (a no-op when it has one).
       defer(c, embedItems(c.env, c.env.DB, [result.itemId]));

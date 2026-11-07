@@ -9,7 +9,8 @@ import * as prepare from "../../../src/worker/program/prepare";
 import { resetDb } from "../../helpers/db";
 import { okReply, stubAnthropic } from "../../helpers/anthropic";
 import { itemDraft, letterDraft } from "../db/helpers";
-import { get, signedInSession, postForm } from "./helpers";
+import { getListener } from "../../../src/worker/db/listeners";
+import { get, newSession, signedInSession, postForm } from "./helpers";
 
 let create: ReturnType<typeof stubAnthropic>;
 let prepared: MockInstance<typeof prepare.prepareLetter>;
@@ -554,5 +555,69 @@ describe("reactions, report, takedown, bookmarklet", () => {
       expect(html).not.toContain("javascript:location");
       expect(html).toContain("ブックマークレットはいま用意できていません");
     }
+  });
+});
+
+describe("POST /letters: a radio name and place before an anonymous reply", () => {
+  const idOf = (cookie: string) => cookie.split("=")[1]!.split(".")[0]!;
+  const replies = async () => (await env.DB.prepare("SELECT radio_name, place FROM letters WHERE kind = 'reply'").all()).results;
+  async function seed() {
+    const item = await seedItem();
+    const parent = await insertLetter(env.DB, letterDraft(item.id));
+    return { itemId: item.id, kind: "reply", parentLetterId: parent.id };
+  }
+
+  it("keeps the name and place on the listener before the reply, so the reply carries them", async () => {
+    const base = await seed();
+    const cookie = await newSession();
+    const res = await postForm("/letters", cookie, { ...base, body: "わかる", radioName: " しずく ", placeCountry: "JP", placeRegion: "32" });
+    expect(res.status).toBe(303);
+    const me = (await getListener(env.DB, idOf(cookie)))!;
+    expect([me.radioName, me.placeCountry, me.placeRegion, me.place]).toEqual(["しずく", "JP", "32", "島根"]);
+    expect(await replies()).toEqual([{ radio_name: "しずく", place: "島根" }]);
+  });
+
+  it("without the fields the reply still goes out from 「名無しのリスナー」 and the listener is left alone", async () => {
+    const base = await seed();
+    const cookie = await newSession();
+    expect((await postForm("/letters", cookie, { ...base, body: "わかる" })).status).toBe(303);
+    expect((await postForm("/letters", cookie, { ...base, body: "もう一言", radioName: "", placeCountry: "" })).status).toBe(303);
+    const me = (await getListener(env.DB, idOf(cookie)))!;
+    expect([me.radioName, me.placeCountry]).toEqual(["", null]);
+    expect(await replies()).toEqual([
+      { radio_name: "", place: "" },
+      { radio_name: "", place: "" },
+    ]);
+  });
+
+  it.each([
+    ["a contact in the name", { radioName: "mail me a@b.jp" }],
+    ["a name over 20 characters", { radioName: "あ".repeat(21) }],
+    ["an unknown country", { radioName: "しずく", placeCountry: "XX" }],
+    ["a region of another country", { radioName: "しずく", placeCountry: "FR", placeRegion: "32" }],
+  ])("422s on %s and sends no reply and changes nothing", async (_, fields) => {
+    const base = await seed();
+    const cookie = await newSession();
+    const res = await postForm("/letters", cookie, { ...base, body: "わかる", ...fields });
+    expect(res.status).toBe(422);
+    expect(await replies()).toEqual([]);
+    const me = (await getListener(env.DB, idOf(cookie)))!;
+    expect([me.radioName, me.placeCountry]).toEqual(["", null]);
+  });
+
+  it("writes the listener once: a listener who has a name keeps it, whatever a later reply carries", async () => {
+    const base = await seed();
+    const cookie = await newSession();
+    await postForm("/letters", cookie, { ...base, body: "わかる", radioName: "しずく" });
+    await postForm("/letters", cookie, { ...base, body: "もう一言", radioName: "別の名前", placeCountry: "FR" });
+    const me = (await getListener(env.DB, idOf(cookie)))!;
+    expect([me.radioName, me.placeCountry]).toEqual(["しずく", null]);
+  });
+
+  it("ignores the fields on anything but a reply", async () => {
+    const base = await seed();
+    const cookie = await newSession();
+    await postForm("/letters", cookie, { ...base, kind: "watashimo", radioName: "しずく" });
+    expect((await getListener(env.DB, idOf(cookie)))!.radioName).toBe("");
   });
 });
