@@ -1485,6 +1485,7 @@ describe("station: small joys", () => {
       ctxs.push(this);
     }
     resume = vi.fn(() => Promise.resolve());
+    close = vi.fn(() => Promise.resolve());
     createOscillator() {
       const o = { type: "", frequency: { value: 0 }, connect: (g: unknown) => g, start() {}, stop() {} };
       this.last = o;
@@ -1669,14 +1670,17 @@ describe("station: small joys", () => {
     dialog.showModal = vi.fn() as unknown as HTMLDialogElement["showModal"];
     dialog.close = vi.fn() as unknown as HTMLDialogElement["close"];
     const unwire = wireSendModal(document);
-    document.querySelector("[data-open-send]")!.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
-    window.dispatchEvent(new MessageEvent("message", { data: { type: "dfm:sent" }, origin: location.origin, source: frame.contentWindow }));
-    expect(document.querySelector(".envelope")).toBeNull();
-    vi.advanceTimersByTime(1500);
-    expect(document.querySelectorAll(".face .envelope.drawn")).toHaveLength(1);
-    vi.advanceTimersByTime(1400);
-    expect(document.querySelector(".envelope")).toBeNull();
-    unwire();
+    try {
+      document.querySelector("[data-open-send]")!.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+      window.dispatchEvent(new MessageEvent("message", { data: { type: "dfm:sent" }, origin: location.origin, source: frame.contentWindow }));
+      expect(document.querySelector(".envelope")).toBeNull();
+      vi.advanceTimersByTime(1500);
+      expect(document.querySelectorAll(".face .envelope.drawn")).toHaveLength(1);
+      vi.advanceTimersByTime(1400);
+      expect(document.querySelector(".envelope")).toBeNull();
+    } finally {
+      unwire();
+    }
   });
 
   it("nothing flies or floats under prefers-reduced-motion", async () => {
@@ -1725,5 +1729,30 @@ describe("station: small joys", () => {
     vi.advanceTimersByTime(60 * 60 * 1000);
     expect(document.documentElement.hasAttribute("data-night")).toBe(true);
     s.unmount();
+    expect(document.documentElement.hasAttribute("data-night")).toBe(false);
+  });
+
+  it("once unmounted, the hourly check stops and the sound context is closed", async () => {
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval", "Date"] });
+    vi.setSystemTime(new Date(2026, 10, 7, 22, 30));
+    nextReplies = [ok(epA())];
+    autoEnd = false;
+    const s = mountStation(root, opts());
+    await power();
+    s.unmount();
+    expect(ctxs[0]!.close).toHaveBeenCalled();
+    vi.advanceTimersByTime(60 * 60 * 1000);
+    expect(document.documentElement.hasAttribute("data-night")).toBe(false);
+  });
+
+  it("the lamp loop stays idle with nothing tapped (the browser voice)", async () => {
+    const frame = vi.fn(() => 1);
+    vi.stubGlobal("requestAnimationFrame", frame);
+    nextReplies = [ok(epA())];
+    autoEnd = false;
+    mountStation(root, opts());
+    await power();
+    await vi.waitFor(() => expect(spoken).toEqual(["a1"]));
+    expect(frame).not.toHaveBeenCalled();
   });
 });

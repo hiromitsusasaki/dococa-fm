@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { BED_FADE_MS, createBed, createSounds } from "../../src/client/audio";
+import { BED_FADE_MS, createBed } from "../../src/client/audio";
+import { createSounds } from "../../src/client/sounds";
 import { createLinePlayer, forgetReportedListens } from "../../src/client/playback";
 import { mountPlayer, type PlayerEpisode } from "../../src/client/player";
 
@@ -804,6 +805,18 @@ describe("createBed", () => {
     }
   });
 
+  it("on iOS, where volume is read-only, a new episode switches the bed at once instead of fading", () => {
+    vi.stubGlobal("navigator", { userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148 Safari/604.1", platform: "iPhone", maxTouchPoints: 5 });
+    rand([0, 0.99]);
+    const bed = createBed({ urls });
+    bed.start();
+    bed.next();
+    const loops = audios.filter((a) => a.loop);
+    expect(loops).toHaveLength(1);
+    expect(loops[0]!.src).toBe("/bed-5.mp3");
+    expect(loops[0]!.paused).toBe(false);
+  });
+
   it("a new episode while no bed plays only changes the url, without a fade", () => {
     vi.useFakeTimers();
     try {
@@ -844,6 +857,7 @@ describe("createBed", () => {
 describe("createSounds", () => {
   const made: Array<{ resume: ReturnType<typeof vi.fn>; tapped: unknown[] }> = [];
   class Ctx {
+    close = vi.fn(() => Promise.resolve());
     state = "running";
     currentTime = 0;
     destination = {};
@@ -887,6 +901,37 @@ describe("createSounds", () => {
     expect(s.level()).toBeCloseTo(1);
     (el as { paused: boolean }).paused = true;
     expect(s.level()).toBeNull();
+  });
+
+  it("tells the lamp when the tapped clip starts playing, and closes its context", () => {
+    const onPlay = vi.fn();
+    const s = createSounds(onPlay);
+    s.unlock();
+    const handlers: Array<() => void> = [];
+    const el = { paused: true, addEventListener: (_: string, fn: () => void) => handlers.push(fn) } as unknown as HTMLMediaElement;
+    s.listen(el);
+    expect(onPlay).not.toHaveBeenCalled();
+    handlers.forEach((h) => h());
+    expect(onPlay).toHaveBeenCalledTimes(1);
+    s.close();
+    expect(made[0]!.close).toHaveBeenCalled();
+    expect(s.level()).toBeNull();
+  });
+
+  it("never taps desktop Safari, and taps Chrome and Firefox on a Mac", () => {
+    const ua = {
+      safari: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.1 Safari/605.1.15",
+      chrome: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+      firefox: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:132.0) Gecko/20100101 Firefox/132.0",
+    };
+    const tapped = Object.entries(ua).map(([, userAgent]) => {
+      vi.stubGlobal("navigator", { userAgent, platform: "MacIntel", maxTouchPoints: 0 });
+      const s = createSounds();
+      s.unlock();
+      s.listen({ paused: false } as HTMLMediaElement);
+      return made.at(-1)!.tapped.length;
+    });
+    expect(tapped).toEqual([0, 1, 1]);
   });
 
   it("waits for a suspended context to run before tapping, and never taps on iOS", async () => {

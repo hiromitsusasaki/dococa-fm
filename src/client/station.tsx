@@ -1,9 +1,9 @@
 /** @jsxImportSource hono/jsx/dom */
 import { flushSync } from "hono/jsx/dom";
 import { createRoot } from "hono/jsx/dom/client";
-import { createSounds } from "./audio";
 import { bindMediaSession, createLinePlayer, fetchNext, type LetterLine, type PlayerEpisode, type PlayerItem, reportListen, resumeAt, type StoredPosition, syncMediaSession, whoOf } from "./playback";
 import { loadDial, postLetter, reactionOf, storeDial } from "./reactions";
+import { createSounds } from "./sounds";
 import { StationScreen, type UpNextRow } from "./station-view";
 
 export type StationOptions = {
@@ -110,7 +110,7 @@ const plainClick = (e: MouseEvent): boolean => !e.defaultPrevented && e.button =
 
 export function mountStation(root: HTMLElement, opts: StationOptions) {
   const str = (key: string) => opts.strings[key] ?? key;
-  const sounds = createSounds();
+  const sounds = createSounds(() => breathe());
   const player = createLinePlayer({ voiceURI: opts.voiceURI, ttsUrl: opts.ttsUrl, lang: str("lang.code") === "en" ? "en" : "ja", onClip: (el) => sounds.listen(el) });
   const reactRoot = createRoot(root);
   let state: State = { power: "off", volume: loadVolume(), current: null, seg: 0, line: 0, queue: [], reason: null, loading: false, replyOpen: false, sent: {}, sendFailed: false };
@@ -185,17 +185,24 @@ export function mountStation(root: HTMLElement, opts: StationOptions) {
     }
   }
 
-  /** While on air, the ON AIR lamp follows the loudness of the cloud voice (±15 %); with no tapped clip it stays as it is. */
+  /**
+   * While on air, the ON AIR lamp follows the loudness of the cloud voice (±15 %). The loop runs only while a tapped clip plays:
+   * it stops at the first frame with nothing to read, and the clip's next `play` (or the switch) starts it again.
+   */
   let lampFrame = 0;
+  let breathing = false;
   function breathe() {
-    if (typeof cancelAnimationFrame === "function") cancelAnimationFrame(lampFrame);
-    if (state.power !== "on" || typeof requestAnimationFrame !== "function") return;
+    if (breathing || state.power !== "on" || sounds.level() === null || typeof requestAnimationFrame !== "function") return;
+    breathing = true;
     const step = () => {
-      if (!mounted || state.power !== "on") return;
-      const level = still() ? null : sounds.level();
+      const level = mounted && state.power === "on" && !still() ? sounds.level() : null;
       const lamp = root.querySelector<HTMLElement>(".face .live");
-      if (level === null) lamp?.style.removeProperty("--voice");
-      else lamp?.style.setProperty("--voice", (0.85 + 0.3 * level).toFixed(2));
+      if (level === null) {
+        lamp?.style.removeProperty("--voice");
+        breathing = false;
+        return;
+      }
+      lamp?.style.setProperty("--voice", (0.85 + 0.3 * level).toFixed(2));
       lampFrame = requestAnimationFrame(step);
     };
     lampFrame = requestAnimationFrame(step);
@@ -588,9 +595,12 @@ export function mountStation(root: HTMLElement, opts: StationOptions) {
       clearTimeout(dialTimer);
       clearTimeout(toastTimer);
       clearInterval(nightTimer);
+      if (typeof cancelAnimationFrame === "function") cancelAnimationFrame(lampFrame);
+      sounds.close();
       toastEl?.remove();
       flight?.remove();
       document.documentElement.removeAttribute("data-on-air");
+      document.documentElement.removeAttribute("data-night");
       document.removeEventListener("click", onCardClick);
       document.removeEventListener("submit", onLangSubmit);
       abort.abort();

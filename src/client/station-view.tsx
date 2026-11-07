@@ -183,13 +183,16 @@ export function StationScreen(p: StationScreenProps) {
         <ul class="up-next">
           {p.upNext.map((r) => (
             <li key={r.key} class={r.now ? "now" : ""}>
-              <span class="tag">{str(r.now ? "station.now" : "station.next")}</span>
-              {r.now && isHttpUrl(r.imageUrl) && <img class="thumb" src={r.imageUrl} alt="" width="40" height="40" />}
-              {r.kind && <span class="kind">{kindLabel(str, r.kind)}</span>}
-              <span class="title">{r.title}</span>
-              <span class="creator">{r.creator}</span>
-              {r.sender && <span class="sender">{r.sender}</span>}
-              {r.reading !== undefined && <i class="reading" style={{ "--at": String(r.reading) }} aria-hidden="true"></i>}
+              {/* The on-air row's text is one box, so the reading line moves over the text only, not the buttons under it. */}
+              <span class="row-text">
+                <span class="tag">{str(r.now ? "station.now" : "station.next")}</span>
+                {r.now && isHttpUrl(r.imageUrl) && <img class="thumb" src={r.imageUrl} alt="" width="40" height="40" />}
+                {r.kind && <span class="kind">{kindLabel(str, r.kind)}</span>}
+                <span class="title">{r.title}</span>
+                <span class="creator">{r.creator}</span>
+                {r.sender && <span class="sender">{r.sender}</span>}
+                {r.reading !== undefined && <i class="reading" style={{ "--at": String(r.reading) }} aria-hidden="true"></i>}
+              </span>
               {r.letterId && <PanelReact id={r.letterId} shareable={r.shareable !== false} sent={p.sent} str={str} on={p.on} />}
             </li>
           ))}
