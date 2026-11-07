@@ -1138,6 +1138,8 @@ describe("the home's send modal", () => {
       '<a class="button" href="/put" data-open-send>お便りを送る</a><dialog class="send-modal"><form method="dialog"><button type="submit">閉じる</button></form><iframe data-src="/put?embed=1" title="お便りを送る"></iframe></dialog>';
     dialog = document.querySelector("dialog")!;
     frame = document.querySelector("iframe")!;
+    // happy-dom swaps the frame's window on each load; a fixed one stands for the page inside it.
+    Object.defineProperty(frame, "contentWindow", { value: {} as Window, configurable: true });
     showModal = vi.fn();
     close = vi.fn();
     dialog.showModal = showModal as unknown as HTMLDialogElement["showModal"];
@@ -1147,7 +1149,8 @@ describe("the home's send modal", () => {
   afterEach(() => unwire());
 
   const press = (init: MouseEventInit = {}) => document.querySelector("[data-open-send]")!.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, ...init }));
-  const message = (data: unknown, origin: string) => window.dispatchEvent(new MessageEvent("message", { data, origin }));
+  /** From the dialog's frame unless `source` says otherwise. */
+  const message = (data: unknown, origin: string, source: Window | null = frame.contentWindow) => window.dispatchEvent(new MessageEvent("message", { data, origin, source }));
 
   it("the button opens the dialog instead of leaving the page, and the frame loads only then", () => {
     expect(frame.getAttribute("src")).toBeNull();
@@ -1186,6 +1189,13 @@ describe("the home's send modal", () => {
     message({ type: "dfm:sent" }, "https://evil.example");
     message({ type: "other" }, location.origin);
     message(null, location.origin);
+    expect(close).not.toHaveBeenCalled();
+  });
+
+  it("ignores a same-origin message from a window other than its frame", () => {
+    press();
+    message({ type: "dfm:sent" }, location.origin, window);
+    message({ type: "dfm:close" }, location.origin, null);
     expect(close).not.toHaveBeenCalled();
   });
 });

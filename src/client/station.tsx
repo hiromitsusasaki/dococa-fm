@@ -441,7 +441,7 @@ export function mountStation(root: HTMLElement, opts: StationOptions) {
 /**
  * The home's send modal: the button (a plain `/put` link without script) opens the `<dialog>`, whose frame loads `/put?embed=1`
  * on the first open and again after a letter is sent. The embedded sent page posts `dfm:sent`, which closes it; Escape inside
- * the frame posts `dfm:close`; a message from any other origin is ignored. Escape on the page and the close button close it natively.
+ * the frame posts `dfm:close`; a message from any other origin or any other window is ignored. Escape on the page and the close button close it natively.
  */
 export function wireSendModal(doc: Document = document): () => void {
   const dialog = doc.querySelector<HTMLDialogElement>("dialog.send-modal");
@@ -458,7 +458,8 @@ export function wireSendModal(doc: Document = document): () => void {
   /** `dfm:sent` closes and reloads the frame next time; `dfm:close` (Escape inside the frame) closes and keeps what was typed. */
   const sent = (e: MessageEvent) => {
     const type = (e.data as { type?: unknown } | null)?.type;
-    if (e.origin !== location.origin || (type !== "dfm:sent" && type !== "dfm:close")) return;
+    // Same origin is not enough: another tab or frame of this site could hold a reference to the home.
+    if (e.origin !== location.origin || !frame.contentWindow || e.source !== frame.contentWindow || (type !== "dfm:sent" && type !== "dfm:close")) return;
     if (type === "dfm:sent") fresh = false;
     dialog.close();
   };
