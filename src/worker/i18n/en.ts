@@ -224,6 +224,7 @@ export const en: Record<keyof typeof ja, string> = {
   "theme.lightShort": "☀\uFE0E",
   "theme.darkShort": "☾",
   "me.title": "My page",
+  "me.newReactions": "New reactions",
   "me.favorites": "Your favorites",
   "me.reactions": "Reactions you got",
   "me.welcome": "Your public radio has an address: {url} (switch it to public in settings and anyone can listen).",

@@ -8,6 +8,7 @@ import { listFavorites } from "../db/history";
 import { getItemsByIds } from "../db/items";
 import { listHeardLetters } from "../db/listens";
 import { listRecentReactionsToListener } from "../db/letters";
+import { markReactionsSeen } from "../db/listeners";
 import type { Env } from "../env";
 import { displayText } from "../letters/display";
 import { tFor } from "../i18n/t";
@@ -27,9 +28,12 @@ me.get("/me", requireSignin, async (c) => {
   const lang = listener.lang;
   const t = tFor(lang);
   const favorites = await listFavorites(c.env.DB, listener.id, FAVORITES_LIMIT);
+  // Taken before the read: a reaction that lands while the page is made lights the dot again rather than going unseen.
+  const seenAt = new Date();
   const reactions = await listRecentReactionsToListener(c.env.DB, listener.id, REACTIONS_LIMIT);
   const items = await getItemsByIds(c.env.DB, reactions.map((r) => r.itemId));
   const heard = await listHeardLetters(c.env.DB, listener.id);
+  await markReactionsSeen(c.env.DB, listener.id, seenAt);
   const publicUrl = listener.stationPublic && listener.stationSlug ? stationUrl(c.env, listener.stationSlug) : null;
   // Shown once: the script drops the query, so a reload does not repeat it. A listener who is already public has no news in it.
   const welcome = c.req.query("welcome") === "1" && listener.stationSlug && !listener.stationPublic ? stationUrl(c.env, listener.stationSlug) : null;

@@ -1,6 +1,7 @@
 import type { Child } from "hono/jsx";
 import { raw } from "hono/html";
 import { type Lang, tFor } from "../worker/i18n/t";
+import { unseenReactions } from "../worker/reaction-notice";
 import type { Listener } from "../worker/types";
 
 type LayoutProps = { title: string; children?: Child; /** The client entry to load: `player` or `station`. */
@@ -39,6 +40,17 @@ export const EMBED_ESCAPE = `addEventListener("keydown",function(e){if(e.key==="
 const THEMES = ["light", "dark", "auto"] as const;
 const LANGS = ["ja", "en"] as const;
 
+/** The `/me` link, with a dot (never a number) while someone's 私も or 一言 waits there unseen; on `/me` itself, none. */
+async function MeLink({ listener, label, dot, here }: { listener: Listener; label: string; dot: string; here: boolean }) {
+  const unseen = !here && (await unseenReactions(listener));
+  return (
+    <a href="/me">
+      {label}
+      {unseen && <span class="dot" role="img" aria-label={dot}></span>}
+    </a>
+  );
+}
+
 function SiteHeader({ listener, path, lang }: { listener?: Listener; path?: string; lang: Lang }) {
   const t = tFor(lang);
   const signedIn = listener !== undefined && listener.googleSub !== null;
@@ -51,7 +63,7 @@ function SiteHeader({ listener, path, lang }: { listener?: Listener; path?: stri
         {listener &&
           (signedIn ? (
             <>
-              <a href="/me">{t("me.title")}</a>
+              <MeLink listener={listener} label={t("me.title")} dot={t("me.newReactions")} here={path?.split("?")[0] === "/me"} />
               <span class="site-user">{t("signin.as", { name: listener.displayName })}</span>
               <form method="post" action="/auth/signout">
                 <button type="submit" class="quiet">{t("signin.out")}</button>

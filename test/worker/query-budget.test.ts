@@ -12,7 +12,7 @@ import { resetDb } from "../helpers/db";
 import { stubAnthropic, toolUse } from "../helpers/anthropic";
 import { json, stubFetch } from "../helpers/fetch";
 import { itemDraft, letterDraft } from "./db/helpers";
-import { newSession } from "./routes/helpers";
+import { newSession, signedInSession } from "./routes/helpers";
 
 /** Workers Free allows 50 D1 queries per invocation; these are the budgets the hot paths must stay under. */
 const START_BUDGET = 50;
@@ -136,5 +136,28 @@ describe("D1 statements per request", () => {
     expect(byDistance).toBeGreaterThanOrEqual(byPools);
     expect(byDistance).toBeLessThanOrEqual(byPools + DISTANCE_EXTRA);
     expect(byDistance).toBeLessThan(EPISODE_BUDGET);
+  });
+
+  it("GET / reads one more statement for a signed-in listener (the reaction notice) and one more for a letter link", async () => {
+    await seedWorld();
+    const measure = async (cookie: string, path = "/") => {
+      const counted = countingD1(env.DB);
+      const res = await app.request(path, { headers: { cookie } }, { ...env, DB: counted.db });
+      expect(res.status).toBe(200);
+      await res.text();
+      return counted.count();
+    };
+    const anon = await newSession();
+    const signed = await signedInSession();
+    const base = await measure(anon);
+    expect(await measure(signed)).toBe(base + 1);
+    expect(await measure(anon, "/?letter=abc")).toBe(base + 1);
+    // The notice is read where the header is drawn: a JSON read pays nothing for it.
+    const json = async (cookie: string) => {
+      const counted = countingD1(env.DB);
+      await (await app.request("/stations/mine.json", { headers: { cookie } }, { ...env, DB: counted.db })).text();
+      return counted.count();
+    };
+    expect(await json(signed)).toBe(await json(anon));
   });
 });

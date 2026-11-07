@@ -96,6 +96,20 @@ describe("GET /me", () => {
     expect(html).not.toMatch(/\d+ (reactions|people|letters)/);
   });
 
+  it("marks the reactions seen when opened, and an anonymous visit marks nothing", async () => {
+    const seenAt = async (id: string) => (await env.DB.prepare("SELECT reactions_seen_at AS s FROM listeners WHERE id = ?").bind(id).first<{ s: string | null }>())?.s ?? null;
+    const anon = await newSession();
+    await SELF.fetch(`${BASE}/me`, { redirect: "manual", headers: { cookie: anon } });
+    expect(await seenAt(idOf(anon))).toBeNull();
+    const cookie = await signedInSession();
+    expect(await seenAt(idOf(cookie))).toBeNull();
+    const before = new Date().toISOString();
+    expect((await get("/me", cookie)).status).toBe(200);
+    const seen = await seenAt(idOf(cookie));
+    expect(seen).not.toBeNull();
+    expect(seen! >= before).toBe(true);
+  });
+
   it("says nobody has reacted yet when nobody has", async () => {
     const html = await (await get("/me", await signedInSession())).text();
     expect(html).toContain(t("me.nobody"));

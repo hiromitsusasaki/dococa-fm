@@ -197,6 +197,17 @@ a {
   color: var(--ink-2);
 }
 
+/* New reactions wait on /me: a dot, never a number. */
+.site-header nav .dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-left: 4px;
+  border-radius: 50%;
+  background: var(--magenta);
+  vertical-align: top;
+}
+
 .site-header nav .quiet {
   padding: 0 var(--sp-2);
   border: 0;

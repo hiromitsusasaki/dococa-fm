@@ -188,6 +188,26 @@ export async function listRecentReactionsToListener(db: D1Database, listenerId: 
   return results.map(rowToLetter);
 }
 
+/**
+ * Whether someone left a 私も or 一言 on one of the listener's public letters since they last opened /me (the same reactions
+ * `listRecentReactionsToListener` lists). One statement, for the header's dot.
+ */
+export async function hasUnseenReactions(db: D1Database, listenerId: string): Promise<boolean> {
+  const row = await db
+    .prepare(
+      `SELECT 1 AS x FROM letters r
+       JOIN letters p ON p.id = r.parent_letter_id
+       JOIN listeners me ON me.id = p.listener_id
+       WHERE p.listener_id = ?1 AND p.status = 'public' AND r.status = 'public'
+         AND r.kind IN ('watashimo', 'reply') AND (r.listener_id IS NULL OR r.listener_id != ?1)
+         AND r.created_at > COALESCE(me.reactions_seen_at, '1970')
+       LIMIT 1`,
+    )
+    .bind(listenerId)
+    .first();
+  return row !== null;
+}
+
 export async function listReactionsForLetter(db: D1Database, letterId: string): Promise<Letter[]> {
   const { results } = await db
     .prepare(`${SELECT} WHERE letters.parent_letter_id = ? AND letters.status = 'public' ORDER BY letters.created_at ASC, letters.id ASC`)

@@ -5,6 +5,7 @@ import {
   countRecentDuplicate,
   getLetter,
   getPublicLetterWithTitle,
+  hasUnseenReactions,
   insertLetter,
   listLettersByListener,
   listLettersForItem,
@@ -12,7 +13,7 @@ import {
   listReactionsForLetter,
   setLetterStatus,
 } from "../../../src/worker/db/letters";
-import { createListener } from "../../../src/worker/db/listeners";
+import { createListener, markReactionsSeen } from "../../../src/worker/db/listeners";
 import { resetDb } from "../../helpers/db";
 import { itemDraft, letterDraft } from "./helpers";
 
@@ -118,6 +119,28 @@ describe("letters", () => {
     expect(got[0]!.item.title).toBe("B");
     expect(got[2]!.item.title).toBe("A");
     expect(await listRecentPublicLetters(env.DB, 2)).toHaveLength(2);
+  });
+
+  it("hasUnseenReactions: another's public 私も or 一言 on the listener's public letter, after the last look", async () => {
+    const me = await createListener(env.DB);
+    const other = await createListener(env.DB);
+    const item = await insertItem(env.DB, itemDraft());
+    const mine = await insertLetter(env.DB, letterDraft(item.id, { listenerId: me.id }));
+    expect(await hasUnseenReactions(env.DB, me.id)).toBe(false);
+    await insertLetter(env.DB, letterDraft(item.id, { kind: "watashimo", parentLetterId: mine.id, listenerId: me.id }));
+    await insertLetter(env.DB, letterDraft(item.id, { kind: "reply", parentLetterId: mine.id, status: "rejected" }));
+    expect(await hasUnseenReactions(env.DB, me.id)).toBe(false);
+    await insertLetter(env.DB, letterDraft(item.id, { kind: "reply", parentLetterId: mine.id, listenerId: other.id }));
+    expect(await hasUnseenReactions(env.DB, me.id)).toBe(true);
+    expect(await hasUnseenReactions(env.DB, other.id)).toBe(false);
+    await tick();
+    await markReactionsSeen(env.DB, me.id);
+    expect(await hasUnseenReactions(env.DB, me.id)).toBe(false);
+    await tick();
+    await insertLetter(env.DB, letterDraft(item.id, { kind: "watashimo", parentLetterId: mine.id }));
+    expect(await hasUnseenReactions(env.DB, me.id)).toBe(true);
+    await setLetterStatus(env.DB, mine.id, "rejected");
+    expect(await hasUnseenReactions(env.DB, me.id)).toBe(false);
   });
 
   it("getPublicLetterWithTitle: a public letter or sourced found voice with its work's title, nothing else", async () => {

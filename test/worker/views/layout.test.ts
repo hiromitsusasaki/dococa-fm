@@ -1,7 +1,11 @@
 import { env } from "cloudflare:workers";
 import { beforeEach, describe, expect, it } from "vitest";
 import { resetDb } from "../../helpers/db";
-import { get, newSession, postForm } from "../routes/helpers";
+import { insertItem } from "../../../src/worker/db/items";
+import { insertLetter } from "../../../src/worker/db/letters";
+import { createListener } from "../../../src/worker/db/listeners";
+import { itemDraft, letterDraft } from "../db/helpers";
+import { get, newSession, postForm, signedInSession } from "../routes/helpers";
 
 beforeEach(() => resetDb(env.DB));
 
@@ -61,5 +65,65 @@ describe("shared layout", () => {
     const group = html.match(/<div class="theme-toggle"[\s\S]*?<\/div>/)?.[0] ?? "";
     for (const short of ["☀︎", "☾", "端末"]) expect(group).toContain(`<span class="short" aria-hidden="true">${short}</span>`);
     expect((group.match(/class="full"/g) ?? []).length).toBe(3);
+  });
+});
+
+describe("the header's notice of new reactions", () => {
+  const idOf = (cookie: string) => cookie.split("=")[1]!.split(".")[0]!;
+  const meLink = (html: string) => html.match(/<a href="\/me"[\s\S]*?<\/a>/)?.[0] ?? "";
+  const tick = () => new Promise((r) => setTimeout(r, 3));
+
+  async function letterBy(listenerId: string) {
+    const it = await insertItem(env.DB, itemDraft({ title: `w-${crypto.randomUUID()}`, externalIds: { itunes: crypto.randomUUID() } }));
+    return insertLetter(env.DB, letterDraft(it.id, { listenerId }));
+  }
+  const react = (parent: { id: string; itemId: string }, over: Parameters<typeof letterDraft>[1] = {}) =>
+    insertLetter(env.DB, letterDraft(parent.itemId, { kind: "watashimo", parentLetterId: parent.id, body: "私も", bodyJa: "私も", ...over }));
+
+  it("shows a dot, never a number, on the /me link when someone reacted to the listener's letter", async () => {
+    const cookie = await signedInSession();
+    const mine = await letterBy(idOf(cookie));
+    expect(meLink(await (await get("/", cookie)).text())).not.toContain("dot");
+    const other = await createListener(env.DB);
+    await react(mine, { listenerId: other.id });
+    await react(mine, { listenerId: other.id, kind: "reply", body: "わかる", bodyJa: "わかる" });
+    const link = meLink(await (await get("/put", cookie)).text());
+    expect(link).toMatch(/<span class="dot" role="img" aria-label="新しい反応があります"><\/span>/);
+    expect(link.replace(/<[^>]+>/g, "")).toBe("マイページ");
+    expect(link).not.toMatch(/\d/);
+  });
+
+  it("clears only when the listener opens /me, and comes back with a later reaction", async () => {
+    const cookie = await signedInSession();
+    const mine = await letterBy(idOf(cookie));
+    await react(mine);
+    expect(meLink(await (await get("/", cookie)).text())).toContain('class="dot"');
+    expect(meLink(await (await get("/", cookie)).text())).toContain('class="dot"');
+    const me = await (await get("/me", cookie)).text();
+    expect(meLink(me)).not.toContain('class="dot"');
+    expect(meLink(await (await get("/", cookie)).text())).not.toContain('class="dot"');
+    await tick();
+    await react(mine);
+    expect(meLink(await (await get("/", cookie)).text())).toContain('class="dot"');
+  });
+
+  it("ignores the listener's own reactions, hidden ones, and reactions to a hidden letter", async () => {
+    const cookie = await signedInSession();
+    const id = idOf(cookie);
+    const mine = await letterBy(id);
+    await react(mine, { listenerId: id });
+    await react(mine, { status: "rejected" });
+    const hidden = await letterBy(id);
+    await env.DB.prepare("UPDATE letters SET status = 'rejected' WHERE id = ?").bind(hidden.id).run();
+    await react(hidden);
+    expect(meLink(await (await get("/", cookie)).text())).not.toContain('class="dot"');
+  });
+
+  it("is never shown to a listener who has not signed in", async () => {
+    const cookie = await newSession();
+    const mine = await letterBy(idOf(cookie));
+    await react(mine);
+    const html = await (await get("/", cookie)).text();
+    expect(html).not.toContain('class="dot"');
   });
 });

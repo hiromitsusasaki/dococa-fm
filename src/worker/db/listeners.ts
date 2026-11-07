@@ -128,6 +128,11 @@ export async function setListenerDial(db: D1Database, id: string, dial: number):
   await db.prepare("UPDATE listeners SET dial = ? WHERE id = ?").bind(dial, id).run();
 }
 
+/** The listener opened /me: reactions made up to `at` no longer light the header's dot. */
+export async function markReactionsSeen(db: D1Database, id: string, at: Date = new Date()): Promise<void> {
+  await db.prepare("UPDATE listeners SET reactions_seen_at = ? WHERE id = ?").bind(at.toISOString(), id).run();
+}
+
 /**
  * Binds a Google account to a listener that has none yet. The write itself checks `google_sub IS NULL`, so two callbacks
  * racing on one listener cannot overwrite each other: the loser gets false. A sub already bound elsewhere throws (UNIQUE).

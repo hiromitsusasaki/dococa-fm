@@ -221,6 +221,7 @@ export const ja = {
   "theme.lightShort": "☀\uFE0E",
   "theme.darkShort": "☾",
   "me.title": "マイページ",
+  "me.newReactions": "新しい反応があります",
   "me.favorites": "あなたの好きなもの",
   "me.reactions": "届いた反応",
   "me.welcome": "公開ラジオの URL ができました: {url}（設定で公開にすると誰でも聴けます）",

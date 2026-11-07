@@ -24,6 +24,7 @@ import { tts } from "./routes/tts";
 import { limitBodies } from "./security/body-limit";
 import { canonicalHost, requirePublicOrigin, sameOriginOnly } from "./security/origin";
 import { ipRateLimit, listenerRateLimit, listensIpRateLimit } from "./security/rate-limit";
+import { reactionNotice } from "./reaction-notice";
 
 const app = new Hono<{ Bindings: Env; Variables: Variables }>();
 
@@ -47,6 +48,7 @@ app.use("*", ipRateLimit);
 app.use("/listens", listensIpRateLimit);
 app.use("*", requireSessionSecret);
 app.use("*", sessionMiddleware);
+app.use("*", reactionNotice);
 app.use("*", listenerRateLimit);
 
 app.get("/healthz", (c) => c.json({ ok: true }));
