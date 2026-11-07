@@ -12,7 +12,8 @@
 6. `docs/superpowers/plans/2026-11-06-dococa-fm-phase4.md` — Phase 4 の計画（お住まい・MCP 外し・ダイヤルと枠ごとの番組・遠さ・ホーム・送るページ・マイページ・選別・台本の改善ループ。設計書の追記 L が正本）
 7. `docs/superpowers/plans/2026-11-07-dococa-fm-phase5.md` — Phase 5 の計画（本番を聴いた本人フィードバック: 言語切替・TTS の見張り・英語の声・オンエア欄・設定・BGM。設計書の追記 M が正本）
 8. `docs/superpowers/plans/2026-11-07-dococa-fm-phase6.md` — Phase 6 の計画（レビューからの更新: ラジオの面・ホーム・直リンク・反応の点・非公開・公開ラジオ一覧・冷えた入口・クローラ対策。設計書の追記 N が正本）
-9. `docs/DESIGN.md` — 見た目と文言の正本。画面を作る・直すときは必ずこれと `docs/design/station-mock.html` に合わせる
+9. `docs/superpowers/plans/2026-11-07-dococa-fm-phase7.md` — Phase 7 の計画（画面ごとの本人フィードバック: 1 枠 1 通・公開ラジオの中身・ホームとマイページの組み替え・共有・about の挿絵・チュートリアル。設計書の追記 O が正本）
+10. `docs/DESIGN.md` — 見た目と文言の正本。画面を作る・直すときは必ずこれと `docs/design/station-mock.html` に合わせる
 
 ブレストと調査の経緯は、このリポには置かない（公開リポになるため）。main-mac / ops-mac の `~/agent_workspace/workspace/2026-11-02-built-with-claude-hackathon/`（private）にある。`outputs/2026-11-03-handoff.md` が引き継ぎ資料、`notes/30-session-log.md` がセッション全文の記録。
 
