@@ -31,7 +31,7 @@ export type StationScreenProps = {
     dial: (value: string) => void;
     toggleReply: () => void;
     watashimo: (letterId?: string) => void;
-    reply: (body: string, letterId?: string) => void;
+    reply: (body: string, letterId?: string) => Promise<boolean> | void;
   };
 };
 
@@ -185,7 +185,6 @@ export function StationScreen(p: StationScreenProps) {
 /** 私も and 一言 for the letter on air, in the panel; they share `sent` with the player card. */
 function PanelReact({ id, sent, str, on }: { id: string; sent: Record<string, true>; str: (key: string) => string; on: StationScreenProps["on"] }) {
   const said = sent[`w:${id}`] === true;
-  const replied = sent[`r:${id}`] === true;
   return (
     <div class="panel-react">
       <button type="button" class="pill hot" data-action="panel-watashimo" disabled={said} onClick={() => on.watashimo(id)}>
@@ -195,12 +194,15 @@ function PanelReact({ id, sent, str, on }: { id: string; sent: Record<string, tr
         class="panel-reply"
         onSubmit={(e: Event) => {
           e.preventDefault();
-          on.reply((e.currentTarget as HTMLFormElement).querySelector("textarea")!.value, id);
+          const ta = (e.currentTarget as HTMLFormElement).querySelector("textarea")!;
+          void Promise.resolve(on.reply(ta.value, id)).then((taken) => {
+            if (taken) ta.value = "";
+          });
         }}
       >
-        <textarea name="body" maxlength={200} rows={2} disabled={replied} aria-label={str("player.reply")}></textarea>
-        <button type="submit" class="pill" disabled={replied}>
-          {str(replied ? "player.sent" : "player.reply")}
+        <textarea name="body" maxlength={200} rows={2} aria-label={str("player.replyLabel")}></textarea>
+        <button type="submit" class="pill">
+          {str(sent[`r:${id}`] ? "player.sent" : "player.reply")}
         </button>
       </form>
     </div>

@@ -310,19 +310,21 @@ export function mountStation(root: HTMLElement, opts: StationOptions) {
 
   /** Reactions on their way, so a second tap before the answer does not post twice. */
   const sending = new Set<string>();
-  async function send(fields: Record<string, string>, key: string) {
-    if (sending.has(key)) return;
+  /** True when the post was taken. `fromPlayer` closes the player card's reply input; the panel has its own. */
+  async function send(fields: Record<string, string>, key: string, fromPlayer: boolean): Promise<boolean> {
+    if (sending.has(key)) return false;
     sending.add(key);
     const taken = await postLetter(fields);
     sending.delete(key);
-    if (taken) setState({ sent: { ...state.sent, [key]: true }, replyOpen: false, sendFailed: false });
+    if (taken) setState({ sent: { ...state.sent, [key]: true }, ...(fromPlayer ? { replyOpen: false } : {}), sendFailed: false });
     else setState({ sendFailed: true });
+    return taken;
   }
 
-  /** `letterId` defaults to the letter being read; the on-air row names the segment's first letter. */
-  function react(kind: "watashimo" | "reply", body?: string, letterId = letterNow()?.letterId) {
-    const r = reactionOf(kind, state.current?.segments[state.seg]?.itemId, letterId, body);
-    if (r) void send(r.fields, r.key);
+  /** The player card reacts to the letter being read; the on-air row names the segment's first letter (`panelLetterId`). */
+  function react(kind: "watashimo" | "reply", body?: string, panelLetterId?: string): Promise<boolean> {
+    const r = reactionOf(kind, state.current?.segments[state.seg]?.itemId, panelLetterId ?? letterNow()?.letterId, body);
+    return r ? send(r.fields, r.key, panelLetterId === undefined) : Promise.resolve(false);
   }
 
   const lineNow = () => state.current?.segments[state.seg]?.lines[state.line];
@@ -341,12 +343,14 @@ export function mountStation(root: HTMLElement, opts: StationOptions) {
         rows.push({ key: `${ep.id}:${from + n}`, now, kind: item.kind ?? null, title: item.title, creator: item.creator, ...(first ? { sender: whoOf(first, str) } : {}), ...(now && first ? { letterId: first.letterId } : {}) });
       });
     };
-    if (state.power !== "off" && state.current) {
+    // Off, limit and failed: the panel is empty and shows its hint, so nothing stale is listed.
+    if (state.power !== "on" && state.power !== "tuning") return rows;
+    // Between episodes nothing is on air yet: only what is queued.
+    if (state.power === "on" && !state.loading && state.current) {
       add(state.current, state.seg, state.seg + 1, true);
       add(state.current, state.seg + 1, Infinity);
     }
-    // Off: the panel is empty and shows its hint, so a stale prefetch is not listed.
-    if (state.power !== "off") for (const ep of state.queue) add(ep, 0, Infinity);
+    for (const ep of state.queue) add(ep, 0, Infinity);
     return rows;
   }
 
@@ -375,7 +379,7 @@ export function mountStation(root: HTMLElement, opts: StationOptions) {
         volume: setVolume,
         dial: turnDial,
         toggleReply: () => setState({ replyOpen: !state.replyOpen }),
-        watashimo: (letterId?: string) => react("watashimo", undefined, letterId),
+        watashimo: (letterId?: string) => void react("watashimo", undefined, letterId),
         reply: (body: string, letterId?: string) => react("reply", body, letterId),
       },
     };

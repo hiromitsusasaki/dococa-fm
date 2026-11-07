@@ -25,6 +25,7 @@ const strings: Record<string, string> = {
   "player.reply": "一言を送る",
   "player.send": "送る",
   "player.sent": "届けました",
+  "player.replyLabel": "一言",
   "player.again": "この作品を聴く・観る",
   "player.sendFailed": "送れませんでした",
   "letter.showOriginal": "原文を見る",
@@ -658,6 +659,18 @@ describe("station: on-air panel", () => {
     expect(btn().textContent).toContain("届けました");
   });
 
+  it("shows a 私も said in the panel as sent on the player card", async () => {
+    nextReplies = [ok(view("epL", [["a", [letter("L1", "l1")]]]))];
+    autoEnd = false;
+    mountStation(root, opts());
+    await power();
+    await vi.waitFor(() => expect(spoken).toEqual(["l1"]));
+    root.querySelector<HTMLButtonElement>('.up-next li.now [data-action="panel-watashimo"]')!.click();
+    await flush();
+    expect((el("watashimo") as HTMLButtonElement).disabled).toBe(true);
+    expect(el("watashimo").textContent).toContain("届けました");
+  });
+
   it("shows a 私も said in the player card as sent in the panel", async () => {
     nextReplies = [ok(view("epL", [["a", [letter("L1", "l1")]]]))];
     autoEnd = false;
@@ -686,10 +699,75 @@ describe("station: on-air panel", () => {
     expect(calls).toEqual(["POST /letters"]);
     const init = (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls.at(-1)![1];
     expect(Object.fromEntries(new URLSearchParams(String(init.body)))).toEqual({ kind: "reply", body: "いい曲", itemId: "a", parentLetterId: "L1" });
+    // Cleared and still usable: a second word to the same letter goes out.
+    expect(ta.value).toBe("");
+    expect(ta.disabled).toBe(false);
+    ta.value = "もう一言";
+    root.querySelector<HTMLFormElement>(".up-next li.now form")!.dispatchEvent(new CustomEvent("submit", { detail: {}, bubbles: true, cancelable: true }));
+    await flush();
+    expect(calls).toEqual(["POST /letters", "POST /letters"]);
+  });
+
+  it("a reply from the panel leaves the player card's reply input open", async () => {
+    nextReplies = [ok(view("epL", [["a", [letter("L1", "l1")]]]))];
+    autoEnd = false;
+    mountStation(root, opts());
+    await power();
+    await vi.waitFor(() => expect(spoken).toEqual(["l1"]));
+    el("reply").click();
+    await flush();
+    expect(root.querySelector("form.reply")).not.toBeNull();
+    const ta = root.querySelector<HTMLTextAreaElement>(".up-next li.now textarea")!;
+    ta.value = "いい曲";
+    root.querySelector<HTMLFormElement>(".up-next li.now form")!.dispatchEvent(new CustomEvent("submit", { detail: {}, bubbles: true, cancelable: true }));
+    await flush();
+    expect(root.querySelector("form.reply")).not.toBeNull();
+  });
+
+  it("a failed post can be tried again", async () => {
+    nextReplies = [ok(epA()), ok(epB())];
+    autoEnd = false;
+    mountStation(root, opts());
+    await power();
+    await vi.waitFor(() => expect(spoken).toEqual(["a1"]));
+    const real = fetch as unknown as ReturnType<typeof vi.fn>;
+    const impl = real.getMockImplementation()!;
+    real.mockImplementationOnce(() => Promise.reject(new Error("offline")));
+    const btn = () => root.querySelector<HTMLButtonElement>('.up-next li.now [data-action="panel-watashimo"]')!;
+    btn().click();
+    await flush();
+    expect(btn().disabled).toBe(false);
+    real.mockImplementation(impl);
+    btn().click();
+    await flush();
+    expect(btn().disabled).toBe(true);
+  });
+
+  it("lists nothing as on air once the day's limit is reached, and not between episodes", async () => {
+    const one = view("epO", [["a", [dj("o1")]]]);
+    nextReplies = [ok(one), json(429, { error: "limit" })];
+    mountStation(root, opts());
+    await power();
+    await vi.waitFor(() => expect(root.querySelector(".station-status")!.textContent).toContain("今日の分はここまで"));
+    expect(root.querySelectorAll(".up-next li.now")).toHaveLength(0);
+    expect(root.querySelectorAll(".up-next li")).toHaveLength(0);
+  });
+
+  it("drops the on-air row while the next episode is awaited", async () => {
+    const one = view("epO", [["a", [dj("o1")]]]);
+    let release: (r: Response) => void = () => {};
+    nextReplies = [ok(one), () => new Promise<Response>((r) => (release = r))];
+    mountStation(root, opts());
+    await power();
+    await vi.waitFor(() => expect(root.querySelector(".station-status")!.textContent).toContain("チューニング中"));
+    expect(root.querySelectorAll(".up-next li.now")).toHaveLength(0);
+    autoEnd = false;
+    release(new Response(JSON.stringify({ episode: view("epU", [["c", [dj("u1")]]]), station: { key: "world", label: "Dococa FM" } }), { status: 200, headers: { "content-type": "application/json" } }));
+    await vi.waitFor(() => expect(root.querySelectorAll(".up-next li.now")).toHaveLength(1));
   });
 
   it("offers no reactions on a row whose segment has no letter", async () => {
-    nextReplies = [ok(epB()), ok(epB())];
+    nextReplies = [ok(epB()), ok(view("epV", [["c", [dj("v1")]]]))];
     autoEnd = false;
     mountStation(root, opts());
     await power();

@@ -76,6 +76,7 @@ export const en: Record<keyof typeof ja, string> = {
   "player.next": "Next work",
   "player.watashimo": "Me too",
   "player.reply": "Reply",
+  "player.replyLabel": "A word back",
   "player.send": "Send",
   "player.sent": "Delivered",
   "player.foundSource": "A voice found online: {author} ({site})",

@@ -73,6 +73,7 @@ export const ja = {
   "player.next": "次の作品",
   "player.watashimo": "私も",
   "player.reply": "一言を送る",
+  "player.replyLabel": "一言",
   "player.send": "送る",
   "player.sent": "届けました",
   "player.foundSource": "ネットで見つけた声 — {author}（{site}）",
