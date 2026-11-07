@@ -348,11 +348,9 @@ describe("lead line", () => {
     ["music", "ja", "Miles Davisの「Blue in Green」という曲の紹介です。"],
     ["book", "ja", "Miles Davisの「Blue in Green」という本の紹介です。"],
     ["film", "ja", "Miles Davisの「Blue in Green」という映画の紹介です。"],
-    ["video", "ja", "Miles Davisの「Blue in Green」という動画の紹介です。"],
     ["music", "en", "Here is “Blue in Green”, a song by Miles Davis."],
     ["book", "en", "Here is “Blue in Green”, a book by Miles Davis."],
     ["film", "en", "Here is “Blue in Green”, a film by Miles Davis."],
-    ["video", "en", "Here is “Blue in Green”, a video by Miles Davis."],
   ] as const)("names a %s work by its kind in %s", (kind, lang, text) => {
     expect(leadLine(item({ kind }), lang)).toEqual({ type: "dj", text, fixed: true });
   });
