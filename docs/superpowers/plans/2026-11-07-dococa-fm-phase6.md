@@ -54,7 +54,7 @@
 - Test: `test/worker/routes/home.test.ts`, `test/worker/views/layout.test.ts`, `test/client/station.test.ts`, `test/worker/routes/me.test.ts`, `test/worker/routes/auth-google.test.ts`
 
 **Interfaces:**
-- Produces: localStorage `dfm.seen` (set after the first switch-on; when present at load, `section.hero` gets class `compact`: picture hidden, wordmark + tagline only, on every width); the language form gets `data-confirm` and the client asks `confirm(t("lang.confirmPlaying"))`「切り替えると再生が止まります。続けますか？」/ "Switching stops the radio. Continue?" only while the radio is on; on a phone (≤ 480 px) the language buttons show `JA` / `EN` and the theme buttons their short labels (`.short` spans exist for auto; add for light/dark: ☀ / ☾ as text), so the header is two rows at most; the sign-in callback redirects a newly bound or slug-assigned listener to `/me?welcome=1`, and `/me` shows a one-line banner `me.welcome`「公開ラジオの URL ができました: {url}（設定で公開にすると誰でも聴けます）」/ en equivalent, once; the home's "recent programmes" section renders nothing (not even the heading) when the listener has none and shows only the `/episodes` link otherwise as now; the explanation line says 「好きなものを 3 つ登録すると」 / "Register three things you love"; `/about`'s rules section starts with 「AI は、お便りに書き足しません。」 / "The AI never adds to a letter."; every screen link to `/stations/world` is removed (route stays).
+- Produces (owner corrections 2026-11-07 first): **the 「お便りを送る」 button sits directly above the on-air panel** — inside `aside.side` (or wrapping it) as its first child, before the panel's heading, on every width (Phase 5 put it under the player in `section.home`; move it, keep the dialog). **「これまでの番組」 becomes full-width rows under the player**, built with the same row component as the on-air rows (work picture, kind, title, sender; a link to `/episodes/<id>`), up to 3, then the `/episodes` link; it sits between the player/on-air block and 「いま届いているお便り」, so the cards are not pushed far down. Then: localStorage `dfm.seen` (set after the first switch-on; when present at load, `section.hero` gets class `compact`: picture hidden, wordmark + tagline only, on every width); the language form gets `data-confirm` and the client asks `confirm(t("lang.confirmPlaying"))`「切り替えると再生が止まります。続けますか？」/ "Switching stops the radio. Continue?" only while the radio is on; on a phone (≤ 480 px) the language buttons show `JA` / `EN` and the theme buttons their short labels (`.short` spans exist for auto; add for light/dark: ☀ / ☾ as text), so the header is two rows at most; the sign-in callback redirects a newly bound or slug-assigned listener to `/me?welcome=1`, and `/me` shows a one-line banner `me.welcome`「公開ラジオの URL ができました: {url}（設定で公開にすると誰でも聴けます）」/ en equivalent, once; the home's "recent programmes" section renders nothing (not even the heading) when the listener has none and shows only the `/episodes` link otherwise as now; the explanation line says 「好きなものを 3 つ登録すると」 / "Register three things you love"; `/about`'s rules section starts with 「AI は、お便りに書き足しません。」 / "The AI never adds to a letter."; every screen link to `/stations/world` is removed (route stays).
 
 - [ ] **Step 1: Failing tests** for each bullet above.
 - [ ] **Step 2: Implement.** Modal on a phone: `dialog.send-modal` at ≤ 480 px is `100dvw × 100dvh`, no border radius, the iframe fills it, the close button stays visible (fixed top-right).
@@ -122,6 +122,22 @@
 
 - [ ] **Step 1: Failing tests**: `GET /` without a cookie → 200, cookie set, `listeners` count unchanged; then `POST /stations/mine/next` with that cookie → the row exists with that id; `GET /items/:id` ×10 without cookies → no rows; `POST /listens` without a prior row creates it; the demo listeners and sign-in flows untouched.
 - [ ] **Step 2: Implement; Step 3: run all, commit** (`fix: no listener row for a cookie-less GET`).
+
+---
+
+### Task 8: Demo reactions (run before Task 7's close-out)
+
+**Files:**
+- Create: `scripts/seed-reactions.ts`, `scripts/lib/seed-reactions.ts`, its test under `test/scripts/` (or where `scripts/lib/*` are tested)
+- Modify: `src/worker/routes/admin.ts` (`GET /admin/letters.json`, and `POST /admin/letters` accepting `kind: "watashimo" | "reply"` with `parentLetterId`), `package.json` (`"seed:reactions"`), `README.md` (one paragraph under seeding), `docs/status.md`
+- Test: `test/worker/routes/admin.test.ts`
+
+**Interfaces:**
+- Produces: `GET /admin/letters.json?after=<id>&limit=50` (admin) → `{ letters: [{ id, kind, itemId, listenerId, body, radioName, demo }], next }` for public `letter` / `found` rows, plus for each the ids of existing reactions' listeners. `POST /admin/letters` with `kind: "watashimo"` (no body) or `kind: "reply"` (body ≤ 200) and `parentLetterId` goes through `createLetter` exactly like a listener's reaction (moderation for replies, no translation for 私も, the demo flag follows the listener), and answers 409 for a repeated 私も. The script `pnpm seed:reactions --origin <url> [--letters <id,...>] [--per 2] [--dry-run]`: for every public letter that has **no reaction from a demo persona yet** (or the given ids), picks 1–3 demo listeners (never the letter's own author, never the same persona twice on one letter) and posts 1–2 私も and 0–1 一言; the 一言 is written by Claude (`claude-sonnet-5-5`, one call per reply) in the persona's language and voice from `docs/demo/personas.json`, ≤ 120 chars, about the letter's feeling, no topical words, no contact-like text, no numbers about people or works, no real-person names beyond the work's creator; checked by the same `check` rules as `seed.ts`. Idempotent: rerunning adds nothing to letters that already have demo reactions, so the owner can run it later for their own new letters (`--letters`).
+
+- [ ] **Step 1: Failing tests** for the admin JSON, the admin reaction post (demo flag, 409 on repeat, moderation on a reply), and the script's selection (no self-reaction, no duplicates, idempotence) with a fake fetch.
+- [ ] **Step 2: Implement; run `--dry-run` against the dev server; then run it for real against production** (`DOCOCA_ORIGIN=https://dococafm.app`, token from `.dev.vars`, never printed) and put the counts in the report. If the run is refused by the environment, say so; the owner runs it.
+- [ ] **Step 3: Commit** (`feat: demo reactions script`).
 
 ---
 
