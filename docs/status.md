@@ -9,8 +9,9 @@ Phase 6（ラジオの面・ホームとヘッダ・お便りの直リンクと�
 ### 本人作業（Phase 6 のデプロイ。この順）
 
 - [ ] `pnpm db:migrate`（0022 `reactions_seen`、0023 `units_lead`: **単位を全部消す**、0024 `readings`、0025 `video_kind`: YouTube の作品を `video` に）。
-- [ ] `pnpm run deploy`。
-- [ ] `/admin/prepare` のループを 2 回。1 回目は `remaining.units` が ja/en とも 0 になるまで（Claude 約 200 回）、2 回目は `remaining.audio` が 0 になるまで（約 1,000 行。`gaveUp` は、ブラウザの声が読む行を含む単位の数）。上限は `CLOUD_TTS_GLOBAL_DAILY_LIMIT`（本番は 8000）の内。コストは [docs/cost.md](cost.md)。
+- [ ] 続けてすぐ `pnpm run deploy`。終わった時刻（UTC）を控える（例 `DEPLOYED_AT=2026-11-08T03:12:00Z`）。
+- [ ] デプロイ前の単位を消す: `pnpm wrangler d1 execute dococa --remote --command "DELETE FROM units WHERE created_at < '$DEPLOYED_AT'"`。migrate と deploy のあいだに古い Worker（cron か誰かの `next`）が冒頭の一行を知らない台本で単位を作り直していると、新しいコードの検証（`lead:`）で落ち続け、作り直されないため（最終レビュー opus I1）。デプロイ前に作られた単位はどれも古い形なので、時刻で切れば安全。
+- [ ] `/admin/prepare` のループ（読み → 単位 → 音声の順に進む）。`remaining.readings`（作品の題名と作者の読み。作品ごとに Claude 1 回）、`remaining.units`（Claude 約 200 回）、`remaining.audio`（約 1,000 行。`gaveUp` は、ブラウザの声が読む行を含む単位の数）が ja/en とも 0 になるまで回す。上限は `CLOUD_TTS_GLOBAL_DAILY_LIMIT`（本番は 8000）の内。コストは [docs/cost.md](cost.md)。
 - [ ] デモの反応を付ける。先に `read -rs PROD_ADMIN_TOKEN` で本番のトークンをシェルに読み込み、`ADMIN_TOKEN="$PROD_ADMIN_TOKEN" pnpm seed:reactions --origin https://dococafm.app --dry-run`（書かせるだけ）で確かめてから、本番の `--per 2`。あとで自分のお便りに付けるなら `--letters <id,...>`。
 - [ ] 聴いて確かめる: 冒頭の一行「…という曲の紹介です」、読み（PSY → サイ、大船渡 → オオフナト）、「別の人」、5 曲の BGM が回ごとにランダムに変わること（音量は `src/client/audio.ts` の `BED_VOLUME`）、ブラウザの声への切り替えが回ぜんぶではなく行ごとになったこと。
 - [ ] 画面を確かめる: ホーム（「お便りを送る」がオンエアの欄の上、「これまでの番組」の行、お便りが届いた公開ラジオ、2 回目の訪問でヒーローが畳まれる、サインイン済みのヘッダを 390px と 1120px で）、`/letters/<id>` の共有ページと X の Card Validator（player カードは許可が要ることがある）、`/?letter=<id>` のリンク、反応の点、`/me` の取り下げ、`/about` の挿絵。iPhone の Safari で、埋め込みプレイヤーの最初のタップで声が出るか。
@@ -24,6 +25,8 @@ Phase 6（ラジオの面・ホームとヘッダ・お便りの直リンクと�
 - 費用の削減: 英語の単位の遅延生成、判定と翻訳を Haiku に（`CLAUDE_MODEL_JUDGE`）、音声の鍵の分割、再試行の上限: [docs/cost.md](cost.md)。
 - Chirp 3 HD を別の TTS として足す（読みを `yomigana` のカスタム発音で渡す）。`TTS_PROVIDER` の切り替えの後ろに置く。
 - 本人が選ぶ UI の細かい直し（楽しさの項目）。
+- 冷えた入口（Task 5）はほとんど効かない: 最初の番組には前のセグメントが無く、最初のお便りを聴いた時点で「冷えた」でなくなるため（最終レビュー opus M3）。「聴いた記録が N 件未満でお気に入りが無い」を冷えたとみなす、国を聴いた記録から読む、などは本人が決める。
+- 共有ページの `og:image` が無い作品では `/kv.jpg` を出すので、リンクの展開（X・Slack など）が cookie なしで取りに来る。画像はセッションの外にした（最終修正）が、ページ自体の取得はまだ行を 1 つ作る（Task 6）。
 
 ## 2026-11-07 Phase 5 完了（本番に反映済み）
 
