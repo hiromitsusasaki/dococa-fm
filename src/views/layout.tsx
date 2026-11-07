@@ -64,6 +64,10 @@ function SiteHeader({ listener, path, lang }: { listener?: Listener; path?: stri
           (signedIn ? (
             <>
               <MeLink listener={listener} label={t("me.title")} dot={t("me.newReactions")} here={path?.split("?")[0] === "/me"} />
+              <a href="/settings" aria-current={path?.split("?")[0] === "/settings" ? "page" : undefined}>
+                <span class="gear" aria-hidden="true">{"\u2699\uFE0E"}</span>
+                {t("settings.title")}
+              </a>
               <span class="site-user" title={t("signin.as", { name: listener.displayName })}>
                 {listener.displayName}
               </span>

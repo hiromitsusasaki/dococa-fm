@@ -119,12 +119,23 @@ describe("the header's notice of new reactions", () => {
     expect(meLink(await (await get("/", cookie)).text())).not.toContain('class="dot"');
   });
 
-  it("shows on a page that passes a copy of the listener (/settings filling in an address)", async () => {
+  it("shows on the settings page too", async () => {
     const cookie = await signedInSession();
     const mine = await letterBy(idOf(cookie));
     await react(mine);
     const html = await (await get("/settings", cookie)).text();
     expect(meLink(html)).toContain('class="dot"');
+  });
+
+  it("links a signed-in listener to the settings, after the my page, with a gear and the word", async () => {
+    const html = await (await get("/put", await signedInSession())).text();
+    const nav = html.match(/<nav>[\s\S]*?<\/nav>/)?.[0] ?? "";
+    expect(nav).toMatch(/<a href="\/settings"[^>]*><span class="gear" aria-hidden="true">⚙\uFE0E<\/span>設定<\/a>/);
+    expect(nav.indexOf('href="/settings"')).toBeGreaterThan(nav.indexOf('href="/me"'));
+    const here = (await (await get("/settings", await signedInSession())).text()).match(/<nav>[\s\S]*?<\/nav>/)?.[0] ?? "";
+    expect(here).toMatch(/<a href="\/settings" aria-current="page">/);
+    const anon = (await (await get("/put", await newSession())).text()).match(/<nav>[\s\S]*?<\/nav>/)?.[0] ?? "";
+    expect(anon).not.toContain('href="/settings"');
   });
 
   it("names the signed-in listener by name alone, the full sentence in its title", async () => {

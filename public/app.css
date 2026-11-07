@@ -210,6 +210,12 @@ a {
 }
 
 /* New reactions wait on /me: a dot, never a number. */
+/* The settings link: a gear and the word. */
+.site-header nav .gear {
+  margin-right: 4px;
+  font-size: 14px;
+}
+
 .site-header nav .dot {
   display: inline-block;
   width: 8px;
@@ -326,6 +332,17 @@ a {
 
   .lang-toggle {
     margin-right: 0;
+  }
+}
+
+/* On a phone the word alone, so the signed-in links stay on one row. */
+@media (max-width: 420px) {
+  .site-header nav .gear {
+    display: none;
+  }
+
+  .site-header nav {
+    gap: 0 var(--sp-1);
   }
 }
 
