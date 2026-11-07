@@ -86,6 +86,15 @@ describe("GET /auth/google", () => {
     expect(res.headers.get("location")).toBe("/stations/a.b?x=1");
   });
 
+  it("returns a new account to the page it started from, and sends one that started nowhere to the welcome line", async () => {
+    const from = await start(await newSession(), "/put?q=abc");
+    stubGoogle({}, from.nonce);
+    expect((await manual(`/auth/google/callback?code=abc&state=${from.state}`, from.cookie)).headers.get("location")).toBe("/put?q=abc");
+    const bare = await start(await newSession());
+    stubGoogle({ sub: "g-2" }, bare.nonce);
+    expect((await manual(`/auth/google/callback?code=abc&state=${bare.state}`, bare.cookie)).headers.get("location")).toBe("/me?welcome=1");
+  });
+
   it("keeps a safe next path", async () => {
     const sid = await newSession();
     expect((await start(sid, "/settings?x=1")).next).toBe("/settings?x=1");
@@ -130,8 +139,8 @@ describe("GET /auth/google/callback", () => {
     const stub = stubGoogle({}, s.nonce);
     const res = await manual(`/auth/google/callback?code=abc&state=${s.state}`, s.cookie);
     expect(res.status).toBe(303);
-    // A new account is shown its public radio address on /me, whatever page it came from.
-    expect(res.headers.get("location")).toBe("/me?welcome=1");
+    // It started on /settings, so it returns there; the welcome line is only for a sign-in bound for /me.
+    expect(res.headers.get("location")).toBe("/settings");
     expect(res.headers.get("set-cookie")).toMatch(/dfm_oauth=;.*Max-Age=0/);
     expect(sidOf(res)).toBeUndefined();
     expect(stub.calls()).toEqual(["https://oauth2.googleapis.com/token"]);

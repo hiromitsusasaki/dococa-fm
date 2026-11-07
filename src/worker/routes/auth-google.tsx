@@ -108,7 +108,8 @@ authGoogle.get("/auth/google/callback", async (c) => {
   } catch {
     // Not fatal: /settings and /me assign the address when they are opened.
   }
-  return c.redirect(welcome ? "/me?welcome=1" : next, 303);
+  // The welcome line lives on /me, so only a sign-in that was going there carries it; one that started elsewhere returns there.
+  return c.redirect(welcome && next === DEFAULT_NEXT ? "/me?welcome=1" : next, 303);
 });
 
 authGoogle.post("/auth/signout", (c) => {

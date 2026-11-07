@@ -493,7 +493,7 @@ export function mountStation(root: HTMLElement, opts: StationOptions) {
 }
 
 /**
- * The home's send modal: the button (a plain `/put` link without script) opens the `<dialog>`, whose frame loads `/put?embed=1`
+ * The home's send modal: the button (drawn by this script, above the on-air list; without script the way to `/put` is the header's link) opens the `<dialog>`, whose frame loads `/put?embed=1`
  * on the first open and again after a letter is sent. The embedded sent page posts `dfm:sent`, which closes it after
  * `SENT_CLOSE_MS` so its confirmation is seen; Escape inside
  * the frame posts `dfm:close`; a message from any other origin or any other window is ignored. Escape on the page and the close button close it natively.
