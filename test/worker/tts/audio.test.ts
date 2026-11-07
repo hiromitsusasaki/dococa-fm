@@ -23,7 +23,7 @@ afterEach(() => vi.unstubAllGlobals());
 describe("audioKey", () => {
   it("is deterministic and differs by lang, voice and text", async () => {
     const a = await audioKey("ja", "male", "こんばんは");
-    expect(a).toMatch(/^tts\/v3\/ja\/male\/[0-9a-f]{64}\.mp3$/);
+    expect(a).toMatch(/^tts\/v4\/ja\/male\/[0-9a-f]{64}\.mp3$/);
     expect(await audioKey("ja", "male", "こんばんは")).toBe(a);
     expect(await audioKey("en", "male", "こんばんは")).not.toBe(a);
     expect(await audioKey("ja", "female", "こんばんは")).not.toBe(a);

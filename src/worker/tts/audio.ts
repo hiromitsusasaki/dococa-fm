@@ -24,8 +24,8 @@ async function sha256Hex(text: string): Promise<string> {
 
 /** The same text in the same voice is the same clip for every listener. */
 export async function audioKey(lang: AudioLang, voice: AudioVoice, text: string): Promise<string> {
-  // v3: every v2 clip was made before the prompt-reading guard and may carry the voice direction.
-  return `tts/v3/${lang}/${voice}/${await sha256Hex(text)}.mp3`;
+  // v4: the guard was too loose for lines over ~40 chars and the English prompt changed (2026-11-07).
+  return `tts/v4/${lang}/${voice}/${await sha256Hex(text)}.mp3`;
 }
 
 /**

@@ -96,7 +96,7 @@ describe("prepareLetter", () => {
     const head = vi.spyOn(env.BUCKET, "head");
     expect(await prepareLetter(keyed, env.DB, letters[0]!.id)).toEqual({ units: 2, audio: 8, failed: 0 });
     expect(order).toEqual(["unit:ja", "unit:en", ...Array(8).fill("clip")]);
-    // The clips are asked for in the order ja (tts/v3/ja/...) then en.
+    // The clips are asked for in the order ja (tts/v4/ja/...) then en.
     const langs = head.mock.calls.map((c) => String(c[0]).split("/")[2]);
     expect(langs.slice(0, 4)).toEqual(["ja", "ja", "ja", "ja"]);
     expect(langs.slice(-4)).toEqual(["en", "en", "en", "en"]);
