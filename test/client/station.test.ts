@@ -34,6 +34,8 @@ const strings: Record<string, string> = {
   "station.dialHint": "次のお便りから効きます",
   "station.searching": "電波を探しています…",
   "station.playFromToast": "このお便りから流します",
+  "home.put": "お便りを送る",
+  "lang.confirmPlaying": "切り替えると再生が止まります。続けますか？",
   "letter.showOriginal": "原文を見る",
   "letter.who": "{name}さん",
   "letter.whoPlace": "{who}（{place}）",
@@ -203,6 +205,59 @@ describe("station: screen", () => {
     await flush();
     expect((el("dial") as HTMLInputElement).value).toBe("0.4");
     expect(root.textContent).toContain("セレンディピティ");
+  });
+
+  it("the home's send button is the first thing in the on-air panel, ahead of its heading, and only where asked", async () => {
+    mountStation(root, opts({ stationKey: "mine", send: true }));
+    await flush();
+    const side = root.querySelector("aside.side")!;
+    expect(side.firstElementChild!.querySelector("a")!.getAttribute("href")).toBe("/put");
+    expect(side.firstElementChild!.querySelector("a")!.hasAttribute("data-open-send")).toBe(true);
+    expect(side.firstElementChild!.textContent).toBe("お便りを送る");
+    expect(side.firstElementChild!.nextElementSibling!.tagName).toBe("H2");
+  });
+
+  it("shows no send button on a station page that did not ask for it", async () => {
+    mountStation(root, opts());
+    await flush();
+    expect(root.querySelector("[data-open-send]")).toBeNull();
+  });
+
+  it("remembers the first switch-on in dfm.seen, so the home can show its short hero next time", async () => {
+    nextReplies = [ok(epA())];
+    autoEnd = false;
+    mountStation(root, opts());
+    await flush();
+    expect(localStorage.getItem("dfm.seen")).toBeNull();
+    await power();
+    expect(localStorage.getItem("dfm.seen")).toBe("1");
+  });
+
+  it("asks before the language switch stops a radio that is on, and lets it through when the answer is no or the radio is off", async () => {
+    const form = document.createElement("form");
+    form.setAttribute("data-confirm", "");
+    form.innerHTML = '<button type="submit" name="lang" value="en">EN</button>';
+    document.body.append(form);
+    const asked = vi.fn();
+    vi.stubGlobal("confirm", asked);
+    const submit = () => {
+      const e = new Event("submit", { cancelable: true, bubbles: true });
+      form.dispatchEvent(e);
+      return e.defaultPrevented;
+    };
+    nextReplies = [ok(epA())];
+    autoEnd = false;
+    mountStation(root, opts());
+    await flush();
+    asked.mockReturnValue(false);
+    expect(submit()).toBe(false);
+    expect(asked).not.toHaveBeenCalled();
+    await power();
+    expect(submit()).toBe(true);
+    expect(asked).toHaveBeenCalledWith("切り替えると再生が止まります。続けますか？");
+    asked.mockReturnValue(true);
+    expect(submit()).toBe(false);
+    form.remove();
   });
 
   it("a station with no history shows the way to start and a switch that is not usable", async () => {
@@ -592,7 +647,7 @@ describe("station: volume", () => {
     const clip = audios.find((a) => !a.loop)!;
     const bed = audios.find((a) => a.loop)!;
     expect(clip.volume).toBe(0.5);
-    expect(bed.volume).toBeCloseTo(0.2);
+    expect(bed.volume).toBeCloseTo(0.15);
     expect(localStorage.getItem("dfm.volume")).toBe("0.5");
   });
 

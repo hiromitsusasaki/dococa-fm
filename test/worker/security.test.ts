@@ -259,7 +259,7 @@ describe("canonical host", () => {
 
 describe("session exemptions", () => {
   it("do not create listener rows for static assets", async () => {
-    for (const path of ["/app.css", "/icon.svg", "/manifest.webmanifest", "/bed.mp3", "/healthz"]) {
+    for (const path of ["/app.css", "/icon.svg", "/manifest.webmanifest", "/bed-3.mp3", "/healthz"]) {
       const res = await SELF.fetch(`http://example.com${path}`);
       expect(res.headers.get("set-cookie"), path).toBeNull();
     }

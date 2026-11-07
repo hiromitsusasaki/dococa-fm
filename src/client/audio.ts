@@ -52,14 +52,30 @@ export function createClipPlayer(): ClipPlayer {
   };
 }
 
-const BED_URL = "/bed.mp3";
-// The file's mean level is about -24 dBFS, so 0.4 puts the bed roughly 16 dB under the voice.
-const BED_VOLUME = 0.4;
+export const BED_URLS = ["/bed-1.mp3", "/bed-2.mp3", "/bed-3.mp3", "/bed-4.mp3", "/bed-5.mp3"];
+// The beds are about -24 LUFS, so 0.3 puts them roughly 18 dB under the voice.
+const BED_VOLUME = 0.3;
 
-export function createBed(): { unlock(): void; start(): void; stop(): void; setVolume(volume: number): void } {
+export type Bed = { unlock(): void; next(): void; start(): void; stop(): void; setVolume(volume: number): void };
+
+export function createBed(opts: { urls?: string[] } = {}): Bed {
+  const urls = opts.urls ?? BED_URLS;
   let bed: HTMLAudioElement | null = null;
+  let current: string | null = null;
   let level = BED_VOLUME;
-  const element = () => (bed ??= Object.assign(new Audio(BED_URL), { loop: true, volume: level }));
+  /** A random url other than the one in use (when there is another to take). */
+  const pick = () => {
+    const others = urls.length > 1 ? urls.filter((u) => u !== current) : urls;
+    return others[Math.floor(Math.random() * others.length)]!;
+  };
+  const element = () => {
+    bed ??= Object.assign(new Audio(), { loop: true, volume: level });
+    if (current === null) {
+      current = pick();
+      bed.src = current;
+    }
+    return bed;
+  };
   return {
     /** The listener's volume (0..1) scales the bed's own quiet level. */
     setVolume(v) {
@@ -71,6 +87,12 @@ export function createBed(): { unlock(): void; start(): void; stop(): void; setV
       const a = element();
       a.play().catch(() => {});
       a.pause();
+    },
+    /** A new episode begins: the next start() plays another bed. */
+    next() {
+      if (current === null) return;
+      current = pick();
+      if (bed) bed.src = current;
     },
     start() {
       element().play().catch(() => {});

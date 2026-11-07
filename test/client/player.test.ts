@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { forgetReportedListens } from "../../src/client/playback";
+import { createBed } from "../../src/client/audio";
+import { createLinePlayer, forgetReportedListens } from "../../src/client/playback";
 import { mountPlayer, type PlayerEpisode } from "../../src/client/player";
 
 const strings: Record<string, string> = {
@@ -210,7 +211,7 @@ describe("player", () => {
     expect(unlockSpeaks).toBe(1);
     const clip = audios.find((a) => a.src.startsWith("data:audio"))!;
     expect(clip.play).toHaveBeenCalledTimes(1);
-    expect(audios.find((a) => a.src === "/bed.mp3")!.play).toHaveBeenCalled();
+    expect(audios.find((a) => a.loop)!.play).toHaveBeenCalled();
   });
 
   it("does not play a preview clip that an older episode still carries", async () => {
@@ -360,10 +361,10 @@ describe("player", () => {
     mountPlayer(root, one, opts());
     await tap("toggle");
     await vi.waitFor(() => expect(spoken).toEqual(["d1", "l1", "d2"]));
-    const bed = audios.find((a) => a.src === "/bed.mp3")!;
+    const bed = audios.find((a) => a.loop)!;
     expect(bed.loop).toBe(true);
-    expect(bed.volume).toBe(0.4);
-    expect(log).toContain("play:/bed.mp3");
+    expect(bed.volume).toBe(0.3);
+    expect(log.some((l) => /^play:\/bed-[1-5]\.mp3$/.test(l))).toBe(true);
   });
 
   it("player_waits_for_voices: waits for voiceschanged when no voices are loaded yet", async () => {
@@ -555,7 +556,7 @@ describe("player", () => {
     await tap("toggle");
     expect(btn("toggle").textContent).toContain("再生");
     expect((speechSynthesis.cancel as ReturnType<typeof vi.fn>).mock.calls.length).toBeGreaterThan(0);
-    expect(audios.find((a) => a.src === "/bed.mp3")!.paused).toBe(true);
+    expect(audios.find((a) => a.loop)!.paused).toBe(true);
     await tap("toggle");
     await vi.waitFor(() => expect(spoken).toEqual(["a1", "a1"]));
     expect(btn("toggle").textContent).toContain("一時停止");
@@ -716,5 +717,72 @@ describe("player: listens", () => {
     await tap("toggle");
     await vi.waitFor(() => expect(spoken.filter((x) => x === "l1")).toHaveLength(3));
     expect(listens()).toHaveLength(0);
+  });
+});
+
+describe("createBed", () => {
+  const urls = ["/bed-1.mp3", "/bed-2.mp3", "/bed-3.mp3", "/bed-4.mp3", "/bed-5.mp3"];
+  const rand = (values: number[]) => {
+    let i = 0;
+    vi.spyOn(Math, "random").mockImplementation(() => values[i++ % values.length]);
+  };
+  const bedEl = () => audios.find((a) => a.loop)!;
+
+  beforeEach(() => {
+    audios.length = 0;
+    vi.stubGlobal("Audio", FakeAudio);
+  });
+  afterEach(() => vi.restoreAllMocks());
+
+  it("picks a url at random, loops it and keeps it while the episode goes on", () => {
+    rand([0.5]);
+    const bed = createBed({ urls });
+    bed.start();
+    expect(bedEl().src).toBe("/bed-3.mp3");
+    expect(bedEl().loop).toBe(true);
+    bed.stop();
+    bed.start();
+    expect(bedEl().src).toBe("/bed-3.mp3");
+  });
+
+  it("never plays the same bed twice in a row", () => {
+    rand([0, 0, 0.99, 0.99]);
+    const bed = createBed({ urls });
+    bed.start();
+    const seen = [bedEl().src];
+    for (let i = 0; i < 3; i++) {
+      bed.next();
+      seen.push(bedEl().src);
+    }
+    seen.slice(1).forEach((u, i) => expect(u).not.toBe(seen[i]));
+  });
+
+  it("unlock picks a bed and plays then pauses it", () => {
+    const bed = createBed({ urls });
+    bed.unlock();
+    expect(urls).toContain(bedEl().src);
+    expect(bedEl().paused).toBe(true);
+    expect(bedEl().play).toHaveBeenCalledTimes(1);
+  });
+
+  it("sits at 0.3 times the listener's volume", () => {
+    const bed = createBed({ urls });
+    bed.start();
+    expect(bedEl().volume).toBe(0.3);
+    bed.setVolume(0.5);
+    expect(bedEl().volume).toBeCloseTo(0.15);
+  });
+
+  it("the line player changes the bed only when the episode changes", async () => {
+    rand([0, 0]);
+    const lp = createLinePlayer({ voiceURI: "mine", ttsUrl: null });
+    const ac = new AbortController();
+    const ep = (id: string) => ({ ...one, id });
+    await lp.play(ep("e1"), 0, 0, ac.signal);
+    const first = bedEl().src;
+    await lp.play(ep("e1"), 0, 1, ac.signal);
+    expect(bedEl().src).toBe(first);
+    await lp.play(ep("e2"), 0, 0, ac.signal);
+    expect(bedEl().src).not.toBe(first);
   });
 });

@@ -32,7 +32,7 @@ describe("signSession / verifySession", () => {
 
 describe("isSessionExempt", () => {
   it("exempts health, admin and static assets", () => {
-    for (const p of ["/healthz", "/admin/episodes", "/app.css", "/assets/player.js", "/src/client/player.tsx", "/favicon.ico", "/manifest.webmanifest", "/icon.svg", "/bed.mp3"]) {
+    for (const p of ["/healthz", "/admin/episodes", "/app.css", "/assets/player.js", "/src/client/player.tsx", "/favicon.ico", "/manifest.webmanifest", "/icon.svg", "/bed-3.mp3"]) {
       expect(isSessionExempt(p), p).toBe(true);
     }
   });

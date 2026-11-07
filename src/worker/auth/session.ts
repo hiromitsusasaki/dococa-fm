@@ -37,11 +37,12 @@ export async function verifySession(cookie: string | undefined, secret: string):
 }
 
 const EXEMPT_PREFIXES = ["/admin", "/assets", "/src"];
-const EXEMPT_PATHS = new Set(["/healthz", "/app.css", "/favicon.ico", "/manifest.webmanifest", "/icon.svg", "/bed.mp3"]);
+const EXEMPT_PATHS = new Set(["/healthz", "/app.css", "/favicon.ico", "/manifest.webmanifest", "/icon.svg"]);
+const BED_PATH = /^\/bed-\d+\.mp3$/;
 
 /** Token-authenticated routes and static assets must not mint a listener per request. */
 export function isSessionExempt(path: string): boolean {
-  if (EXEMPT_PATHS.has(path)) return true;
+  if (EXEMPT_PATHS.has(path) || BED_PATH.test(path)) return true;
   return EXEMPT_PREFIXES.some((p) => path === p || path.startsWith(`${p}/`));
 }
 
