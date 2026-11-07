@@ -77,6 +77,23 @@ export async function setItemReading(db: D1Database, id: string, reading: NonNul
   ]);
 }
 
+/**
+ * Forgets how the Japanese voice says the work (the owner's remake of one of its units does this, so a wrong reading
+ * that later units never correct can go). The work's Japanese units are marked to be voiced again when it had one.
+ */
+export async function clearItemReading(db: D1Database, id: string): Promise<void> {
+  await db.batch([
+    db
+      .prepare(
+        `UPDATE units SET audio_ready = 0 WHERE lang = 'ja' AND audio_ready = 1
+           AND letter_id IN (SELECT l.id FROM letters l WHERE l.item_id = ?)
+           AND EXISTS (SELECT 1 FROM items WHERE id = ? AND reading_ja IS NOT NULL)`,
+      )
+      .bind(id, id),
+    db.prepare("UPDATE items SET reading_ja = NULL WHERE id = ?").bind(id),
+  ]);
+}
+
 export async function getItem(db: D1Database, id: string): Promise<Item | null> {
   const row = await db.prepare("SELECT * FROM items WHERE id = ?").bind(id).first<Row>();
   return row ? rowToItem(row) : null;

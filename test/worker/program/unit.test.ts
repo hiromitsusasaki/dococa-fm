@@ -352,6 +352,31 @@ describe("readings for the voice", () => {
     expect((await getItem(env.DB, f.item.id))!).not.toHaveProperty("readingJa");
   });
 
+  it("clears the work's reading on a remake, so the remade unit's reading becomes the work's", async () => {
+    const f = await psy();
+    create.mockResolvedValue(reply({ creatorReading: "ピーエスワイ", readings: [] }));
+    await makeUnit(keyed, env.DB, f.letter, f.item, "ja");
+    expect((await getItem(env.DB, f.item.id))!.readingJa).toEqual({ creator: "ピーエスワイ" });
+    create.mockResolvedValue(reply({ readings: [], creatorReading: "" }));
+    expect(await remakeUnit(keyed, env.DB, f.letter, (await getItem(env.DB, f.item.id))!, "ja")).toBe("remade");
+    expect((await getItem(env.DB, f.item.id))!).not.toHaveProperty("readingJa");
+    create.mockResolvedValue(reply());
+    expect(await remakeUnit(keyed, env.DB, f.letter, (await getItem(env.DB, f.item.id))!, "ja")).toBe("remade");
+    expect((await getItem(env.DB, f.item.id))!.readingJa).toEqual({ creator: "サイ" });
+  });
+
+  it("keeps the work's reading when a remake fails, and an English remake never touches it", async () => {
+    const f = await psy();
+    create.mockResolvedValue(reply());
+    await makeUnit(keyed, env.DB, f.letter, f.item, "ja");
+    create.mockResolvedValue(reply({ intro: "PSYの一曲をお聴きください。" }));
+    expect(await remakeUnit(keyed, env.DB, f.letter, (await getItem(env.DB, f.item.id))!, "ja")).toBe("failed");
+    expect((await getItem(env.DB, f.item.id))!.readingJa).toEqual({ creator: "サイ" });
+    create.mockResolvedValue(toolUse("write_unit", { intro: "A bright song.", after: "What a summer." }));
+    expect(await remakeUnit(keyed, env.DB, { ...f.letter, bodyEn: "We danced." }, (await getItem(env.DB, f.item.id))!, "en")).toBe("remade");
+    expect((await getItem(env.DB, f.item.id))!.readingJa).toEqual({ creator: "サイ" });
+  });
+
   it("replaces the unit's readings on a remake", async () => {
     const f = await psy();
     create.mockResolvedValue(reply());

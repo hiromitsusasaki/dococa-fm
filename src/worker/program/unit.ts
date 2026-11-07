@@ -1,5 +1,5 @@
 import { claude, escapeTags, hasClaude, model, oneLine } from "../claude/client";
-import { setItemReading } from "../db/items";
+import { clearItemReading, setItemReading } from "../db/items";
 import { countUnitsToday, getUnits, listLikedUnits, replaceUnit, upsertUnit } from "../db/units";
 import type { Env } from "../env";
 import { limitFrom } from "../limits";
@@ -312,7 +312,10 @@ export type Remade = "remade" | "busy" | "capped" | "failed";
  * `unit:<letterId>:<lang>` is held throughout, the new lines are written and verified (one retry, as `makeUnit`), and
  * only then one batch notes the remake and replaces the row (`replaceUnit`). Claude unavailable, lines that fail
  * verification, or a failed write: `"failed"`, the old row untouched. Today's cap reached: `"capped"`. Another run
- * holds the claim: `"busy"`. The clips are not made here.
+ * holds the claim: `"busy"`. The clips are not made here. A remake also clears the work's reading (`items.reading_ja`)
+ * before the new unit is stored, so the remade unit's reading, if it gives one, becomes the work's: a wrong work
+ * reading that later units never correct (they give none for an easy title) goes this way. The new lines are checked
+ * without the old reading.
  */
 export async function remakeUnit(env: Env, db: D1Database, letter: Letter, item: Item, lang: Unit["lang"]): Promise<Remade> {
   if (!hasClaude(env)) return "failed";
@@ -320,9 +323,11 @@ export async function remakeUnit(env: Env, db: D1Database, letter: Letter, item:
   if (!(await claimTts(db, claim, Date.now(), UNIT_CLAIM_TTL_MS))) return "busy";
   try {
     if (await unitCapReached(env, db)) return "capped";
-    const written = await writeChecked(env, db, letter, item, lang);
+    const { readingJa: _old, ...bare } = item;
+    const written = await writeChecked(env, db, letter, lang === "ja" ? bare : item, lang);
     if (!written?.ok) return "failed";
     try {
+      if (lang === "ja") await clearItemReading(db, item.id);
       await replaceUnit(db, { letterId: letter.id, lang, intro: written.lines.intro, after: written.lines.after, readings: written.lines.readings });
       await storeItemReading(db, item, written.lines);
     } catch (e) {

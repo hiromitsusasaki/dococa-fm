@@ -1,6 +1,6 @@
 import { env } from "cloudflare:workers";
 import { beforeEach, describe, expect, it } from "vitest";
-import { countItemsWithoutVec, findItemByExternalId, getItem, getItemVecs, insertItem, listItemsWithoutVec, searchItems, setItemReading, setItemVec, VEC_DIMS } from "../../../src/worker/db/items";
+import { clearItemReading, countItemsWithoutVec, findItemByExternalId, getItem, getItemVecs, insertItem, listItemsWithoutVec, searchItems, setItemReading, setItemVec, VEC_DIMS } from "../../../src/worker/db/items";
 import { insertLetter } from "../../../src/worker/db/letters";
 import { upsertUnit } from "../../../src/worker/db/units";
 import { angled } from "../../helpers/ai";
@@ -97,6 +97,19 @@ describe("items", () => {
     expect((await getItem(env.DB, it.id))!.readingJa).toEqual({ creator: "サイ", title: "カンナムスタイル" });
     await setItemReading(env.DB, it.id, { creator: "サイー" });
     expect((await getItem(env.DB, it.id))!.readingJa).toEqual({ creator: "サイー", title: "カンナムスタイル" });
+  });
+
+  it("clears the work's reading, and marks its voiced Japanese units to be voiced again only when it had one", async () => {
+    const it = await insertItem(env.DB, itemDraft({ creator: "PSY" }));
+    const l = await insertLetter(env.DB, letterDraft(it.id));
+    await upsertUnit(env.DB, { letterId: l.id, lang: "ja", intro: "a", after: "b", verified: true, audioReady: true });
+    await clearItemReading(env.DB, it.id);
+    expect((await env.DB.prepare("SELECT audio_ready FROM units").first<{ audio_ready: number }>())?.audio_ready).toBe(1);
+    await setItemReading(env.DB, it.id, { creator: "サイ" });
+    await env.DB.prepare("UPDATE units SET audio_ready = 1").run();
+    await clearItemReading(env.DB, it.id);
+    expect(await getItem(env.DB, it.id)).not.toHaveProperty("readingJa");
+    expect((await env.DB.prepare("SELECT audio_ready FROM units").first<{ audio_ready: number }>())?.audio_ready).toBe(0);
   });
 
   it("marks the work's voiced Japanese units to be voiced again only when its reading changes", async () => {

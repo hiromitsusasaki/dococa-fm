@@ -208,7 +208,7 @@ admin.post("/admin/episodes", async (c) => {
   return c.json({ id: made.id, cloudTts: episode?.cloudTts === true });
 });
 
-/** The stored episode, report included, so the eval script can read what a listener's session would. */
+/** The stored episode, report included, so the eval script can read what a listener's session would. It carries `spoken` (the voice's text): admin only, never a listener's path. */
 admin.get("/admin/episodes/:id", async (c) => {
   const episode = await getEpisode(c.env.DB, c.req.param("id"));
   return episode ? c.json(episode) : c.json({ error: "episode not found" }, 404);
