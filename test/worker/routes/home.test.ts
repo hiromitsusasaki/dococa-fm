@@ -100,15 +100,15 @@ describe("GET /", () => {
     expect(html).not.toContain("URL なしの声");
   });
 
-  it("explains the switch and the dial's far shelves, with no link to /start, for every listener", async () => {
+  it("explains the switch and the dial, with no link to /start, for every listener", async () => {
     const cookie = await newSession();
-    const explain = '<p class="muted">スイッチを入れると、世界のどこかの誰かのお便りが流れます。ダイヤルを右に回すほど、遠くの棚から届きます。</p>';
+    const explain = '<p class="muted">スイッチを入れると、世界のどこかの誰かのお便りが流れます。ダイヤルを右に回すほど、自分の好みから遠いお便りが混ざります。</p>';
     const html = await (await get("/", cookie)).text();
     expect(html).toContain(explain);
     expect(html).not.toContain('href="/start"');
     expect(html).not.toContain("あなたのラジオをつける");
     const en = await (await SELF.fetch(`${BASE}/`, { headers: { "accept-language": "en" } })).text();
-    expect(en).toContain('<p class="muted">Turn the switch on and someone&#39;s letter from somewhere in the world plays. Turn the dial to the right and letters come from farther shelves.</p>');
+    expect(en).toContain('<p class="muted">Turn the switch on and someone&#39;s letter from somewhere in the world plays. Turn the dial to the right and more letters come from outside your own taste.</p>');
     expect(en).not.toContain('href="/start"');
   });
 

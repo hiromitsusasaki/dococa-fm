@@ -7,22 +7,22 @@ import { BASE, get, newSession, postForm } from "./helpers";
 beforeEach(() => resetDb(env.DB));
 
 describe("GET /about", () => {
-  it("answers in Japanese with a title, a lead, why it was made and the four sections", async () => {
+  it("answers in Japanese with a title, a lead and the four sections", async () => {
     const res = await get("/about", await newSession());
     expect(res.status).toBe(200);
     const html = await res.text();
     expect(html).toContain("<h1>Dococa FM とは</h1>");
     expect(html).toContain("世界のどこかにいる誰かの好きなものが聴こえてくるラジオです。");
-    for (const h of ["なぜ作ったか", "聴く", "送る", "自分のラジオ", "できること・しないこと"]) expect(html).toContain(`<h2>${h}</h2>`);
-    expect((html.match(/<section class="panel/g) ?? []).length).toBe(5);
+    for (const h of ["聴く", "送る", "自分のラジオ", "できること・しないこと"]) expect(html).toContain(`<h2>${h}</h2>`);
+    expect((html.match(/<section class="panel/g) ?? []).length).toBe(4);
     expect(html).not.toContain("局");
   });
 
   it("carries the gradient rule under each heading, not on top of the panel", async () => {
     const html = await (await get("/about", await newSession())).text();
-    expect((html.match(/<section class="panel panel-rule-under/g) ?? []).length).toBe(5);
-    expect((html.match(/<\/h2>\s*<div class="rule"/g) ?? []).length).toBe(5);
-    expect((html.match(/class="rule"/g) ?? []).length).toBe(5);
+    expect((html.match(/<section class="panel panel-rule-under/g) ?? []).length).toBe(4);
+    expect((html.match(/<\/h2>\s*<div class="rule"/g) ?? []).length).toBe(4);
+    expect((html.match(/class="rule"/g) ?? []).length).toBe(4);
     const css = await (await SELF.fetch(`${BASE}/app.css`)).text();
     expect(css).toMatch(/\.panel-rule-under::before\s*{\s*display:\s*none/);
   });
@@ -39,13 +39,11 @@ describe("GET /about", () => {
     expect(en).toMatch(/<p>Send 3 letters and the radio plays letters closer to your taste\. Sign in with Google/);
   });
 
-  it("says why it was made between the lead and the sections, as text with no illustration", async () => {
+  it("goes from the lead straight to the sections, with no section about why it was made", async () => {
     const html = await (await get("/about", await newSession())).text();
-    const why = html.match(/<section class="panel panel-rule-under about-why">[\s\S]*?<\/section>/)?.[0] ?? "";
-    expect(why).toMatch(/<h2>なぜ作ったか<\/h2>\s*<div class="rule"[^>]*><\/div>\s*<p>私は田舎で青春を過ごし、/);
-    expect(why).not.toContain("<img");
-    expect(html.indexOf('class="about-lead"')).toBeLessThan(html.indexOf("about-why"));
-    expect(html.indexOf("about-why")).toBeLessThan(html.indexOf("/about/listen.jpg"));
+    expect(html).not.toContain("about-why");
+    expect(html).not.toContain("なぜ作ったか");
+    expect(html.indexOf('class="about-lead"')).toBeLessThan(html.indexOf("/about/listen.jpg"));
   });
 
   it("tells a listener they do not have to reply", async () => {
@@ -73,11 +71,11 @@ describe("GET /about", () => {
 
   it("opens the rules with what the AI never does", async () => {
     const ja = await (await get("/about", await newSession())).text();
-    expect(ja).toMatch(/<h2>できること・しないこと<\/h2>\s*<div class="rule"[^>]*><\/div>\s*<figure[^>]*>.*?<\/figure>\s*<p>AI は、お便りに書き足しも言い換えもせずに読みます（言葉の違う人には、訳を添えて）。[\s\S]*?数字で人や作品を測りません。[\s\S]*?［デモ用］/);
+    expect(ja).toMatch(/<h2>できること・しないこと<\/h2>\s*<div class="rule"[^>]*><\/div>\s*<figure[^>]*>.*?<\/figure>\s*<p>AI は、お便りに書き足しも言い換えもせずに読みます。別の言語で聴いている人には、原文はそのままに、訳したものを読みます。[\s\S]*?数字で人や作品を測りません。[\s\S]*?［デモ用］/);
     const cookie = await newSession();
     await postForm("/lang", cookie, { lang: "en", next: "/about" });
     const en = await (await get("/about", cookie)).text();
-    expect(en).toMatch(/<h2>What we do and don[^<]*t do<\/h2>\s*<div class="rule"[^>]*><\/div>\s*<figure[^>]*>.*?<\/figure>\s*<p>The AI reads each letter without adding or rewording anything \(with a translation for listeners of another language\)\.[\s\S]*?\[Demo\]/);
+    expect(en).toMatch(/<h2>What we do and don[^<]*t do<\/h2>\s*<div class="rule"[^>]*><\/div>\s*<figure[^>]*>.*?<\/figure>\s*<p>The AI reads each letter without adding or rewording anything\. Listeners who use another language hear a translation, with the original kept as written\.[\s\S]*?\[Demo\]/);
   });
 
   it("answers in English for an English listener", async () => {
@@ -86,8 +84,8 @@ describe("GET /about", () => {
     const html = await (await get("/about", cookie)).text();
     expect(html).toContain('<html lang="en">');
     expect(html).toContain("<h1>About Dococa FM</h1>");
-    expect((html.match(/<section class="panel/g) ?? []).length).toBe(5);
-    expect(html).toContain("<h2>Why I made this</h2>");
+    expect((html.match(/<section class="panel/g) ?? []).length).toBe(4);
+    expect(html).toContain("<h2>Listen</h2>");
     expect(html).not.toContain("聴く");
   });
 
