@@ -11,6 +11,7 @@ Phase 6（ラジオの面・ホームとヘッダ・お便りの直リンクと�
 - [ ] `pnpm db:migrate`（0022 `reactions_seen`、0023 `units_lead`: **単位を全部消す**、0024 `readings`、0025 `video_kind`: YouTube の作品を `video` に）。
 - [ ] 続けてすぐ `pnpm run deploy`。終わった時刻（UTC）を控える（例 `DEPLOYED_AT=2026-11-08T03:12:00Z`）。
 - [ ] デプロイ前の単位を消す: `pnpm wrangler d1 execute dococa --remote --command "DELETE FROM units WHERE created_at < '$DEPLOYED_AT'"`。migrate と deploy のあいだに古い Worker（cron か誰かの `next`）が冒頭の一行を知らない台本で単位を作り直していると、新しいコードの検証（`lead:`）で落ち続け、作り直されないため（最終レビュー opus I1）。デプロイ前に作られた単位はどれも古い形なので、時刻で切れば安全。
+- [ ] 0025 で `video` に移った作品のベクトルを作り直させる: `pnpm wrangler d1 execute dococa --remote --command "UPDATE items SET vec = NULL WHERE kind = 'video'"`（埋め込みの文が `[music]` のままのため。次の `/admin/prepare` が最初に埋め直す。最終レビュー opus M6）。
 - [ ] `/admin/prepare` のループ（読み → 単位 → 音声の順に進む）。`remaining.readings`（作品の題名と作者の読み。作品ごとに Claude 1 回）、`remaining.units`（Claude 約 200 回）、`remaining.audio`（約 1,000 行。`gaveUp` は、ブラウザの声が読む行を含む単位の数）が ja/en とも 0 になるまで回す。上限は `CLOUD_TTS_GLOBAL_DAILY_LIMIT`（本番は 8000）の内。コストは [docs/cost.md](cost.md)。
 - [ ] デモの反応を付ける。先に `read -rs PROD_ADMIN_TOKEN` で本番のトークンをシェルに読み込み、`ADMIN_TOKEN="$PROD_ADMIN_TOKEN" pnpm seed:reactions --origin https://dococafm.app --dry-run`（書かせるだけ）で確かめてから、本番の `--per 2`。あとで自分のお便りに付けるなら `--letters <id,...>`。
 - [ ] 聴いて確かめる: 冒頭の一行「…という曲の紹介です」、読み（PSY → サイ、大船渡 → オオフナト）、「別の人」、5 曲の BGM が回ごとにランダムに変わること（音量は `src/client/audio.ts` の `BED_VOLUME`）、ブラウザの声への切り替えが回ぜんぶではなく行ごとになったこと。
