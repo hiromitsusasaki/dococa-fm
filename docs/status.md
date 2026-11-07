@@ -30,6 +30,7 @@ Phase 5（TTS の見張りと指示文・ヘッダの言語切替・オンエア
 | Task 8 | デモの反応（デモのペルソナから「私も」と一言。あとから送られたお便りにも付けられる） | 未着手 |
 | Task 9 | 種類ごとの冒頭の一行（「…という曲の紹介です」。0023 で単位を作り直す） | 未着手 |
 | Task 10 | 読み方（台本係が読みを返し、読み上げだけ変える。PSY → サイ。0024） | 未着手 |
+| Task 11 | お便りの共有ページ `/letters/:id`（OGP・X の player カード・埋め込みプレイヤー・公開の音声経路） | 未着手 |
 | Task 7 | 締め（`docs/cost.md`・status・README・SECURITY・DESIGN） | 未着手 |
 
 ## Phase 5 の進み（計画: `docs/superpowers/plans/2026-11-07-dococa-fm-phase5.md`、設計: 追記 M）
