@@ -12,6 +12,7 @@ import { langRoutes } from "./routes/lang";
 import { episodes } from "./routes/episodes";
 import { home } from "./routes/home";
 import { items } from "./routes/items";
+import { isFramedPath, letterPage } from "./routes/letter-page";
 import { letters } from "./routes/letters";
 import { listens } from "./routes/listens";
 import { me } from "./routes/me";
@@ -27,7 +28,15 @@ import { ipRateLimit, listenerRateLimit, listensIpRateLimit } from "./security/r
 const app = new Hono<{ Bindings: Env; Variables: Variables }>();
 
 // No CSP: the player reads inline JSON script blocks and the client bundle. The other default headers stay on.
-app.use("*", secureHeaders({ referrerPolicy: "strict-origin-when-cross-origin" }));
+const siteHeaders = secureHeaders({ referrerPolicy: "strict-origin-when-cross-origin" });
+// A shared letter's player is made to be framed by any site (an X player card, an iframe embed): no X-Frame-Options.
+const framedHeaders = secureHeaders({
+  referrerPolicy: "strict-origin-when-cross-origin",
+  xFrameOptions: false,
+  crossOriginResourcePolicy: "cross-origin",
+  contentSecurityPolicy: { frameAncestors: ["*"] },
+});
+app.use("*", (c, next) => (isFramedPath(c.req.path) ? framedHeaders : siteHeaders)(c, next));
 // Cheap refusals come before the session middleware so they never mint a listener row.
 app.use("*", requirePublicOrigin);
 app.use("*", canonicalHost);
@@ -52,6 +61,7 @@ app.route("/", about);
 app.route("/", put);
 app.route("/", start);
 app.route("/", letters);
+app.route("/", letterPage);
 app.route("/", me);
 app.route("/", items);
 app.route("/", episodes);

@@ -3,6 +3,7 @@ import { SELF } from "cloudflare:test";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import app from "../../src/worker/index";
 import { t } from "../../src/worker/i18n/t";
+import { isSessionExempt } from "../../src/worker/auth/session";
 import { WindowStore, isRateLimited } from "../../src/worker/security/rate-limit";
 import { resetDb } from "../helpers/db";
 import { newSession } from "./routes/helpers";
@@ -259,11 +260,26 @@ describe("canonical host", () => {
 
 describe("session exemptions", () => {
   it("do not create listener rows for static assets", async () => {
-    for (const path of ["/app.css", "/icon.svg", "/manifest.webmanifest", "/bed-3.mp3", "/healthz"]) {
+    const shared = "/letters/00000000-0000-4000-8000-000000000000";
+    for (const path of ["/app.css", "/icon.svg", "/manifest.webmanifest", "/bed-3.mp3", "/healthz", `${shared}/player`, `${shared}/lines.json`, `${shared}/audio/3`]) {
       const res = await SELF.fetch(`http://example.com${path}`);
       expect(res.headers.get("set-cookie"), path).toBeNull();
     }
     expect((await env.DB.prepare("SELECT COUNT(*) AS n FROM listeners").first<{ n: number }>())!.n).toBe(0);
+  });
+});
+
+describe("the shared letter's routes", () => {
+  it("exempt the player, the lines and the clips from the session, and keep it on the page", async () => {
+    const id = "00000000-0000-4000-8000-000000000000";
+    for (const path of [`/letters/${id}/player`, `/letters/${id}/lines.json`, `/letters/${id}/audio/0`]) expect(isSessionExempt(path), path).toBe(true);
+    for (const path of [`/letters/${id}`, `/letters/${id}/reactions`, `/letters/${id}/player/x`]) expect(isSessionExempt(path), path).toBe(false);
+  });
+
+  it("are all GET, and none of them counts in the shared buckets", () => {
+    const shared = app.routes.filter((r) => r.path.startsWith("/letters/:id") && r.path !== "/letters/:id/reactions" && r.path !== "/letters/:id/report");
+    expect(shared.map((r) => `${r.method} ${r.path}`).sort()).toEqual(["GET /letters/:id", "GET /letters/:id/audio/:n", "GET /letters/:id/audio/:n", "GET /letters/:id/lines.json", "GET /letters/:id/player"]);
+    for (const r of shared) expect(isRateLimited("GET", r.path.replace(/:[A-Za-z]+/g, "x"), new URLSearchParams())).toBe(false);
   });
 });
 

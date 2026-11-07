@@ -39,10 +39,12 @@ export async function verifySession(cookie: string | undefined, secret: string):
 const EXEMPT_PREFIXES = ["/admin", "/assets", "/src"];
 const EXEMPT_PATHS = new Set(["/healthz", "/app.css", "/favicon.ico", "/manifest.webmanifest", "/icon.svg"]);
 const BED_PATH = /^\/bed-\d+\.mp3$/;
+/** A shared letter's player, its lines and its clips: framed on other sites, they know nothing of the listener. */
+const LETTER_PLAYER_PATH = /^\/letters\/[^/]+\/(player|lines\.json|audio\/[^/]+)$/;
 
 /** Token-authenticated routes and static assets must not mint a listener per request. */
 export function isSessionExempt(path: string): boolean {
-  if (EXEMPT_PATHS.has(path) || BED_PATH.test(path)) return true;
+  if (EXEMPT_PATHS.has(path) || BED_PATH.test(path) || LETTER_PLAYER_PATH.test(path)) return true;
   return EXEMPT_PREFIXES.some((p) => path === p || path.startsWith(`${p}/`));
 }
 

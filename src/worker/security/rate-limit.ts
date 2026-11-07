@@ -133,6 +133,11 @@ export const ttsIpRateLimit = routeLimiter(TTS_IP_LIMIT_PER_WINDOW, (c) => {
   const ip = c.req.header("cf-connecting-ip");
   return ip ? `ip:${ip}` : null;
 });
+/** `GET /letters/:id/audio/:n` spends the same cloud voice as `/tts` on a miss, with no listener: its own bucket, 120 a minute per IP. */
+export const letterAudioIpRateLimit = routeLimiter(TTS_IP_LIMIT_PER_WINDOW, (c) => {
+  const ip = c.req.header("cf-connecting-ip");
+  return ip ? `ip:${ip}` : null;
+});
 export const ttsListenerRateLimit = routeLimiter(TTS_LISTENER_LIMIT_PER_WINDOW, (c) => {
   const listener = c.get("listener");
   return listener ? `listener:${listener.id}` : null;
