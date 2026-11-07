@@ -11,7 +11,10 @@ const strings: Record<string, string> = {
   "station.volume": "音量",
   "station.dial": "セレンディピティ",
   "station.nowPlaying": "いま流れている",
-  "station.upNext": "このあとのお便り",
+  "station.panel": "オンエア",
+  "station.now": "いま",
+  "station.next": "このあと",
+  "station.offHint": "スイッチを入れると、ここにお便りが並びます。",
   "station.tuning": "チューニング中",
   "station.limit": "今日の分はここまで。また明日",
   "station.failed": "電波が届きませんでした",
@@ -344,17 +347,23 @@ describe("station: playing", () => {
     expect(s.state().current?.id).toBe("epA");
   });
 
-  it("lists what is still to come, with kind, title and creator but no numbers", async () => {
+  it("lists the letter on air first, then what is still to come, with kind, title and creator but no numbers", async () => {
     nextReplies = [ok(epA()), ok(epB())];
     autoEnd = false;
     mountStation(root, opts());
     await power();
     await vi.waitFor(() => expect(spoken).toEqual(["a1"]));
-    const rows = [...root.querySelectorAll(".up-next li")].map((li) => li.textContent);
-    expect(root.querySelector(".side")!.textContent).toContain("このあとのお便り");
-    expect(rows[0]).toContain("映画");
-    expect(rows[0]).toContain("曲B");
-    expect(rows[0]).toContain("作者B");
+    const items = [...root.querySelectorAll(".up-next li")];
+    const rows = items.map((li) => li.textContent);
+    expect(root.querySelector(".side h2")!.textContent).toBe("オンエア");
+    expect(items[0]!.classList.contains("now")).toBe(true);
+    expect(items[0]!.querySelector(".tag")!.textContent).toBe("いま");
+    expect(rows[0]).toContain("曲A");
+    expect(items[1]!.classList.contains("now")).toBe(false);
+    expect(items[1]!.querySelector(".tag")!.textContent).toBe("このあと");
+    expect(rows[1]).toContain("映画");
+    expect(rows[1]).toContain("曲B");
+    expect(rows[1]).toContain("作者B");
     expect(rows.join(" ")).not.toMatch(/\d/);
     expect(root.querySelector("ol")).toBeNull();
   });
@@ -367,10 +376,11 @@ describe("station: playing", () => {
     await power();
     await vi.waitFor(() => expect(spoken).toEqual(["a1"]));
     const rows = [...root.querySelectorAll(".up-next li")];
-    expect(rows[0]!.textContent).toContain("曲B");
-    expect(rows[0]!.querySelector(".sender")?.textContent).toBe("しずくさん（松本）");
-    expect(rows[1]!.textContent).toContain("曲C");
-    expect(rows[1]!.querySelector(".sender")).toBeNull();
+    expect(rows[0]!.querySelector(".sender")).toBeNull();
+    expect(rows[1]!.textContent).toContain("曲B");
+    expect(rows[1]!.querySelector(".sender")?.textContent).toBe("しずくさん（松本）");
+    expect(rows[2]!.textContent).toContain("曲C");
+    expect(rows[2]!.querySelector(".sender")).toBeNull();
   });
 
   it("shows the sender's place from the codes in the page's language", async () => {
@@ -586,6 +596,106 @@ describe("station: volume", () => {
     document.body.innerHTML = '<div id="station"></div>';
     root = document.getElementById("station")!;
     expect(mountStation(root, opts()).state().volume).toBe(0.8);
+  });
+});
+
+describe("station: on-air panel", () => {
+  const titles = () => [...root.querySelectorAll(".up-next li")].map((li) => li.querySelector(".title")!.textContent);
+  const nowRows = () => [...root.querySelectorAll(".up-next li.now")];
+
+  it("shows a hint and no rows while the switch is off", async () => {
+    mountStation(root, opts());
+    await flush();
+    expect(root.querySelectorAll(".up-next li")).toHaveLength(0);
+    expect(root.querySelector(".side")!.textContent).toContain("スイッチを入れると、ここにお便りが並びます。");
+  });
+
+  it("puts the episode playing first, then the prefetched one, and drops the first when the second starts", async () => {
+    const one = view("epO", [["a", [dj("o1")]]]);
+    const two = view("epT", [["b", [dj("t1")]]]);
+    nextReplies = [ok(one), ok(two), ok(view("epU", [["c", [dj("u1")]]]))];
+    autoEnd = false;
+    mountStation(root, opts());
+    await power();
+    await vi.waitFor(() => expect(spoken).toEqual(["o1"]));
+    await vi.waitFor(() => expect(titles()).toEqual(["曲A", "曲B"]));
+    expect(root.querySelector(".side h2")!.textContent).toBe("オンエア");
+    expect(nowRows()).toHaveLength(1);
+    held[0]!.onend?.();
+    await vi.waitFor(() => expect(spoken).toEqual(["o1", "t1"]));
+    await vi.waitFor(() => expect(titles()[0]).toBe("曲B"));
+    expect(nowRows().map((li) => li.querySelector(".title")!.textContent)).toEqual(["曲B"]);
+    expect(titles().filter((t) => t === "曲A")).toHaveLength(0);
+  });
+
+  it("empties and shows the hint again after turning off", async () => {
+    nextReplies = [ok(epA()), ok(epB())];
+    autoEnd = false;
+    mountStation(root, opts());
+    await power();
+    await vi.waitFor(() => expect(spoken).toEqual(["a1"]));
+    await power();
+    expect(root.querySelectorAll(".up-next li")).toHaveLength(0);
+    expect(root.querySelector(".side")!.textContent).toContain("スイッチを入れると");
+  });
+
+  it("says 私も from the on-air row once, for the segment's first letter, and the player shows it as sent", async () => {
+    nextReplies = [ok(epA()), ok(epB())];
+    autoEnd = false;
+    mountStation(root, opts());
+    await power();
+    await vi.waitFor(() => expect(spoken).toEqual(["a1"]));
+    calls.length = 0;
+    const btn = () => root.querySelector<HTMLButtonElement>('.up-next li.now [data-action="panel-watashimo"]')!;
+    expect(root.querySelectorAll('.up-next li:not(.now) [data-action="panel-watashimo"]')).toHaveLength(0);
+    btn().click();
+    btn().click();
+    await flush();
+    expect(calls).toEqual(["POST /letters"]);
+    const init = (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls.at(-1)![1];
+    expect(Object.fromEntries(new URLSearchParams(String(init.body)))).toEqual({ kind: "watashimo", itemId: "a", parentLetterId: "L1" });
+    expect(btn().disabled).toBe(true);
+    expect(btn().textContent).toContain("届けました");
+  });
+
+  it("shows a 私も said in the player card as sent in the panel", async () => {
+    nextReplies = [ok(view("epL", [["a", [letter("L1", "l1")]]]))];
+    autoEnd = false;
+    mountStation(root, opts());
+    await power();
+    await vi.waitFor(() => expect(spoken).toEqual(["l1"]));
+    el("watashimo").click();
+    await flush();
+    const panel = root.querySelector<HTMLButtonElement>('.up-next li.now [data-action="panel-watashimo"]')!;
+    expect(panel.disabled).toBe(true);
+    expect(panel.textContent).toContain("届けました");
+  });
+
+  it("sends a reply typed in the on-air row", async () => {
+    nextReplies = [ok(epA()), ok(epB())];
+    autoEnd = false;
+    mountStation(root, opts());
+    await power();
+    await vi.waitFor(() => expect(spoken).toEqual(["a1"]));
+    calls.length = 0;
+    const ta = root.querySelector<HTMLTextAreaElement>(".up-next li.now textarea")!;
+    expect(ta.getAttribute("maxlength")).toBe("200");
+    ta.value = "いい曲";
+    root.querySelector<HTMLFormElement>(".up-next li.now form")!.dispatchEvent(new CustomEvent("submit", { detail: {}, bubbles: true, cancelable: true }));
+    await flush();
+    expect(calls).toEqual(["POST /letters"]);
+    const init = (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls.at(-1)![1];
+    expect(Object.fromEntries(new URLSearchParams(String(init.body)))).toEqual({ kind: "reply", body: "いい曲", itemId: "a", parentLetterId: "L1" });
+  });
+
+  it("offers no reactions on a row whose segment has no letter", async () => {
+    nextReplies = [ok(epB()), ok(epB())];
+    autoEnd = false;
+    mountStation(root, opts());
+    await power();
+    await vi.waitFor(() => expect(spoken).toEqual(["x1"]));
+    expect(root.querySelector(".up-next li.now")).not.toBeNull();
+    expect(root.querySelector(".up-next li.now button")).toBeNull();
   });
 });
 

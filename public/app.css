@@ -756,6 +756,51 @@ button.pill {
   font-size: 13px;
 }
 
+.up-next .tag {
+  flex: 1 0 100%;
+  color: var(--ink-2);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+}
+
+.up-next li.now {
+  padding-left: var(--sp-3);
+  border-left: 3px solid var(--coral);
+}
+
+.up-next li.now .tag {
+  color: var(--label);
+  font-weight: 700;
+}
+
+.panel-react {
+  display: flex;
+  flex: 1 0 100%;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--sp-2);
+  margin-top: var(--sp-2);
+}
+
+.panel-reply {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--sp-2);
+  width: 100%;
+}
+
+.panel-reply textarea {
+  width: 100%;
+  padding: var(--sp-2) var(--sp-3);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-md);
+  background: var(--panel);
+  color: var(--ink);
+  font: inherit;
+  resize: vertical;
+}
+
 .kind {
   color: var(--magenta);
   font-size: 11px;

@@ -62,6 +62,7 @@ CSS 変数は `:root` にライト、`@media (prefers-color-scheme: dark)` と `
 | `.scale`（目盛り） | 12px の高さの縦線の繰り返し + 針 | 針の位置は飾り（再生位置ではない） |
 | `.switch` | 72×36 のトグル。`aria-pressed` | OFF: `--haze` と枠線。ON: `--lemon` に点灯 + `box-shadow` のゆるい明滅（`prefers-reduced-motion` で止める） |
 | `.knob` | 52px の円、`--knob`、針は coral | 音量とセレンディピティの 2 つ。セレンディピティ（ダイヤル）はラジオの面にあり、自分のラジオだけに出る（ホームの Dococa FM と人のラジオには出さない）。0〜1 を 0.1 刻みで、離したときに値を `localStorage["dfm.dial"]` に残して次の回から効かせる。`input[type=range]` を置き換え、キーボードでも動く |
+| `.up-next`（「オンエア」の欄） | 見出し `オンエア`。1 行目は今流れている作品（`li.now`: 左に 3px の coral の縦線、札 `いま`）、続けて同じ回の残りと作り置きの回（札 `このあと`）。`いま` の行の下に、その作品の最初のお便りへの `私も`（`pill hot`）と 一言（200 字の textarea と `一言を送る`）。送ったあとは `届けました` で押せない。プレイヤーのカードと送信済みの記録を共有する | スイッチが OFF の間は行を出さず、案内の一文だけ。件数や順位は出さない |
 | `.letter-card`（ホームの「いま届いているお便り」） | `article` に 2 つのリンク。絵と本文は `/stations/mine?letter=<id>`（自分のお便りは作品ページ）、薄い行は作品ページ `/items/<id>`。`--panel`、枠線 1px `--line`、丸角 12px、影。左に 96px の絵の箱（`--haze`、丸角 12px、絵が無ければ空の箱）、右に本文（120 字で切り、切れたときだけ「…」。全文は作品ページ）、`このお便りから聴く`（magenta。自分のお便りには出さない）、絵と本文の下に薄い行 `作品名 · 送り主（お住まい）`。見つけた声は送り主の代わりに出典の作者 | 最新 6 通。PC 幅（> 760px）は 2 列、スマホ幅は 1 列。数字は付けない |
 | お便り `blockquote` | 左線 3px `--lemon`、`--haze` の地、丸角 `0 12px 12px 0` | 主文 → 原文トグル（`<details>`）→ 送り主（`〇〇さん（お住まい、国）［デモ用］`） |
 | `.pill` | 枠線 1px coral、丸、13px | 主ボタン `.pill.hot` は magenta 塗り・白文字・700 |
@@ -92,7 +93,9 @@ CSS 変数は `:root` にライト、`@media (prefers-color-scheme: dark)` と `
 | 音量 | 音量 | Volume |
 | ダイヤル | セレンディピティ（ホバーの説明: 右に回すほど、あなたと接点のないお便りが増えます） | Serendipity |
 | いま | いま流れている | Now playing |
-| 次 | このあとのお便り | Up next: letters |
+| 欄の見出し | オンエア | On air |
+| 欄の行の札 | いま / このあと | Now / Next |
+| 欄の空の案内 | スイッチを入れると、ここにお便りが並びます。 | Turn the switch on and the letters line up here. |
 | 自分の局 | あなたのラジオ | Your radio |
 | 人の局 | 〇〇さんのラジオ | 〇〇's radio |
 | お便り | お便りを送る / 送る | Send a letter / Send |

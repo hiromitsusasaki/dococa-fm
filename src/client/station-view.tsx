@@ -3,8 +3,8 @@ import { LetterQuote } from "./letter-quote";
 import { isHttpUrl, type LetterLine, outLabel, type PlayerItem, type PlayerOriginals } from "./playback";
 import { onReleased } from "./reactions";
 
-/** `sender` is the first reader's name line; absent for a work nobody has written about. */
-export type UpNextRow = { key: string; kind: string | null; title: string; creator: string; sender?: string };
+/** `sender` is the first reader's name line; absent for a work nobody has written about. `letterId` is only on the row now on air, for the reactions. */
+export type UpNextRow = { key: string; now: boolean; kind: string | null; title: string; creator: string; sender?: string; letterId?: string };
 
 export type StationScreenProps = {
   str: (key: string) => string;
@@ -30,8 +30,8 @@ export type StationScreenProps = {
     volume: (value: number) => void;
     dial: (value: string) => void;
     toggleReply: () => void;
-    watashimo: () => void;
-    reply: (body: string) => void;
+    watashimo: (letterId?: string) => void;
+    reply: (body: string, letterId?: string) => void;
   };
 };
 
@@ -114,7 +114,7 @@ export function StationScreen(p: StationScreenProps) {
           </div>
           {p.letter && (
             <div class="react">
-              <button type="button" class="pill hot" data-action="watashimo" disabled={p.sent[`w:${p.letter.letterId}`] === true} onClick={p.on.watashimo}>
+              <button type="button" class="pill hot" data-action="watashimo" disabled={p.sent[`w:${p.letter.letterId}`] === true} onClick={() => p.on.watashimo()}>
                 {str(p.sent[`w:${p.letter.letterId}`] ? "player.sent" : "player.watashimo")}
               </button>
               <button type="button" class="pill" data-action="reply" aria-expanded={String(p.replyOpen)} onClick={p.on.toggleReply}>
@@ -154,14 +154,17 @@ export function StationScreen(p: StationScreenProps) {
       )}
 
       <aside class="side panel">
-        <h2>{str("station.upNext")}</h2>
+        <h2>{str("station.panel")}</h2>
+        {p.upNext.length === 0 && p.power === "off" && !p.grow && <p class="muted">{str("station.offHint")}</p>}
         <ul class="up-next">
           {p.upNext.map((r) => (
-            <li key={r.key}>
+            <li key={r.key} class={r.now ? "now" : ""}>
+              <span class="tag">{str(r.now ? "station.now" : "station.next")}</span>
               {r.kind && <span class="kind">{kindLabel(str, r.kind)}</span>}
               <span class="title">{r.title}</span>
               <span class="creator">{r.creator}</span>
               {r.sender && <span class="sender">{r.sender}</span>}
+              {r.letterId && <PanelReact id={r.letterId} sent={p.sent} str={str} on={p.on} />}
             </li>
           ))}
         </ul>
@@ -175,6 +178,31 @@ export function StationScreen(p: StationScreenProps) {
           </div>
         )}
       </aside>
+    </div>
+  );
+}
+
+/** 私も and 一言 for the letter on air, in the panel; they share `sent` with the player card. */
+function PanelReact({ id, sent, str, on }: { id: string; sent: Record<string, true>; str: (key: string) => string; on: StationScreenProps["on"] }) {
+  const said = sent[`w:${id}`] === true;
+  const replied = sent[`r:${id}`] === true;
+  return (
+    <div class="panel-react">
+      <button type="button" class="pill hot" data-action="panel-watashimo" disabled={said} onClick={() => on.watashimo(id)}>
+        {str(said ? "player.sent" : "player.watashimo")}
+      </button>
+      <form
+        class="panel-reply"
+        onSubmit={(e: Event) => {
+          e.preventDefault();
+          on.reply((e.currentTarget as HTMLFormElement).querySelector("textarea")!.value, id);
+        }}
+      >
+        <textarea name="body" maxlength={200} rows={2} disabled={replied} aria-label={str("player.reply")}></textarea>
+        <button type="submit" class="pill" disabled={replied}>
+          {str(replied ? "player.sent" : "player.reply")}
+        </button>
+      </form>
     </div>
   );
 }

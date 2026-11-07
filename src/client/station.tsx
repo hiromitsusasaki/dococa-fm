@@ -308,13 +308,20 @@ export function mountStation(root: HTMLElement, opts: StationOptions) {
     setState({ volume: v });
   }
 
+  /** Reactions on their way, so a second tap before the answer does not post twice. */
+  const sending = new Set<string>();
   async function send(fields: Record<string, string>, key: string) {
-    if (await postLetter(fields)) setState({ sent: { ...state.sent, [key]: true }, replyOpen: false, sendFailed: false });
+    if (sending.has(key)) return;
+    sending.add(key);
+    const taken = await postLetter(fields);
+    sending.delete(key);
+    if (taken) setState({ sent: { ...state.sent, [key]: true }, replyOpen: false, sendFailed: false });
     else setState({ sendFailed: true });
   }
 
-  function react(kind: "watashimo" | "reply", body?: string) {
-    const r = reactionOf(kind, state.current?.segments[state.seg]?.itemId, letterNow()?.letterId, body);
+  /** `letterId` defaults to the letter being read; the on-air row names the segment's first letter. */
+  function react(kind: "watashimo" | "reply", body?: string, letterId = letterNow()?.letterId) {
+    const r = reactionOf(kind, state.current?.segments[state.seg]?.itemId, letterId, body);
     if (r) void send(r.fields, r.key);
   }
 
@@ -326,16 +333,20 @@ export function mountStation(root: HTMLElement, opts: StationOptions) {
 
   function upNextRows(): UpNextRow[] {
     const rows: UpNextRow[] = [];
-    const add = (ep: PlayerEpisode, from: number) => {
-      ep.segments.slice(from).forEach((s, n) => {
+    const add = (ep: PlayerEpisode, from: number, upto: number, now = false) => {
+      ep.segments.slice(from, upto).forEach((s, n) => {
         const item = ep.items[s.itemId];
         if (!item) return;
         const first = s.lines.find((l): l is LetterLine => l.type === "letter");
-        rows.push({ key: `${ep.id}:${from + n}`, kind: item.kind ?? null, title: item.title, creator: item.creator, ...(first ? { sender: whoOf(first, str) } : {}) });
+        rows.push({ key: `${ep.id}:${from + n}`, now, kind: item.kind ?? null, title: item.title, creator: item.creator, ...(first ? { sender: whoOf(first, str) } : {}), ...(now && first ? { letterId: first.letterId } : {}) });
       });
     };
-    if (state.current) add(state.current, state.seg + 1);
-    for (const ep of state.queue) add(ep, 0);
+    if (state.power !== "off" && state.current) {
+      add(state.current, state.seg, state.seg + 1, true);
+      add(state.current, state.seg + 1, Infinity);
+    }
+    // Off: the panel is empty and shows its hint, so a stale prefetch is not listed.
+    if (state.power !== "off") for (const ep of state.queue) add(ep, 0, Infinity);
     return rows;
   }
 
@@ -364,8 +375,8 @@ export function mountStation(root: HTMLElement, opts: StationOptions) {
         volume: setVolume,
         dial: turnDial,
         toggleReply: () => setState({ replyOpen: !state.replyOpen }),
-        watashimo: () => react("watashimo"),
-        reply: (body: string) => react("reply", body),
+        watashimo: (letterId?: string) => react("watashimo", undefined, letterId),
+        reply: (body: string, letterId?: string) => react("reply", body, letterId),
       },
     };
   }
