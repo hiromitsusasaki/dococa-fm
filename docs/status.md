@@ -15,6 +15,20 @@ Phase 5（TTS の見張りと指示文・ヘッダの言語切替・オンエア
 - [ ] 画面を確かめる: ヘッダの言語切替、ホーム（ダイヤル、カードを押して即再生、送るモーダル、直近 3 番組）、`/settings`（公開 URL）、`/about`。
 - [ ] 任意: あとで `pnpm wrangler secret delete CLOUD_TTS_GLOBAL_DAILY_LIMIT` で既定の 3000 に戻す。
 
+## Phase 6 の進み（計画: `docs/superpowers/plans/2026-11-07-dococa-fm-phase6.md`、設計: 追記 N）
+
+2026-11-07 のサービス仕様レビューのプロダクトと UI/UX の項目（本人がすべて採用）。7 タスク。終わったら migration 0022 → deploy。
+
+| Task | 内容 | 状態 |
+|---|---|---|
+| Task 1 | ラジオの面（ダイヤルの両端・電波待ち・音量の保存・私もの合図・サムネ・カードの再生印・コントラスト） | 未着手 |
+| Task 2 | ホームとヘッダ（ヒーローを畳む・短い表記・言語切替の確認・サインイン後の案内・文言） | 未着手 |
+| Task 3 | お便りの直リンク `/?letter=`・リンクのコピー・新しい反応の点（0022） | 未着手 |
+| Task 4 | 送ったお便りの非公開（`withdrawn`）・公開ラジオの一覧 | 未着手 |
+| Task 5 | 冷えた入口（お住まいの国を散らす） | 未着手 |
+| Task 6 | cookie の無い GET でリスナー行を作らない | 未着手 |
+| Task 7 | 締め（`docs/cost.md`・status・README・SECURITY・DESIGN） | 未着手 |
+
 ## Phase 5 の進み（計画: `docs/superpowers/plans/2026-11-07-dococa-fm-phase5.md`、設計: 追記 M）
 
 2026-11-07 の本人フィードバック（本番を聴いて。2 回分）から。8 タスク。すべて完了。デプロイは上の本人作業（migration 0021 → deploy → `/admin/prepare` のループで音声を全部作り直す）。
