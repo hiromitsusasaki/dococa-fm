@@ -146,6 +146,18 @@ describe("letters", () => {
     expect(await listRecentPublicLetters(env.DB, 2)).toHaveLength(2);
   });
 
+  it("listRecentPublicLetters: a person's letter comes before a demo listener's, even when it is older", async () => {
+    const a = await insertItem(env.DB, itemDraft({ title: "A", externalIds: { itunes: "pd-a" } }));
+    const person = await createListener(env.DB);
+    const persona = await createListener(env.DB, { demo: true });
+    const older = await insertLetter(env.DB, letterDraft(a.id, { listenerId: person.id }));
+    await tick();
+    const demo = await insertLetter(env.DB, letterDraft(a.id, { listenerId: persona.id }));
+    await tick();
+    const newest = await insertLetter(env.DB, letterDraft(a.id, { listenerId: person.id }));
+    expect((await listRecentPublicLetters(env.DB, 6)).map((l) => l.id)).toEqual([newest.id, older.id, demo.id]);
+  });
+
   it("hasUnseenReactions: another's public 私も or 一言 on the listener's public letter, after the last look", async () => {
     const me = await createListener(env.DB);
     const other = await createListener(env.DB);

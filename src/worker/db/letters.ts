@@ -88,7 +88,8 @@ export async function getLettersByIds(db: D1Database, ids: Iterable<string>): Pr
   return out;
 }
 
-/** The newest public letters (not 私も / 一言), each with its work; a found voice counts only with its source. One query. */
+/** The newest public letters (not 私も / 一言), each with its work; a found voice counts only with its source. People's letters come
+ * before the demo listeners' (newest first within each). One query. */
 export async function listRecentPublicLetters(db: D1Database, limit = 6): Promise<Array<Letter & { item: Item }>> {
   const { results } = await db
     .prepare(
@@ -101,7 +102,7 @@ export async function listRecentPublicLetters(db: D1Database, limit = 6): Promis
        LEFT JOIN listeners ON listeners.id = letters.listener_id
        WHERE letters.status = 'public'
          AND (letters.kind = 'letter' OR (letters.kind = 'found' AND TRIM(COALESCE(letters.source_url, '')) <> '' AND TRIM(COALESCE(letters.source_author, '')) <> ''))
-       ORDER BY letters.created_at DESC, letters.id
+       ORDER BY COALESCE(listeners.demo, 0) ASC, letters.created_at DESC, letters.id
        LIMIT ?`,
     )
     .bind(Math.max(0, Math.min(limit, 20)))
