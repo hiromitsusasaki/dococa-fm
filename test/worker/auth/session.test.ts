@@ -32,13 +32,13 @@ describe("signSession / verifySession", () => {
 
 describe("isSessionExempt", () => {
   it("exempts health, admin and static assets", () => {
-    for (const p of ["/healthz", "/admin/episodes", "/app.css", "/assets/player.js", "/src/client/player.tsx", "/favicon.ico", "/manifest.webmanifest", "/icon.svg", "/bed-3.mp3"]) {
+    for (const p of ["/healthz", "/admin/episodes", "/app.css", "/assets/player.js", "/src/client/player.tsx", "/favicon.ico", "/manifest.webmanifest", "/icon.svg", "/bed-3.mp3", "/kv.jpg", "/kv-mobile.jpg", "/about/radio.jpg"]) {
       expect(isSessionExempt(p), p).toBe(true);
     }
   });
 
   it("covers everything else, including look-alike prefixes", () => {
-    for (const p of ["/", "/settings", "/apix", "/api/search", "/administrator", "/mcp/abc", "/healthz2"]) {
+    for (const p of ["/", "/settings", "/apix", "/api/search", "/administrator", "/mcp/abc", "/healthz2", "/about", "/about/", "/kv.jpgx", "/x/kv.jpg", "/about/a/b.jpg", "/about/x.png"]) {
       expect(isSessionExempt(p), p).toBe(false);
     }
   });
