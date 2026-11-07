@@ -418,8 +418,8 @@ describe("verifyEpisode intro names the sender", () => {
   });
 
   it("lets an intro name the work's title and creator, and lets an after mention the sender", () => {
-    expect(run([intro("Miles Davis の Blue in Green です。", plain.id), read(plain), after("みなとさん、ありがとう。", plain.id)], "ja").details).toEqual([]);
-    expect(run([intro("Blue in Green, by Miles Davis.", placed.id), read(placed, placed.bodyEn!)], "en", placed).details).toEqual([]);
+    expect(run([intro("静かな一曲です。Miles Davis の Blue in Green は夜に似合います。", plain.id), read(plain), after("みなとさん、ありがとう。", plain.id)], "ja").details).toEqual([]);
+    expect(run([intro("A quiet one. Blue in Green, by Miles Davis.", placed.id), read(placed, placed.bodyEn!)], "en", placed).details).toEqual([]);
   });
 
   it.each([
@@ -480,5 +480,30 @@ describe("verifyEpisode japanese gaps", () => {
 
   it.each(["一通のお便りです。", "世界のどこかの一通を。", "ずっと聴いてきた人の一曲です。", "夜に聴いてきた歌です。"])("passes %s", (text) => {
     expect(details(text)).toEqual([]);
+  });
+});
+
+describe("verifyEpisode intro after the lead", () => {
+  const intro = (text: string): ScriptLine => ({ type: "dj", text, unit: { letterId: plain.id, part: "intro" } });
+  const run = (text: string, lang: "ja" | "en" = "ja", title = "Blue in Green") =>
+    verifyEpisode([{ itemId: "i1", slot: "near", lines: [intro(text), read(plain)] }], byId([plain]), me, new Map([["i1", item({ title })]]), lang).details.filter((d) => d.startsWith("lead:"));
+
+  it.each([
+    ["ja", "Blue in Greenは、静かな一曲です。"],
+    ["ja", "「blue in green」、夜のための曲。"],
+    ["en", "Blue in Green is a quiet piece. It suits the night."],
+  ] as const)("fails a %s intro whose first sentence restates the title: %s", (lang, text) => {
+    expect(run(text, lang)).toEqual(["lead: segment 1 line 1: restates the title"]);
+  });
+
+  it("lets the title come back after the first sentence, and lets a title of one character pass", () => {
+    expect(run("静かな一曲です。Blue in Greenは夜に似合います。")).toEqual([]);
+    expect(run("A quiet piece. Blue in Green suits the night.", "en")).toEqual([]);
+    expect(run("海の見える部屋で聴きたい一曲です。", "ja", "海")).toEqual([]);
+  });
+
+  it("does not hold an after line or a fixed line to it", () => {
+    const lines: ScriptLine[] = [fixedDj("Miles Davisの「Blue in Green」という曲の紹介です。"), read(plain), { type: "dj", text: "Blue in Greenはいい曲です。", unit: { letterId: plain.id, part: "after" } }];
+    expect(verifyEpisode([{ itemId: "i1", slot: "near", lines }], byId([plain]), me, new Map([["i1", item()]])).details).toEqual([]);
   });
 });

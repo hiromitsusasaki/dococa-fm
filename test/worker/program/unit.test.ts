@@ -55,6 +55,16 @@ describe("writeUnitLines", () => {
     expect(JSON.stringify({ messages: req.messages, tools: req.tools })).not.toContain("かけ");
   });
 
+  it("tells the DJ the lead has just named the work, in either language", async () => {
+    create.mockResolvedValue(lines());
+    await writeUnitLines(keyed, { item: item({ kind: "book" }), letter: letter(), lang: "ja" });
+    expect(content(0)).toContain("直前に『Miles Davisの「Blue in Green」という本の紹介です。』と告げてある。intro はその続きで、題名と作者を繰り返さずに始める。");
+    expect(create.mock.calls[0]![0].system).toContain("題名と作者を繰り返さずに始める");
+    await writeUnitLines(keyed, { item: item({ creator: "" }), letter: letter({ bodyEn: "x" }), lang: "en" });
+    expect(content(1)).toContain('a fixed line says: "Here is \u201cBlue in Green\u201d, a song." Your intro follows it: start without repeating the title or the creator.');
+    expect(create.mock.calls[1]![0].system).toContain("starts without repeating the title or the creator");
+  });
+
   it("returns the intro and after", async () => {
     create.mockResolvedValue(lines("紹介", "感想"));
     expect(await writeUnitLines(keyed, { item: item(), letter: letter(), lang: "ja" })).toEqual({ intro: "紹介", after: "感想" });
@@ -152,7 +162,7 @@ describe("writeUnitLines in english", () => {
     const u = await makeUnit(keyed, env.DB, f.letter, f.item, "en");
     expect(u).toMatchObject({ lang: "en", intro: "A quiet piece.", verified: true });
     expect(create).toHaveBeenCalledTimes(2);
-    expect(content(1)).toContain("playback: segment 1 line 1:");
+    expect(content(1)).toContain("playback: segment 1 line 2:");
     expect((await getUnits(env.DB, [f.letter.id], "ja")).size).toBe(0);
   });
 });
@@ -161,6 +171,7 @@ describe("unitSegment", () => {
   it("hands over in english and reads the english text for an english unit", () => {
     const l = letter({ bodyEn: "I listened alone at midnight.", placeCountry: "JP", placeRegion: "01" });
     expect(unitSegment({ intro: "A quiet piece.", after: "Lovely." }, l, item(), "en").lines).toEqual([
+      { type: "dj", text: "Here is \u201cBlue in Green\u201d, a song by Miles Davis.", fixed: true },
       { type: "dj", text: "A quiet piece.", unit: { letterId: "l1", part: "intro" } },
       { type: "dj", text: "A letter from みなと, who lives in Hokkaido, Japan.", fixed: true },
       expect.objectContaining({ type: "letter", letterId: "l1", text: "I listened alone at midnight.", place: "函館", placeCountry: "JP", placeRegion: "01" }),
@@ -168,19 +179,21 @@ describe("unitSegment", () => {
     ]);
   });
 
-  it("is the hand-over and the letter when there is no unit", () => {
+  it("is the lead, the hand-over and the letter when there is no unit", () => {
     const seg = unitSegment(null, letter(), item(), "ja");
     expect(seg.itemId).toBe("i1");
     expect(seg.lines).toEqual([
+      { type: "dj", text: "Miles Davisの「Blue in Green」という曲の紹介です。", fixed: true },
       { type: "dj", text: "函館にお住まいの、みなとさんからのお便りです。", fixed: true },
       expect.objectContaining({ type: "letter", letterId: "l1", text: letter().bodyJa }),
     ]);
   });
 
-  it("puts the intro before the hand-over and the after after the letter, with no bridge", () => {
+  it("puts the lead first, the intro before the hand-over and the after after the letter, with no bridge", () => {
     const found = letter({ id: "f", kind: "found", radioName: "", place: "", sourceAuthor: "@jazzcat", sourceUrl: "https://youtu.be/x" });
-    const seg = unitSegment({ intro: "紹介", after: "感想" }, found, item(), "ja");
+    const seg = unitSegment({ intro: "紹介", after: "感想" }, found, item({ kind: "film", creator: "" }), "ja");
     expect(seg.lines).toEqual([
+      { type: "dj", text: "「Blue in Green」という映画の紹介です。", fixed: true },
       { type: "dj", text: "紹介", unit: { letterId: "f", part: "intro" } },
       { type: "dj", text: t("script.foundVoice", { author: "@jazzcat", site: "YouTube" }), fixed: true },
       expect.objectContaining({ type: "letter", letterId: "f" }),
@@ -210,7 +223,7 @@ describe("makeUnit", () => {
     create.mockResolvedValueOnce(lines("お聴きください。")).mockResolvedValueOnce(lines("落ち着いた一曲です。"));
     const u = await makeUnit(keyed, env.DB, f.letter, f.item, "ja");
     expect(create).toHaveBeenCalledTimes(2);
-    expect(content(1)).toContain("playback: segment 1 line 1: お聴きください");
+    expect(content(1)).toContain("playback: segment 1 line 2: お聴きください");
     expect(content(1)).not.toContain("お聴きください。");
     expect(u).toMatchObject({ intro: "落ち着いた一曲です。", verified: true });
   });
@@ -220,7 +233,7 @@ describe("makeUnit", () => {
     create.mockResolvedValueOnce(lines("松本のしずくさんが選んだ一曲です。")).mockResolvedValueOnce(lines("落ち着いた一曲です。"));
     const u = await makeUnit(keyed, env.DB, f.letter, f.item, "ja");
     expect(create).toHaveBeenCalledTimes(2);
-    expect(content(1)).toContain("intro: segment 1 line 1: names the sender");
+    expect(content(1)).toContain("intro: segment 1 line 2: names the sender");
     expect(u).toMatchObject({ intro: "落ち着いた一曲です。", verified: true });
   });
 
@@ -237,7 +250,7 @@ describe("makeUnit", () => {
     const f = await stored();
     create.mockResolvedValue(lines("静かな一曲です。", "雨の日に聴きました。と書いてくれました"));
     expect(await makeUnit(keyed, env.DB, f.letter, f.item, "ja")).toMatchObject({ verified: false });
-    expect(content(1)).toContain("pii: segment 1 line 4: quotes a letter");
+    expect(content(1)).toContain("pii: segment 1 line 5: quotes a letter");
   });
 
   it("returns null and stores nothing without a key", async () => {

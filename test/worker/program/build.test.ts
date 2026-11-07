@@ -59,8 +59,9 @@ describe("buildEpisode", () => {
     expect(ep.segments.map((s) => s.itemId).sort()).toEqual([f.i0, f.i1].sort());
     const near = ep.segments.find((s) => s.itemId === f.i0)!;
     const said = texts(near.lines);
-    // The intro follows the open bridge, whichever letter the shuffle reads first.
-    expect(said[1]).toBe("近くの紹介です。");
+    // The lead and then the intro follow the open bridge, whichever letter the shuffle reads first.
+    expect(said[1]).toMatch(/」という(?:曲|本|映画)の紹介です。$/);
+    expect(said[2]).toBe("近くの紹介です。");
     const at = said.indexOf(`letter:${f.near.id}`);
     expect(said.slice(at - 1, at + 2)).toEqual(["松本にお住まいの、しずくさんからのお便りです。", `letter:${f.near.id}`, "近くの感想です。"]);
     expect(said).toContain("那覇にお住まいの、あおいさんから『私も』が届いています");
@@ -68,7 +69,7 @@ describe("buildEpisode", () => {
     // The listener's own letter is never read back to them.
     expect(near.lines.some((l) => l.type === "letter" && l.letterId === f.mine.id)).toBe(false);
     const far = texts(ep.segments.find((s) => s.itemId === f.i1)!.lines);
-    expect(far.slice(1, 5)).toEqual(["遠くの紹介です。", "松本にお住まいの、しずくさんからのお便りです。", `letter:${f.far.id}`, "遠くの感想です。"]);
+    expect(far.slice(2, 6)).toEqual(["遠くの紹介です。", "松本にお住まいの、しずくさんからのお便りです。", `letter:${f.far.id}`, "遠くの感想です。"]);
     expect(typeof ep.id).toBe("string");
   });
 
@@ -159,7 +160,7 @@ describe("buildEpisode", () => {
     vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ type: "error", error: { type: "authentication_error", message: "bad key" } }), { status: 401, headers: { "content-type": "application/json" } })));
     const ep = await buildEpisode(keyed, env.DB, f.a, { size: 2, seed: "s" });
     expect(ep.verified).toBe(true);
-    expect(ep.segments[0]!.lines[1]).toEqual({ type: "dj", text: expect.stringMatching(/からのお便りです。$/), fixed: true });
+    expect(ep.segments[0]!.lines[2]).toEqual({ type: "dj", text: expect.stringMatching(/からのお便りです。$/), fixed: true });
     expect(warn.mock.calls.some((c) => c.includes("status 401"))).toBe(true);
   });
 
@@ -168,7 +169,7 @@ describe("buildEpisode", () => {
     const ep = await buildEpisode(keyless, env.DB, f.a, { size: 2, seed: "s" });
     expect(create).not.toHaveBeenCalled();
     expect(ep.verified).toBe(true);
-    for (const seg of ep.segments) expect(seg.lines[1]).toEqual({ type: "dj", text: expect.stringMatching(/からのお便りです。$/), fixed: true });
+    for (const seg of ep.segments) expect(seg.lines[2]).toEqual({ type: "dj", text: expect.stringMatching(/からのお便りです。$/), fixed: true });
   });
 
   it("composes fixed lines only without calling Claude when today's units are at UNIT_DAILY_LIMIT", async () => {
@@ -178,7 +179,7 @@ describe("buildEpisode", () => {
       if (limit === "1") await storeUnit(f.mine.id, "前の日の紹介です。", "前の日の感想です。", false);
       const ep = await buildEpisode({ ...keyed, UNIT_DAILY_LIMIT: limit } as Env, env.DB, f.a, { size: 2, seed: "s" });
       expect(ep.verified).toBe(true);
-      for (const seg of ep.segments) expect(seg.lines[1]).toEqual({ type: "dj", text: expect.stringMatching(/からのお便りです。$/), fixed: true });
+      for (const seg of ep.segments) expect(seg.lines[2]).toEqual({ type: "dj", text: expect.stringMatching(/からのお便りです。$/), fixed: true });
     }
     expect(create).not.toHaveBeenCalled();
     expect((await getUnits(env.DB, [f.near.id, f.far.id], "ja")).size).toBe(0);
@@ -189,7 +190,7 @@ describe("buildEpisode", () => {
     create.mockResolvedValue({ content: [{ type: "text", text: "はい" }] });
     const ep = await buildEpisode(keyed, env.DB, f.a, { size: 2, seed: "s" });
     expect(ep.verified).toBe(true);
-    for (const seg of ep.segments) expect(seg.lines[1]).toEqual({ type: "dj", text: expect.stringMatching(/からのお便りです。$/), fixed: true });
+    for (const seg of ep.segments) expect(seg.lines[2]).toEqual({ type: "dj", text: expect.stringMatching(/からのお便りです。$/), fixed: true });
   });
 
   it("drops a found voice without a source and still verifies", async () => {

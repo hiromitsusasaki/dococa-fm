@@ -1,12 +1,14 @@
 import { describe, expect, it } from "vitest";
 import { t } from "../../../src/worker/i18n/t";
 import { BRIDGE_KEYS } from "../../../src/worker/program/bridge";
-import { composeEpisode, FIXED_TEMPLATES, read, siteName } from "../../../src/worker/program/compose";
+import { composeEpisode, FIXED_TEMPLATES, leadLine, read, siteName } from "../../../src/worker/program/compose";
 import { verifyEpisode } from "../../../src/worker/program/verify";
 import type { Unit } from "../../../src/worker/types";
 import { byId, item, letter, listener } from "./fixtures";
 
 const unit = (letterId: string, intro: string, after: string, verified = true): Unit => ({ letterId, lang: "ja", intro, after, verified, audioReady: false, createdAt: "2026-01-01T00:00:00Z" });
+/** The fixed lead the fixture work gets, said before the first letter of each segment. */
+const LEAD = "Miles Davisの「Blue in Green」という曲の紹介です。";
 const unitsOf = (...us: Unit[]): Map<string, Unit> => new Map(us.map((u) => [u.letterId, u]));
 
 const plain = letter({ id: "a" });
@@ -38,6 +40,7 @@ describe("composeEpisode", () => {
     expect(seg).toMatchObject({ itemId: "i1", slot: "near" });
     expect(seg!.lines).toEqual([
       { type: "dj", text: "Dococa FM。世界のどこかにいる誰かの好きなものへのお便りを、お届けします。", fixed: true, bridge: "bridge.open" },
+      { type: "dj", text: LEAD, fixed: true },
       { type: "dj", text: "はじめ", unit: { letterId: "a", part: "intro" } },
       { type: "dj", text: "函館にお住まいの、みなとさんからのお便りです。", fixed: true },
       { type: "letter", letterId: "a", text: plain.bodyJa, radioName: "みなと", place: "函館", kind: "letter", sourceUrl: null, sourceAuthor: null },
@@ -57,16 +60,16 @@ describe("composeEpisode", () => {
     const b = letter({ id: "b", radioName: "そら", place: "" });
     const plan = [{ itemId: "i1", slot: "near" as const, letterIds: ["a", "b"], reactionIds: [] }];
     const texts = (us: Map<string, Unit> | null) => composeEpisode(plan, us, byId([plain, b]), items)[0]!.lines.map((l) => (l.type === "letter" ? `letter:${l.letterId}` : (l as { text: string }).text));
-    const bare = [t("bridge.open"), "函館にお住まいの、みなとさんからのお便りです。", "letter:a", t("bridge.sameWork"), "そらさんからのお便りです。", "letter:b"];
+    const bare = [t("bridge.open"), LEAD, "函館にお住まいの、みなとさんからのお便りです。", "letter:a", t("bridge.sameWork"), "そらさんからのお便りです。", "letter:b"];
     expect(texts(null)).toEqual(bare);
     expect(texts(unitsOf(unit("a", "紹介", "感想", false), unit("b", "紹介b", "感想b", false)))).toEqual(bare);
     // The first letter's unit failed alone: no intro, since the next letter's intro was written about that letter.
     expect(texts(unitsOf(unit("a", "紹介", "感想", false), unit("b", "紹介b", "感想b")))).toEqual([
-      t("bridge.open"), "函館にお住まいの、みなとさんからのお便りです。", "letter:a", t("bridge.sameWork"), "そらさんからのお便りです。", "letter:b", "感想b",
+      t("bridge.open"), LEAD, "函館にお住まいの、みなとさんからのお便りです。", "letter:a", t("bridge.sameWork"), "そらさんからのお便りです。", "letter:b", "感想b",
     ]);
     // An empty line is not said.
     expect(texts(unitsOf(unit("a", "", "感想")))).toEqual([
-      t("bridge.open"), "函館にお住まいの、みなとさんからのお便りです。", "letter:a", "感想", t("bridge.sameWork"), "そらさんからのお便りです。", "letter:b",
+      t("bridge.open"), LEAD, "函館にお住まいの、みなとさんからのお便りです。", "letter:a", "感想", t("bridge.sameWork"), "そらさんからのお便りです。", "letter:b",
     ]);
   });
 
@@ -74,7 +77,7 @@ describe("composeEpisode", () => {
     const r2 = letter({ id: "r2", kind: "reply", body: "届きました", bodyJa: "届きました", radioName: "そら", place: "熊本" });
     const [seg] = composeEpisode([{ itemId: "i1", slot: "near", letterIds: ["r2", "a"], reactionIds: [] }], unitsOf(unit("a", "紹介", "感想")), byId([r2, plain]), items);
     expect(seg!.lines.map((l) => (l.type === "letter" ? `letter:${l.letterId}` : (l as { text: string }).text))).toEqual([
-      t("bridge.open"), "熊本にお住まいの、そらさんからのお便りです。", "letter:r2", t("bridge.sameWork"), "函館にお住まいの、みなとさんからのお便りです。", "letter:a", "感想",
+      t("bridge.open"), LEAD, "熊本にお住まいの、そらさんからのお便りです。", "letter:r2", t("bridge.sameWork"), "函館にお住まいの、みなとさんからのお便りです。", "letter:a", "感想",
     ]);
   });
 
@@ -83,7 +86,7 @@ describe("composeEpisode", () => {
     const [seg] = composeEpisode([{ itemId: "i1", slot: "near", letterIds: ["a", "b"], reactionIds: [] }], unitsOf(unit("a", "紹介a", "感想a"), unit("b", "紹介b", "感想b")), byId([plain, b]), items);
     const intros = seg!.lines.filter((l) => l.type === "dj" && l.unit?.part === "intro");
     expect(intros).toEqual([{ type: "dj", text: "紹介a", unit: { letterId: "a", part: "intro" } }]);
-    expect(seg!.lines[1]).toEqual(intros[0]);
+    expect(seg!.lines[2]).toEqual(intros[0]);
   });
 
   it("never adds a preview clip, even for a work that has a preview url: only talk plays", () => {
@@ -126,7 +129,7 @@ describe("composeEpisode", () => {
       items,
     );
     for (const seg of segs) {
-      expect(seg.lines[1]).toEqual({ type: "dj", text: "函館にお住まいの、みなとさんからのお便りです。", fixed: true });
+      expect(seg.lines[2]).toEqual({ type: "dj", text: "函館にお住まいの、みなとさんからのお便りです。", fixed: true });
       // Only template lines: the reading cue and the spoken found-voice source.
       expect(seg.lines.filter((l) => l.type === "dj").every((l) => l.type === "dj" && l.fixed === true)).toBe(true);
     }
@@ -139,6 +142,7 @@ describe("composeEpisode", () => {
     const texts = seg!.lines.filter((l) => l.type === "dj").map((l) => (l as { text: string }).text);
     expect(texts).toEqual([
       t("bridge.open"),
+      LEAD,
       "函館にお住まいの、みなとさんからのお便りです。",
       t("bridge.sameWork"),
       "そらさんからのお便りです。",
@@ -148,7 +152,7 @@ describe("composeEpisode", () => {
   it("does not say 'someone' for a sender with a place but no radio name", () => {
     const p = letter({ id: "p", radioName: "", place: "函館" });
     const [seg] = composeEpisode([{ itemId: "i1", slot: "near", letterIds: ["p"], reactionIds: [] }], null, byId([p]), items);
-    expect(seg!.lines[1]).toEqual({ type: "dj", text: "お便りを読みます。", fixed: true });
+    expect(seg!.lines[2]).toEqual({ type: "dj", text: "お便りを読みます。", fixed: true });
   });
 
   it("throws when a plan entry has no letters", () => {
@@ -169,7 +173,7 @@ describe("composeEpisode", () => {
   it("keeps the plain reading cue for an anonymous sender", () => {
     const anon = letter({ id: "n", radioName: "", place: "" });
     const [seg] = composeEpisode([{ itemId: "i1", slot: "near", letterIds: ["n"], reactionIds: [] }], null, byId([anon]), items);
-    expect(seg!.lines[1]).toEqual({ type: "dj", text: "お便りを読みます。", fixed: true });
+    expect(seg!.lines[2]).toEqual({ type: "dj", text: "お便りを読みます。", fixed: true });
   });
 
   it.each([
@@ -193,6 +197,7 @@ describe("composeEpisode in english", () => {
     const said = seg!.lines.map((l) => (l.type === "letter" ? `letter:${l.text}` : (l as { text: string }).text));
     expect(said).toEqual([
       t("bridge.open", undefined, "en"),
+      "Here is “Blue in Green”, a song by Miles Davis.",
       "A quiet piece.",
       "A letter from みなと, who lives in Shimane, Japan.",
       "letter:I listened alone at midnight.",
@@ -270,7 +275,7 @@ describe("bridges", () => {
     const b = letter({ id: "b", radioName: "そら", place: "" });
     const [s] = composeEpisode([seg("i1", "near", ["a", "b"])], unitsOf(unit("a", "紹介", "感想a"), unit("b", "紹介b", "感想b")), byId([plain, b]), items);
     expect(texts(s!.lines)).toEqual([
-      t("bridge.open"), "紹介", "函館にお住まいの、みなとさんからのお便りです。", plain.bodyJa, "感想a",
+      t("bridge.open"), LEAD, "紹介", "函館にお住まいの、みなとさんからのお便りです。", plain.bodyJa, "感想a",
       t("bridge.sameWork"), "そらさんからのお便りです。", b.bodyJa, "感想b",
     ]);
   });
@@ -335,5 +340,52 @@ describe("read", () => {
     const bare = read(letter());
     expect(bare).not.toHaveProperty("placeCountry");
     expect(bare).not.toHaveProperty("placeRegion");
+  });
+});
+
+describe("lead line", () => {
+  it.each([
+    ["music", "ja", "Miles Davisの「Blue in Green」という曲の紹介です。"],
+    ["book", "ja", "Miles Davisの「Blue in Green」という本の紹介です。"],
+    ["film", "ja", "Miles Davisの「Blue in Green」という映画の紹介です。"],
+    ["music", "en", "Here is “Blue in Green”, a song by Miles Davis."],
+    ["book", "en", "Here is “Blue in Green”, a book by Miles Davis."],
+    ["film", "en", "Here is “Blue in Green”, a film by Miles Davis."],
+  ] as const)("names a %s work by its kind in %s", (kind, lang, text) => {
+    expect(leadLine(item({ kind }), lang)).toEqual({ type: "dj", text, fixed: true });
+  });
+
+  it("drops the creator when there is none", () => {
+    expect(leadLine(item({ creator: " " }), "ja").text).toBe("「Blue in Green」という曲の紹介です。");
+    expect(leadLine(item({ kind: "film", creator: "" }), "en").text).toBe("Here is “Blue in Green”, a film.");
+  });
+
+  it("has a template for videos too", () => {
+    expect(t("script.lead.video", { creator: "A", title: "B" })).toBe("Aの「B」という動画の紹介です。");
+    expect(t("script.lead.video.noCreator", { title: "B" }, "en")).toBe("Here is “B”, a video.");
+  });
+
+  it("opens each segment's letters before the intro, with or without a unit", () => {
+    const lead = { type: "dj", text: "Miles Davisの「Blue in Green」という曲の紹介です。", fixed: true };
+    const [withUnit] = composeEpisode([{ itemId: "i1", slot: "near", letterIds: ["a"], reactionIds: [] }], unitsOf(unit("a", "紹介", "感想")), byId([plain]), items);
+    expect(withUnit!.lines.slice(0, 3)).toEqual([expect.objectContaining({ bridge: "bridge.open" }), lead, { type: "dj", text: "紹介", unit: { letterId: "a", part: "intro" } }]);
+    const [bare] = composeEpisode([{ itemId: "i1", slot: "near", letterIds: ["a"], reactionIds: [] }], null, byId([plain]), items);
+    expect(bare!.lines[1]).toEqual(lead);
+    const [asked] = composeEpisode([{ itemId: "i1", slot: "near", letterIds: ["a"], reactionIds: [] }], null, byId([plain]), items, "ja", "mine", { first: true, asked: true });
+    expect(asked!.lines[0]).toEqual(lead);
+  });
+
+  it("is said once per segment, not before a second letter, and not in a segment of reactions only", () => {
+    const b = letter({ id: "b", radioName: "そら", place: "" });
+    const [seg] = composeEpisode([{ itemId: "i1", slot: "near", letterIds: ["a", "b"], reactionIds: [] }], null, byId([plain, b]), items);
+    expect(seg!.lines.filter((l) => l.type === "dj" && l.text.endsWith("という曲の紹介です。"))).toHaveLength(1);
+    const [only] = composeEpisode([{ itemId: "i1", slot: "near", letterIds: [], reactionIds: ["w1"] }], null, letters, items);
+    expect(only!.lines.some((l) => l.type === "dj" && l.text.endsWith("という曲の紹介です。"))).toBe(false);
+  });
+
+  it("passes the checks even when a letter contains the title", () => {
+    const titled = letter({ id: "t", body: "Blue in Greenを夜中に聴いて泣いた。", bodyJa: "Blue in Greenを夜中に聴いて泣いた。" });
+    const segs = composeEpisode([{ itemId: "i1", slot: "near", letterIds: ["t"], reactionIds: [] }], null, byId([titled]), items);
+    expect(verifyEpisode(segs, byId([titled]), listener(), items)).toMatchObject({ topical: true, pii: true, details: [] });
   });
 });

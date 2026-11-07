@@ -4,7 +4,7 @@ import type { Env } from "../env";
 import { limitFrom } from "../limits";
 import { claimTts, releaseTts } from "../tts/claim";
 import type { Item, Letter, Segment, Unit } from "../types";
-import { letterLines, type UnitLines } from "./compose";
+import { leadLine, letterLines, type UnitLines } from "./compose";
 import { DJ_SYSTEM, DJ_SYSTEM_EN, letterTag, retryNote, workTag } from "./script";
 import { verifyEpisode } from "./verify";
 
@@ -15,7 +15,7 @@ export const AFTER_MAX = 120;
 /** Replies out of shape are asked for again, up to this many calls. */
 const ATTEMPTS = 3;
 /** Checks rephrased lines can fix; verbatim and sources failures come from the data. */
-const RETRYABLE = /^(?:topical|measure|pii|announce|playback|intro): /;
+const RETRYABLE = /^(?:topical|measure|pii|announce|playback|intro|lead): /;
 /** Units made at once while a programme waits for them. */
 const CONCURRENCY = 3;
 /** A unit is for everyone, so it is checked against no listener's account. */
@@ -90,6 +90,7 @@ function userMessage(input: UnitInput): string {
       "Write the intro and after for the next segment.",
       "A separate reader reads the letters and found voices word for word. Before that, a fixed line says the sender's name and place.",
       "You neither quote nor summarise: in intro you introduce the work, and in after you react briefly to what the letter says.",
+      `Just before your intro, a fixed line says: "${escapeTags(leadLine(input.item, "en").text)}" Your intro follows it: start without repeating the title or the creator.`,
     ];
     const retry = input.retryNotes?.length ? ["", retryNote(input.retryNotes, "en")] : [];
     const segment = ["<segment>", workTag(input.item, "en"), letterTag(input.letter, "en"), "</segment>"].join("\n");
@@ -99,6 +100,7 @@ function userMessage(input: UnitInput): string {
     "次のセグメントに、intro と after を書いてください。",
     "お便りと見つけた声は、別の読み上げ役が原文のまま読みます。送り主の名前と土地は、その前に定型文が言います。",
     "あなたは引用も要約もせず、intro で作品を紹介し、after でお便りの内容に短く反応します。",
+    `直前に『${escapeTags(leadLine(input.item, "ja").text)}』と告げてある。intro はその続きで、題名と作者を繰り返さずに始める。`,
   ];
   const retry = input.retryNotes?.length ? ["", retryNote(input.retryNotes)] : [];
   const segment = ["<segment>", workTag(input.item), letterTag(input.letter), "</segment>"].join("\n");
@@ -135,9 +137,9 @@ export async function writeUnitLines(env: Env, input: UnitInput): Promise<UnitLi
   throw new Error("dj unit invalid");
 }
 
-/** The one-segment layout a unit is verified and voiced with: [intro?, hand-over(fixed), letter, after?]. No bridges. */
+/** The one-segment layout a unit is verified and voiced with: [lead(fixed), intro?, hand-over(fixed), letter, after?]. No bridges. */
 export function unitSegment(unit: UnitLines | null, letter: Letter, item: Item, lang: Unit["lang"]): Segment {
-  return { itemId: item.id, slot: "near", lines: letterLines(letter, unit, true, lang) };
+  return { itemId: item.id, slot: "near", lines: [leadLine(item, lang), ...letterLines(letter, unit, true, lang)] };
 }
 
 function verifyUnit(lines: UnitLines, letter: Letter, item: Item, lang: Unit["lang"]): { ok: boolean; details: string[] } {

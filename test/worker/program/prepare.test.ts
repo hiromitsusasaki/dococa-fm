@@ -63,12 +63,20 @@ afterEach(() => {
 });
 
 describe("prepareLetter", () => {
-  it("makes the unit with one Claude call and voices intro, hand-over, letter and after", async () => {
+  it("makes the unit with one Claude call and voices lead, intro, hand-over, letter and after", async () => {
     const { letters } = await seed();
-    expect(await prepareLetter(keyed, env.DB, letters[0]!.id, "ja")).toEqual({ units: 1, audio: 4, failed: 0 });
+    expect(await prepareLetter(keyed, env.DB, letters[0]!.id, "ja")).toEqual({ units: 1, audio: 5, failed: 0 });
     expect(create).toHaveBeenCalledTimes(1);
-    expect(google).toHaveBeenCalledTimes(4);
+    expect(google).toHaveBeenCalledTimes(5);
     expect(await unitOf(letters[0]!.id)).toMatchObject({ verified: true, audioReady: true });
+  });
+
+  it("voices only the lead, the hand-over and the letter for a unit that failed verification", async () => {
+    const { letters } = await seed();
+    create.mockImplementation(() => toolUse("write_unit", { intro: "どうぞお聴きください。", after: "いいお便りでした。" }));
+    expect(await prepareLetter(keyed, env.DB, letters[0]!.id, "ja")).toEqual({ units: 1, audio: 3, failed: 0 });
+    expect(await unitOf(letters[0]!.id)).toMatchObject({ verified: false, audioReady: false });
+    expect(google).toHaveBeenCalledTimes(3);
   });
 
   it("with no language named, makes the ja and the en unit and voices both", async () => {
@@ -77,10 +85,10 @@ describe("prepareLetter", () => {
     create.mockImplementation((req: { system: string }) =>
       toolUse("write_unit", req.system.startsWith("You are") ? { intro: "A quiet piece.", after: "A lovely letter." } : { intro: "静かな一曲です。", after: "いいお便りでした。" }),
     );
-    expect(await prepareLetter(keyed, env.DB, id)).toEqual({ units: 2, audio: 8, failed: 0 });
+    expect(await prepareLetter(keyed, env.DB, id)).toEqual({ units: 2, audio: 10, failed: 0 });
     expect(await unitOf(id)).toMatchObject({ intro: "静かな一曲です。", audioReady: true });
     expect((await getUnits(env.DB, [id], "en")).get(id)).toMatchObject({ intro: "A quiet piece.", verified: true, audioReady: true });
-    expect(google).toHaveBeenCalledTimes(8);
+    expect(google).toHaveBeenCalledTimes(10);
   });
 
   it("makes both units before any audio: ja unit, en unit, then the ja clips, then the en clips", async () => {
@@ -96,12 +104,12 @@ describe("prepareLetter", () => {
       return json({ audioContent: audio });
     });
     const head = vi.spyOn(env.BUCKET, "head");
-    expect(await prepareLetter(keyed, env.DB, letters[0]!.id)).toEqual({ units: 2, audio: 8, failed: 0 });
-    expect(order).toEqual(["unit:ja", "unit:en", ...Array(8).fill("clip")]);
+    expect(await prepareLetter(keyed, env.DB, letters[0]!.id)).toEqual({ units: 2, audio: 10, failed: 0 });
+    expect(order).toEqual(["unit:ja", "unit:en", ...Array(10).fill("clip")]);
     // The clips are asked for in the order ja (tts/v4/ja/...) then en.
     const langs = head.mock.calls.map((c) => String(c[0]).split("/")[2]);
-    expect(langs.slice(0, 4)).toEqual(["ja", "ja", "ja", "ja"]);
-    expect(langs.slice(-4)).toEqual(["en", "en", "en", "en"]);
+    expect(langs.slice(0, 5)).toEqual(Array(5).fill("ja"));
+    expect(langs.slice(-5)).toEqual(Array(5).fill("en"));
   });
 
   it("does nothing more the second time", async () => {
@@ -109,7 +117,7 @@ describe("prepareLetter", () => {
     await prepareLetter(keyed, env.DB, letters[0]!.id, "ja");
     expect(await prepareLetter(keyed, env.DB, letters[0]!.id, "ja")).toEqual({ units: 0, audio: 0, failed: 0 });
     expect(create).toHaveBeenCalledTimes(1);
-    expect(google).toHaveBeenCalledTimes(4);
+    expect(google).toHaveBeenCalledTimes(5);
   });
 
   it("ignores a rejected letter, a reaction and an unknown id", async () => {
@@ -130,7 +138,7 @@ describe("prepareLetter", () => {
   it("counts failed clips and leaves the unit not ready", async () => {
     stubBoth(() => json({ error: "x" }, 500));
     const { letters } = await seed();
-    expect(await prepareLetter(keyed, env.DB, letters[0]!.id, "ja")).toEqual({ units: 1, audio: 0, failed: 4 });
+    expect(await prepareLetter(keyed, env.DB, letters[0]!.id, "ja")).toEqual({ units: 1, audio: 0, failed: 5 });
     expect(await unitOf(letters[0]!.id)).toMatchObject({ audioReady: false });
   });
 
@@ -285,8 +293,8 @@ describe("prepareBatch", () => {
     const { letters } = await seed(2);
     await prepareBatch(keylessTts, env.DB, 20);
     const r = await prepareBatch(keyed, env.DB, 20);
-    // The stubbed intro and after are the same text for both letters, so their clips are shared.
-    expect(r).toEqual({ units: 0, audio: 12, failed: 0, remaining: { vectors: 1, units: { ja: 0, en: 0 }, audio: { ja: 0, en: 0 }, gaveUp: { ja: 0, en: 0 } } });
+    // The stubbed intro and after, and the work's lead, are the same text for both letters, so their clips are shared.
+    expect(r).toEqual({ units: 0, audio: 14, failed: 0, remaining: { vectors: 1, units: { ja: 0, en: 0 }, audio: { ja: 0, en: 0 }, gaveUp: { ja: 0, en: 0 } } });
     expect(create).toHaveBeenCalledTimes(4);
     expect(await unitOf(letters[1]!.id)).toMatchObject({ audioReady: true });
   });

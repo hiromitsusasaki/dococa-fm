@@ -73,6 +73,18 @@ const RULES = {
   en: { topical: TOPICAL_EN, year: YEAR_EN, maskYears: maskDataYearsEn, measure: MEASURE_EN, playback: PLAYBACK_EN, announce: ANNOUNCE_EN, windows: wordWindows },
 } as const;
 
+/** The intro's first sentence: up to the first 。！？!? or a full stop before a space, or all of it. */
+const firstSentence = (text: string): string => text.match(/^[\s\S]*?(?:[。！？!?]|\.(?=\s|$)|$)/u)![0];
+
+/**
+ * Whether an intro's first sentence says the work's title again, which the fixed lead has just said. A title of
+ * one code point is not checked, since it would turn up by chance. Normalised and lower-cased on both sides.
+ */
+function restatesTitle(text: string, item: Item | undefined): boolean {
+  const title = item ? norm(item.title).trim().toLowerCase() : "";
+  return Array.from(title).length >= 2 && firstSentence(text).toLowerCase().includes(title);
+}
+
 /**
  * Lower-cases, then replaces every title and creator with one sentinel code point, in letters and dj
  * lines alike: the DJ may name the work in any case, but a name cannot pad a window, and a copied
@@ -194,6 +206,10 @@ export function verifyEpisode(
           topical = false;
           // Never the name itself: details reach the logs.
           details.push(`intro: ${at}: names the sender`);
+        }
+        if (line.unit?.part === "intro" && restatesTitle(text, items.get(seg.itemId))) {
+          topical = false;
+          details.push(`lead: ${at}: restates the title`);
         }
       }
       const play = !line.fixed ? mask(text).match(rules.playback) : null;

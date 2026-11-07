@@ -18,7 +18,22 @@ const unitLine = (text: string, letterId: string, part: "intro" | "after"): Scri
 const fixed = (text: string): ScriptLine => ({ type: "dj", text, fixed: true });
 
 /** Every template a `fixed` line is made from; the quote check reads only what was filled into them. */
-export const FIXED_TEMPLATES = ["script.readingOnly", "script.letterFrom", "script.foundVoice", "script.reaction", "script.replyReaction", ...BRIDGE_KEYS] as const;
+export const FIXED_TEMPLATES = [
+  "script.readingOnly",
+  "script.letterFrom",
+  "script.foundVoice",
+  "script.reaction",
+  "script.replyReaction",
+  ...(["music", "book", "film", "video"] as const).flatMap((k) => [`script.lead.${k}`, `script.lead.${k}.noCreator`] as const),
+  ...BRIDGE_KEYS,
+] as const;
+
+/** The fixed line that names the work by its kind before the DJ talks about it: its own title and creator, never the model's words. */
+export function leadLine(item: Item, lang: Lang = "ja"): Extract<ScriptLine, { type: "dj" }> {
+  const creator = item.creator.trim();
+  const text = creator === "" ? t(`script.lead.${item.kind}.noCreator`, { title: item.title }, lang) : t(`script.lead.${item.kind}`, { title: item.title, creator }, lang);
+  return { type: "dj", text, fixed: true };
+}
 
 /** Where a found voice was found, said aloud; the same label the screens show. */
 export const siteName = (sourceUrl: string | null, lang: Lang = "ja"): string => siteLabel(sourceUrl) || t("script.web", undefined, lang);
@@ -75,7 +90,7 @@ export function letterLines(l: Letter, unit: UnitLines | null, withIntro: boolea
 }
 
 /**
- * Lays out each segment: bridge, the work's intro, then per letter [hand-over, letter, after] with a sameWork
+ * Lays out each segment: bridge, the fixed lead naming the work, the work's intro, then per letter [hand-over, letter, after] with a sameWork
  * bridge between letters, then the reactions; nothing closes the episode. The intro is the first
  * letter's own verified unit, said once before its hand-over; with none (a reply read first has no unit), none.
  * Letter lines come from `letters` only, so nothing the DJ wrote can stand in for a letter. Only verified
@@ -106,7 +121,9 @@ export function composeEpisode(
     const present = p.letterIds.flatMap((id) => letters.get(id) ?? []);
     const lines: ScriptLine[] = opens && asked && i === 0 ? [] : [bridgeLine(bridgeBefore(opens && i === 0, p.slot, station), lang)];
     // A unit's intro was written with its own letter in the prompt, so it airs only before that letter.
+    // The lead names the work once, before the first letter, with or without a unit.
     const first = present[0];
+    if (first) lines.push(leadLine(item, lang));
     const intro = first ? (spoken(first)?.intro ?? "") : "";
     if (first && intro !== "") lines.push(unitLine(intro, first.id, "intro"));
     present.forEach((l, n) => {
