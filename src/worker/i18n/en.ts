@@ -14,7 +14,6 @@ export const en: Record<keyof typeof ja, string> = {
   "settings.placeCountry": "Country",
   "settings.placeRegion": "Prefecture / State",
   "settings.placeNone": "Not set",
-  "settings.voice": "DJ voice",
   "settings.save": "Save",
   "settings.saved": "Saved",
   "settings.invalid": "Please check what you entered",

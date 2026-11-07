@@ -256,6 +256,15 @@ describe("public station settings", () => {
     expect(results.every((r) => r.slug === null)).toBe(true);
   });
 
+  it("has no DJ voice field and ignores a posted voice", async () => {
+    const cookie = await signedInSession("Hiro");
+    expect(await (await get("/settings", cookie)).text()).not.toContain('name="voice"');
+    const before = await env.DB.prepare("SELECT voice FROM listeners WHERE display_name = 'Hiro'").first<{ voice: string }>();
+    const res = await postForm("/settings", cookie, { radioName: "", voice: "somebody-else", dial: "0.5" });
+    expect(res.status).toBe(303);
+    expect(await env.DB.prepare("SELECT voice FROM listeners WHERE display_name = 'Hiro'").first()).toEqual(before);
+  });
+
   it("explains that only the radio name appears on the public page", async () => {
     expect(await (await get("/settings", await signedInSession())).text()).toContain("公開ページにはラジオネームだけが出ます");
   });

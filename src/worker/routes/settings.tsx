@@ -21,7 +21,6 @@ const fields = z.object({
   /** Empty means no place. */
   placeCountry: z.string().trim().refine((v) => v === "" || COUNTRIES.some((c) => c.code === v)).default(""),
   placeRegion: z.string().trim().default(""),
-  voice: z.string().max(200),
   stationPublic: z.literal("1").optional(),
   /** Empty means "leave it as it is". */
   stationSlug: z.string().trim().toLowerCase().refine((v) => v === "" || SLUG.test(v)).optional(),
@@ -32,7 +31,7 @@ const schema = fields.refine((v) => isValidRegion(v.placeCountry, v.placeRegion)
 /** What the station section shows. Absent for an anonymous listener, who cannot publish. */
 type StationView = { isPublic: boolean; slug: string; url: string | null; taken?: boolean };
 
-type FormValues = Pick<Listener, "radioName" | "place" | "placeCountry" | "placeRegion" | "voice" | "lang">;
+type FormValues = Pick<Listener, "radioName" | "place" | "placeCountry" | "placeRegion" | "lang">;
 
 function SettingsPage(props: { values: FormValues; listener: Listener; path: string; listenerId: string; spotifyConnected: boolean; spotifyFailed?: boolean; signinFailed?: boolean; saved?: boolean; invalid?: boolean; station?: StationView }) {
   const { values, listener, path, listenerId, spotifyConnected, spotifyFailed, signinFailed, saved, invalid, station } = props;
@@ -79,10 +78,6 @@ function SettingsPage(props: { values: FormValues; listener: Listener; path: str
               </select>
             </label>
           </fieldset>
-          <label>
-            <span>{t("settings.voice")}</span>
-            <input type="text" name="voice" maxlength={200} value={values.voice} />
-          </label>
           {station && (
             <fieldset class="settings-station">
               <legend>{t("settings.station")}</legend>

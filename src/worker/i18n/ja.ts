@@ -11,7 +11,6 @@ export const ja = {
   "settings.placeCountry": "国",
   "settings.placeRegion": "都道府県・州",
   "settings.placeNone": "選ばない",
-  "settings.voice": "DJ の声",
   "settings.save": "保存",
   "settings.saved": "保存しました",
   "settings.invalid": "入力を確認してください",
