@@ -1164,11 +1164,16 @@ describe("the home's send modal", () => {
     expect(showModal).not.toHaveBeenCalled();
   });
 
-  it("closes on dfm:sent from its own origin, and loads a fresh page on the next open", () => {
+  it("closes on dfm:sent from its own origin once the confirmation has been seen, and loads a fresh page on the next open", () => {
+    vi.useFakeTimers();
     press();
     frame.setAttribute("src", "/put?embed=1&sent=x");
     message({ type: "dfm:sent" }, location.origin);
+    vi.advanceTimersByTime(1400);
+    expect(close).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(100);
     expect(close).toHaveBeenCalledTimes(1);
+    vi.useRealTimers();
     press();
     expect(frame.getAttribute("src")).toBe("/put?embed=1");
   });
@@ -1190,6 +1195,16 @@ describe("the home's send modal", () => {
     message({ type: "other" }, location.origin);
     message(null, location.origin);
     expect(close).not.toHaveBeenCalled();
+  });
+
+  it("a modal opened again before the sent page's close keeps open", () => {
+    vi.useFakeTimers();
+    press();
+    message({ type: "dfm:sent" }, location.origin);
+    press();
+    vi.advanceTimersByTime(2000);
+    expect(close).not.toHaveBeenCalled();
+    vi.useRealTimers();
   });
 
   it("ignores a same-origin message from a window other than its frame", () => {

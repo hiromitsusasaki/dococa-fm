@@ -440,17 +440,23 @@ export function mountStation(root: HTMLElement, opts: StationOptions) {
 
 /**
  * The home's send modal: the button (a plain `/put` link without script) opens the `<dialog>`, whose frame loads `/put?embed=1`
- * on the first open and again after a letter is sent. The embedded sent page posts `dfm:sent`, which closes it; Escape inside
+ * on the first open and again after a letter is sent. The embedded sent page posts `dfm:sent`, which closes it after
+ * `SENT_CLOSE_MS` so its confirmation is seen; Escape inside
  * the frame posts `dfm:close`; a message from any other origin or any other window is ignored. Escape on the page and the close button close it natively.
  */
+/** How long the send modal stays open on its 「届きました」 page before it closes. */
+const SENT_CLOSE_MS = 1500;
+
 export function wireSendModal(doc: Document = document): () => void {
   const dialog = doc.querySelector<HTMLDialogElement>("dialog.send-modal");
   const frame = dialog?.querySelector("iframe");
   if (!dialog || !frame || typeof dialog.showModal !== "function") return () => {};
   let fresh = false;
+  let closing: ReturnType<typeof setTimeout> | undefined;
   const open = (e: MouseEvent) => {
     if (!(e.target as Element | null)?.closest?.("[data-open-send]") || !plainClick(e)) return;
     e.preventDefault();
+    clearTimeout(closing);
     if (!fresh) frame.src = frame.dataset.src ?? "/put?embed=1";
     fresh = true;
     dialog.showModal();
@@ -460,12 +466,15 @@ export function wireSendModal(doc: Document = document): () => void {
     const type = (e.data as { type?: unknown } | null)?.type;
     // Same origin is not enough: another tab or frame of this site could hold a reference to the home.
     if (e.origin !== location.origin || !frame.contentWindow || e.source !== frame.contentWindow || (type !== "dfm:sent" && type !== "dfm:close")) return;
-    if (type === "dfm:sent") fresh = false;
-    dialog.close();
+    clearTimeout(closing);
+    if (type === "dfm:close") return dialog.close();
+    fresh = false;
+    closing = setTimeout(() => dialog.close(), SENT_CLOSE_MS);
   };
   doc.addEventListener("click", open);
   window.addEventListener("message", sent);
   return () => {
+    clearTimeout(closing);
     doc.removeEventListener("click", open);
     window.removeEventListener("message", sent);
   };
