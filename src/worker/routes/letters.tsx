@@ -8,7 +8,7 @@ import { currentPath, requireSignin } from "../auth/require-signin";
 import type { Variables } from "../auth/session";
 import { embedItems } from "../ai/embed";
 import { getItem } from "../db/items";
-import { updateListener } from "../db/listeners";
+import { claimProfile } from "../db/listeners";
 import { isValidPlace, profileFields, replyProfilePatch } from "../listener-profile";
 import { displayText } from "../letters/display";
 import { getLetter, insertReport, insertTakedown, listReactionsForLetter } from "../db/letters";
@@ -80,7 +80,8 @@ letters.post(
       profile = replyProfilePatch(parsed.data);
     }
     const result = await createLetter(c.env, c.env.DB, profile ? { ...listener, ...profile } : listener, form);
-    if (result.ok && profile) await updateListener(c.env.DB, listener.id, profile);
+    // Conditional: a reply that raced another and lost leaves the name the first one wrote.
+    if (result.ok && profile) await claimProfile(c.env.DB, listener.id, profile);
     if (result.ok) {
       // The work may be new: its vector is made after the answer (a no-op when it has one).
       defer(c, embedItems(c.env, c.env.DB, [result.itemId]));

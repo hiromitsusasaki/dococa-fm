@@ -106,16 +106,28 @@ const COLUMNS = {
   stationSlug: "station_slug",
 } as const;
 
-export async function updateListener(db: D1Database, id: string, patch: Partial<Listener>): Promise<Listener | null> {
+/** The `SET` list and its values for the fields the patch has; null when it has none. */
+function setsOf(patch: Partial<Listener>): { sets: string; values: unknown[] } | null {
   const entries = (Object.keys(COLUMNS) as (keyof typeof COLUMNS)[]).filter((k) => patch[k] !== undefined);
-  if (entries.length > 0) {
-    const sets = entries.map((k) => `${COLUMNS[k]} = ?`).join(", ");
-    await db
-      .prepare(`UPDATE listeners SET ${sets} WHERE id = ?`)
-      .bind(...entries.map((k) => (typeof patch[k] === "boolean" ? Number(patch[k]) : (patch[k] ?? null))), id)
-      .run();
-  }
+  if (entries.length === 0) return null;
+  return { sets: entries.map((k) => `${COLUMNS[k]} = ?`).join(", "), values: entries.map((k) => (typeof patch[k] === "boolean" ? Number(patch[k]) : (patch[k] ?? null))) };
+}
+
+export async function updateListener(db: D1Database, id: string, patch: Partial<Listener>): Promise<Listener | null> {
+  const s = setsOf(patch);
+  if (s) await db.prepare(`UPDATE listeners SET ${s.sets} WHERE id = ?`).bind(...s.values, id).run();
   return getListener(db, id);
+}
+
+/**
+ * Writes the patch only while the listener has no radio name, in one statement, so two replies racing to name a
+ * nameless listener cannot replace each other: the first one wins. True when it wrote.
+ */
+export async function claimProfile(db: D1Database, id: string, patch: Partial<Listener>): Promise<boolean> {
+  const s = setsOf(patch);
+  if (!s) return false;
+  const res = await db.prepare(`UPDATE listeners SET ${s.sets} WHERE id = ? AND radio_name = ''`).bind(...s.values, id).run();
+  return (res.meta.changes ?? 0) > 0;
 }
 
 /** Writes the slug only while the listener has none, so two requests racing to assign one cannot replace each other. A slug held by another listener throws (UNIQUE). */

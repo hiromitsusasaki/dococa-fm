@@ -1,6 +1,7 @@
 import { env } from "cloudflare:workers";
 import { beforeEach, describe, expect, it } from "vitest";
 import {
+  claimProfile,
   createListener,
   getListener,
   getListenerByGoogleSub,
@@ -113,5 +114,15 @@ describe("listeners", () => {
     expect(radios.map((r) => r.slug)).toEqual(["aaa", "bbb"]);
     expect(radios[1]).toMatchObject({ radioName: "bbb", placeCountry: "JP", placeRegion: "13" });
     expect((await listRecentPublicRadios(env.DB, 1)).map((r) => r.slug)).toEqual(["aaa"]);
+  });
+});
+
+describe("claimProfile", () => {
+  it("names a nameless listener once: a second claim, like a racing reply that lost, changes nothing", async () => {
+    const l = await createListener(env.DB);
+    expect(await claimProfile(env.DB, l.id, { radioName: "しずく", placeCountry: "JP", placeRegion: "32", place: "島根" })).toBe(true);
+    expect(await claimProfile(env.DB, l.id, { radioName: "別の名前", placeCountry: "FR", placeRegion: null, place: "フランス" })).toBe(false);
+    const me = (await getListener(env.DB, l.id))!;
+    expect([me.radioName, me.placeCountry, me.placeRegion, me.place]).toEqual(["しずく", "JP", "32", "島根"]);
   });
 });
