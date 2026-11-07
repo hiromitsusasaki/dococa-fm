@@ -3,14 +3,14 @@ import { env } from "cloudflare:workers";
 import { beforeEach, describe, expect, it } from "vitest";
 import { upsertHistory } from "../../../src/worker/db/history";
 import { insertItem } from "../../../src/worker/db/items";
-import { insertLetter } from "../../../src/worker/db/letters";
-import { updateListener } from "../../../src/worker/db/listeners";
+import { getLetter, insertLetter, setLetterStatus } from "../../../src/worker/db/letters";
+import { createListener, updateListener } from "../../../src/worker/db/listeners";
 import { insertEpisode } from "../../../src/worker/db/episodes";
 import { recordListen } from "../../../src/worker/db/listens";
 import { t } from "../../../src/worker/i18n/t";
 import { resetDb } from "../../helpers/db";
 import { itemDraft, letterDraft } from "../db/helpers";
-import { BASE, get, newSession, signedInSession } from "./helpers";
+import { BASE, get, newSession, postForm, signedInSession } from "./helpers";
 
 const idOf = (cookie: string) => cookie.split("=")[1]!.split(".")[0]!;
 
@@ -57,7 +57,7 @@ describe("GET /me", () => {
     expect(html).not.toMatch(/\d+ ?件/);
   });
 
-  it("lays the page out as four panels, with an image on a favourite and no sign-out form", async () => {
+  it("lays the page out as five panels, with an image on a favourite and no sign-out form", async () => {
     const cookie = await signedInSession();
     const me = idOf(cookie);
     const withArt = await insertItem(env.DB, itemDraft({ title: "With art", imageUrl: "https://example.com/a.jpg", externalIds: { itunes: "11" } }));
@@ -69,7 +69,7 @@ describe("GET /me", () => {
     const html = await (await get("/me", cookie)).text();
     const main = html.slice(html.indexOf('<main class="me"'));
     const panels = [...main.matchAll(/<section class="panel (me-[a-z]+)"/g)].map((m) => m[1]);
-    expect(panels).toEqual(["me-favorites", "me-heard", "me-reactions", "me-station"]);
+    expect(panels).toEqual(["me-favorites", "me-heard", "me-letters", "me-reactions", "me-station"]);
     expect(main).not.toContain('action="/auth/signout"');
     expect(main).toMatch(/<img src="https:\/\/example\.com\/a\.jpg"[^>]*width="96"[^>]*height="96"/);
     expect(main.match(/<img /g)).toHaveLength(1);
@@ -193,5 +193,83 @@ describe("GET /me", () => {
     expect(html).toContain('href="https://youtu.be/x"');
     expect(html).toContain(`/takedown?letterId=${found.id}`);
     expect(html).not.toContain(t("listener.anonymous"));
+  });
+});
+
+describe("own letters and POST /letters/:id/withdraw", () => {
+  const withdraw = (id: string, cookie: string) => postForm(`/letters/${id}/withdraw`, cookie, {});
+
+  it("lists own public letters with the work, the first 60 characters and the date, and a withdraw button with its confirm text", async () => {
+    const cookie = await signedInSession();
+    const me = idOf(cookie);
+    const a = await insertItem(env.DB, itemDraft({ title: "Blue in Green", externalIds: { itunes: "a1" } }));
+    const b = await insertItem(env.DB, itemDraft({ title: "Kind of Blue", externalIds: { itunes: "b1" } }));
+    const long = "あ".repeat(80);
+    const l1 = await insertLetter(env.DB, letterDraft(a.id, { listenerId: me, body: long, bodyJa: long }));
+    const l2 = await insertLetter(env.DB, letterDraft(b.id, { listenerId: me, body: "二通目", bodyJa: "二通目" }));
+    const gone = await insertLetter(env.DB, letterDraft(b.id, { listenerId: me, body: "取り下げ済み", bodyJa: "取り下げ済み" }));
+    await setLetterStatus(env.DB, gone.id, "withdrawn");
+    await insertLetter(env.DB, letterDraft(b.id, { listenerId: (await createListener(env.DB)).id, body: "他人のお便り", bodyJa: "他人のお便り" }));
+    const html = await (await get("/me", cookie)).text();
+    const panel = html.slice(html.indexOf('class="panel me-letters"'), html.indexOf('class="panel me-reactions"'));
+    expect(panel).toContain(t("me.myLetters"));
+    expect(panel).toContain("Blue in Green");
+    expect(panel).toContain("Kind of Blue");
+    expect(panel).toContain("あ".repeat(60));
+    expect(panel).not.toContain("あ".repeat(61));
+    expect(panel).toContain("二通目");
+    expect(panel).not.toContain("取り下げ済み");
+    expect(panel).not.toContain("他人のお便り");
+    expect(panel.match(new RegExp(`action="/letters/(${l1.id}|${l2.id})/withdraw"`, "g"))).toHaveLength(2);
+    expect(panel).toContain(t("me.withdraw"));
+    expect(panel).toContain(t("me.withdrawConfirm"));
+    expect(panel).not.toMatch(/\d+ ?件/);
+  });
+
+  it("shows a line instead of a list when there is no letter", async () => {
+    const html = await (await get("/me", await signedInSession())).text();
+    expect(html).toContain(t("me.myLettersNone"));
+  });
+
+  it("takes an own letter back: 303 to /me, and it is gone from the work page, the home cards and the shared page", async () => {
+    const cookie = await signedInSession();
+    const me = idOf(cookie);
+    const item = await insertItem(env.DB, itemDraft());
+    const mine = await insertLetter(env.DB, letterDraft(item.id, { listenerId: me, body: "ひみつの本文", bodyJa: "ひみつの本文" }));
+    const watch = await get("/", cookie);
+    expect(await watch.text()).toContain("ひみつの本文");
+    expect(await (await get(`/items/${item.id}`, cookie)).text()).toContain("ひみつの本文");
+    expect((await SELF.fetch(`${BASE}/letters/${mine.id}`)).status).toBe(200);
+
+    const res = await withdraw(mine.id, cookie);
+    expect(res.status).toBe(303);
+    expect(res.headers.get("location")).toBe("/me");
+    expect((await getLetter(env.DB, mine.id))?.status).toBe("withdrawn");
+    expect(await (await get(`/items/${item.id}`, cookie)).text()).not.toContain("ひみつの本文");
+    expect(await (await get("/", cookie)).text()).not.toContain("ひみつの本文");
+    expect((await SELF.fetch(`${BASE}/letters/${mine.id}`)).status).toBe(404);
+    expect(await (await get("/me", cookie)).text()).not.toContain("ひみつの本文");
+  });
+
+  it("answers 404 for another listener's letter, an own reply, a reaction and an unknown id, and changes nothing", async () => {
+    const cookie = await signedInSession();
+    const me = idOf(cookie);
+    const item = await insertItem(env.DB, itemDraft());
+    const theirs = await insertLetter(env.DB, letterDraft(item.id, { listenerId: (await createListener(env.DB)).id }));
+    const parent = await insertLetter(env.DB, letterDraft(item.id, { listenerId: (await createListener(env.DB)).id }));
+    const reply = await insertLetter(env.DB, letterDraft(item.id, { kind: "reply", listenerId: me, parentLetterId: parent.id }));
+    const anon = await insertLetter(env.DB, letterDraft(item.id, { listenerId: null }));
+    for (const id of [theirs.id, reply.id, anon.id, "nope"]) expect((await withdraw(id, cookie)).status, id).toBe(404);
+    for (const l of [theirs, reply, anon]) expect((await getLetter(env.DB, l.id))?.status).toBe("public");
+  });
+
+  it("sends an anonymous listener to sign-in and changes nothing", async () => {
+    const item = await insertItem(env.DB, itemDraft());
+    const cookie = await newSession();
+    const mine = await insertLetter(env.DB, letterDraft(item.id, { listenerId: idOf(cookie) }));
+    const res = await withdraw(mine.id, cookie);
+    expect(res.status).toBe(303);
+    expect(res.headers.get("location")).toContain("/auth/google");
+    expect((await getLetter(env.DB, mine.id))?.status).toBe("public");
   });
 });

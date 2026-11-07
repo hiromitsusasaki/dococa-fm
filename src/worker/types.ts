@@ -37,7 +37,8 @@ export type Letter = {
   parentLetterId: string | null;
   sourceUrl: string | null;
   sourceAuthor: string | null;
-  status: "public" | "rejected";
+  /** `withdrawn`: the sender took it back. Every reader treats it exactly as `rejected`: only `public` is ever shown, voiced or chosen. */
+  status: "public" | "rejected" | "withdrawn";
   /** The letter was sent by a demo account (read from the listener, never stored on the letter). */
   demo: boolean;
   createdAt: string;

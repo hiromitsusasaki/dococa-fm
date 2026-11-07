@@ -278,7 +278,7 @@ describe("the shared letter's routes", () => {
   });
 
   it("are all GET, and none of them counts in the shared buckets", () => {
-    const shared = app.routes.filter((r) => r.path.startsWith("/letters/:id") && r.path !== "/letters/:id/reactions" && r.path !== "/letters/:id/report");
+    const shared = app.routes.filter((r) => r.path.startsWith("/letters/:id") && r.path !== "/letters/:id/reactions" && r.path !== "/letters/:id/report" && r.path !== "/letters/:id/withdraw");
     expect(shared.map((r) => `${r.method} ${r.path}`).sort()).toEqual(["GET /letters/:id", "GET /letters/:id/audio/:n", "GET /letters/:id/audio/:n", "GET /letters/:id/lines.json", "GET /letters/:id/player"]);
     for (const r of shared) expect(isRateLimited("GET", r.path.replace(/:[A-Za-z]+/g, "x"), new URLSearchParams())).toBe(false);
   });
@@ -289,6 +289,13 @@ describe("the temporary /api routes", () => {
     expect(app.routes.some((r) => r.path.startsWith("/api"))).toBe(false);
     for (const path of ["/api/search?q=x", "/api/resolve?url=https%3A%2F%2Fexample.com%2F"]) expect((await app.request(path, {}, e)).status, path).toBe(404);
     expect(isRateLimited("GET", "/api/search", new URLSearchParams())).toBe(false);
+  });
+});
+
+describe("isRateLimited for the withdraw post", () => {
+  it("limits the withdraw post and not a get", () => {
+    expect(isRateLimited("POST", "/letters/abc/withdraw", new URLSearchParams())).toBe(true);
+    expect(isRateLimited("GET", "/letters/abc/withdraw", new URLSearchParams())).toBe(false);
   });
 });
 

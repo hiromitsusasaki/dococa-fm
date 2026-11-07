@@ -11,7 +11,9 @@ import {
   listLettersForItem,
   listRecentPublicLetters,
   listReactionsForLetter,
+  listOwnPublicLetters,
   setLetterStatus,
+  withdrawLetter,
 } from "../../../src/worker/db/letters";
 import { createListener, markReactionsSeen } from "../../../src/worker/db/listeners";
 import { resetDb } from "../../helpers/db";
@@ -55,6 +57,29 @@ describe("letters", () => {
     const second = await insertLetter(env.DB, letterDraft(item.id, { body: "2" }));
     await insertLetter(env.DB, letterDraft(other.id, { body: "other" }));
     expect((await listLettersForItem(env.DB, item.id)).map((l) => l.id)).toEqual([first.id, second.id]);
+  });
+
+  it("withdrawLetter takes back only the listener's own public letter, and listOwnPublicLetters stops listing it", async () => {
+    const item = await insertItem(env.DB, itemDraft());
+    const me = await createListener(env.DB);
+    const other = await createListener(env.DB);
+    const mine = await insertLetter(env.DB, letterDraft(item.id, { listenerId: me.id, body: "mine" }));
+    await tick();
+    const mine2 = await insertLetter(env.DB, letterDraft(item.id, { listenerId: me.id, body: "mine2" }));
+    const reply = await insertLetter(env.DB, letterDraft(item.id, { kind: "reply", listenerId: me.id, parentLetterId: mine.id }));
+    const theirs = await insertLetter(env.DB, letterDraft(item.id, { listenerId: other.id }));
+    expect((await listOwnPublicLetters(env.DB, me.id)).map((l) => l.id)).toEqual([mine2.id, mine.id]);
+    expect(await withdrawLetter(env.DB, theirs.id, me.id)).toBe(false);
+    expect(await withdrawLetter(env.DB, reply.id, me.id)).toBe(false);
+    expect(await withdrawLetter(env.DB, "nope", me.id)).toBe(false);
+    expect(await withdrawLetter(env.DB, mine.id, me.id)).toBe(true);
+    expect(await withdrawLetter(env.DB, mine.id, me.id)).toBe(false);
+    expect((await getLetter(env.DB, mine.id))?.status).toBe("withdrawn");
+    expect((await getLetter(env.DB, theirs.id))?.status).toBe("public");
+    expect((await listOwnPublicLetters(env.DB, me.id)).map((l) => l.id)).toEqual([mine2.id]);
+    expect((await listLettersForItem(env.DB, item.id)).map((l) => l.id)).not.toContain(mine.id);
+    expect((await listRecentPublicLetters(env.DB, 10)).map((l) => l.id)).not.toContain(mine.id);
+    expect(await getPublicLetterWithTitle(env.DB, mine.id)).toBeNull();
   });
 
   it("listLettersByListener returns all statuses, newest first", async () => {

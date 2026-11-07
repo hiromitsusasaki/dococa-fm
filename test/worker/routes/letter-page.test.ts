@@ -99,9 +99,9 @@ describe("GET /letters/:id", () => {
     expect(metaOf(html, "og:audio")).toBe(`${ORIGIN}/letters/${letter.id}/audio/0`);
   });
 
-  it("answers 404 for a rejected letter, a reaction, a found voice without its source, an unknown or malformed id", async () => {
+  it.each(["rejected", "withdrawn"] as const)("answers 404 for a %s letter, a reaction, a found voice without its source, an unknown or malformed id", async (status) => {
     const { letter } = await shared();
-    await setLetterStatus(env.DB, letter.id, "rejected");
+    await setLetterStatus(env.DB, letter.id, status);
     const { item } = await shared();
     const reaction = await insertLetter(env.DB, letterDraft(item.id, { kind: "watashimo", parentLetterId: letter.id }));
     const found = await insertLetter(env.DB, letterDraft(item.id, { kind: "found", sourceUrl: null, sourceAuthor: "someone" }));

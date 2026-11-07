@@ -7,7 +7,7 @@ import type { Variables } from "../auth/session";
 import { listFavorites } from "../db/history";
 import { getItemsByIds } from "../db/items";
 import { listHeardLetters } from "../db/listens";
-import { listRecentReactionsToListener } from "../db/letters";
+import { listOwnPublicLetters, listRecentReactionsToListener, withdrawLetter } from "../db/letters";
 import { markReactionsSeen } from "../db/listeners";
 import type { Env } from "../env";
 import { displayText } from "../letters/display";
@@ -16,6 +16,8 @@ import { ensureStationSlug, stationUrl } from "../program/station";
 
 const FAVORITES_LIMIT = 20;
 const REACTIONS_LIMIT = 50;
+/** A letter in the list of one's own quotes this many characters. */
+const OWN_PREVIEW_CHARS = 60;
 const JST_OFFSET_MS = 9 * 60 * 60 * 1000;
 const jstDate = (iso: string): string => new Date(Date.parse(iso) + JST_OFFSET_MS).toISOString().slice(0, 10);
 
@@ -33,6 +35,8 @@ me.get("/me", requireSignin, async (c) => {
   const reactions = await listRecentReactionsToListener(c.env.DB, listener.id, REACTIONS_LIMIT);
   const items = await getItemsByIds(c.env.DB, reactions.map((r) => r.itemId));
   const heard = await listHeardLetters(c.env.DB, listener.id);
+  const own = await listOwnPublicLetters(c.env.DB, listener.id);
+  const ownItems = await getItemsByIds(c.env.DB, own.map((l) => l.itemId));
   // The dot is a decoration: a failed write leaves it lit, it does not fail the page.
   await markReactionsSeen(c.env.DB, listener.id, seenAt).catch(() => {});
   const publicUrl = listener.stationPublic && listener.stationSlug ? stationUrl(c.env, listener.stationSlug) : null;
@@ -91,6 +95,27 @@ me.get("/me", requireSignin, async (c) => {
             </ul>
           )}
         </section>
+        <section class="panel me-letters">
+          <h2>{t("me.myLetters")}</h2>
+          {own.length === 0 ? (
+            <p class="muted">{t("me.myLettersNone")}</p>
+          ) : (
+            <ul class="me-list">
+              {own.map((l) => (
+                <li>
+                  <p>
+                    <a href={`/items/${l.itemId}`}>{ownItems.get(l.itemId)?.title ?? ""}</a>
+                  </p>
+                  <p class="letter-body">{Array.from(displayText(l, lang).main).slice(0, OWN_PREVIEW_CHARS).join("")}</p>
+                  <p class="muted">{jstDate(l.createdAt)}</p>
+                  <form method="post" action={`/letters/${l.id}/withdraw`} onsubmit={`return confirm(${JSON.stringify(t("me.withdrawConfirm"))})`}>
+                    <button type="submit" class="quiet">{t("me.withdraw")}</button>
+                  </form>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
         <section class="panel me-reactions">
           <h2>{t("me.reactions")}</h2>
           {reactions.length === 0 ? (
@@ -125,4 +150,10 @@ me.get("/me", requireSignin, async (c) => {
       </main>
     </Layout>,
   );
+});
+
+/** The sender takes a letter back: it turns `withdrawn`, which every reader treats as rejected. Only one's own letters, never a reply or a reaction. */
+me.post("/letters/:id/withdraw", requireSignin, async (c) => {
+  if (!(await withdrawLetter(c.env.DB, c.req.param("id"), c.get("listener").id))) return c.notFound();
+  return c.redirect("/me", 303);
 });

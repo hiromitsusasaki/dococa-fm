@@ -156,10 +156,10 @@ describe("GET /tts", () => {
     expect(fn).not.toHaveBeenCalled();
   });
 
-  it("answers 404 for a letter rejected since, and for the segment that only read it", async () => {
+  it.each(["rejected", "withdrawn"] as const)("answers 404 for a letter made %s since, and for the segment that only read it", async (status) => {
     const { cookie, ep } = await setup();
     const letterId = (ep.segments[0]!.lines[2] as { letterId: string }).letterId;
-    await setLetterStatus(env.DB, letterId, "rejected");
+    await setLetterStatus(env.DB, letterId, status);
     const { fn } = stubFetch([[GOOGLE, () => json({ audioContent: audio })]]);
     expect((await call(`/tts?episode=${ep.id}&line=2`, cookie)).status).toBe(404);
     expect((await call(`/tts?episode=${ep.id}&line=0`, cookie)).status).toBe(404);

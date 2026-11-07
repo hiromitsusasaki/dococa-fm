@@ -283,12 +283,12 @@ describe("GET /episodes/:id", () => {
     expect(Object.values(json.originals).every((o) => o.original === null)).toBe(true);
   });
 
-  it("leaves a letter rejected since out of the page, the embedded json and the json", async () => {
+  it.each(["rejected", "withdrawn"] as const)("leaves a letter made %s since out of the page, the embedded json and the json", async (status) => {
     const { cookie, id } = await make();
     const ep = (await getEpisode(env.DB, id))!;
     const target = ep.segments.find((s) => s.lines.some((l) => l.type === "letter"))!;
     const line = target.lines.find((l) => l.type === "letter") as { letterId: string; text: string };
-    await setLetterStatus(env.DB, line.letterId, "rejected");
+    await setLetterStatus(env.DB, line.letterId, status);
     const html = await (await get(`/episodes/${id}`, cookie)).text();
     const embedded = JSON.parse(html.match(/id="episode-json">([\s\S]*?)<\/script>/)![1]!);
     const ids = (segs: Episode["segments"]) => segs.flatMap((s) => s.lines.flatMap((l) => (l.type === "letter" ? [l.letterId] : [])));

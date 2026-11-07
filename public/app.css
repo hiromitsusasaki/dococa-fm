@@ -1721,6 +1721,42 @@ body.embed .put {
   justify-self: start;
 }
 
+/* Public radios with new letters: a name and a place each, newest first. No numbers. */
+.public-radios {
+  display: grid;
+  gap: var(--sp-2);
+}
+
+.public-radios h2 {
+  margin: 0;
+}
+
+.public-radio-list {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.public-radio-list li + li {
+  border-top: 1px solid var(--line);
+}
+
+.public-radio-list a {
+  display: block;
+  padding: 10px 0;
+}
+
+/* /me: taking a letter back is quiet and still 44px to tap. */
+.me-letters form {
+  margin: 0;
+}
+
+.me-letters button.quiet {
+  min-height: 44px;
+  padding-inline: 0;
+}
+
 body.embed .put h1 {
   margin-top: 0;
 }

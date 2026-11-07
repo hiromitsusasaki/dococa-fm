@@ -244,6 +244,24 @@ export async function setLetterStatus(db: D1Database, id: string, status: Letter
   await db.prepare("UPDATE letters SET status = ? WHERE id = ?").bind(status, id).run();
 }
 
+/** The listener's own public letters (kind `letter` only), newest first: what /me lets them take back. */
+export async function listOwnPublicLetters(db: D1Database, listenerId: string): Promise<Letter[]> {
+  const { results } = await db
+    .prepare(`${SELECT} WHERE letters.listener_id = ? AND letters.kind = 'letter' AND letters.status = 'public' ORDER BY letters.created_at DESC, letters.id DESC`)
+    .bind(listenerId)
+    .all<Row>();
+  return results.map(rowToLetter);
+}
+
+/** The sender takes a public letter back. One write that checks owner, kind and status; false when it matched none. */
+export async function withdrawLetter(db: D1Database, id: string, listenerId: string): Promise<boolean> {
+  const res = await db
+    .prepare("UPDATE letters SET status = 'withdrawn' WHERE id = ? AND listener_id = ? AND kind = 'letter' AND status = 'public'")
+    .bind(id, listenerId)
+    .run();
+  return (res.meta.changes ?? 0) > 0;
+}
+
 export async function insertReport(
   db: D1Database,
   r: { letterId: string; listenerId: string | null; reason: string },
