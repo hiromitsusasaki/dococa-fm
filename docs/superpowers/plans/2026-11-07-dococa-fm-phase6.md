@@ -170,7 +170,7 @@
 - Produces: `applyReadings(text, readings)`; `ScriptLine.spoken`; `Unit.readings`; `Item.readingJa`. Readings apply to the lead line (title/creator readings from the item), the intro and the after (unit readings + item readings). English lines: unchanged (no readings; the writer may still spell a name TTS-friendly in English text itself, as today).
 
 - [ ] **Step 1: Failing tests**: a unit answer with `readings: [{text:"PSY", reading:"サイ"}]` and `creatorReading: "サイ"` stores both; `unitSegment` yields lead/intro/after with `spoken` where "PSY" → "サイ" and `text` unchanged; a reading whose `text` is not in any line is dropped; `prepareLetter` and `GET /tts` synthesize the spoken text and the key differs from the written text's key; a letter line never gets `spoken`; the player JSON has no `spoken`; verify rejects a unit whose `text` contains a reading string that is not in the original (defensive).
-- [ ] **Step 2: Implement.** No regeneration migration: existing units simply have no readings until remade or rewritten (0023 already rewrites them all).
+- [ ] **Step 2: Implement.** No regeneration migration: existing units simply have no readings until remade or rewritten (0023 already rewrites them all). Also fix a fixed line the voice misreads (owner 2026-11-07): `bridge.sameWork` ja 「同じ作品に、別の方からもお便りが届いています。」 → 「同じ作品に、別の人からもお便りが届いています。」（「方」 is read ほう）; grep every fixed ja line (`bridge.*`, `script.*`) for 「方」 and replace with 「人」 or kana where it means かた; the new text gets a new cache key by itself.
 - [ ] **Step 3: Run all, commit** (`feat: readings for the voice`).
 
 ---
