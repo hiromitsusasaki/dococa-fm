@@ -29,6 +29,8 @@ export type StationOptions = {
   send?: boolean;
   /** The listener has no radio name: the 一言 form offers to add one, until a reply carries it. */
   askName?: boolean;
+  /** The own radio's dial works yet (three letters and reactions); false draws it locked until a `next` answer says it woke. Absent: it works. */
+  dialReady?: boolean;
   strings: Record<string, string>;
 };
 
@@ -43,7 +45,8 @@ export type StationState = {
 };
 
 type Reason = "limit" | "failed" | "empty";
-type State = StationState & { reason: Reason | null; loading: boolean; sent: Record<string, true>; sendFailed: string | null; askName: boolean };
+/** `woke`: the dial unlocked on this visit, so it lights and sweeps in once. */
+type State = StationState & { reason: Reason | null; loading: boolean; sent: Record<string, true>; sendFailed: string | null; askName: boolean; dialReady: boolean; woke: boolean };
 type Fetched = { ok: true; view: PlayerEpisode } | { ok: false; reason: Reason };
 
 const VOLUME_KEY = "dfm.volume";
@@ -52,6 +55,8 @@ const DEFAULT_VOLUME = 0.8;
 /** A turn of the dial is sent once it rests this long, so a sweep is one new ask, not many. */
 const DIAL_SETTLE_MS = 300;
 const HINT_KEY = "dfm.dialHinted";
+/** Set while this browser shows the dial locked, so a dial that woke between visits (a letter sent from /put) is greeted at load. */
+const LOCKED_KEY = "dfm.dialLocked";
 /** Set at the first switch-on; the home then shows its hero short (wordmark and tagline only) on later visits. */
 const SEEN_KEY = "dfm.seen";
 
@@ -124,7 +129,7 @@ export function mountStation(root: HTMLElement, opts: StationOptions) {
   const sounds = createSounds(() => breathe());
   const player = createLinePlayer({ voiceURI: opts.voiceURI, ttsUrl: opts.ttsUrl, lang: str("lang.code") === "en" ? "en" : "ja", onClip: (el) => sounds.listen(el) });
   const reactRoot = createRoot(root);
-  let state: State = { power: "off", volume: loadVolume(), current: null, seg: 0, line: 0, queue: [], reason: null, loading: false, sent: {}, sendFailed: null, askName: opts.askName === true };
+  let state: State = { power: "off", volume: loadVolume(), current: null, seg: 0, line: 0, queue: [], reason: null, loading: false, sent: {}, sendFailed: null, askName: opts.askName === true, dialReady: opts.dialReady !== false, woke: false };
   let abort = new AbortController();
   let mounted = true;
   /** The episode being made for the queue, if any. */
@@ -157,6 +162,15 @@ export function mountStation(root: HTMLElement, opts: StationOptions) {
     }
     hinted = true;
     toast(str("station.dialHint"));
+  }
+
+  /** The dial works from now on: it lights, its needle sweeps in once (not under reduced motion) and a toast says so. */
+  function wake() {
+    try {
+      localStorage.removeItem(LOCKED_KEY);
+    } catch {}
+    setState({ dialReady: true, woke: true });
+    toast(str("station.dialReady"));
   }
 
   const itemOf = (ep: PlayerEpisode | null, seg: number): PlayerItem | undefined => {
@@ -208,6 +222,7 @@ export function mountStation(root: HTMLElement, opts: StationOptions) {
   async function requestNext(): Promise<Fetched> {
     const r = await fetchNext(opts.nextUrl, { dial, first: !heard, ...(letterId ? { letterId } : {}) });
     if (!r.ok) return r;
+    if (r.body.dialReady === true && !state.dialReady) wake();
     const episode = r.body.episode;
     return playable(episode) ? { ok: true, view: episode } : { ok: false, reason: "failed" };
   }
@@ -262,6 +277,7 @@ export function mountStation(root: HTMLElement, opts: StationOptions) {
 
   /** The dial turned: keep it, and once it rests, forget the episode made with the old value and ask again. */
   function turnDial(value: string) {
+    if (!state.dialReady) return;
     const v = storeDial(value);
     if (v === null) return;
     dial = v;
@@ -547,6 +563,8 @@ export function mountStation(root: HTMLElement, opts: StationOptions) {
       sendFailed: state.sendFailed,
       volume: state.volume,
       dial: opts.stationKey === "mine" ? dial : null,
+      dialReady: state.dialReady,
+      woke: state.woke,
       grow: opts.grow === true,
       primed: letterId !== undefined,
       send: opts.send === true,
@@ -589,6 +607,14 @@ export function mountStation(root: HTMLElement, opts: StationOptions) {
   markNight();
   const nightTimer = setInterval(markNight, NIGHT_CHECK_MS);
   setState({});
+  if (opts.stationKey === "mine" && opts.dialReady !== undefined) {
+    let seenLocked = false;
+    try {
+      seenLocked = localStorage.getItem(LOCKED_KEY) === "1";
+      if (!opts.dialReady) localStorage.setItem(LOCKED_KEY, "1");
+    } catch {}
+    if (opts.dialReady && seenLocked) wake();
+  }
   // A first visit to the home, or `/?tour=1` (the about page's 「使い方」); never over the send modal. A letter link came to hear
   // that letter: the tour waits, unmarked, for the next visit.
   if (opts.send && !document.querySelector("dialog[open]")) {
@@ -687,6 +713,7 @@ function boot() {
     grow: el.dataset.grow === "1",
     send: el.dataset.send === "1",
     askName: el.dataset.askName === "1",
+    ...(el.dataset.dialReady ? { dialReady: el.dataset.dialReady === "1" } : {}),
     strings,
   });
 }

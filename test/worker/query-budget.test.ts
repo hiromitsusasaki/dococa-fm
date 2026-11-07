@@ -2,7 +2,6 @@ import { env } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import app from "../../src/worker/index";
 import { insertItem, quantise } from "../../src/worker/db/items";
-import { upsertHistory } from "../../src/worker/db/history";
 import { angled } from "../helpers/ai";
 import { insertLetter } from "../../src/worker/db/letters";
 import { createListener, updateListener } from "../../src/worker/db/listeners";
@@ -111,13 +110,14 @@ describe("D1 statements per request", () => {
   });
 
   it(`POST /stations/mine/next by distance adds at most ${DISTANCE_EXTRA} statements, a cold start ${COLD_START_EXTRA}, and both stay under ${EPISODE_BUDGET}`, async () => {
-    const measure = async (withVectors: boolean, withFavourite = true) => {
+    const measure = async (withVectors: boolean, withOwnLetter = true) => {
       await resetDb(env.DB);
       await seedWorld();
       const cookie = await newSession();
       const me = cookie.split("=")[1]!.split(".")[0]!;
       const fav = await insertItem(env.DB, itemDraft({ title: "favourite", externalIds: { itunes: "777" } }));
-      if (withFavourite) await upsertHistory(env.DB, [{ listenerId: me, itemId: fav.id, source: "manual", occurredAt: null, rank: 1 }]);
+      // The taste comes from the listener's own letters (Phase 7 Task 7), not from favourites.
+      if (withOwnLetter) await insertLetter(env.DB, letterDraft(fav.id, { listenerId: me, body: "my own letter" }));
       if (withVectors) {
         // Written straight to the table so the isolate's vector cache is cold: the worst case.
         const { results } = await env.DB.prepare("SELECT id FROM items ORDER BY id").all<{ id: string }>();

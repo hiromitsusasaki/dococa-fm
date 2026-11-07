@@ -1,6 +1,7 @@
 import { dequantise, normalise } from "../db/items";
+import { countOwnLetters } from "../db/letters";
 import type { Listener } from "../types";
-import { TASTE_FAVORITES_SQL, TASTE_HEARD_SQL } from "./select-sql";
+import { TASTE_HEARD_SQL, TASTE_OWN_SQL } from "./select-sql";
 import type { Slot } from "./select";
 
 /** The mean of the rows' vectors (null when none has one), and whether the query found any row at all. */
@@ -18,15 +19,24 @@ async function meanOf(db: D1Database, sql: string, listenerId: string): Promise<
 }
 
 /**
- * Where the listener stands: the mean of the vectors of up to 50 favourites (the order `listFavorites` gives), else of
- * up to 20 works they heard most recently, as a unit vector; null when none of those has a vector. `blank`: the
- * listener has no favourite and has heard nothing yet (a cold start), whether or not the works have vectors.
+ * Where the listener stands: the mean of the vectors of up to 50 works they spoke about themselves (their own letters,
+ * and the letters they answered with a 私も or a 一言; favourites never count), else of up to 20 works they heard most
+ * recently, as a unit vector; null when none of those has a vector. `blank`: the listener has written nothing, reacted
+ * to nothing and heard nothing yet (a cold start), whether or not the works have vectors.
  */
 export async function standingOf(db: D1Database, listener: Pick<Listener, "id">): Promise<{ taste: Float32Array | null; blank: boolean }> {
-  const favourites = await meanOf(db, TASTE_FAVORITES_SQL, listener.id);
-  if (favourites.mean) return { taste: favourites.mean, blank: false };
+  const own = await meanOf(db, TASTE_OWN_SQL, listener.id);
+  if (own.mean) return { taste: own.mean, blank: false };
   const heard = await meanOf(db, TASTE_HEARD_SQL, listener.id);
-  return { taste: heard.mean, blank: !favourites.any && !heard.any };
+  return { taste: heard.mean, blank: !own.any && !heard.any };
+}
+
+/** The dial wakes once the listener has this many own voices: letters sent and reactions. */
+export const DIAL_WAKES_AT = 3;
+
+/** Whether the listener's dial works yet (see `DIAL_WAKES_AT`). Before, the radio shows it locked. */
+export async function dialAwake(db: D1Database, listenerId: string): Promise<boolean> {
+  return (await countOwnLetters(db, listenerId)) >= DIAL_WAKES_AT;
 }
 
 /** The listener's taste alone (see `standingOf`). */

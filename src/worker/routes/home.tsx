@@ -11,6 +11,7 @@ import { displayText } from "../letters/display";
 import type { Item } from "../types";
 import { canAskLetter } from "../program/select";
 import { stationLabel } from "../program/station";
+import { dialAwake } from "../program/taste";
 import { StationPage } from "./stations";
 
 export const home = new Hono<{ Bindings: Env; Variables: Variables }>();
@@ -39,11 +40,12 @@ home.get("/", async (c) => {
   // home is the ordinary one. A public letter also gives the link its preview.
   const asked = c.req.query("letter") ?? "";
   const wanted = asked.length > 0 && asked.length <= 100 ? asked : undefined;
-  const [recent, heard, shared, radios] = await Promise.all([
+  const [recent, heard, shared, radios, dialReady] = await Promise.all([
     listRecentPublicLetters(c.env.DB, 6),
     listArchive(c.env.DB, listener.id, RECENT_EPISODES),
     wanted ? getPublicLetterWithTitle(c.env.DB, wanted) : null,
     listRecentPublicRadios(c.env.DB, PUBLIC_RADIOS),
+    dialAwake(c.env.DB, listener.id),
   ]);
   const letter = shared && wanted && (await canAskLetter(c.env.DB, listener, shared.letter)) ? wanted : undefined;
   const og = shared && wanted
@@ -69,7 +71,7 @@ home.get("/", async (c) => {
   );
   const heroBoot = <script>{raw(HERO_COMPACT)}</script>;
   return c.html(
-    <StationPage stationKey="mine" title={t("app.name")} label={stationLabel({ kind: "mine" }, "", lang)} lang={lang} listener={listener} path={letter ? `/?letter=${encodeURIComponent(letter)}` : "/"} voice={listener.voice} dial={listener.dial} grow={false} hideName top={<>{hero}{heroBoot}</>} send letter={letter} og={og}>
+    <StationPage stationKey="mine" title={t("app.name")} label={stationLabel({ kind: "mine" }, "", lang)} lang={lang} listener={listener} path={letter ? `/?letter=${encodeURIComponent(letter)}` : "/"} voice={listener.voice} dial={listener.dial} dialReady={dialReady} grow={false} hideName top={<>{hero}{heroBoot}</>} send letter={letter} og={og}>
       <section class="home">
         {/* The station script opens this over the page, so the radio keeps playing; the frame loads on the first open. */}
         <dialog class="send-modal" aria-label={t("put.title")}>
@@ -78,11 +80,7 @@ home.get("/", async (c) => {
           </form>
           <iframe data-src="/put?embed=1" title={t("put.title")}></iframe>
         </dialog>
-        <p class="muted">
-          {t("home.explain")}
-          {lang === "en" && " "}
-          <a href="/start">{t("home.explainStart")}</a>
-        </p>
+        <p class="muted">{t("home.explain")}</p>
         {heard.length > 0 && (
           <section class="panel recent-episodes">
             <h2>{t("episode.archive")}</h2>

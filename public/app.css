@@ -2148,6 +2148,79 @@ body.embed .put h1 {
   font-size: 11px;
 }
 
+/*
+ * The dial before three letters (DESIGN.md「ダイヤル」): it keeps its shape but has no needle and a flat grey ring, a lock at its
+ * centre, its ends at half strength, and does not turn. Awake, its ring lights coral; on waking, the needle sweeps in once.
+ */
+.knob-dial.locked,
+.knob-dial.locked input[type="range"] {
+  cursor: not-allowed;
+}
+
+.knob-dial.locked .knob-body i {
+  visibility: hidden;
+}
+
+.knob-dial.locked .dial-end {
+  opacity: 0.5;
+}
+
+.knob-dial.locked .control-label {
+  max-width: 168px;
+  text-align: center;
+}
+
+.knob-dial.ready .knob-body {
+  border-color: var(--coral);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--coral) 45%, transparent);
+}
+
+.knob-lock {
+  position: absolute;
+  left: calc(50% - 6px);
+  top: calc(50% - 2px);
+  width: 12px;
+  height: 9px;
+  border-radius: 2px;
+  background: var(--ink-2);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.knob-lock::before {
+  content: "";
+  position: absolute;
+  left: 2px;
+  bottom: 100%;
+  box-sizing: border-box;
+  width: 8px;
+  height: 6px;
+  border: 2px solid var(--ink-2);
+  border-bottom: 0;
+  border-radius: 4px 4px 0 0;
+}
+
+.knob-dial.locked .knob-lock {
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .knob-lock {
+    transition: opacity 300ms ease-out;
+  }
+
+  .knob-dial.woke .knob-body i {
+    animation: knob-wake 300ms ease-out both;
+  }
+}
+
+@keyframes knob-wake {
+  from {
+    transform: rotate(-135deg);
+    opacity: 0;
+  }
+}
+
 .toast {
   position: fixed;
   left: 50%;

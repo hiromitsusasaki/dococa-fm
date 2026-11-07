@@ -188,10 +188,10 @@ describe("GET /episodes/new", () => {
 });
 
 describe("home and bookmarklet", () => {
-  it("sends a brand-new listener from the home page to /start", async () => {
+  it("no longer links a brand-new listener from the home page to /start (the route stays)", async () => {
     const html = await (await get("/", await signedInSession())).text();
     expect(html).not.toMatch(/<form[^>]*action="\/episodes"/);
-    expect(html).toMatch(/好きなものを 3 つ登録すると、あなたの好みに近いお便りが流れてきます。<a href="\/start">始める<\/a>/);
+    expect(html).not.toContain('href="/start"');
   });
 
   it("puts the bookmarklet itself on /put and a link to it on /settings", async () => {

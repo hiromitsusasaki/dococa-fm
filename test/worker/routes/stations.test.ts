@@ -47,6 +47,23 @@ describe("POST /stations/:key/next", () => {
     expect(body.station.label).not.toBe("");
   });
 
+  it("mine tells the player whether the dial is awake: after three own letters and reactions; world and public never say", async () => {
+    await seedWorld();
+    const cookie = await newSession();
+    const me = cookie.split("=")[1]!.split(".")[0]!;
+    const res = await postNext("mine", cookie);
+    expect(res.status).toBe(200);
+    expect(((await res.json()) as { dialReady?: unknown }).dialReady).toBe(false);
+    const it = await insertItem(env.DB, itemDraft({ title: "own", externalIds: { itunes: "990" } }));
+    await insertLetter(env.DB, letterDraft(it.id, { listenerId: me, body: "one" }));
+    await insertLetter(env.DB, letterDraft(it.id, { listenerId: me, body: "two" }));
+    const theirs = (await env.DB.prepare("SELECT id FROM letters WHERE listener_id != ? AND kind = 'letter' LIMIT 1").bind(me).first<{ id: string }>())!.id;
+    const parent = (await env.DB.prepare("SELECT item_id FROM letters WHERE id = ?").bind(theirs).first<{ item_id: string }>())!.item_id;
+    await insertLetter(env.DB, letterDraft(parent, { kind: "watashimo", listenerId: me, parentLetterId: theirs }));
+    expect(((await (await postNext("mine", cookie)).json()) as { dialReady?: unknown }).dialReady).toBe(true);
+    expect(await (await postNext("world", cookie)).json()).not.toHaveProperty("dialReady");
+  });
+
   it("refuses a cross-site post", async () => {
     await seedWorld();
     const cookie = await newSession();
@@ -371,6 +388,16 @@ describe("GET /stations/:key (page)", () => {
     expect(html).toContain('data-next-url="/stations/s:hiro/next"');
     expect(html).toContain('data-listens-url="/listens"');
     expect(html).toContain("ヒロ");
+  });
+
+  it("mine carries whether the dial is awake (three own letters and reactions); world and public radios carry nothing", async () => {
+    const cookie = await newSession();
+    const me = cookie.split("=")[1]!.split(".")[0]!;
+    expect(await (await page("mine", cookie)).text()).toContain('data-dial-ready="0"');
+    const it = await insertItem(env.DB, itemDraft({ title: "own" }));
+    for (const body of ["one", "two", "three"]) await insertLetter(env.DB, letterDraft(it.id, { listenerId: me, body }));
+    expect(await (await page("mine", cookie)).text()).toContain('data-dial-ready="1"');
+    expect(await (await page("world", cookie)).text()).not.toContain("data-dial-ready");
   });
 
   it("mine with no history asks the player to show how to start; with history it does not", async () => {

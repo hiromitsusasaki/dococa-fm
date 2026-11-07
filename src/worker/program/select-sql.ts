@@ -1,3 +1,5 @@
+import { OWN_VOICES_SQL } from "../db/letters";
+
 /**
  * Candidate pools, one query each. Every query binds the listener id as ?1 and returns
  * distinct `item_id`s ordered by id, so the only randomness is the seeded shuffle afterwards.
@@ -97,10 +99,12 @@ export const EXCLUDED_SQL = `SELECT item_id, 'spent' AS why FROM (${SPENT_ITEMS}
   UNION ALL SELECT item_id, 'aired' AS why FROM (${lastSegmentItems(RECENT_SEGMENTS)})
   UNION ALL SELECT item_id, 'latest' AS why FROM (${lastSegmentItems(1)})`;
 
-/** The vectors of up to 50 favourites, in `listFavorites`' order (keep the predicate and ORDER in step); null for a work without one. */
-export const TASTE_FAVORITES_SQL = `SELECT i.vec FROM
-    (SELECT h.item_id FROM history h WHERE h.listener_id = ?1 AND h.source IN ('manual', 'url')
-     ORDER BY h.rank IS NULL, h.rank ASC, h.occurred_at DESC, h.item_id LIMIT 50) f
+/**
+ * The vectors of up to 50 works the listener spoke about themselves (`OWN_VOICES_SQL`: their own letters, and the letters
+ * they answered with a 私も or a 一言), the most recent first; null for a work without one. Favourites never count.
+ */
+export const TASTE_OWN_SQL = `SELECT i.vec FROM
+    (SELECT v.item_id, MAX(v.created_at) AS at FROM (${OWN_VOICES_SQL}) v GROUP BY v.item_id ORDER BY at DESC, v.item_id LIMIT 50) f
   JOIN items i ON i.id = f.item_id`;
 
 /** The vectors of up to 20 works whose letters the listener heard most recently; null for a work without one. */

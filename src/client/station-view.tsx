@@ -24,6 +24,10 @@ export type StationScreenProps = {
   sendFailed: string | null;
   volume: number;
   dial: number | null;
+  /** The dial works yet; before, it is drawn locked (no needle, a lock, the line saying three letters wake it) and does not turn. */
+  dialReady: boolean;
+  /** It woke on this visit: it lights and its needle sweeps in once. */
+  woke: boolean;
   grow: boolean;
   /** A letter link is waiting for the switch: it says it plays from that letter. */
   primed: boolean;
@@ -77,7 +81,7 @@ export function StationScreen(p: StationScreenProps) {
           {p.power === "on" && <span class="live">{str("station.onAir")}</span>}
           {p.power === "tuning" && <span class="tuning" aria-hidden="true">{str("station.tuning")}</span>}
         </div>
-        <div class={`scale${lit ? " lit" : ""}${p.power === "on" ? " sweep" : ""}`} style={{ "--needle": needle(p.dial) }} aria-hidden="true"></div>
+        <div class={`scale${lit ? " lit" : ""}${p.power === "on" ? " sweep" : ""}`} style={{ "--needle": needle(p.dialReady ? p.dial : null) }} aria-hidden="true"></div>
         <div class="controls">
           <div class="control">
             <button type="button" class="switch" data-action="power" aria-pressed={String(lit)} aria-label={str("station.onOff")} disabled={p.grow} onClick={p.on.power}></button>
@@ -93,11 +97,12 @@ export function StationScreen(p: StationScreenProps) {
             <span class="control-label">{str("station.volume")}</span>
           </label>
           {p.dial !== null && (
-            <label class="knob knob-dial" title={str("station.dialHelp")}>
+            <label class={`knob knob-dial ${p.dialReady ? (p.woke ? "ready woke" : "ready") : "locked"}`} title={str("station.dialHelp")}>
               <span class="dial-row">
                 <span class="dial-end">{str("station.dialNear")}</span>
                 <span class="knob-body" style={{ "--angle": angle(p.dial) }}>
                   <i></i>
+                  <b class="knob-lock" aria-hidden="true"></b>
                   <input
                     type="range"
                     min="0"
@@ -106,6 +111,7 @@ export function StationScreen(p: StationScreenProps) {
                     data-action="dial"
                     aria-label={str("station.dial")}
                     value={String(p.dial)}
+                    disabled={!p.dialReady}
                     ref={onReleased(p.on.dial)}
                     onInput={(e: Event) => {
                       const input = e.currentTarget as HTMLInputElement;
@@ -118,7 +124,7 @@ export function StationScreen(p: StationScreenProps) {
                 </span>
                 <span class="dial-end">{str("station.dialFar")}</span>
               </span>
-              <span class="control-label">{str("station.dial")}</span>
+              <span class="control-label">{str(p.dialReady ? "station.dial" : "station.dialLocked")}</span>
             </label>
           )}
         </div>

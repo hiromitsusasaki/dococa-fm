@@ -508,9 +508,10 @@ describe("selectProgram by distance", () => {
   const seeds = ["s", "t", "u", "v", "w"];
   const DAY = 24 * 60 * 60 * 1000;
 
-  /** A's taste is i3 (a favourite nobody else wrote on); i1 lies close to it, i9 far; no other work has a vector. */
+  /** A's taste is i3 (A wrote on it, nobody else did); i1 lies close to it, i9 far; no other work has a vector. */
   async function withVectors() {
     const f = await buildFixture();
+    await insertLetter(env.DB, letterDraft(f.items[3]!, { listenerId: f.a.id, body: "A on 3" }));
     await setItemVec(env.DB, f.items[3]!, angled(0));
     await setItemVec(env.DB, f.items[1]!, angled(0.1));
     await setItemVec(env.DB, f.items[9]!, angled(1.5));
@@ -586,10 +587,11 @@ describe("selectProgram by distance", () => {
 
   it("chooses by pools as before when the listener has no taste or no candidate has a vector", async () => {
     const f = await buildFixture();
-    // A taste but no candidate with a vector.
+    // A taste (A's own letter on i3) but no candidate with a vector.
+    await insertLetter(env.DB, letterDraft(f.items[3]!, { listenerId: f.a.id, body: "A on 3" }));
     await setItemVec(env.DB, f.items[3]!, angled(0));
     for (const seed of seeds) expect((await selectProgram(env.DB, f.a, { size: 1, seed, dial: 0.5 })).map((s) => s.slot)).toEqual(["neighbor"]);
-    // Candidates with vectors but no taste: B has no favourites and has heard nothing.
+    // Candidates with vectors but no taste: a new listener has written nothing and heard nothing.
     await setItemVec(env.DB, f.items[9]!, angled(1.5));
     await setItemVec(env.DB, f.items[1]!, angled(0.1));
     const fresh = await createListener(env.DB);
@@ -719,6 +721,7 @@ describe("selectProgram never airs the same work twice in a row", () => {
 
   it("mine by distance: with every candidate aired, the latest is still not picked", async () => {
     const f = await buildFixture();
+    await insertLetter(env.DB, letterDraft(f.items[3]!, { listenerId: f.a.id, body: "A on 3" }));
     await setItemVec(env.DB, f.items[3]!, angled(0));
     await setItemVec(env.DB, f.items[1]!, angled(0.1));
     await setItemVec(env.DB, f.items[9]!, angled(1.5));

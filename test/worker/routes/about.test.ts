@@ -27,6 +27,18 @@ describe("GET /about", () => {
     expect(css).toMatch(/\.panel-rule-under::before\s*{\s*display:\s*none/);
   });
 
+  it("says the own radio leans to the listener after three letters, keeps the sign-in line, and links neither /start nor Spotify", async () => {
+    const ja = await (await get("/about", await newSession())).text();
+    expect(ja).toMatch(/<h2>自分のラジオ<\/h2>[\s\S]*?<p>お便りを 3 通送ると、あなたの好みに近いお便りが流れてきます。Google でサインインして/);
+    expect(ja).not.toContain("好きなものを 3 つ");
+    expect(ja).not.toContain('href="/start"');
+    expect(ja).not.toMatch(/href="\/auth\/spotify|href="\/settings\/spotify/);
+    const cookie = await newSession();
+    await postForm("/lang", cookie, { lang: "en", next: "/about" });
+    const en = await (await get("/about", cookie)).text();
+    expect(en).toMatch(/<p>Send 3 letters and the radio plays letters closer to your taste\. Sign in with Google/);
+  });
+
   it("offers the home's tour again, through /?tour=1", async () => {
     const html = await (await get("/about", await newSession())).text();
     expect(html).toMatch(/<a class="pill tour-again" href="\/\?tour=1">使い方<\/a>/);

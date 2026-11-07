@@ -37,7 +37,6 @@ export async function isInHistory(db: D1Database, listenerId: string, itemId: st
   return row !== null;
 }
 
-// The favourites predicate (source IN manual/url) and rank order are repeated in TASTE_FAVORITES_SQL (program/select-sql.ts); keep them in step.
 const ORDER = {
   recent: "h.occurred_at IS NULL, h.occurred_at DESC, h.item_id",
   rank: "h.rank IS NULL, h.rank ASC, h.occurred_at DESC, h.item_id",

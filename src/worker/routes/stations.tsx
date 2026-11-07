@@ -11,6 +11,7 @@ import { ja } from "../i18n/ja";
 import { type Lang, tFor } from "../i18n/t";
 import { makeEpisode } from "../program/create";
 import { publicRadioHasLetters } from "../program/select";
+import { dialAwake } from "../program/taste";
 import { readNextBody } from "./next-body";
 import { playerView } from "../program/player-view";
 import { type StationKey, parseStationKey, stationColumn, stationLabel, stationUrl } from "../program/station";
@@ -60,10 +61,12 @@ export type StationPageProps = {
   letter?: string;
   /** The home: the radio's on-air panel opens with the 「お便りを送る」 button, which opens the send modal. */
   send?: boolean;
+  /** The listener's own radio: whether its dial works yet (`dialAwake`); before, the dial is drawn locked. Absent elsewhere. */
+  dialReady?: boolean;
 };
 
 /** The station screen: the player mounts into `#station` and takes everything it needs from its data attributes. */
-export function StationPage({ stationKey, label, lang, listener, path, voice, dial, grow, title, og, children, hideName, top, letter, send }: StationPageProps) {
+export function StationPage({ stationKey, label, lang, listener, path, voice, dial, grow, title, og, children, hideName, top, letter, send, dialReady }: StationPageProps) {
   return (
     <Layout title={title ?? label} script="station" lang={lang} listener={listener} path={path} og={og}>
       <main class="station-page">
@@ -79,6 +82,7 @@ export function StationPage({ stationKey, label, lang, listener, path, voice, di
           data-listens-url="/listens"
           data-voice={voice}
           data-dial={String(dial)}
+          data-dial-ready={dialReady === undefined ? undefined : dialReady ? "1" : "0"}
           data-grow={grow ? "1" : "0"}
           data-letter={letter}
           data-send={send ? "1" : undefined}
@@ -110,6 +114,8 @@ stations.post("/stations/:key/next", async (c) => {
   return c.json({
     episode: await playerView(c.env.DB, stored, listener.lang),
     station: { key: raw, label: stationLabel(station.key, station.ownerName, listener.lang) },
+    // The own radio's dial wakes once three letters and reactions are in: the player unlocks it when this turns true.
+    ...(station.key.kind === "mine" ? { dialReady: await dialAwake(c.env.DB, listener.id) } : {}),
   });
 });
 
@@ -129,9 +135,10 @@ stations.get("/stations/:key", async (c) => {
     const grow = station.key.kind === "mine" && !letter && (await listHistory(c.env.DB, listener.id, 1)).length === 0;
     // A public radio plays only its owner's letters and the ones they answered: before the first, the page says so.
     const empty = station.key.kind === "public" && !(await publicRadioHasLetters(c.env.DB, station.key.ownerId));
+    const dialReady = station.key.kind === "mine" ? await dialAwake(c.env.DB, listener.id) : undefined;
     const t = tFor(listener.lang);
     return c.html(
-      <StationPage letter={letter} stationKey={raw} label={label} lang={listener.lang} listener={listener} path={currentPath(c)} voice={listener.voice} dial={listener.dial} grow={grow} og={station.url ? { title: label, description: t("app.tagline"), url: station.url } : undefined}>
+      <StationPage letter={letter} stationKey={raw} label={label} lang={listener.lang} listener={listener} path={currentPath(c)} voice={listener.voice} dial={listener.dial} dialReady={dialReady} grow={grow} og={station.url ? { title: label, description: t("app.tagline"), url: station.url } : undefined}>
         {empty && <p class="muted station-empty">{t("station.publicEmpty")}</p>}
       </StationPage>,
     );

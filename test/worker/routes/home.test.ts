@@ -102,18 +102,31 @@ describe("GET /", () => {
     expect(html).not.toContain("URL なしの声");
   });
 
-  it("explains how the radio leans to the listener's taste, with the way to /start, for every listener", async () => {
+  it("explains that three letters lean the radio to the listener's taste, with no link to /start, for every listener", async () => {
     const cookie = await newSession();
-    const explain = '<p class="muted">好きなものを 3 つ登録すると、あなたの好みに近いお便りが流れてきます。<a href="/start">始める</a></p>';
-    expect(await (await get("/", cookie)).text()).toContain(explain);
-    const item = await insertItem(env.DB, itemDraft());
-    const id = cookie.split("=")[1]!.split(".")[0]!;
-    await upsertHistory(env.DB, [{ listenerId: id, itemId: item.id, source: "manual", occurredAt: null, rank: null }]);
+    const explain = '<p class="muted">お便りを 3 通送ると、あなたの好みに近いお便りが流れてきます。</p>';
     const html = await (await get("/", cookie)).text();
     expect(html).toContain(explain);
+    expect(html).not.toContain('href="/start"');
     expect(html).not.toContain("あなたのラジオをつける");
     const en = await (await SELF.fetch(`${BASE}/`, { headers: { "accept-language": "en" } })).text();
-    expect(en).toContain('<p class="muted">Register three things you love and the letters drift closer to your taste. <a href="/start">Start</a></p>');
+    expect(en).toContain('<p class="muted">Send 3 letters and the radio plays letters closer to your taste.</p>');
+    expect(en).not.toContain('href="/start"');
+  });
+
+  it("locks the dial until the listener has three own letters and reactions; favourites do not count", async () => {
+    const cookie = await newSession();
+    const me = cookie.split("=")[1]!.split(".")[0]!;
+    const other = await createListener(env.DB);
+    const it = await insertItem(env.DB, itemDraft());
+    for (const n of [1, 2, 3]) await upsertHistory(env.DB, [{ listenerId: me, itemId: (await insertItem(env.DB, itemDraft({ title: `fav${n}`, externalIds: { itunes: `f${n}` } }))).id, source: "manual", occurredAt: null, rank: n }]);
+    expect(await (await get("/", cookie)).text()).toContain('data-dial-ready="0"');
+    await insertLetter(env.DB, letterDraft(it.id, { listenerId: me, body: "one" }));
+    const theirs = await insertLetter(env.DB, letterDraft(it.id, { listenerId: other.id, body: "theirs" }));
+    await insertLetter(env.DB, letterDraft(it.id, { kind: "reply", listenerId: me, parentLetterId: theirs.id, body: "yes" }));
+    expect(await (await get("/", cookie)).text()).toContain('data-dial-ready="0"');
+    await insertLetter(env.DB, letterDraft(it.id, { kind: "watashimo", listenerId: me, parentLetterId: theirs.id }));
+    expect(await (await get("/", cookie)).text()).toContain('data-dial-ready="1"');
   });
 
   it("lists the three latest programmes the listener heard, by work and sender, then the archive link; a new listener gets the link only", async () => {
@@ -229,7 +242,7 @@ describe("GET /", () => {
       expect(i, s).toBeGreaterThan(-1);
       return i;
     };
-    const order = [at('id="station"'), at('<section class="home">'), at('<dialog class="send-modal"'), at('<p class="muted">好きなものを'), at('<section class="panel recent-episodes">'), at('class="letter-cards"')];
+    const order = [at('id="station"'), at('<section class="home">'), at('<dialog class="send-modal"'), at('<p class="muted">お便りを 3 通送ると'), at('<section class="panel recent-episodes">'), at('class="letter-cards"')];
     expect([...order].sort((a, b) => a - b)).toEqual(order);
   });
 

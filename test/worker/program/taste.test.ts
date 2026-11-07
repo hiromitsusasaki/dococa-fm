@@ -3,11 +3,11 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { insertEpisode } from "../../../src/worker/db/episodes";
 import { upsertHistory } from "../../../src/worker/db/history";
 import { insertItem, setItemVec } from "../../../src/worker/db/items";
-import { insertLetter } from "../../../src/worker/db/letters";
+import { countOwnLetters, insertLetter, setLetterStatus } from "../../../src/worker/db/letters";
 import { createListener } from "../../../src/worker/db/listeners";
 import { recordListen } from "../../../src/worker/db/listens";
 import { seededRng } from "../../../src/worker/program/select";
-import { farness, pickByDial, standingOf, tasteOf } from "../../../src/worker/program/taste";
+import { dialAwake, farness, pickByDial, standingOf, tasteOf } from "../../../src/worker/program/taste";
 import { angled } from "../../helpers/ai";
 import { resetDb } from "../../helpers/db";
 import { itemDraft, letterDraft } from "../db/helpers";
@@ -63,8 +63,9 @@ describe("pickByDial", () => {
 });
 
 describe("tasteOf", () => {
-  it("is the mean of the favourites' vectors, else of the works heard, else null", async () => {
+  it("is the mean of the works of the listener's own letters and of the letters they answered, else of the works heard, else null", async () => {
     const me = await createListener(env.DB);
+    const other = await createListener(env.DB);
     expect(await tasteOf(env.DB, me)).toBeNull();
 
     const heardItem = await insertItem(env.DB, itemDraft({ externalIds: {} }));
@@ -75,29 +76,47 @@ describe("tasteOf", () => {
     const heard = (await tasteOf(env.DB, me))!;
     expect(heard[0]).toBeCloseTo(Math.cos(1.2), 2);
 
+    // An own letter on a, a 一言 on someone else's letter on b, a 私も on a work with no vector.
     const a = await insertItem(env.DB, itemDraft({ externalIds: {} }));
     const b = await insertItem(env.DB, itemDraft({ externalIds: {} }));
     const none = await insertItem(env.DB, itemDraft({ externalIds: {} }));
     await setItemVec(env.DB, a.id, angled(0));
     await setItemVec(env.DB, b.id, angled(Math.PI / 2));
-    await upsertHistory(env.DB, [a, b, none].map((i) => ({ listenerId: me.id, itemId: i.id, source: "manual" as const, occurredAt: null, rank: null })));
-    const fav = (await tasteOf(env.DB, me))!;
-    expect(fav[0]).toBeCloseTo(Math.SQRT1_2, 2);
-    expect(fav[1]).toBeCloseTo(Math.SQRT1_2, 2);
-    expect(Math.hypot(...fav)).toBeCloseTo(1, 5);
+    await insertLetter(env.DB, letterDraft(a.id, { listenerId: me.id, body: "mine on a" }));
+    const theirs = await insertLetter(env.DB, letterDraft(b.id, { listenerId: other.id, body: "theirs on b" }));
+    await insertLetter(env.DB, letterDraft(b.id, { kind: "reply", listenerId: me.id, parentLetterId: theirs.id, body: "yes" }));
+    const plain = await insertLetter(env.DB, letterDraft(none.id, { listenerId: other.id, body: "theirs on none" }));
+    await insertLetter(env.DB, letterDraft(none.id, { kind: "watashimo", listenerId: me.id, parentLetterId: plain.id }));
+    const own = (await tasteOf(env.DB, me))!;
+    expect(own[0]).toBeCloseTo(Math.SQRT1_2, 2);
+    expect(own[1]).toBeCloseTo(Math.SQRT1_2, 2);
+    expect(Math.hypot(...own)).toBeCloseTo(1, 5);
   });
 
-  it("does not count an imported (Spotify) work as a favourite", async () => {
+  it("never counts a favourite, a withdrawn letter, or a reaction on a letter taken down", async () => {
     const me = await createListener(env.DB);
-    const i = await insertItem(env.DB, itemDraft({ externalIds: {} }));
-    await setItemVec(env.DB, i.id, angled(0));
-    await upsertHistory(env.DB, [{ listenerId: me.id, itemId: i.id, source: "spotify", occurredAt: null, rank: 1 }]);
-    expect(await tasteOf(env.DB, me)).toBeNull();
+    const other = await createListener(env.DB);
+    const fav = await insertItem(env.DB, itemDraft({ externalIds: {} }));
+    await setItemVec(env.DB, fav.id, angled(0));
+    await upsertHistory(env.DB, [{ listenerId: me.id, itemId: fav.id, source: "manual", occurredAt: null, rank: 1 }]);
+    const sp = await insertItem(env.DB, itemDraft({ externalIds: {} }));
+    await setItemVec(env.DB, sp.id, angled(0.3));
+    await upsertHistory(env.DB, [{ listenerId: me.id, itemId: sp.id, source: "spotify", occurredAt: null, rank: 1 }]);
+    const gone = await insertItem(env.DB, itemDraft({ externalIds: {} }));
+    await setItemVec(env.DB, gone.id, angled(0.6));
+    const withdrawn = await insertLetter(env.DB, letterDraft(gone.id, { listenerId: me.id, body: "taken back" }));
+    await setLetterStatus(env.DB, withdrawn.id, "withdrawn");
+    const down = await insertItem(env.DB, itemDraft({ externalIds: {} }));
+    await setItemVec(env.DB, down.id, angled(0.9));
+    const rejected = await insertLetter(env.DB, letterDraft(down.id, { listenerId: other.id, body: "taken down" }));
+    await insertLetter(env.DB, letterDraft(down.id, { kind: "watashimo", listenerId: me.id, parentLetterId: rejected.id }));
+    await setLetterStatus(env.DB, rejected.id, "rejected");
+    expect(await standingOf(env.DB, me)).toEqual({ taste: null, blank: true });
   });
 });
 
 describe("standingOf", () => {
-  it("is blank only before any favourite or listen, vectors or not", async () => {
+  it("is blank only before any own letter, reaction or listen, vectors or not", async () => {
     const me = await createListener(env.DB);
     expect(await standingOf(env.DB, me)).toEqual({ taste: null, blank: true });
     const heardItem = await insertItem(env.DB, itemDraft({ externalIds: {} }));
@@ -106,9 +125,36 @@ describe("standingOf", () => {
     await recordListen(env.DB, { listenerId: me.id, episodeId: ep.id, letterId: letter.id, segmentIndex: 0 });
     expect(await standingOf(env.DB, me)).toEqual({ taste: null, blank: false });
 
-    const other = await createListener(env.DB);
+    const writer = await createListener(env.DB);
+    const own = await insertItem(env.DB, itemDraft({ externalIds: {} }));
+    await insertLetter(env.DB, letterDraft(own.id, { listenerId: writer.id, body: "mine" }));
+    expect(await standingOf(env.DB, writer)).toEqual({ taste: null, blank: false });
+
+    // A favourite alone is still a cold start.
+    const fan = await createListener(env.DB);
     const fav = await insertItem(env.DB, itemDraft({ externalIds: {} }));
-    await upsertHistory(env.DB, [{ listenerId: other.id, itemId: fav.id, source: "manual", occurredAt: null, rank: 1 }]);
-    expect(await standingOf(env.DB, other)).toEqual({ taste: null, blank: false });
+    await upsertHistory(env.DB, [{ listenerId: fan.id, itemId: fav.id, source: "manual", occurredAt: null, rank: 1 }]);
+    expect(await standingOf(env.DB, fan)).toEqual({ taste: null, blank: true });
+  });
+});
+
+describe("dialAwake", () => {
+  it("wakes at three own voices: letters sent and reactions, public ones only", async () => {
+    const me = await createListener(env.DB);
+    const other = await createListener(env.DB);
+    const it1 = await insertItem(env.DB, itemDraft({ externalIds: {} }));
+    expect(await dialAwake(env.DB, me.id)).toBe(false);
+    await insertLetter(env.DB, letterDraft(it1.id, { listenerId: me.id, body: "one" }));
+    const theirs = await insertLetter(env.DB, letterDraft(it1.id, { listenerId: other.id, body: "theirs" }));
+    await insertLetter(env.DB, letterDraft(it1.id, { kind: "watashimo", listenerId: me.id, parentLetterId: theirs.id }));
+    const withdrawn = await insertLetter(env.DB, letterDraft(it1.id, { listenerId: me.id, body: "taken back" }));
+    await setLetterStatus(env.DB, withdrawn.id, "withdrawn");
+    // Someone else's letters and favourites do not count.
+    await upsertHistory(env.DB, [{ listenerId: me.id, itemId: it1.id, source: "manual", occurredAt: null, rank: 1 }]);
+    expect(await countOwnLetters(env.DB, me.id)).toBe(2);
+    expect(await dialAwake(env.DB, me.id)).toBe(false);
+    await insertLetter(env.DB, letterDraft(it1.id, { kind: "reply", listenerId: me.id, parentLetterId: theirs.id, body: "yes" }));
+    expect(await dialAwake(env.DB, me.id)).toBe(true);
+    expect(await dialAwake(env.DB, other.id)).toBe(false);
   });
 });

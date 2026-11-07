@@ -48,6 +48,8 @@ const strings: Record<string, string> = {
   "station.dialNear": "近く",
   "station.dialFar": "遠く",
   "station.dialHint": "次のお便りから効きます",
+  "station.dialLocked": "お便りを 3 通送ると、ダイヤルが効きはじめます",
+  "station.dialReady": "ダイヤルが効くようになりました",
   "station.searching": "電波を探しています…",
   "station.playFromToast": "このお便りから流します",
   "station.playFromLetter": "このお便りから聴く",
@@ -1151,6 +1153,66 @@ describe("station: the dial and the first ask", () => {
     mountStation(root, opts({ stationKey: "s:hiro", dial: 0.5 }));
     await flush();
     expect(root.querySelector(".knob-dial")).toBeNull();
+  });
+});
+
+describe("station: the dial wakes after three letters", () => {
+  const one = (id: string) => view(id, [["a", [dj(`${id}-1`)]]]);
+  const knob = () => root.querySelector<HTMLElement>(".knob-dial")!;
+  const toastText = () => document.body.querySelector(".toast")?.textContent ?? null;
+  const awake = (v: object, dialReady: boolean) => json(200, { episode: v, station: { key: "mine", label: "Dococa FM" }, dialReady });
+
+  it("stays on the face but locked: no turning, a lock at its centre, the line in place of its name", async () => {
+    sessionStorage.clear();
+    mountStation(root, opts({ stationKey: "mine", dial: 0.4, dialReady: false }));
+    await flush();
+    expect(knob().classList.contains("locked")).toBe(true);
+    expect(knob().querySelector(".knob-lock")).not.toBeNull();
+    expect([...knob().querySelectorAll(".dial-end")].map((e) => e.textContent)).toEqual(["近く", "遠く"]);
+    expect(knob().querySelector(".control-label")!.textContent).toBe("お便りを 3 通送ると、ダイヤルが効きはじめます");
+    const input = el("dial") as HTMLInputElement;
+    expect(input.disabled).toBe(true);
+    input.value = "0.9";
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+    expect(localStorage.getItem("dfm.dial")).toBeNull();
+    expect(toastText()).toBeNull();
+    // The scale's needle rests in the middle while the dial does nothing.
+    expect(root.querySelector<HTMLElement>(".scale")!.style.getPropertyValue("--needle")).toBe("50%");
+  });
+
+  it("wakes when the next episode says so: the ring lights, the needle sweeps in once, a toast says it works", async () => {
+    nextReplies = [awake(one("e1"), false), awake(one("e2"), true)];
+    autoEnd = false;
+    const s = mountStation(root, opts({ stationKey: "mine", dial: 0.4, dialReady: false }));
+    await flush();
+    expect(knob().classList.contains("locked")).toBe(true);
+    await power();
+    // The first answer still says locked; the one fetched ahead says it woke.
+    await vi.waitFor(() => expect(s.state().queue.map((e) => e.id)).toEqual(["e2"]));
+    expect(knob().classList.contains("locked")).toBe(false);
+    expect(knob().classList.contains("ready")).toBe(true);
+    expect(knob().classList.contains("woke")).toBe(true);
+    expect((el("dial") as HTMLInputElement).disabled).toBe(false);
+    expect(knob().querySelector(".control-label")!.textContent).toBe("セレンディピティ");
+    expect(toastText()).toBe("ダイヤルが効くようになりました");
+    expect(localStorage.getItem("dfm.dialLocked")).toBeNull();
+  });
+
+  it("wakes at load when this browser last saw it locked, once; a dial that was always awake says nothing", async () => {
+    const a = mountStation(root, opts({ stationKey: "mine", dial: 0.4, dialReady: false }));
+    await flush();
+    expect(localStorage.getItem("dfm.dialLocked")).toBe("1");
+    a.unmount();
+    const b = mountStation(root, opts({ stationKey: "mine", dial: 0.4, dialReady: true }));
+    await flush();
+    expect(knob().classList.contains("woke")).toBe(true);
+    expect(toastText()).toBe("ダイヤルが効くようになりました");
+    b.unmount();
+    mountStation(root, opts({ stationKey: "mine", dial: 0.4, dialReady: true }));
+    await flush();
+    expect(knob().classList.contains("ready")).toBe(true);
+    expect(knob().classList.contains("woke")).toBe(false);
+    expect(toastText()).toBeNull();
   });
 });
 
