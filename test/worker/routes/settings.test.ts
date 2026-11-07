@@ -93,6 +93,16 @@ describe("settings", () => {
     expect(html).not.toContain("土地");
   });
 
+  it("has no language select, and ignores a posted lang", async () => {
+    const cookie = cookieOf(await SELF.fetch(`${BASE}/settings`, { headers: { "accept-language": "ja" } }));
+    const html = await (await SELF.fetch(`${BASE}/settings`, { headers: { cookie } })).text();
+    expect(html).not.toMatch(/<select[^>]*name="lang"/);
+    const post = await postForm("/settings", cookie, { radioName: "ヒロ", voice: "", lang: "en" });
+    expect(post.status).toBe(303);
+    const row = await env.DB.prepare("SELECT lang FROM listeners").first<{ lang: string }>();
+    expect(row?.lang).toBe("ja");
+  });
+
   it("saves radio name and place, then shows them", async () => {
     const cookie = cookieOf(await SELF.fetch(`${BASE}/settings`));
     const post = await postForm("/settings", cookie, { radioName: "ヒロ", placeCountry: "JP", placeRegion: "32", voice: "", dial: "0.8" });

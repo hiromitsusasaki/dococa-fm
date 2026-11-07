@@ -22,7 +22,6 @@ const fields = z.object({
   placeCountry: z.string().trim().refine((v) => v === "" || COUNTRIES.some((c) => c.code === v)).default(""),
   placeRegion: z.string().trim().default(""),
   voice: z.string().max(200),
-  lang: z.enum(["ja", "en"]).optional(),
   stationPublic: z.literal("1").optional(),
   /** Empty means "leave it as it is". */
   stationSlug: z.string().trim().toLowerCase().refine((v) => v === "" || SLUG.test(v)).optional(),
@@ -48,13 +47,6 @@ function SettingsPage(props: { values: FormValues; listener: Listener; path: str
         {invalid && <p class="settings-error" role="alert">{t("settings.invalid")}</p>}
 
         <form method="post" action="/settings" class="settings-form">
-          <label>
-            <span>{t("settings.lang")}</span>
-            <select name="lang">
-              <option value="ja" selected={values.lang === "ja"}>日本語</option>
-              <option value="en" selected={values.lang === "en"}>English</option>
-            </select>
-          </label>
           <label>
             <span>{t("settings.radioName")}</span>
             <input type="text" name="radioName" maxlength={20} value={values.radioName} />

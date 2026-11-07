@@ -23,6 +23,7 @@ const THEME_BOOT = `try{var t=localStorage.getItem("dfm.theme");if(t==="light"||
 const THEME_WIRE = `(function(){var r=document.documentElement,bs=document.querySelectorAll("[data-theme-set]");function cur(){var t=r.getAttribute("data-theme");return t==="light"||t==="dark"?t:"auto"}function show(){var c=cur();bs.forEach(function(b){b.setAttribute("aria-pressed",String(b.getAttribute("data-theme-set")===c))})}bs.forEach(function(b){b.addEventListener("click",function(){var v=b.getAttribute("data-theme-set");if(v==="auto")r.removeAttribute("data-theme");else r.setAttribute("data-theme",v);try{if(v==="auto")localStorage.removeItem("dfm.theme");else localStorage.setItem("dfm.theme",v)}catch(e){}show()})});show()})();`;
 
 const THEMES = ["light", "dark", "auto"] as const;
+const LANGS = ["ja", "en"] as const;
 
 function SiteHeader({ listener, path, lang }: { listener?: Listener; path?: string; lang: Lang }) {
   const t = tFor(lang);
@@ -45,6 +46,14 @@ function SiteHeader({ listener, path, lang }: { listener?: Listener; path?: stri
             <a href={`/auth/google?next=${encodeURIComponent(path ?? "/")}`}>{t("signin.google")}</a>
           )}
         </nav>
+      )}
+      {listener && (
+        <form method="post" action="/lang" class="lang-toggle" role="group" aria-label={t("lang.label")}>
+          <input type="hidden" name="next" value={path ?? "/"} />
+          {LANGS.map((l) => (
+            <button type="submit" name="lang" value={l} aria-pressed={String(lang === l)} lang={l}>{t(`lang.${l}`)}</button>
+          ))}
+        </form>
       )}
       <div class="theme-toggle" role="group" aria-label={t("theme.label")}>
         {THEMES.map((mode) => (

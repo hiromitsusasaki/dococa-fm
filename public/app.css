@@ -203,11 +203,17 @@ a {
   cursor: pointer;
 }
 
-.theme-toggle {
+.theme-toggle,
+.lang-toggle {
   display: inline-flex;
 }
 
-.theme-toggle button {
+.lang-toggle {
+  margin-right: var(--sp-2);
+}
+
+.theme-toggle button,
+.lang-toggle button {
   position: relative;
   min-height: 30px;
   padding: 0 10px;
@@ -221,22 +227,26 @@ a {
 }
 
 /* 44px hit area around the 30px visual height. */
-.theme-toggle button::after {
+.theme-toggle button::after,
+.lang-toggle button::after {
   content: "";
   position: absolute;
   inset: -7px 0;
 }
 
-.theme-toggle button:first-child {
+.theme-toggle button:first-child,
+.lang-toggle button:first-child {
   border-left-width: 1px;
   border-radius: var(--r-pill) 0 0 var(--r-pill);
 }
 
-.theme-toggle button:last-child {
+.theme-toggle button:last-child,
+.lang-toggle button:last-child {
   border-radius: 0 var(--r-pill) var(--r-pill) 0;
 }
 
-.theme-toggle button[aria-pressed="true"] {
+.theme-toggle button[aria-pressed="true"],
+.lang-toggle button[aria-pressed="true"] {
   background: var(--ink);
   border-color: var(--ink);
   color: var(--paper);
