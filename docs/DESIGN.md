@@ -59,6 +59,7 @@ CSS 変数は `:root` にライト、`@media (prefers-color-scheme: dark)` と `
 | `.hero` | 丸角 24px、枠線 1px `--line-strong`、影 `0 18px 40px rgba(20,40,70,.12)`、`background-clip: padding-box`。PC 幅は 2 列（左: wordmark とタグライン、右: キービジュアル `public/kv.jpg` を 3:2・丸角 16px・影つき）。スマホ幅は 1 列で絵は文の下に全幅 | ライトは白、ダークは紺の無地（パネルと同じ） |
 | `.panel`（ラジオ、オンエア、カード） | 丸角 22px、`--panel`、枠線 1px `--line`、影、上端に 4px の帯（`::before`） | |
 | `.face`（ラジオの面） | 左に `DOCOCA FM`、右に赤い点つきの `ON AIR`。破線の下罫 | 局名は出さない |
+| ラジオの面の案内（Phase 6） | ダイヤルの左右に `span.dial-end`（`近く` / `遠く`、`--ink-2` の 11px）。ダイヤルを初めて離したとき、セッションに 1 度だけ「次のお便りから効きます」を `.toast` で出す。電源を入れて最初の回を待つ間、状態の行は「電波を探しています…」（回のつなぎは今までどおり「チューニング中」）。音量は `localStorage["dfm.volume"]` に残る。私もを押すと「送りました」、カードを押すと「このお便りから流します」の `.toast`（`div[role=status]` が 1 つ、新しいのが古いのを置き換え、2.5 秒で消える。画面下の中央、`--ink` 地に `--paper` 字）。オンエアの欄の `いま` の行に 40×40 の作品の絵（`img.thumb`、あるときだけ）。カードの `このお便りから聴く` の前に `span.letter-card-playmark`（20px の `--magenta` の円に三角、`aria-hidden`）。小さい字の洋紅は `--magenta-text`（ライト `#c8287d`、白地で 5.2:1。ダークは `--magenta` のまま 5.5:1） | 数字は付けない |
 | `.scale`（目盛り） | 12px の高さの縦線の繰り返し + 針 | 針の位置は飾り（再生位置ではない） |
 | `.switch` | 72×36 のトグル。`aria-pressed` | OFF: `--haze` と枠線。ON: `--lemon` に点灯 + `box-shadow` のゆるい明滅（`prefers-reduced-motion` で止める） |
 | `.knob` | 52px の円、`--knob`、針は coral | 音量とセレンディピティの 2 つ。セレンディピティ（ダイヤル）はラジオの面にあり、自分のラジオだけに出る（ホームのラジオは自分のラジオなので出る。`/stations/world` と人のラジオには出さない）。0〜1 を 0.1 刻みで、離したときに値を `localStorage["dfm.dial"]` に残して次の回から効かせる。`input[type=range]` を置き換え、キーボードでも動く |

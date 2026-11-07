@@ -157,6 +157,24 @@
 
 ---
 
+### Task 10: Readings for the voice (owner request 2026-11-07; after Task 9)
+
+**Goal:** Gemini-TTS misreads some proper names in Japanese (PSY → ぴーえすわい instead of サイ). The script writer (Claude) supplies readings; the screen keeps the written form, only the spoken text changes. Letters stay verbatim in both text and speech (not in scope).
+
+**Files:**
+- Create: `migrations/0024_readings.sql` (`ALTER TABLE items ADD COLUMN reading_ja TEXT;` — JSON `{ "title": "...", "creator": "..." }` or NULL; `ALTER TABLE units ADD COLUMN readings TEXT;` — JSON array `[{ "text": "PSY", "reading": "サイ" }]` or NULL)
+- Modify: `src/worker/program/unit.ts` (the `write_unit` tool gains optional `readings` (array of `{text, reading}`, ≤ 8, each `text` ≤ 40 chars appearing verbatim in intro/after/lead/title/creator) and optional `titleReading` / `creatorReading` for ja; the prompt explains: カタカナで、TTS が読み間違えそうな固有名だけ), `src/worker/db/units.ts`, `src/worker/db/items.ts` (`setItemReading` when empty), `src/worker/program/compose.ts` (`ScriptLine` gains optional `spoken?: string` for `dj` lines: the text with readings applied, exact-string replace, longest `text` first; never for `letter` lines), `src/worker/program/prepare.ts` + `src/worker/routes/tts.ts` + `src/worker/tts/audio.ts` callers (synthesize `line.spoken ?? line.text`; the cache key hashes the spoken text), `src/worker/program/verify.ts` (readings never appear in `text`; `spoken` differs from `text` only by the listed replacements — a check), the player view (does not send `spoken` to the client; the client shows `text`), `README.md`, `docs/status.md`, `SECURITY.md` (readings are DJ-line only)
+- Test: `unit.test.ts`, `compose.test.ts`, `prepare.test.ts`, `tts.test.ts`, `verify.test.ts`, `db/items.test.ts`
+
+**Interfaces:**
+- Produces: `applyReadings(text, readings)`; `ScriptLine.spoken`; `Unit.readings`; `Item.readingJa`. Readings apply to the lead line (title/creator readings from the item), the intro and the after (unit readings + item readings). English lines: unchanged (no readings; the writer may still spell a name TTS-friendly in English text itself, as today).
+
+- [ ] **Step 1: Failing tests**: a unit answer with `readings: [{text:"PSY", reading:"サイ"}]` and `creatorReading: "サイ"` stores both; `unitSegment` yields lead/intro/after with `spoken` where "PSY" → "サイ" and `text` unchanged; a reading whose `text` is not in any line is dropped; `prepareLetter` and `GET /tts` synthesize the spoken text and the key differs from the written text's key; a letter line never gets `spoken`; the player JSON has no `spoken`; verify rejects a unit whose `text` contains a reading string that is not in the original (defensive).
+- [ ] **Step 2: Implement.** No regeneration migration: existing units simply have no readings until remade or rewritten (0023 already rewrites them all).
+- [ ] **Step 3: Run all, commit** (`feat: readings for the voice`).
+
+---
+
 ### Task 7: Close-out: cost notes and docs
 
 **Files:**
