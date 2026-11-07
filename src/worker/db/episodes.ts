@@ -96,13 +96,14 @@ export type ArchiveSender = { radioName: string; place: string; placeCountry?: s
 /**
  * The archive rows in one query: each verified episode the listener heard something in (a `listens` row; an episode
  * fetched ahead and never played is left out), newest first, with the title of its first work and the sender of its
- * first letter (taken from the stored lines, so no further query; null when the first segment reads none).
+ * first letter (taken from the stored lines, so no further query; null when the first segment reads none). Only a
+ * letter or a found voice names the sender: a reply or 私も read in that segment is someone reacting, not the sender.
  */
 export async function listArchive(db: D1Database, listenerId: string, limit: number): Promise<Array<{ id: string; createdAt: string; title: string | null; sender: ArchiveSender | null }>> {
   const { results } = await db
     .prepare(
       `SELECT e.id, e.created_at, i.title,
-         (SELECT l.value FROM json_each(e.segments, '$[0].lines') AS l WHERE json_extract(l.value, '$.type') = 'letter' LIMIT 1) AS first_letter
+         (SELECT l.value FROM json_each(e.segments, '$[0].lines') AS l WHERE json_extract(l.value, '$.type') = 'letter' AND json_extract(l.value, '$.kind') IN ('letter', 'found') LIMIT 1) AS first_letter
        FROM episodes e
        LEFT JOIN items i ON i.id = json_extract(e.segments, '$[0].itemId')
        WHERE e.listener_id = ? AND e.verified = 1 AND EXISTS (SELECT 1 FROM listens WHERE listener_id = e.listener_id AND episode_id = e.id)

@@ -137,6 +137,24 @@ describe("GET /", () => {
     expect(empty).toBe('<section class="recent-episodes"><h2>これまでの番組</h2><a href="/episodes">すべて見る</a>');
   });
 
+  it("names the letter's sender in a recent programme, never someone who replied to it", async () => {
+    const cookie = await newSession();
+    const listenerId = cookie.split("=")[1]!.split(".")[0]!;
+    const it = await insertItem(env.DB, itemDraft({ title: "返信のある曲", externalIds: { itunes: "rp" } }));
+    const l = await insertLetter(env.DB, letterDraft(it.id, { body: "便り", bodyJa: "便り" }));
+    const r = await insertLetter(env.DB, letterDraft(it.id, { kind: "reply", parentLetterId: l.id, body: "いいね", bodyJa: "いいね" }));
+    const reply = { type: "letter" as const, letterId: r.id, text: "いいね", radioName: "返した人", place: "那覇", kind: "reply" as const, sourceUrl: null, sourceAuthor: null };
+    const letter = { type: "letter" as const, letterId: l.id, text: "便り", radioName: "送り主", place: "札幌", kind: "letter" as const, sourceUrl: null, sourceAuthor: null };
+    const both = await insertEpisode(env.DB, { listenerId, segments: [{ itemId: it.id, slot: "near" as const, lines: [reply, letter] }], verified: true, report: {} as Episode["report"], createdAt: "2026-11-02T00:00:00.000Z" });
+    const only = await insertEpisode(env.DB, { listenerId, segments: [{ itemId: it.id, slot: "near" as const, lines: [{ type: "dj" as const, text: "x" }, reply] }], verified: true, report: {} as Episode["report"], createdAt: "2026-11-01T00:00:00.000Z" });
+    await recordListen(env.DB, { listenerId, episodeId: both.id, letterId: l.id, segmentIndex: 0 });
+    await recordListen(env.DB, { listenerId, episodeId: only.id, letterId: r.id, segmentIndex: 0 });
+    const html = await (await get("/", cookie)).text();
+    expect(html).toContain(`<a href="/episodes/${both.id}">返信のある曲 · 送り主さん（札幌）</a>`);
+    expect(html).toContain(`<a href="/episodes/${only.id}">返信のある曲</a>`);
+    expect(html).not.toContain("返した人");
+  });
+
   it("orders the home: send, explanation, recent programmes, then the letter cards", async () => {
     const cookie = await newSession();
     const it = await insertItem(env.DB, itemDraft());
