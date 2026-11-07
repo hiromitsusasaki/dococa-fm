@@ -2,9 +2,22 @@
 
 > 新しいセッションはまずここを読む。更新はタスクの区切りごと（最新を上に）。
 
+## 2026-11-07 Phase 5 完了（最終レビューの修正まで・ローカル）。次は本人作業 → デプロイ
+
+Phase 5（TTS の見張りと指示文・ヘッダの言語切替・オンエアの欄・設定の整理と `radio-xxxxxx`・自作の BGM・ホームの作り替え・説明ページ・締めのドキュメント）の Task 1〜8 は main にコミット済み（push していない）。本番は Phase 4 の状態のままなので、下の本人作業を上から順に済ませる。
+
+### 本人作業（Phase 5 のデプロイ。この順）
+
+- [ ] `pnpm db:migrate`（0021: 音声の鍵 v4。`tts_audio` を空にし `units.audio_ready` を戻す。当日の TTS 上限カウンタも空になる（本番は `CLOUD_TTS_GLOBAL_DAILY_LIMIT=8000` のまま）ので、日本時間の日の早いうちに当てるか、prepare の回数を見ながら進める）。
+- [ ] `pnpm run deploy`。
+- [ ] `/admin/prepare` のループ（`{"limit":8}` 程度で、`remaining.audio` が ja/en とも 0 になるまで。約 700 行、上限の内）。最初の 1〜2 回で `failed` が増えるなら、英語の見張りが新しい遅めの指示文に対して厳しすぎる可能性がある。`src/worker/tts/google.ts` の `SECONDS_PER_CHAR.en` を 0.125 → 0.14 に緩めて再デプロイ。
+- [ ] 聴いて確かめる: 冒頭の挨拶（指示文が読まれていないか）、日本語と英語の回の話し方、BGM の音量感（声の 16 dB ほど下。大きい/小さいなら `src/client/audio.ts` の `BED_VOLUME`）。
+- [ ] 画面を確かめる: ヘッダの言語切替、ホーム（ダイヤル、カードを押して即再生、送るモーダル、直近 3 番組）、`/settings`（公開 URL）、`/about`。
+- [ ] 任意: あとで `pnpm wrangler secret delete CLOUD_TTS_GLOBAL_DAILY_LIMIT` で既定の 3000 に戻す。
+
 ## Phase 5 の進み（計画: `docs/superpowers/plans/2026-11-07-dococa-fm-phase5.md`、設計: 追記 M）
 
-2026-11-07 の本人フィードバック（本番を聴いて。2 回分）から。8 タスク。終わったら migration 0021 → deploy → `/admin/prepare` のループ（音声を全部作り直す）。
+2026-11-07 の本人フィードバック（本番を聴いて。2 回分）から。8 タスク。すべて完了。デプロイは上の本人作業（migration 0021 → deploy → `/admin/prepare` のループで音声を全部作り直す）。
 
 | Task | 内容 | 状態 |
 |---|---|---|
@@ -15,12 +28,16 @@
 | Task 5 | 聞こえる BGM（自作のベッド音に差し替え） | 完了（`scripts/make-bed.sh` が 32 秒のつなぎ目のない mono 64 kbps の静かなパッドを合成し `public/bed.mp3` を上書き。実測 平均 −23.1 dBFS・ピーク −12.4 dBFS。`BED_VOLUME` は 0.4。音の良し悪しは本人がデプロイ後に聴いて判断） |
 | Task 6 | ホーム（ラジオを `mine` にしてダイヤルを常に表示・カードで即再生（挨拶を飛ばす）・送るモーダル・説明文・直近 3 番組） | 完了（ホームは匿名も含め `mine` を載せる。頼んだお便りが最初の枠に座った初回は、挨拶もつなぎも無くそのお便りの紹介から始まる。カードは `data-play-letter` をページの委譲クリックで拾い、作り置きを捨ててそのお便りから鳴らし直す。送るは `<dialog>` の iframe に `/put?embed=1`（ヘッダ無し。フォームとリンクは `embed=1` を引き継ぎ、サインインと設定は `_top`）。送ると `/put?embed=1&sent=<作品>` が `dfm:sent` を送ってモーダルが閉じる。説明文は全員に。直近 3 番組は `listArchive` が保存済みの行から送り主も 1 クエリで返す。`station.js` 4.8 kB gzip。スクリーンショットは `docs/screenshots/2026-11-07-home-*.png`） |
 | Task 7 | 説明ページ `/about` とヘッダのリンク | 完了（`GET /about` は 4 枚のパネル（聴く・送る・自分のラジオ・できること・しないこと）。言語はリスナーのもの。ヘッダのナビは常に出し、「Dococa FM とは」を先頭に全員へ（`listener` が無いページでも）。スクリーンショットは `docs/screenshots/2026-11-07-about-*.png`） |
-| Task 8 | 締めのドキュメント | 未着手 |
+| Task 8 | 締めのドキュメント | 完了（status・README・SECURITY.md・DESIGN.md をコードに合わせた。サインイン済みのヘッダの 390px のスクリーンショットは `docs/screenshots/2026-11-07-header-signedin-phone.png`） |
 
 ### 決定（Phase 5）
 
 - BGM が鳴らない原因は `public/bed.mp3` が Phase 1 のプレースホルダ（20 秒、平均 −46 dB）だったこと。自作のアンビエントに差し替える。本物の楽曲にするなら本人が CC0 のものを選ぶ。
 - プロンプトの読み上げの見張りは本番の clip の実測から決める（追記 M に数字）。英語の指示文は説明形のまま。
+- 頼んだお便りが最初の枠に座った初回は、挨拶もつなぎも無く、そのお便りの紹介から始める（Task 6。カードを押してすぐ聴けるように）。
+- ホームのラジオは、匿名も含め全員が `mine`（自分のラジオ）にする。ダイヤルも全員に出る（Task 6）。
+- 英語の見張りの余裕は 1 秒に満たない（Task 1 のレビュー M1）。測ったのは古い指示文で、新しい「ゆっくり」の指示文では英語の読みが遅くなりうる。`failed` が増えたら `SECONDS_PER_CHAR.en` を 0.125 → 0.14 に緩める（上の本人作業）。
+- 0021 は `tts_audio` を空にするので、その日の TTS 上限カウンタ（`tts_audio` の行数）も空になる（Task 1 のレビュー M5）。当てる日と prepare の回し方に注意する（上の本人作業）。
 
 ## Phase 4 の進み（計画: `docs/superpowers/plans/2026-11-06-dococa-fm-phase4.md`、設計: 追記 L）
 
@@ -209,7 +226,7 @@ Phase 2（ラジオ中心の体験への作り替え）と Phase 3（単位・�
 - 全体レビュー（Claude と Codex）の指摘を 9 コミットで閉じた。主なもの: 定型文が引用検査に当たって 503 になる件、プレイヤーに原文を出す、時事語・作品数・住所・郵便番号の検査、未検証の回と非公開にしたお便りを全出口で出さない、作品の題名と作者の判定、審査員の 3 作品を「近く」に入れる、D1 のクエリ数（`POST /start` 57 → 25、`POST /episodes` 45 → 13）、空の回を作らない、`PUBLIC_ORIGIN` の既定値を空に、開発時の判定の素通しは `DEV_SKIP_CLAUDE=1` だけ、TTS の single-flight と上限、本文の上限、MCP の照会前の IP 制限。詳細は `.superpowers/sdd/2026-11-03-dococa-fm/final-fix-report.md`（gitignore 済み）。
 - Cloudflare のプランは **Workers Paid**（本人確認 2026-11-04）。D1 のクエリ上限は 1 回の実行あたり 1000。主な経路は `test/worker/query-budget.test.ts` で数えている。単位がそろっていれば番組の作成は 30 未満だが、単位をその場で作る経路は 1 単位につき 6 文かかり、最悪（18 単位）でおよそ 140 文になる（テストの上限は 150）。Workers Free の 50 は超えるが、Paid の 1000 には十分な余裕がある（2026-11-06 最終修正で更新）。
 - 次の一手（当時）: 本人が push → 鍵を入れる → デプロイ → チェックリストを済ませて public 化・提出。push とデプロイは 2026-11-05 に完了（上の節）。
-- Task 16 でできたこと: CI（SHA 固定、secret なし）、Dependabot、SECURITY.md、同一オリジン検査、`secureHeaders()`、レート制限（IP とリスナー、1 分 20 回。カウンタは isolate ごと）、番組作成の全体上限（`EPISODE_GLOBAL_DAILY_LIMIT` 既定 300、`CLOUD_TTS_GLOBAL_DAILY_LIMIT` 既定 50、上限値 `0` は停止）、`SESSION_SECRET` 空のときの 500、未検証の番組は 404。
+- Task 16 でできたこと: CI（SHA 固定、secret なし）、Dependabot、SECURITY.md、同一オリジン検査、`secureHeaders()`、レート制限（IP とリスナー、1 分 20 回。カウンタは isolate ごと）、番組作成の全体上限（`EPISODE_GLOBAL_DAILY_LIMIT` 既定 300、`CLOUD_TTS_GLOBAL_DAILY_LIMIT` 既定 50（現在の既定は 1800 / 3000）、上限値 `0` は停止）、`SESSION_SECRET` 空のときの 500、未検証の番組は 404。
 - **public 化前チェックリスト（本人）**
   - [x] ローカルの commit を push する（2026-11-04 ops-mac から push。初回 CI 緑）。
   - [x] Cloudflare のプラン: Paid。
