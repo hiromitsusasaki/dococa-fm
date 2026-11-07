@@ -283,8 +283,9 @@ a {
   display: none;
 }
 
-/* On a phone the switches show their short labels, so the header stays within two rows. */
-@media (max-width: 480px) {
+/* Up to 1080px the switches show their short labels and the nav sits closer, so a signed-in header stays on one row down to 800px
+   (in Japanese the full labels wrap below about 1045px). */
+@media (max-width: 1080px) {
   .theme-toggle .full,
   .lang-toggle .full {
     display: none;
@@ -299,15 +300,23 @@ a {
     gap: 0 var(--sp-3);
   }
 
-  /* Row one: wordmark and the two switches; row two: the links. */
+  .site-header nav {
+    gap: 0 var(--sp-2);
+  }
+}
+
+/* Below 900px the signed-in name goes (サインアウト stays), so the header still fits one row at 800px. */
+@media (max-width: 899px) {
+  .site-header .site-user {
+    display: none;
+  }
+}
+
+/* On a phone the header is two rows: the wordmark and the two switches, then the links. */
+@media (max-width: 480px) {
   .site-header nav {
     order: 3;
     flex: 1 0 100%;
-    gap: 0 var(--sp-2);
-  }
-
-  .site-header .site-user {
-    display: none;
   }
 
   /* Sign-out lines up with the links, so a signed-in nav stays on one row. */
