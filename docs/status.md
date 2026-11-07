@@ -28,6 +28,7 @@ Phase 5（TTS の見張りと指示文・ヘッダの言語切替・オンエア
 | Task 5 | 冷えた入口（お住まいの国を散らす） | 未着手 |
 | Task 6 | cookie の無い GET でリスナー行を作らない | 未着手 |
 | Task 8 | デモの反応（デモのペルソナから「私も」と一言。あとから送られたお便りにも付けられる） | 未着手 |
+| Task 9 | 種類ごとの冒頭の一行（「…という曲の紹介です」。0023 で単位を作り直す） | 未着手 |
 | Task 7 | 締め（`docs/cost.md`・status・README・SECURITY・DESIGN） | 未着手 |
 
 ## Phase 5 の進み（計画: `docs/superpowers/plans/2026-11-07-dococa-fm-phase5.md`、設計: 追記 M）

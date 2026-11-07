@@ -141,6 +141,22 @@
 
 ---
 
+### Task 9: A kind-specific lead line before the introduction (owner request 2026-11-07)
+
+**Files:**
+- Modify: `src/worker/program/compose.ts` (`unitSegment`: a fixed `lead` line before the intro), `src/worker/program/script.ts` (DJ prompts: the lead has just named the work), `src/worker/program/unit.ts` (prompt input), `src/worker/program/verify.ts` (the lead is a fixed template; the intro must not restate the title in its first sentence — a new `retryable` detail `lead:`), `src/worker/i18n/ja.ts`, `src/worker/i18n/en.ts`, `src/worker/program/prepare.ts` (the lead is voiced with the unit), `docs/status.md`, `README.md` (line count per letter)
+- Create: `migrations/0023_units_lead.sql` (`DELETE FROM units;` — every unit is rewritten so the intro no longer opens with the title; liked flags are lost, none exist yet)
+- Test: `test/worker/program/compose.test.ts`, `verify.test.ts`, `unit.test.ts`, `prepare.test.ts`, `i18n.test.ts`
+
+**Interfaces:**
+- Produces: i18n `script.lead.music` ja「{creator}の「{title}」という曲の紹介です。」/ en "Here is “{title}”, a song by {creator}."; `script.lead.book` ja「{creator}の「{title}」という本の紹介です。」/ en "Here is “{title}”, a book by {creator}."; `script.lead.film` ja「{creator}の「{title}」という映画の紹介です。」/ en "Here is “{title}”, a film by {creator}."; `script.lead.video` ja「{creator}の「{title}」という動画の紹介です。」/ en "Here is “{title}”, a video by {creator}."; when `creator` is empty: `script.lead.<kind>.noCreator` ja「「{title}」という曲の紹介です。」 etc. The lead is a `dj` line with `fixed: true` (like the hand-over), the first line of the unit segment, before the intro; it is cached per work and language like any line. The DJ prompt (ja/en) says: 「直前に『{creator}の「{title}」という{種類}の紹介です』と告げてある。intro はその続きで、題名と作者を繰り返さずに始める。」 `verify.ts`: the intro's first sentence must not contain the title (retryable `lead:`).
+
+- [ ] **Step 1: Failing tests**: `unitSegment` of a music/book/film/video item yields lines `[lead, intro, handover, letter, after]` with the right template and `fixed: true`; empty creator → the noCreator template; `verifyEpisode` flags an intro whose first sentence contains the title; the DJ prompt carries the lead sentence; `prepareLetter` voices 5 lines per verified unit (2 for unverified: handover + letter; the lead is added only with a verified unit — decide and test); i18n parity.
+- [ ] **Step 2: Implement; migration; docs** (README: "お便り 1 通で音声はおよそ 10 行"; status 決定: the lead line and why `0023` deletes units).
+- [ ] **Step 3: Run all, commit** (`feat: kind-specific lead line before the introduction`).
+
+---
+
 ### Task 7: Close-out: cost notes and docs
 
 **Files:**
