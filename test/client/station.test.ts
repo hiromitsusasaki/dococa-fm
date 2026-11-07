@@ -937,7 +937,7 @@ describe("station: a name and place before a reply", () => {
   it("a refused name or place says so and keeps asking; a refused reply without them is the plain failure", async () => {
     const off = await onLetter(true);
     const real = fetch as unknown as ReturnType<typeof vi.fn>;
-    const refused = () => Promise.resolve(new Response("", { status: 422 }));
+    const refused = () => Promise.resolve(new Response("", { status: 422, headers: { "x-dfm-reject": "profile" } }));
     real.mockImplementationOnce(refused);
     root.querySelector<HTMLInputElement>('.now input[name="radioName"]')!.value = "しずく";
     root.querySelector<HTMLTextAreaElement>(".now form.reply textarea")!.value = "いい曲";
@@ -945,8 +945,19 @@ describe("station: a name and place before a reply", () => {
     await flush();
     expect(root.querySelector(".station-status")!.textContent).toBe("ラジオネームとお住まいを確かめてください");
     expect(root.querySelector(".now details.reply-name")).not.toBeNull();
-    real.mockImplementationOnce(refused);
+    real.mockImplementationOnce(() => Promise.resolve(new Response("", { status: 422 })));
     root.querySelector<HTMLInputElement>('.now input[name="radioName"]')!.value = "";
+    submit();
+    await flush();
+    expect(root.querySelector(".station-status")!.textContent).toBe("送れませんでした");
+    off();
+  });
+
+  it("a reply with a name that is refused for its words (no profile mark) is the plain failure, not a bad name", async () => {
+    const off = await onLetter(true);
+    (fetch as unknown as ReturnType<typeof vi.fn>).mockImplementationOnce(() => Promise.resolve(new Response("", { status: 422 })));
+    root.querySelector<HTMLInputElement>('.now input[name="radioName"]')!.value = "しずく";
+    root.querySelector<HTMLTextAreaElement>(".now form.reply textarea")!.value = "いい曲";
     submit();
     await flush();
     expect(root.querySelector(".station-status")!.textContent).toBe("送れませんでした");

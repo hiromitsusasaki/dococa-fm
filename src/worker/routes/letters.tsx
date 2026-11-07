@@ -38,6 +38,8 @@ const letterSchema = z.object({
   placeRegion: z.string().max(10).optional(),
 });
 const profileSchema = z.object(profileFields).refine(isValidPlace);
+/** On a 422 for a reply, `profile` when the name or place was refused (the reply itself was not looked at). */
+export const REJECT_HEADER = "x-dfm-reject";
 type LetterForm = z.infer<typeof letterSchema>;
 
 export const letters = new Hono<{ Bindings: Env; Variables: Variables }>();
@@ -70,7 +72,11 @@ letters.post(
     let profile: Partial<Listener> | null = null;
     if (form.kind === "reply" && !listener.radioName && (form.radioName?.trim() || form.placeCountry?.trim())) {
       const parsed = profileSchema.safeParse({ radioName: form.radioName ?? "", placeCountry: form.placeCountry ?? "", placeRegion: form.placeRegion ?? "" });
-      if (!parsed.success) return putError(c, form, t("settings.invalid"), 422);
+      if (!parsed.success) {
+        // The player tells a refused name or place apart from a refused reply by this header.
+        c.header(REJECT_HEADER, "profile");
+        return putError(c, form, t("settings.invalid"), 422);
+      }
       profile = replyProfilePatch(parsed.data);
     }
     const result = await createLetter(c.env, c.env.DB, profile ? { ...listener, ...profile } : listener, form);

@@ -514,7 +514,7 @@ export function mountStation(root: HTMLElement, opts: StationOptions) {
       if (state.power === "on") sounds.play("watashimo", state.volume);
     }
     if (taken) setState({ sent: { ...state.sent, [key]: true }, sendFailed: null, ...(fields.radioName ? { askName: false } : {}) });
-    else setState({ sendFailed: answer === "invalid" && (fields.radioName || fields.placeCountry) ? "reply.invalidName" : "player.sendFailed" });
+    else setState({ sendFailed: answer === "profile" ? "reply.invalidName" : "player.sendFailed" });
     if (taken && key.startsWith("w:")) envelope(document, "float");
     return taken;
   }

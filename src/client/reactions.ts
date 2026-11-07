@@ -3,12 +3,16 @@
 const FORM = { "content-type": "application/x-www-form-urlencoded" };
 
 /** Posts a reaction letter: `taken` (a redirect, or 409 for a 私も already said), `invalid` (422: something in the form was refused) or `failed`. */
-export async function sendLetter(fields: Record<string, string>): Promise<"taken" | "invalid" | "failed"> {
+/**
+ * Posts a letter, a 私も or a 一言. `profile`: the name or place sent with a reply was refused (the server marks that
+ * 422 with `x-dfm-reject: profile`); any other refusal is `failed`.
+ */
+export async function sendLetter(fields: Record<string, string>): Promise<"taken" | "profile" | "failed"> {
   try {
     const res = await fetch("/letters", { method: "POST", headers: FORM, body: new URLSearchParams(fields).toString(), redirect: "manual" });
     // A successful post answers with a redirect; 409 means this person already said watashimo.
     if (res.ok || res.type === "opaqueredirect" || res.status === 409 || (res.status >= 300 && res.status < 400)) return "taken";
-    return res.status === 422 ? "invalid" : "failed";
+    return res.status === 422 && res.headers.get("x-dfm-reject") === "profile" ? "profile" : "failed";
   } catch {
     return "failed";
   }

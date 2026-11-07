@@ -600,6 +600,8 @@ describe("POST /letters: a radio name and place before an anonymous reply", () =
     const cookie = await newSession();
     const res = await postForm("/letters", cookie, { ...base, body: "わかる", ...fields });
     expect(res.status).toBe(422);
+    // The player shows 「ラジオネームとお住まいを…」 only for this mark.
+    expect(res.headers.get("x-dfm-reject")).toBe("profile");
     expect(await replies()).toEqual([]);
     const me = (await getListener(env.DB, idOf(cookie)))!;
     expect([me.radioName, me.placeCountry]).toEqual(["", null]);
@@ -629,6 +631,8 @@ describe("POST /letters: a radio name and place before an anonymous reply", () =
     const cookie = await newSession();
     const res = await postForm("/letters", cookie, { ...base, parentLetterId: "nope", body: "わかる", radioName: "しずく", placeCountry: "JP" });
     expect(res.status).toBe(422);
+    // Refused for the reply, not the name: no profile mark, so the player shows the plain failure.
+    expect(res.headers.get("x-dfm-reject")).toBeNull();
     expect(await replies()).toEqual([]);
     const me = (await getListener(env.DB, idOf(cookie)))!;
     expect([me.radioName, me.placeCountry]).toEqual(["", null]);
