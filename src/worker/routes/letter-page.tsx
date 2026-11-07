@@ -11,7 +11,7 @@ import { type Lang, tFor } from "../i18n/t";
 import { displayText } from "../letters/display";
 import { unitSegment } from "../program/unit";
 import { letterAudioIpRateLimit } from "../security/rate-limit";
-import { audioKey, ensureAudio, voiceOf } from "../tts/audio";
+import { audioKey, voiceOf } from "../tts/audio";
 import type { Item, Letter, ScriptLine } from "../types";
 
 export const letterPage = new Hono<{ Bindings: Env; Variables: Variables }>();
@@ -185,15 +185,9 @@ letterPage.get("/letters/:id/audio/:n", letterAudioIpRateLimit, async (c) => {
   const slot = slots.find((s) => s.n === Number(raw));
   if (!slot) return c.json({ error: "not found" }, 404);
 
-  // The same key and cap as `/tts`: a clip made here is the one every programme plays.
-  const ensured = await ensureAudio(c.env, c.env.DB, { text: said(slot.line), lang, voice: voiceOf(c.env) });
-  if (!ensured.ok) {
-    if (ensured.reason === "limit") return c.json({ error: "tts limit" }, 503);
-    if (ensured.reason === "busy") return c.json({ error: "tts busy" }, 503, { "retry-after": "2" });
-    if (ensured.reason === "unavailable") return c.json({ error: "tts unavailable" }, 503);
-    return c.json({ error: "tts failed" }, 502);
-  }
-  const clip = await c.env.BUCKET.get(ensured.key);
-  if (!clip) return c.json({ error: "tts failed" }, 502);
+  // Cached clips only, under the same key as `/tts`: this route never synthesises, so no paid call is made here.
+  // A miss is a 404, and the player shows that line's text for its length and moves on.
+  const clip = await c.env.BUCKET.get(await audioKey(lang, voiceOf(c.env), said(slot.line)));
+  if (!clip) return c.json({ error: "not found" }, 404);
   return new Response(clip.body, { headers: AUDIO_HEADERS });
 });

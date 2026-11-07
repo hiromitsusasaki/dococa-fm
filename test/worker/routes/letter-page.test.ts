@@ -201,25 +201,28 @@ describe("GET /letters/:id/audio/:n", () => {
     expect(await listeners()).toBe(0);
   });
 
-  it("synthesizes a miss under the shared key, saying a dj line's spoken text", async () => {
+  it("serves a dj line's clip under the key of its spoken text, and never synthesises a miss", async () => {
     const { letter } = await shared();
     await withUnit(letter.id);
     const { fn } = stubFetch([[GOOGLE, () => json({ audioContent: audio })]]);
+    expect((await get(`/letters/${letter.id}/audio/1`, {}, keyed)).status).toBe(404);
+    expect((await get(`/letters/${letter.id}/audio/3`, {}, keyed)).status).toBe(404);
+    expect(fn).not.toHaveBeenCalled();
+    expect(await env.BUCKET.get(await audioKey("ja", "male", "サイらしい一曲です。"))).toBeNull();
+    await env.BUCKET.put(await audioKey("ja", "male", "サイらしい一曲です。"), new Uint8Array([5]));
     const res = await get(`/letters/${letter.id}/audio/1`, {}, keyed);
     expect(res.status).toBe(200);
-    expect(JSON.parse(String(fn.mock.calls[0]![1]?.body)).input.text).toBe("サイらしい一曲です。");
-    expect(await env.BUCKET.get(await audioKey("ja", "male", "サイらしい一曲です。"))).not.toBeNull();
-  });
-
-  it("answers 503 at the daily cap, and 404 for a line the letter does not have", async () => {
-    const { letter } = await shared();
-    const { fn } = stubFetch([[GOOGLE, () => json({ audioContent: audio })]]);
-    expect((await get(`/letters/${letter.id}/audio/3`, {}, { ...keyed, CLOUD_TTS_GLOBAL_DAILY_LIMIT: "0" })).status).toBe(503);
-    for (const n of ["0", "1", "4", "5", "x", "03"]) expect((await get(`/letters/${letter.id}/audio/${n}`, {}, keyed)).status, n).toBe(404);
+    expect([...new Uint8Array(await res.arrayBuffer())]).toEqual([5]);
     expect(fn).not.toHaveBeenCalled();
   });
 
-  it("limits one IP in its own bucket, before any synthesis", async () => {
+  it("answers 404 for a line the letter does not have", async () => {
+    const { letter } = await shared();
+    await env.BUCKET.put(await audioKey("ja", "male", BODY), new Uint8Array([1]));
+    for (const n of ["0", "1", "4", "5", "x", "03"]) expect((await get(`/letters/${letter.id}/audio/${n}`, {}, keyed)).status, n).toBe(404);
+  });
+
+  it("limits one IP in its own bucket", async () => {
     const { letter } = await shared();
     await env.BUCKET.put(await audioKey("ja", "male", BODY), new Uint8Array([1]));
     // RATE_LIMIT_PER_MINUTE=1 scales the bucket down: 6 a minute per IP.
