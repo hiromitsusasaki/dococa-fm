@@ -993,3 +993,86 @@ describe("station: the dial and the first ask", () => {
     expect(root.querySelector(".knob-dial")).toBeNull();
   });
 });
+
+describe("station: a letter card plays on this radio", () => {
+  const one = (id: string) => view(id, [["a", [dj(`${id}-1`), letter(`${id}-L`, "l")]]]);
+  let scrolled: ReturnType<typeof vi.fn>;
+  const card = (id: string) => {
+    const a = document.createElement("a");
+    a.href = `/stations/mine?letter=${id}`;
+    a.setAttribute("data-play-letter", id);
+    a.innerHTML = "<span class='letter-card-text'>text</span>";
+    document.body.append(a);
+    return a;
+  };
+  /** True when the click was let through (the link would navigate). */
+  const press = (target: Element, init: MouseEventInit = {}) => target.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, ...init }));
+
+  beforeEach(() => {
+    scrolled = vi.fn();
+    HTMLElement.prototype.scrollIntoView = scrolled as unknown as HTMLElement["scrollIntoView"];
+  });
+
+  it("an idle radio: the click stays on the page, the radio turns on with the letter as the first ask, and the page scrolls to the player", async () => {
+    resumeReply = ok(one("old"));
+    nextReplies = [ok(one("e1"))];
+    autoEnd = false;
+    const s = mountStation(root, opts({ stationKey: "mine", dial: 0.4 }));
+    const through = press(card("L5").querySelector("span")!);
+    expect(through).toBe(false);
+    await vi.waitFor(() => expect(s.state().power).toBe("on"));
+    expect(bodies[0]).toEqual({ dial: 0.4, first: true, letterId: "L5" });
+    expect(s.state().current?.id).toBe("e1");
+    // A card asks for its letter: the last visit is not resumed.
+    expect(calls.some((c) => c.startsWith("GET /stations/world.json"))).toBe(false);
+    expect(scrolled).toHaveBeenCalled();
+    expect(scrolled.mock.contexts[0]).toBe(root);
+  });
+
+  it("a playing radio starts again from the card's letter, dropping the queue", async () => {
+    nextReplies = [ok(one("e1")), ok(one("e2")), ok(one("e3"))];
+    autoEnd = false;
+    const s = mountStation(root, opts({ stationKey: "mine", dial: 0.4 }));
+    await power();
+    await vi.waitFor(() => expect(s.state().queue.map((e) => e.id)).toEqual(["e2"]));
+    press(card("L7"));
+    await vi.waitFor(() => expect(s.state().current?.id).toBe("e3"));
+    expect(s.state().power).toBe("on");
+    expect(bodies[2]).toEqual({ dial: 0.4, first: true, letterId: "L7" });
+    expect(s.state().queue.map((e) => e.id)).not.toContain("e2");
+  });
+
+  it("a press during the first tuning takes over: the earlier answer is dropped", async () => {
+    let release!: () => void;
+    const late = () => new Promise<Response>((r) => (release = () => void ok(one("slow"))().then(r)));
+    nextReplies = [late, ok(one("asked"))];
+    autoEnd = false;
+    const s = mountStation(root, opts({ stationKey: "mine" }));
+    await power();
+    await vi.waitFor(() => expect(bodies).toHaveLength(1));
+    press(card("L8"));
+    await vi.waitFor(() => expect(s.state().current?.id).toBe("asked"));
+    release();
+    await flush();
+    expect(s.state().current?.id).toBe("asked");
+    expect(s.state().power).toBe("on");
+  });
+
+  it("leaves a modified click (a new tab) and other links alone", async () => {
+    const s = mountStation(root, opts({ stationKey: "mine" }));
+    expect(press(card("L9"), { metaKey: true })).toBe(true);
+    const other = document.createElement("a");
+    other.href = "/items/x";
+    document.body.append(other);
+    expect(press(other)).toBe(true);
+    await flush();
+    expect(s.state().power).toBe("off");
+    expect(bodies).toEqual([]);
+  });
+
+  it("stops listening once unmounted", async () => {
+    const s = mountStation(root, opts({ stationKey: "mine" }));
+    s.unmount();
+    expect(press(card("L1"))).toBe(true);
+  });
+});

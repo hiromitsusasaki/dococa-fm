@@ -87,6 +87,8 @@ export function mountStation(root: HTMLElement, opts: StationOptions) {
   let aheadFail: Reason | null = null;
   let resumeTried = false;
   let starting = false;
+  /** Bumped when a card restarts the radio: a start already under way is dropped. */
+  let starts = 0;
   let dial = loadDial(opts.dial);
   let dialTimer: ReturnType<typeof setTimeout> | undefined;
   /** Bumped when the dial turns: an ask made before that no longer fits and its answer is dropped. */
@@ -233,6 +235,8 @@ export function mountStation(root: HTMLElement, opts: StationOptions) {
   /** The first episode after the switch is turned on: where the last visit stopped, else a new one. */
   async function begin() {
     starting = true;
+    // A card pressed while this start awaits takes over: this one then stops at its next step.
+    const start = starts;
     let view: PlayerEpisode | null = null;
     let [seg, line] = [0, 0];
     let reason: Reason | null = null;
@@ -240,10 +244,12 @@ export function mountStation(root: HTMLElement, opts: StationOptions) {
     if (!resumeTried) {
       resumeTried = true;
       const resumed = letterId ? null : await requestResume();
+      if (start !== starts) return;
       if (resumed) ({ view, seg, line } = resumed);
     }
     if (!view) {
       const r = await requestNext();
+      if (start !== starts) return;
       if (r.ok) {
         view = r.view;
         letterId = undefined;
@@ -286,6 +292,32 @@ export function mountStation(root: HTMLElement, opts: StationOptions) {
     abort.abort();
     player.stopBed();
     setState({ power: "off", loading: false });
+  }
+
+  /** A letter card on the page: start again from that letter, as a new visit would (no resume, `first` with the letter). */
+  function playLetter(id: string) {
+    abort.abort();
+    player.stopBed();
+    generation++;
+    starts++;
+    ahead = null;
+    if (aheadFail !== "limit") aheadFail = null;
+    letterId = id;
+    heard = false;
+    resumeTried = true;
+    starting = false;
+    setState({ power: "off", current: null, seg: 0, line: 0, queue: [], loading: false });
+    turnOn();
+    root.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  /** Cards keep their link for a new tab or no script; a plain click plays the letter here. */
+  function onCardClick(e: MouseEvent) {
+    const card = (e.target as Element | null)?.closest?.("[data-play-letter]");
+    const id = card?.getAttribute("data-play-letter");
+    if (!id || opts.grow || !root.isConnected || e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+    e.preventDefault();
+    playLetter(id);
   }
 
   /** Lock-screen "next": skip to the next work, or to the next episode from the last one. */
@@ -386,6 +418,7 @@ export function mountStation(root: HTMLElement, opts: StationOptions) {
   }
 
   bindMediaSession({ play: turnOn, pause: turnOff, next: skip });
+  document.addEventListener("click", onCardClick);
   setState({});
 
   return {
@@ -393,6 +426,7 @@ export function mountStation(root: HTMLElement, opts: StationOptions) {
     unmount() {
       mounted = false;
       clearTimeout(dialTimer);
+      document.removeEventListener("click", onCardClick);
       abort.abort();
       player.stopBed();
       reactRoot.unmount();

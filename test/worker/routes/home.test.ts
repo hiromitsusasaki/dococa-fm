@@ -70,9 +70,11 @@ describe("GET /", () => {
     await new Promise((r) => setTimeout(r, 2));
     const other = await insertLetter(env.DB, letterDraft(it.id, { body: "ひとの便り", bodyJa: "ひとの便り" }));
     const html = await (await get("/", cookie)).text();
-    expect(html).toContain(`<a class="letter-card-main" href="/stations/mine?letter=${other.id}">`);
+    // The link stays for a new tab and for no script; the station script plays the letter on the home radio.
+    expect(html).toContain(`<a class="letter-card-main" href="/stations/mine?letter=${other.id}" data-play-letter="${other.id}">`);
     expect(html).toContain(`<a class="letter-card-main" href="/items/${it.id}">`);
     expect(html).not.toContain(`letter=${mine.id}`);
+    expect(html).not.toContain(`data-play-letter="${mine.id}"`);
     expect((html.match(new RegExp(`<a class="letter-card-meta" href="/items/${it.id}">曲B`, "g")) ?? []).length).toBe(2);
     expect((html.match(/このお便りから聴く/g) ?? []).length).toBe(1);
     expect(html).not.toMatch(/<a\s[^>]*>(?:(?!<\/a>)[\s\S])*<a\s/);

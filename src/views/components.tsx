@@ -154,7 +154,8 @@ const CARD_CHARS = 120;
 
 /**
  * A letter on the home page: the work's picture, the text cut at 120 code points, and who sent it. The picture and text start the
- * listener's radio from this letter (or open the work page for the viewer's own letter, which the radio refuses); the muted line opens the work page, where the full text is.
+ * listener's radio from this letter: on the home radio with the station script (`data-play-letter`), else at `/stations/mine?letter=`.
+ * The viewer's own letter, which the radio refuses, opens the work page instead; the muted line opens the work page, where the full text is.
  */
 export function LetterCard({ letter, item, lang, viewerId }: { letter: Letter; item: Item; lang: Lang; viewerId: string }) {
   const t = tFor(lang);
@@ -164,7 +165,7 @@ export function LetterCard({ letter, item, lang, viewerId }: { letter: Letter; i
   const own = letter.listenerId !== null && letter.listenerId === viewerId;
   return (
     <article class="letter-card">
-      <a class="letter-card-main" href={own ? `/items/${item.id}` : `/stations/mine?letter=${letter.id}`}>
+      <a class="letter-card-main" href={own ? `/items/${item.id}` : `/stations/mine?letter=${letter.id}`} data-play-letter={own ? undefined : letter.id}>
         <span class="letter-card-art">{item.imageUrl && <img src={item.imageUrl} alt="" width="96" height="96" loading="lazy" />}</span>
         <span class="letter-card-body">
           <span class="letter-card-text">{text}</span>
