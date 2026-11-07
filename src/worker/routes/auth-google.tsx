@@ -7,28 +7,13 @@ import { type Variables, clearSessionCookie, setSessionCookie } from "../auth/se
 import { bindGoogleSub, getListenerByGoogleSub } from "../db/listeners";
 import type { Env } from "../env";
 import { tFor } from "../i18n/t";
+import { safeNext } from "../security/next";
 
 const OAUTH_COOKIE = "dfm_oauth";
 const OAUTH_PATH = "/auth/google";
 const OAUTH_MAX_AGE = 600;
 const DEFAULT_NEXT = "/me";
 const FAILED = "/settings?signin=failed";
-
-/**
- * A same-site absolute path only; anything else would make the callback an open redirect. Printable ASCII only,
- * because browsers strip tabs and newlines from a Location value (`/%09/evil.com` would become `//evil.com`).
- */
-function safeNext(raw: string | undefined, publicOrigin: string): string {
-  if (!raw || raw.length > 200 || !/^\/(?!\/)[\x21-\x7e]*$/.test(raw) || raw.includes("\\") || /%(?:[01][0-9a-f]|7f)/i.test(raw)) return DEFAULT_NEXT;
-  try {
-    const u = new URL(raw, publicOrigin);
-    if (u.origin !== new URL(publicOrigin).origin) return DEFAULT_NEXT;
-    const next = u.pathname + u.search;
-    return next.startsWith("//") ? DEFAULT_NEXT : next;
-  } catch {
-    return DEFAULT_NEXT;
-  }
-}
 
 const randomHex = () => Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, "0")).join("");
 
@@ -51,7 +36,7 @@ authGoogle.get("/auth/google", (c) => {
   }
   const state = randomHex();
   const nonce = randomHex();
-  const next = safeNext(c.req.query("next"), c.env.PUBLIC_ORIGIN);
+  const next = safeNext(c.req.query("next"), c.env.PUBLIC_ORIGIN, DEFAULT_NEXT);
   setCookie(c, OAUTH_COOKIE, `${state}.${nonce}.${encodeURIComponent(next)}`, {
     httpOnly: true,
     sameSite: "Lax",
@@ -75,7 +60,7 @@ authGoogle.get("/auth/google/callback", async (c) => {
 
   let next = DEFAULT_NEXT;
   try {
-    next = safeNext(decodeURIComponent(rest.join(".")), c.env.PUBLIC_ORIGIN);
+    next = safeNext(decodeURIComponent(rest.join(".")), c.env.PUBLIC_ORIGIN, DEFAULT_NEXT);
   } catch {
     // A malformed escape falls back to the default.
   }
