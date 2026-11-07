@@ -14,3 +14,4 @@ dist/
 
 # playwright MCP の出力（スクリーンショット・スナップショット）
 .playwright-mcp/
+.vitest/
