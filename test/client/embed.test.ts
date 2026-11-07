@@ -51,12 +51,13 @@ afterEach(() => {
 });
 
 describe("the shared letter's player", () => {
-  it("fetches the lines on the first press and plays each clip in order, showing its text", async () => {
+  it("fetches the lines on mount and plays each clip in order from the first press, showing its text", async () => {
     const { button, line } = mount();
-    expect(fetch).not.toHaveBeenCalled();
-    button.click();
-    await flush();
     expect(fetch).toHaveBeenCalledWith(`${BASE}/lines.json`);
+    await flush();
+    button.click();
+    // Inside the tap, with no await before it.
+    expect(play).toHaveBeenCalledTimes(1);
     expect(new URL(audio().src).pathname).toBe(`${BASE}/audio/0`);
     expect(line.textContent).toBe(LINES[0]!.text);
     expect(button.textContent).toBe("一時停止");
@@ -75,6 +76,7 @@ describe("the shared letter's player", () => {
 
   it("shows a line without a clip as text for its reading time, then goes on", async () => {
     const { button, line } = mount();
+    await flush();
     button.click();
     await flush();
     audio().dispatchEvent(new Event("error"));
@@ -88,6 +90,7 @@ describe("the shared letter's player", () => {
   it("treats a refused play as a missing clip, but not a pause before the clip began", async () => {
     play.mockImplementationOnce(() => Promise.reject(Object.assign(new Error("aborted"), { name: "AbortError" })));
     const { button } = mount();
+    await flush();
     button.click();
     await flush();
     vi.advanceTimersByTime(60_000);
@@ -102,6 +105,7 @@ describe("the shared letter's player", () => {
 
   it("pauses and resumes the same line", async () => {
     const { button } = mount();
+    await flush();
     button.click();
     await flush();
     button.click();
@@ -115,6 +119,7 @@ describe("the shared letter's player", () => {
 
   it("keeps a paused text-only line on screen until play is pressed again", async () => {
     const { button } = mount();
+    await flush();
     button.click();
     await flush();
     audio().dispatchEvent(new Event("error"));
@@ -129,11 +134,46 @@ describe("the shared letter's player", () => {
   it("does nothing for a base that is not a shared letter's own path", async () => {
     for (const base of ["https://evil.example/letters/6b1c2f0e-1111-4aaa-8bbb-0c0ffee00011", "//evil.example/x", "/letters/abc", "/admin/x"]) {
       const { button } = mount(base);
+      await flush();
       button.click();
       await flush();
       expect(button.textContent, base).toBe("再生");
     }
     expect(fetch).not.toHaveBeenCalled();
     expect(audios).toHaveLength(0);
+  });
+
+  it("plays inside the tap while the lines are still loading, starts the first line when they come, and fetches them once", async () => {
+    let resolve!: (r: Response) => void;
+    vi.stubGlobal("fetch", vi.fn(() => new Promise<Response>((r) => (resolve = r))));
+    play.mockImplementationOnce(() => Promise.reject(Object.assign(new Error("no source"), { name: "NotSupportedError" })));
+    const { button, line } = mount();
+    button.click();
+    expect(play).toHaveBeenCalledTimes(1);
+    button.click();
+    button.click();
+    expect(play).toHaveBeenCalledTimes(2);
+    resolve(new Response(JSON.stringify({ lines: LINES })));
+    await flush();
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(new URL(audio().src).pathname).toBe(`${BASE}/audio/0`);
+    expect(line.textContent).toBe(LINES[0]!.text);
+    expect(play).toHaveBeenCalledTimes(3);
+    // The unlocking play's rejection (no source yet) is not taken for a missing clip.
+    vi.advanceTimersByTime(60_000);
+    expect(new URL(audio().src).pathname).toBe(`${BASE}/audio/0`);
+  });
+
+  it("waits for another press when paused before the lines came", async () => {
+    let resolve!: (r: Response) => void;
+    vi.stubGlobal("fetch", vi.fn(() => new Promise<Response>((r) => (resolve = r))));
+    const { button } = mount();
+    button.click();
+    button.click();
+    resolve(new Response(JSON.stringify({ lines: LINES })));
+    await flush();
+    expect(audio().getAttribute("src")).toBeNull();
+    button.click();
+    expect(new URL(audio().src).pathname).toBe(`${BASE}/audio/0`);
   });
 });

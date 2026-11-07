@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import app from "../../src/worker/index";
 import { t } from "../../src/worker/i18n/t";
 import { isSessionExempt } from "../../src/worker/auth/session";
+import { isFramedPath } from "../../src/worker/routes/letter-page";
 import { WindowStore, isRateLimited } from "../../src/worker/security/rate-limit";
 import { resetDb } from "../helpers/db";
 import { newSession } from "./routes/helpers";
@@ -344,5 +345,32 @@ describe("rate-limit allowlist covers every write route", () => {
     expect(refused.status).toBe(429);
     expect(refused.headers.get("set-cookie")).toBeNull();
     expect(await rows()).toBe(before);
+  });
+});
+
+describe("isFramedPath", () => {
+  it("frames only the exact /letters/<id>/player", () => {
+    const id = "6b1c2f0e-1111-4aaa-8bbb-0c0ffee00011";
+    expect(isFramedPath(`/letters/${id}/player`)).toBe(true);
+    for (const path of [
+      `/letters/${id}/player/`,
+      `/letters/${id}/player/..`,
+      `/letters/${id}/player/x`,
+      `/Letters/${id}/player`,
+      `/letters/${id}/PLAYER`,
+      `/letters/${id}`,
+      `/letters/${id}/lines.json`,
+      `/x/letters/${id}/player`,
+      `/letter/${id}/player`,
+      "/letters//player",
+    ]) expect(isFramedPath(path), path).toBe(false);
+  });
+
+  it("frames an encoded slash or an uppercase id only as a path the route answers with a bare 404", async () => {
+    for (const id of ["a%2Fb", "6B1C2F0E-1111-4AAA-8BBB-0C0FFEE00011"]) {
+      const res = await app.request(`/letters/${id}/player`, {}, e);
+      expect(res.status, id).toBe(404);
+      expect(await res.text(), id).not.toContain("<form");
+    }
   });
 });

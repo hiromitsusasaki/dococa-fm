@@ -67,9 +67,20 @@ export function mountEmbed(root: HTMLElement): void {
     begin();
   }
 
+  // Fetched on mount, once: the first press must call `play()` inside the tap (iOS drops the gesture across an await).
+  let waiting = false;
+  void fetch(`${base}/lines.json`)
+    .then(async (res) => (res.ok ? ((await res.json()) as { lines: Line[] }).lines : []))
+    .catch(() => [])
+    .then((got) => {
+      lines = got;
+      if (waiting && playing) begin();
+      waiting = false;
+    });
+
   audio.addEventListener("ended", next);
   audio.addEventListener("error", skip);
-  button.addEventListener("click", async () => {
+  button.addEventListener("click", () => {
     playing = !playing;
     label();
     if (!playing) {
@@ -78,13 +89,9 @@ export function mountEmbed(root: HTMLElement): void {
       return;
     }
     if (!lines) {
-      try {
-        const res = await fetch(`${base}/lines.json`);
-        lines = res.ok ? ((await res.json()) as { lines: Line[] }).lines : [];
-      } catch {
-        lines = [];
-      }
-      if (playing) begin();
+      // Lines still on their way: play the element inside the tap so the browser lets it play later; the first line starts when they arrive.
+      waiting = true;
+      audio.play()?.catch(() => {});
       return;
     }
     if (!current) begin();
