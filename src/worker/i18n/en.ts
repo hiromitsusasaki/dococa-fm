@@ -247,7 +247,7 @@ export const en: Record<keyof typeof ja, string> = {
   "about.send.title": "Send",
   "about.send.body": "Paste the link of a work you love, or search for it by title, then write your letter. Letters are read without rewriting; listeners in another language hear a translation alongside. The AI does not talk about current events, and it never rates people or works with numbers.",
   "about.mine.title": "Your own radio",
-  "about.mine.body": "Send three things you love and you get a radio that plays letters close to your taste. Sign in with Google and others can listen to it at a public URL.",
+  "about.mine.body": "Send three things you love and you get a radio that plays letters close to your taste. Sign in with Google and make it public in your settings, and others can listen to it at your radio's URL.",
   "about.rules.title": "What we do and don't do",
-  "about.rules.body": "A letter belongs to the person who wrote it. The AI does not add to it or invent voices that have no source. A letter that is reported is taken off the public pages.",
+  "about.rules.body": "A letter belongs to the person who wrote it. The AI does not add to it or invent voices that have no source. A letter that is reported is reviewed and then taken off the public pages.",
 };
