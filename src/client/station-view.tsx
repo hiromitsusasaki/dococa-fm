@@ -155,8 +155,9 @@ export function StationScreen(p: StationScreenProps) {
             {p.djText !== null && <p class="player-dj">{p.djText}</p>}
             {p.letter && <LetterQuote letter={p.letter} original={p.original} str={str} toggleKey="letter.showOriginal" />}
           </div>
-          {/* Letters and found voices are read verbatim; the DJ's own words are not quoted. */}
-          {p.letter && <p class="muted verbatim">{str("station.verbatim")}</p>}
+          {/* Letters and found voices are read verbatim, or in a translation when the card shows one (the original behind its toggle);
+              the DJ's own words get no note. */}
+          {p.letter && <p class="muted verbatim">{str(p.original?.original != null && p.original.original !== p.original.main ? "station.verbatimTranslated" : "station.verbatim")}</p>}
           {links.length > 0 && (
             <div class="again" data-action="again">
               <p class="muted">{str("player.again")}</p>

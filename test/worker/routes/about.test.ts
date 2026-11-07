@@ -73,11 +73,11 @@ describe("GET /about", () => {
 
   it("opens the rules with what the AI never does", async () => {
     const ja = await (await get("/about", await newSession())).text();
-    expect(ja).toMatch(/<h2>できること・しないこと<\/h2>\s*<div class="rule"[^>]*><\/div>\s*<figure[^>]*>.*?<\/figure>\s*<p>AI は、お便りを一字も変えずに読みます。[\s\S]*?数字で人や作品を測りません。[\s\S]*?［デモ用］/);
+    expect(ja).toMatch(/<h2>できること・しないこと<\/h2>\s*<div class="rule"[^>]*><\/div>\s*<figure[^>]*>.*?<\/figure>\s*<p>AI は、お便りに書き足しも言い換えもせずに読みます（言葉の違う人には、訳を添えて）。[\s\S]*?数字で人や作品を測りません。[\s\S]*?［デモ用］/);
     const cookie = await newSession();
     await postForm("/lang", cookie, { lang: "en", next: "/about" });
     const en = await (await get("/about", cookie)).text();
-    expect(en).toMatch(/<h2>What we do and don[^<]*t do<\/h2>\s*<div class="rule"[^>]*><\/div>\s*<figure[^>]*>.*?<\/figure>\s*<p>The AI reads each letter without changing a single character\.[\s\S]*?\[Demo\]/);
+    expect(en).toMatch(/<h2>What we do and don[^<]*t do<\/h2>\s*<div class="rule"[^>]*><\/div>\s*<figure[^>]*>.*?<\/figure>\s*<p>The AI reads each letter without adding or rewording anything \(with a translation for listeners of another language\)\.[\s\S]*?\[Demo\]/);
   });
 
   it("answers in English for an English listener", async () => {

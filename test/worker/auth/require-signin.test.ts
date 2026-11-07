@@ -85,6 +85,9 @@ describe("GET /put", () => {
     const anon = await (await get(`/put?itemId=${item.id}`, await newSession())).text();
     expect(anon).not.toContain('action="/letters"');
     expect(anon).toContain(t("signin.needed"));
+    // It names what needs the sign-in: a letter, not "favourites".
+    expect(t("signin.needed")).toMatch(/^お便りを送るには、サインインが要ります。/);
+    expect(t("signin.needed", undefined, "en")).toMatch(/^Sign in to send a letter\./);
     expect(anon).toContain("/auth/google?next=");
     expect(await (await get(`/put?itemId=${item.id}`, await signedInSession())).text()).toContain('action="/letters"');
   });
