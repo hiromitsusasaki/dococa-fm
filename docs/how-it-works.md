@@ -279,7 +279,7 @@ Gemini-TTS はときどき、指示文そのものを本文の前に読み上げ
 - `src/worker/program/compose.ts` `leadLine`、`handOver`、`letterLines`、`composeEpisode` — 1 枠の並びと定型の行
 - `src/worker/program/build.ts` `buildEpisode` — 番組全体の検査と単位の外し方
 - `src/worker/program/select.ts` `selectProgram`、`pickByDistance`、`seatOrder` — 反響、遠さ、枠の順、初めての人
-- `src/worker/program/select-sql.ts` `ECHO_SQL`、`EXCLUDED_SQL`、`TASTE_FAVORITES_SQL`、`TASTE_HEARD_SQL`、`FRESH_PLACE_LETTERS_SQL` — 候補と除外
+- `src/worker/program/select-sql.ts` `ECHO_SQL`、`EXCLUDED_SQL`、`TASTE_OWN_SQL`、`TASTE_HEARD_SQL`、`FRESH_PLACE_LETTERS_SQL` — 候補と除外
 - `src/worker/program/taste.ts` `standingOf`、`farness`、`pickByDial` — 好み、遠さの順位、±0.2 の帯
 - `src/worker/ai/embed.ts` `itemText`、`embedItems` — bge-m3 に渡す文
 - `src/worker/db/items.ts` `VEC_DIMS` — 1024 次元

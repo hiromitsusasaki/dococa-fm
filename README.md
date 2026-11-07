@@ -52,7 +52,7 @@ Claude Code を中心に、Sonnet が実装し、Opus がレビューし、Codex
 - **名前の無い人の一言。** ラジオネームが未設定のまま一言を返すときは、欄の下の畳んだ 1 行から、ラジオネームとお住まいを添えられます（任意。設定と同じ規則で確かめ、一言が受け付けられたときだけ保存します）。
 - **説明ページ。** ヘッダの「Dococa FM とは」から `/about` を開けます。聴く・送る・自分のラジオ・できることとしないことを 4 枚で説明します。
 - **お住まい。** 設定の「お住まい」は、国と都道府県・州から選びます。お便りの送り主に添えて出ます。
-- **お便りを共有する。** 1 通のお便りは `/letters/<id>` で開けます。作品・お便り（原文のまま）・私もと一言の欄と、そのお便りの分だけのプレイヤー（作品の名前・DJ の紹介・手渡し・お便り・DJ のひとこと）が並び、「ラジオで続きを聴く」で自分のラジオに移ります。X などに貼ると、OGP のカードと、タイムラインで聴ける player カード（`/letters/<id>/player`。ほかのサイトの iframe にも入れられます）になります。
+- **お便りを共有する。** 1 通のお便りは `/letters/<id>` で開けます。作品・お便り（原文のまま）・私もと一言の欄と、そのお便りの分だけのプレイヤー（作品の名前・DJ の紹介・手渡し・お便り・DJ のひとこと）が並び、「ラジオで続きを聴く」で自分のラジオに移ります。X などに貼ると OGP のカードになります。X の player カード（`/letters/<id>/player`。ほかのサイトの iframe にも入れられます）は X 側の許可が要るため、タイムラインで聴けるかは未確認です。
 - **反応のお知らせ。** 自分のお便りに人の「私も」や一言が届くと、ヘッダの「マイページ」に小さな点が付きます（数字は付けません）。マイページを開くと消えます。
 - **取り下げ。** 送ったお便りは、マイページの「送ったお便り」から自分で非公開にできます（確認つき）。ラジオにも作品ページにも共有ページにも出なくなります。
 - **公開ラジオ。** ホームの「お便りが届いた公開ラジオ」から、公開している人のラジオに入れます（ラジオネームとお住まいだけ。件数は出しません）。
@@ -100,7 +100,7 @@ DJ が語る材料は 3 層に分かれ、混ぜません。
 **しないこと。**
 
 - お便りを要約・言い換え・加工しない。画面でも番組でも原文のままです（前後の空白だけ除いて保存します）。非日本語のお便りは、番組では訳を読み、画面には訳の下に原文を出します。
-- 時事を言わない（日付・ニュース・流行・季節の挨拶）。
+- 時事を言わない（昨夜・先日・公開中・新作といった時事の語と、人数・順位・作品数などの数え上げ）。
 - 数字で人や作品を測らない（件数・ランキング・一致率・再生回数）。
 - 出典の無い「見つけた声」を作らない。
 
@@ -180,7 +180,7 @@ Cloudflare Workers に載せます（D1 と R2 を使います）。本番の UR
 
 ```bash
 pnpm wrangler login
-pnpm wrangler d1 create dococa            # 出力の database_id を wrangler.jsonc の d1_databases に書く
+pnpm wrangler d1 create dococa            # 出力の database_id を wrangler.jsonc の d1_databases に書く（リポの値は本番のもの）
 pnpm wrangler r2 bucket create dococa-audio
 pnpm wrangler secret put ANTHROPIC_API_KEY   # .dev.vars.example の鍵を 1 つずつ（ADMIN_TOKEN、SESSION_SECRET、SPOTIFY_CLIENT_ID、GOOGLE_TTS_SA_JSON、GOOGLE_OAUTH_CLIENT_ID、GOOGLE_OAUTH_CLIENT_SECRET、TMDB_API_KEY、YOUTUBE_API_KEY、任意で GOOGLE_BOOKS_API_KEY）
 pnpm db:migrate   # migrations/ の 0001〜0025 のうち、まだ当てていないものを順に当てる
@@ -190,7 +190,7 @@ pnpm run deploy   # pnpm deploy は pnpm 組み込みの別コマンドなので
 
 作品のベクトルには Workers AI を使います（`wrangler.jsonc` の `ai` バインディング `AI`。Workers Paid のアカウントで有効にします）。バインディングが無くても動き、そのときはダイヤルが枠の順を決めるだけになります。初めて有効にしたら、`/admin/prepare` を一度回して既存の作品のベクトルを作ります（次節）。
 
-`wrangler.jsonc` の `PUBLIC_ORIGIN` は、リポジトリでは空です。空のままデプロイすると、`/healthz` 以外のすべてのリクエストが 500（`Server is not configured`）になります。デプロイ前に `vars` へ本番の origin を書いてください。`--var` で渡す方法は、次の `pnpm run deploy` で空に戻るので使いません。開発では `.dev.vars` の `PUBLIC_ORIGIN=http://127.0.0.1:5173` を使います。Spotify の redirect URI も同じ origin に合わせます。
+`wrangler.jsonc` の `routes`・`vars.PUBLIC_ORIGIN`・`d1_databases` の `database_id` は、この本番（dococafm.app）の値が入っています。fork して動かす人は 3 つとも自分の値に差し替えてください。`PUBLIC_ORIGIN` が空のままデプロイすると、`/healthz` 以外のすべてのリクエストが 500（`Server is not configured`）になります。デプロイ前に `vars` へ本番の origin を書いてください。`--var` で渡す方法は、次の `pnpm run deploy` で空に戻るので使いません。開発では `.dev.vars` の `PUBLIC_ORIGIN=http://127.0.0.1:5173` を使います。Spotify の redirect URI も同じ origin に合わせます。
 
 `DEV_SKIP_CLAUDE=1` は開発専用です。`ANTHROPIC_API_KEY` が空のときに、お便りの判定と翻訳を素通しにします。本番の `vars` や secrets には入れません（入れなければ、鍵が空のときお便りの投稿は 503 で止まります）。
 
@@ -208,7 +208,8 @@ Spotify 連携は開発モードのため、許可リストに入っているア
 
 ### public 化前チェックリスト（本人）
 
-- [ ] リポの Settings → Code security で **Secret scanning** と **Push protection** を有効にする。
+- [ ] リポの Settings → Code security で **Secret scanning** と **Push protection** を有効にする。同じ画面で **Private vulnerability reporting** も有効にする（SECURITY.md がそこへの報告を案内しているため）。
+- [ ] `CLAUDE.md`・`docs/status.md`・設計書に残る知人の名前（伊豆部など）、手元の端末名やパス、Cloudflare のアカウント名を、公開してよいか見る。消すなら commit してから。
 - [ ] Settings → Actions → General で、fork からの pull request の workflow は承認が要る設定にする（"Require approval for all outside collaborators"）。
 - [ ] Settings → Branches（または Rulesets）で、`main` への直接 push を自分だけに限定する。
 - [ ] 手元で `gitleaks detect --source .` を実行し、検出が 0 であることを確かめる（履歴全体が対象）。
