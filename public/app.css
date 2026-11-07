@@ -769,19 +769,6 @@ a {
   letter-spacing: 0.08em;
 }
 
-/* Phone width: the switch takes its own row; the two knobs sit side by side under it, centred, their bodies on one line. */
-@media (max-width: 420px) {
-  .controls {
-    justify-content: center;
-    align-items: flex-start;
-    gap: 18px 14px;
-  }
-
-  .controls > .control {
-    flex: 1 0 100%;
-  }
-}
-
 .knob {
   /* Room for the widened hit area of the range inside the wrapper. */
   min-width: 92px;
@@ -824,6 +811,72 @@ a {
   margin: 0;
   opacity: 0;
   cursor: pointer;
+}
+
+/*
+ * Phone width: the switch takes its own row, and the two knobs become horizontal sliders under it, one per row (a thumb
+ * cannot turn a 52px knob). The range inputs are the same elements, shown instead of hidden, so the script does not change.
+ */
+@media (max-width: 420px) {
+  .controls {
+    justify-content: center;
+    align-items: flex-start;
+    gap: 16px 14px;
+  }
+
+  .controls > .control,
+  .controls > .knob {
+    flex: 1 0 100%;
+  }
+
+  .knob {
+    align-items: stretch;
+  }
+
+  .knob .dial-row {
+    gap: 10px;
+  }
+
+  .knob .knob-body {
+    display: flex;
+    align-items: center;
+    flex: 1 1 auto;
+    width: auto;
+    height: 32px;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+  }
+
+  .knob .knob-body i {
+    display: none;
+  }
+
+  .knob input[type="range"] {
+    position: static;
+    inset: auto;
+    width: 100%;
+    height: 32px;
+    opacity: 1;
+    accent-color: var(--coral);
+  }
+
+  /* The awake ring is the knob's; a slider shows it is awake by its coral colour alone. */
+  .controls .knob-dial.ready .knob-body {
+    box-shadow: none;
+  }
+
+  .knob-dial.locked input[type="range"] {
+    opacity: 0.4;
+  }
+
+  .knob-lock {
+    top: calc(50% - 5px);
+  }
+
+  .knob .control-label {
+    text-align: center;
+  }
 }
 
 .switch {
