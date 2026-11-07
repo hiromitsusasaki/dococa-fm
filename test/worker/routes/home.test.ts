@@ -191,6 +191,28 @@ describe("GET /", () => {
     expect(html).not.toContain("返した人");
   });
 
+  it.each(["withdrawn", "rejected"] as const)("leaves a %s letter's sender out of the recent programmes, and drops a row it was the only letter of", async (status) => {
+    const cookie = await newSession();
+    const listenerId = cookie.split("=")[1]!.split(".")[0]!;
+    const it = await insertItem(env.DB, itemDraft({ title: "消えた便りの曲", externalIds: { itunes: "wd" } }));
+    const gone = await insertLetter(env.DB, letterDraft(it.id, { body: "便り", bodyJa: "便り" }));
+    const kept = await insertLetter(env.DB, letterDraft(it.id, { body: "残る便り", bodyJa: "残る便り" }));
+    const line = (id: string, radioName: string) => ({ type: "letter" as const, letterId: id, text: "便り", radioName, place: "札幌", kind: "letter" as const, sourceUrl: null, sourceAuthor: null });
+    const alone = await insertEpisode(env.DB, { listenerId, segments: [{ itemId: it.id, slot: "near" as const, lines: [line(gone.id, "消えた人")] }], verified: true, report: {} as Episode["report"], createdAt: "2026-11-01T00:00:00.000Z" });
+    const two = await insertEpisode(env.DB, { listenerId, segments: [{ itemId: it.id, slot: "near" as const, lines: [line(gone.id, "消えた人"), line(kept.id, "残る人")] }], verified: true, report: {} as Episode["report"], createdAt: "2026-11-02T00:00:00.000Z" });
+    await recordListen(env.DB, { listenerId, episodeId: alone.id, letterId: gone.id, segmentIndex: 0 });
+    await recordListen(env.DB, { listenerId, episodeId: two.id, letterId: kept.id, segmentIndex: 0 });
+    await env.DB.prepare("UPDATE letters SET status = ? WHERE id = ?").bind(status, gone.id).run();
+    for (const path of ["/", "/episodes"]) {
+      const html = await (await get(path, cookie)).text();
+      expect(html, path).not.toContain(`/episodes/${alone.id}`);
+      const row = html.match(new RegExp(`<a[^>]*href="/episodes/${two.id}"[\\s\\S]*?</a>`))?.[0] ?? "";
+      expect(row, path).toContain("消えた便りの曲");
+      expect(row, path).not.toContain('class="sender"');
+      expect(html, path).not.toContain("消えた人");
+    }
+  });
+
   it("orders the home: the radio, the send dialog, explanation, recent programmes, then the letter cards", async () => {
     const cookie = await newSession();
     const listenerId = cookie.split("=")[1]!.split(".")[0]!;
