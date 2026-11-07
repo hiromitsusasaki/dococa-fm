@@ -128,24 +128,64 @@ describe("spokeThePrompt", () => {
   });
 });
 
+describe("synthesize a short line", () => {
+  const twenty = "あ".repeat(20);
+  it("makes two calls and returns the smaller clip", async () => {
+    let n = 0;
+    const { ttsCalls } = stubFetch([[URL_PREFIX, () => json({ audioContent: b64(++n === 1 ? [1, 2, 3, 4, 5, 6] : [9, 9]) })]]);
+    const out = await synthesize(env, twenty, "male", "ja");
+    expect(ttsCalls()).toHaveLength(2);
+    expect(bytesOf(out.audio)).toEqual([9, 9]);
+    expect(out.calls).toBe(2);
+  });
+  it("returns the smaller clip whichever attempt made it", async () => {
+    let n = 0;
+    stubFetch([[URL_PREFIX, () => json({ audioContent: b64(++n === 1 ? [9, 9] : [1, 2, 3, 4, 5, 6]) })]]);
+    expect(bytesOf((await synthesize(env, twenty, "male", "ja")).audio)).toEqual([9, 9]);
+  });
+  it("uses the other clip when one attempt fails, and counts the calls of both", async () => {
+    let n = 0;
+    stubFetch([[URL_PREFIX, () => (++n === 1 ? json({ error: {} }, 500) : json({ audioContent: b64([7]) }))]]);
+    const out = await synthesize(env, twenty, "male", "ja");
+    expect(bytesOf(out.audio)).toEqual([7]);
+    expect(out.calls).toBe(1);
+  });
+  it("throws when both attempts fail", async () => {
+    stubFetch([[URL_PREFIX, () => json({ error: {} }, 500)]]);
+    await expect(synthesize(env, twenty, "male", "ja")).rejects.toThrow("tts 500");
+  });
+  it("counts the retries of both attempts when they spoke the prompt", async () => {
+    stubFetch([[URL_PREFIX, () => json({ audioContent: btoa("x".repeat(25 * 4000)) })]]);
+    await expect(synthesize(env, twenty, "male", "ja")).rejects.toMatchObject({ message: "tts prompt", calls: 6 });
+  });
+  it("makes one call for 60 chars and for exactly 41, two for exactly 40", async () => {
+    const { ttsCalls } = stubFetch([[URL_PREFIX, () => json({ audioContent: b64([1]) })]]);
+    expect((await synthesize(env, "あ".repeat(60), "male", "ja")).calls).toBe(1);
+    expect((await synthesize(env, "あ".repeat(41), "male", "ja")).calls).toBe(1);
+    expect((await synthesize(env, "あ".repeat(40), "male", "ja")).calls).toBe(2);
+    expect(ttsCalls()).toHaveLength(4);
+  });
+});
+
 describe("synthesize when the prompt is spoken", () => {
+  const sentence = "ここで一息。".repeat(8); // 48 chars: a single call per try
   const longClip = () => json({ audioContent: btoa("x".repeat(25 * 4000)) });
   it("makes the chunk again and counts every call", async () => {
     let n = 0;
     const { ttsCalls } = stubFetch([[URL_PREFIX, () => (++n < 3 ? longClip() : json({ audioContent: b64([7]) }))]]);
-    const out = await synthesize(env, "ここで一息。", "male", "ja");
+    const out = await synthesize(env, sentence, "male", "ja");
     expect(bytesOf(out.audio)).toEqual([7]);
     expect(out.calls).toBe(3);
     expect(ttsCalls()).toHaveLength(3);
   });
   it("gives up after three spoken prompts with a fixed message", async () => {
     const { ttsCalls } = stubFetch([[URL_PREFIX, longClip]]);
-    await expect(synthesize(env, "ここで一息。", "male", "ja")).rejects.toThrow("tts prompt");
+    await expect(synthesize(env, sentence, "male", "ja")).rejects.toThrow("tts prompt");
     expect(ttsCalls()).toHaveLength(3);
   });
   it("counts one call for a clip of the expected length", async () => {
     const { ttsCalls } = stubFetch([[URL_PREFIX, () => json({ audioContent: b64([1]) })]]);
-    expect((await synthesize(env, "ここで一息。", "male", "ja")).calls).toBe(1);
+    expect((await synthesize(env, sentence, "male", "ja")).calls).toBe(1);
     expect(ttsCalls()).toHaveLength(1);
   });
 });

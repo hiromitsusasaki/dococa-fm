@@ -10,7 +10,8 @@ const GOOGLE = "https://texttospeech.googleapis.com/v1/text:synthesize";
 const sa = await makeServiceAccount();
 const keyed = { ...env, GOOGLE_TTS_SA_JSON: sa.json };
 const audio = btoa(String.fromCharCode(1, 2, 3));
-const line = { text: "こんばんは", lang: "ja" as const, voice: "male" as const };
+// Over 40 code points, so a clip is made once; a short line is made twice (see google.test.ts).
+const line = { text: "こんばんは".repeat(9), lang: "ja" as const, voice: "male" as const };
 const rowCount = async () => (await env.DB.prepare("SELECT COUNT(*) AS n FROM tts_audio").first<{ n: number }>())!.n;
 
 beforeEach(async () => {
@@ -178,6 +179,19 @@ describe("ensureAudio", () => {
     await ensureAudio(keyed, env.DB, { text: "Good evening", lang: "en", voice: "female" });
     const body = JSON.parse(String(fn.mock.calls[0]![1]?.body));
     expect(body.voice).toMatchObject({ languageCode: "en-US", name: "Kore" });
+  });
+});
+
+describe("ensureAudio for a short line", () => {
+  it("counts both syntheses toward the cap and stores the shorter clip", async () => {
+    let n = 0;
+    const { fn } = stubFetch([[GOOGLE, () => json({ audioContent: ++n === 1 ? btoa("xxxxxx") : audio })]]);
+    const short = { ...line, text: "こんばんは" };
+    const key = await audioKey("ja", "male", short.text);
+    expect(await ensureAudio(keyed, env.DB, short)).toEqual({ ok: true, key, made: true });
+    expect(fn).toHaveBeenCalledTimes(2);
+    expect([...new Uint8Array(await (await env.BUCKET.get(key))!.arrayBuffer())]).toEqual([1, 2, 3]);
+    expect(await countSynthesizedToday(env.DB)).toBe(2);
   });
 });
 

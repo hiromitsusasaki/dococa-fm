@@ -49,6 +49,8 @@ const SLACK_SECONDS = 3;
 const CJK = /[\u3000-\u303f\u3040-\u309f\u30a0-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\uff00-\uffef\u1100-\u11ff\u3130-\u318f\uac00-\ud7af]/u;
 /** Clips that spoke the prompt are made again up to this many paid calls per chunk. */
 const ATTEMPTS = 3;
+/** A single-chunk text of at most this many code points is synthesized twice and the shorter clip kept. */
+const SHORT_TWICE_CHARS = 40;
 
 /**
  * Gemini-TTS now and then reads the style prompt aloud before the text. Such a clip is far longer than its text
@@ -116,17 +118,47 @@ async function synthesizeOnce(env: Env, sa: ServiceAccount, text: string, voice:
 }
 
 /**
+ * Makes a short line twice at once and keeps the clip with fewer bytes. Gemini-TTS now and then reads a short
+ * line two times in one clip (seen in production 2026-11-07 on two 20-char lead lines: 7.2 s and 6.8 s where
+ * about 4 s is normal). The length guard cannot catch that, because the allowance for 20 chars is about 8 s.
+ * The shorter of two is almost always the clean one. The cost is one more call per short line, that is, per
+ * fixed line and lead. If one attempt fails, the other is used; the failed attempt's paid calls still count.
+ */
+async function synthesizeShortTwice(env: Env, sa: ServiceAccount, text: string, voice: AudioVoice, lang: AudioLang): Promise<{ audio: Uint8Array; calls: number }> {
+  // The token is fetched once before the pair starts, so a cold cache does not mint two.
+  try {
+    await accessToken(sa);
+  } catch (e) {
+    throw new SynthesisError(e instanceof Error ? e.message : "tts failed", 0);
+  }
+  const settled = await Promise.allSettled([synthesizeChunk(env, sa, text, voice, lang), synthesizeChunk(env, sa, text, voice, lang)]);
+  const callsOf = (r: PromiseSettledResult<{ audio: Uint8Array; calls: number }>): number =>
+    r.status === "fulfilled" ? r.value.calls : r.reason instanceof SynthesisError ? r.reason.calls : 0;
+  const calls = callsOf(settled[0]) + callsOf(settled[1]);
+  const clips = settled.flatMap((r) => (r.status === "fulfilled" ? [r.value.audio] : []));
+  if (clips.length === 0) {
+    const first = settled[0];
+    const message = first.status === "rejected" && first.reason instanceof Error ? first.reason.message : "tts failed";
+    throw new SynthesisError(message, calls);
+  }
+  return { audio: clips.reduce((a, b) => (b.length < a.length ? b : a)), calls };
+}
+
+/**
  * Reads `text` aloud as MP3. Long text goes out in pieces and the MP3 frames are joined in order. `calls` is
  * the number of paid calls it took, retries included, for the daily cap. Throws `tts prompt` when a piece
- * spoke the prompt three times in a row.
+ * spoke the prompt three times in a row. A short single-piece text is made twice and the shorter clip wins
+ * (see `synthesizeShortTwice`).
  */
 export async function synthesize(env: Env, text: string, voice: AudioVoice, lang: AudioLang): Promise<{ audio: ArrayBuffer; calls: number }> {
   const sa = parseServiceAccount(env.GOOGLE_TTS_SA_JSON);
   const parts: Uint8Array[] = [];
   let calls = 0;
-  for (const chunk of splitText(text)) {
+  const chunks = splitText(text);
+  const twice = chunks.length === 1 && Array.from(text).length <= SHORT_TWICE_CHARS;
+  for (const chunk of chunks) {
     try {
-      const made = await synthesizeChunk(env, sa, chunk, voice, lang);
+      const made = twice ? await synthesizeShortTwice(env, sa, chunk, voice, lang) : await synthesizeChunk(env, sa, chunk, voice, lang);
       parts.push(made.audio);
       calls += made.calls;
     } catch (e) {
