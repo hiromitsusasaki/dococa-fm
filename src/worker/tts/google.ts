@@ -41,9 +41,12 @@ function fromBase64(b64: string): Uint8Array {
 
 /** The API's MP3 is 32 kbps CBR mono, so a clip's length follows from its bytes. */
 const BYTES_PER_SECOND = 4000;
-/** A clip may run this long per code point of its text, plus a fixed allowance for the pauses of a short line. */
-const SECONDS_PER_CHAR = { ja: 0.27, en: 0.125 } as const;
+/** A clip may run this long per code point of its text, by script, plus a fixed allowance for the pauses of a short line. */
+const SECONDS_PER_CJK_CHAR = 0.27;
+const SECONDS_PER_OTHER_CHAR = 0.125;
 const SLACK_SECONDS = 3;
+/** Hiragana, Katakana, CJK punctuation, CJK Unified Ideographs, fullwidth forms and Hangul: one spoken mora or syllable each. */
+const CJK = /[\u3000-\u303f\u3040-\u309f\u30a0-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\uff00-\uffef\u1100-\u11ff\u3130-\u318f\uac00-\ud7af]/u;
 /** Clips that spoke the prompt are made again up to this many paid calls per chunk. */
 const ATTEMPTS = 3;
 
@@ -56,9 +59,16 @@ const ATTEMPTS = 3;
  * clips had +8...+10 s. The ja opening line (41 chars) took 16.6 s where about 8 s is normal. The earlier 0.5 / 0.35
  * s/char with 4 s of slack let every line over about 40 chars through, so the allowance is now just above the
  * slowest clean clip.
+ *
+ * The allowance is counted per script, not per programme language: an English programme reads Japanese found
+ * voices and song titles, a Japanese one reads Latin artist names. A CJK character is spoken about twice as long
+ * as a Latin letter, so pricing a Japanese line at the English rate would reject honest clips and pay for them
+ * again. `lang` stays in the signature for the callers; the text alone decides the allowance.
  */
-export function spokeThePrompt(bytes: number, text: string, lang: AudioLang): boolean {
-  return bytes / BYTES_PER_SECOND > SLACK_SECONDS + Array.from(text).length * SECONDS_PER_CHAR[lang];
+export function spokeThePrompt(bytes: number, text: string, _lang: AudioLang): boolean {
+  let allowance = SLACK_SECONDS;
+  for (const ch of text) allowance += CJK.test(ch) ? SECONDS_PER_CJK_CHAR : SECONDS_PER_OTHER_CHAR;
+  return bytes / BYTES_PER_SECOND > allowance;
 }
 
 /** A failure that carries the paid calls made before it, so the caller can count them toward the cap. */

@@ -119,6 +119,13 @@ describe("spokeThePrompt", () => {
     expect(spokeThePrompt(16.6 * 4000, "a".repeat(148), "en")).toBe(false);
     expect(spokeThePrompt(2.5 * 4000, "The next letter.", "en")).toBe(false);
   });
+  it("prices each character by its script, not by the programme language", () => {
+    // A Japanese found voice read in an English programme
+    expect(spokeThePrompt(20 * 4000, "あ".repeat(80), "en")).toBe(false);
+    // A Japanese line with a Latin song title
+    expect(spokeThePrompt(6 * 4000, "エド・シーランの「Shape of You」です。", "ja")).toBe(false);
+    expect(spokeThePrompt(6 * 4000, "エド・シーランの「Shape of You」です。", "en")).toBe(false);
+  });
 });
 
 describe("synthesize when the prompt is spoken", () => {
