@@ -209,7 +209,7 @@ a {
 }
 
 .lang-toggle {
-  margin-right: var(--sp-2);
+  margin: 0 var(--sp-2) 0 0;
 }
 
 .theme-toggle button,
@@ -235,13 +235,13 @@ a {
 }
 
 .theme-toggle button:first-child,
-.lang-toggle button:first-child {
+.lang-toggle button:first-of-type {
   border-left-width: 1px;
   border-radius: var(--r-pill) 0 0 var(--r-pill);
 }
 
 .theme-toggle button:last-child,
-.lang-toggle button:last-child {
+.lang-toggle button:last-of-type {
   border-radius: 0 var(--r-pill) var(--r-pill) 0;
 }
 
