@@ -586,7 +586,7 @@ describe("station: volume", () => {
     const clip = audios.find((a) => !a.loop)!;
     const bed = audios.find((a) => a.loop)!;
     expect(clip.volume).toBe(0.5);
-    expect(bed.volume).toBeCloseTo(0.075);
+    expect(bed.volume).toBeCloseTo(0.2);
     expect(localStorage.getItem("dfm.volume")).toBe("0.5");
   });
 

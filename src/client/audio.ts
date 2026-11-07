@@ -53,7 +53,8 @@ export function createClipPlayer(): ClipPlayer {
 }
 
 const BED_URL = "/bed.mp3";
-const BED_VOLUME = 0.15;
+// The file's mean level is about -24 dBFS, so 0.4 puts the bed roughly 16 dB under the voice.
+const BED_VOLUME = 0.4;
 
 export function createBed(): { unlock(): void; start(): void; stop(): void; setVolume(volume: number): void } {
   let bed: HTMLAudioElement | null = null;

@@ -362,7 +362,7 @@ describe("player", () => {
     await vi.waitFor(() => expect(spoken).toEqual(["d1", "l1", "d2"]));
     const bed = audios.find((a) => a.src === "/bed.mp3")!;
     expect(bed.loop).toBe(true);
-    expect(bed.volume).toBe(0.15);
+    expect(bed.volume).toBe(0.4);
     expect(log).toContain("play:/bed.mp3");
   });
 
