@@ -29,14 +29,14 @@ describe("GET /about", () => {
 
   it("says the own radio leans to the listener after three letters, keeps the sign-in line, and links neither /start nor Spotify", async () => {
     const ja = await (await get("/about", await newSession())).text();
-    expect(ja).toMatch(/<h2>自分のラジオ<\/h2>[\s\S]*?<p>お便りを 3 通送ると、あなたの好みに近いお便りが流れてきます。Google でサインインして/);
+    expect(ja).toMatch(/<h2>自分のラジオ<\/h2>[\s\S]*?<p>自分のラジオは、あなたが送ったお便りと、「一言」を返したお便りをまとめたラジオです。Google でサインインして/);
     expect(ja).not.toContain("好きなものを 3 つ");
     expect(ja).not.toContain('href="/start"');
     expect(ja).not.toMatch(/href="\/auth\/spotify|href="\/settings\/spotify/);
     const cookie = await newSession();
     await postForm("/lang", cookie, { lang: "en", next: "/about" });
     const en = await (await get("/about", cookie)).text();
-    expect(en).toMatch(/<p>Send 3 letters and the radio plays letters closer to your taste\. Sign in with Google/);
+    expect(en).toMatch(/<p>Your radio gathers the letters you sent and the letters you replied to\. Sign in with Google/);
   });
 
   it("goes from the lead straight to the sections, with no section about why it was made", async () => {
@@ -48,7 +48,7 @@ describe("GET /about", () => {
 
   it("tells a listener they do not have to reply", async () => {
     const html = await (await get("/about", await newSession())).text();
-    expect(html).toMatch(/<h2>聴く<\/h2>[\s\S]*?「私も」と一言を返せます。返さなくてもかまいません。<\/p>/);
+    expect(html).toMatch(/<h2>聴く<\/h2>[\s\S]*?「私も」と「一言」を返せます。<\/p>/);
   });
 
   it("offers the home's tour again, through /?tour=1", async () => {
@@ -71,11 +71,11 @@ describe("GET /about", () => {
 
   it("opens the rules with what the AI never does", async () => {
     const ja = await (await get("/about", await newSession())).text();
-    expect(ja).toMatch(/<h2>できること・しないこと<\/h2>\s*<div class="rule"[^>]*><\/div>\s*<figure[^>]*>.*?<\/figure>\s*<p>AI は、お便りに書き足しも言い換えもせずに読みます。別の言語で聴いている人には、原文はそのままに、訳したものを読みます。[\s\S]*?数字で人や作品を測りません。[\s\S]*?［デモ用］/);
+    expect(ja).toMatch(/<h2>できること・しないこと<\/h2>\s*<div class="rule"[^>]*><\/div>\s*<figure[^>]*>.*?<\/figure>\s*<p>AI は、お便りに書き足しも言い換えもせずに読みます。別の言語で聴いている人には、原文はそのままに、訳したものを読みます。お便りは書いた人のものです。DJ は、あなたが好きかもしれないものと、まだ出会ったことのない新しいものへのお便りを、ダイヤルで選んだバランスで、あなただけに紹介します。<\/p>/);
     const cookie = await newSession();
     await postForm("/lang", cookie, { lang: "en", next: "/about" });
     const en = await (await get("/about", cookie)).text();
-    expect(en).toMatch(/<h2>What we do and don[^<]*t do<\/h2>\s*<div class="rule"[^>]*><\/div>\s*<figure[^>]*>.*?<\/figure>\s*<p>The AI reads each letter without adding or rewording anything\. Listeners who use another language hear a translation, with the original kept as written\.[\s\S]*?\[Demo\]/);
+    expect(en).toMatch(/<h2>What we do and don[^<]*t do<\/h2>\s*<div class="rule"[^>]*><\/div>\s*<figure[^>]*>.*?<\/figure>\s*<p>The AI reads each letter without adding or rewording anything\. Listeners who use another language hear a translation, with the original kept as written\. The letter belongs to the person who wrote it\. The DJ introduces, to you alone, letters about things you might love and things you have never met, in the balance you choose with the dial\.<\/p>/);
   });
 
   it("answers in English for an English listener", async () => {
