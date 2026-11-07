@@ -33,10 +33,10 @@ function SiteHeader({ listener, path, lang }: { listener?: Listener; path?: stri
   return (
     <header class="site-header">
       <a class="site-name wordmark" href="/">{t("app.name")}</a>
-      {listener && (
-        <nav>
-          <a href="/put">{t("home.put")}</a>
-          {signedIn ? (
+      <nav>
+        <a href="/about" aria-current={path === "/about" ? "page" : undefined}>{t("about.link")}</a>
+        {listener && <a href="/put">{t("home.put")}</a>}
+        {listener && (signedIn ? (
             <>
               <a href="/me">{t("me.title")}</a>
               <span class="site-user">{t("signin.as", { name: listener.displayName })}</span>
@@ -46,9 +46,8 @@ function SiteHeader({ listener, path, lang }: { listener?: Listener; path?: stri
             </>
           ) : (
             <a href={`/auth/google?next=${encodeURIComponent(path ?? "/")}`}>{t("signin.google")}</a>
-          )}
-        </nav>
-      )}
+          ))}
+      </nav>
       {listener && (
         <form method="post" action="/lang" class="lang-toggle" role="group" aria-label={t("lang.label")}>
           <input type="hidden" name="next" value={path ?? "/"} />

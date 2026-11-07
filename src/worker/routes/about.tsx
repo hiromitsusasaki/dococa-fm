@@ -1,0 +1,28 @@
+import { Hono } from "hono";
+import { Layout } from "../../views/layout";
+import type { Variables } from "../auth/session";
+import type { Env } from "../env";
+import { tFor } from "../i18n/t";
+
+const SECTIONS = ["listen", "send", "mine", "rules"] as const;
+
+export const about = new Hono<{ Bindings: Env; Variables: Variables }>();
+
+about.get("/about", (c) => {
+  const listener = c.get("listener");
+  const t = tFor(listener.lang);
+  return c.html(
+    <Layout title={t("about.title")} lang={listener.lang} listener={listener} path="/about">
+      <main class="about">
+        <h1>{t("about.title")}</h1>
+        <p class="about-lead">{t("about.lead")}</p>
+        {SECTIONS.map((key) => (
+          <section class="panel">
+            <h2>{t(`about.${key}.title`)}</h2>
+            <p>{t(`about.${key}.body`)}</p>
+          </section>
+        ))}
+      </main>
+    </Layout>,
+  );
+});

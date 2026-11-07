@@ -837,6 +837,7 @@ button.pill {
 
 .item-page,
 .put,
+.about,
 .takedown,
 .bookmarklet,
 .reactions-page,
@@ -1135,6 +1136,39 @@ button:disabled,
   white-space: pre-wrap;
   word-break: break-all;
   color: var(--ink-2);
+}
+
+/* The about page: a lead and four panels, set like the send page. */
+.about {
+  display: grid;
+  gap: var(--sp-4);
+}
+
+.about h1 {
+  margin-bottom: 0;
+}
+
+.about-lead {
+  margin: 0;
+  color: var(--ink-2);
+  font-size: var(--fs-16);
+  line-height: 1.8;
+}
+
+.about .panel h2 {
+  margin: 0 0 var(--sp-3);
+  font-size: var(--fs-20);
+}
+
+.about .panel p {
+  margin: 0;
+  line-height: 1.8;
+}
+
+.site-header nav a[aria-current="page"] {
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 4px;
 }
 
 /* The send page: three panels (choose the work, write the letter, the bookmarklet). */
