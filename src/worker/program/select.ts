@@ -6,8 +6,11 @@ import { type StationKey, stationColumn } from "./station";
 import { farness, pickByDial, standingOf } from "./taste";
 
 export type Slot = "near" | "neighbor" | "far";
-/** One segment: a work and the one letter it reads (none in an echo of reactions only). */
-export type Selection = { itemId: string; slot: Slot; letterIds: string[] };
+/**
+ * One segment: a work and the one letter it reads (none in an echo of reactions only). On a public radio,
+ * `ownerReplyIds` is the owner's 一言 on that letter, read after it.
+ */
+export type Selection = { itemId: string; slot: Slot; letterIds: string[]; ownerReplyIds?: string[] };
 
 /** A letter heard within this long waits; then it may air again. */
 const HEARD_WITHIN_MS = 7 * 24 * 60 * 60 * 1000;
@@ -139,7 +142,7 @@ async function worldProgram(db: D1Database, listener: Listener, since: string, s
  */
 async function publicProgram(db: D1Database, listener: Listener, ownerId: string, since: string, size: number): Promise<Selection[]> {
   const recent = await recentOn(db, listener.id, since, stationColumn({ kind: "public", ownerId }));
-  const { results } = await db.prepare(PUBLIC_LETTERS_SQL).bind(listener.id, since, ownerId).all<{ id: string; item_id: string; heard: number }>();
+  const { results } = await db.prepare(PUBLIC_LETTERS_SQL).bind(listener.id, since, ownerId).all<{ id: string; item_id: string; heard: number; reply_id: string | null }>();
   const wait = (r: { item_id: string; heard: number }) => (recent.latest.has(r.item_id) ? 3 : recent.aired.has(r.item_id) ? 2 : r.heard === 1 ? 1 : 0);
   const out: Selection[] = [];
   const works = new Set<string>();
@@ -147,7 +150,7 @@ async function publicProgram(db: D1Database, listener: Listener, ownerId: string
     if (out.length >= size) break;
     if (works.has(r.item_id)) continue;
     works.add(r.item_id);
-    out.push({ itemId: r.item_id, slot: "near", letterIds: [r.id] });
+    out.push({ itemId: r.item_id, slot: "near", letterIds: [r.id], ...(r.reply_id ? { ownerReplyIds: [r.reply_id] } : {}) });
   }
   return out;
 }

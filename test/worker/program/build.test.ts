@@ -322,6 +322,27 @@ describe("buildEpisode", () => {
     expect(ep.segments[0]?.lines.filter((l) => l.type === "letter").map((l) => (l as { letterId: string }).letterId)).toEqual([own.id]);
   });
 
+  it("a public station reads the owner's 一言 after a letter they answered, and nobody else's; the owner's own letters play without one", async () => {
+    const owner = await createListener(env.DB, { radioName: "ヒロ", place: "大船渡" });
+    const guest = await createListener(env.DB);
+    const writer = await createListener(env.DB);
+    const answeredWork = (await insertItem(env.DB, itemDraft({ title: "返事をした曲" }))).id;
+    const ownWork = (await insertItem(env.DB, itemDraft({ title: "持ち主の曲" }))).id;
+    const answered = await insertLetter(env.DB, letterDraft(answeredWork, { listenerId: writer.id, radioName: "しずく", place: "松本", body: "雨の日に聴きました。", bodyJa: "雨の日に聴きました。" }));
+    const reply = await insertLetter(env.DB, letterDraft(answeredWork, { kind: "reply", listenerId: owner.id, radioName: "ヒロ", place: "大船渡", parentLetterId: answered.id, body: "わかります", bodyJa: "わかります" }));
+    const stranger = await insertLetter(env.DB, letterDraft(answeredWork, { kind: "reply", listenerId: guest.id, radioName: "そら", place: "熊本", parentLetterId: answered.id, body: "よそからの一言", bodyJa: "よそからの一言" }));
+    const own = await insertLetter(env.DB, letterDraft(ownWork, { listenerId: owner.id, body: "持ち主の一通。", bodyJa: "持ち主の一通。" }));
+    const ep = await buildEpisode(keyless, env.DB, guest, { station: { kind: "public", ownerId: owner.id }, seed: "t" });
+    expect(ep.verified).toBe(true);
+    const said = texts(ep.segments.find((s) => s.itemId === answeredWork)!.lines);
+    const at = said.indexOf(`letter:${answered.id}`);
+    expect(said.slice(at + 1)).toEqual(["大船渡にお住まいの、ヒロさんから一言が届いています", `letter:${reply.id}`]);
+    expect(said).not.toContain(`letter:${stranger.id}`);
+    const ownSaid = texts(ep.segments.find((s) => s.itemId === ownWork)!.lines);
+    expect(ownSaid[ownSaid.length - 1]).toBe(`letter:${own.id}`);
+    expect(ownSaid.some((x) => x.endsWith("から一言が届いています"))).toBe(false);
+  });
+
   it("a public station bridges its later segments with the neutral next line", async () => {
     const owner = await createListener(env.DB);
     const guest = await createListener(env.DB);

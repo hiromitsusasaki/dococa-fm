@@ -375,6 +375,9 @@ describe("selectProgram stations", () => {
       expect(p.every((s) => s.slot === "near" && s.letterIds.length === 1)).toBe(true);
       expect(new Set(p.flatMap((s) => s.letterIds))).toEqual(expected);
       expect(new Set(p.map((s) => s.itemId)).size).toBe(p.length);
+      // The owner's 一言 goes with the letter it answers; their own letters carry none.
+      expect(p.find((s) => s.letterIds[0] === answered.id)?.ownerReplyIds).toHaveLength(1);
+      expect(p.find((s) => s.letterIds[0] === own.id)?.ownerReplyIds).toBeUndefined();
     }
   });
 

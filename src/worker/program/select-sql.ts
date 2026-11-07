@@ -126,8 +126,14 @@ const publicPool = (owner: string): string => `l.status = 'public' AND (
     OR (${letterOrSourced("l")} AND l.id IN (SELECT r.parent_letter_id FROM letters r WHERE r.listener_id = ${owner} AND r.kind = 'reply' AND r.status = 'public'))
   )`;
 
-/** The public radio of ?3 for the visitor ?1, with whether they heard each letter since ?2: the unheard first, the oldest first. */
-export const PUBLIC_LETTERS_SQL = `SELECT l.id, l.item_id, (l.id IN (${HEARD_LETTERS})) AS heard FROM letters l
+/**
+ * The public radio of ?3 for the visitor ?1, with whether they heard each letter since ?2 (the unheard first, the oldest
+ * first) and the owner's latest public 一言 on it, read after it (null on the owner's own letters).
+ */
+export const PUBLIC_LETTERS_SQL = `SELECT l.id, l.item_id, (l.id IN (${HEARD_LETTERS})) AS heard,
+    (SELECT r.id FROM letters r WHERE r.parent_letter_id = l.id AND r.listener_id = ?3 AND r.kind = 'reply' AND r.status = 'public'
+     ORDER BY r.created_at DESC, r.id DESC LIMIT 1) AS reply_id
+  FROM letters l
   WHERE ${publicPool("?3")}
   ORDER BY heard, l.created_at, l.id`;
 

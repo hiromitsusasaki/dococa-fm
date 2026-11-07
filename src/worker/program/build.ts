@@ -48,10 +48,12 @@ export async function buildEpisode(
   const selection = await selectProgram(db, listener, opts);
   // Three reads for the whole plan, whatever its size: D1 counts queries per invocation.
   const itemIds = selection.map((s) => s.itemId);
+  // A public radio reads only the owner's own 一言 after a letter they answered; never reactions to the visitor's letters.
+  const onPublic = opts.station?.kind === "public";
   const [stored, candidates, allReactions] = await Promise.all([
     getItemsByIds(db, itemIds),
-    getLettersByIds(db, selection.flatMap((s) => s.letterIds)),
-    listReactionsToListener(db, listener.id, itemIds),
+    getLettersByIds(db, selection.flatMap((s) => [...s.letterIds, ...(s.ownerReplyIds ?? [])])),
+    onPublic ? Promise.resolve([] as Letter[]) : listReactionsToListener(db, listener.id, itemIds),
   ]);
   const items = new Map<string, Item>();
   const letters = new Map<string, Letter>();
@@ -62,8 +64,12 @@ export async function buildEpisode(
   for (const s of selection) {
     const item = stored.get(s.itemId);
     if (!item) continue;
-    // Public 私も and 一言 that others left on this listener's letters about the item, newest first.
-    const reactions = allReactions.filter((r) => r.itemId === item.id).slice(0, MAX_REACTIONS);
+    // On a public radio, the owner's 一言 on the letter. Elsewhere, public 私も and 一言 that others left on this listener's letters about the item, newest first.
+    const ownerReplies = (s.ownerReplyIds ?? []).flatMap((id) => {
+      const r = candidates.get(id);
+      return r && r.status === "public" && r.kind === "reply" ? [r] : [];
+    });
+    const reactions = onPublic ? ownerReplies : allReactions.filter((r) => r.itemId === item.id).slice(0, MAX_REACTIONS);
     // A reply that is read as a reaction is not read a second time as a selected letter.
     const reacted = new Set(reactions.map((r) => r.id));
     const read: Letter[] = [];
