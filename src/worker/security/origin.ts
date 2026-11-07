@@ -3,7 +3,8 @@ import type { Env } from "../env";
 
 const UNSAFE = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 
-function normalized(origin: string): string {
+/** PUBLIC_ORIGIN as a bare origin (no path, no trailing slash); an unparsable value is returned as it is. */
+export function normalized(origin: string): string {
   try {
     return new URL(origin).origin;
   } catch {

@@ -170,6 +170,11 @@ describe("link previews and page titles", () => {
     }
   });
 
+  it("names the page without its query in the default preview", async () => {
+    const html = await (await get("/put?itemId=x&embed=0", await newSession())).text();
+    expect(meta(html, "og:url")).toBe("http://127.0.0.1:5173/put");
+  });
+
   it("titles each page by what it is, then the app", async () => {
     const cookie = await newSession();
     const title = async (path: string) => (await (await get(path, cookie)).text()).match(/<title>([^<]*)<\/title>/)?.[1];
@@ -203,7 +208,7 @@ describe("the 404 page", () => {
     const res = await asBrowser("/items/nope", cookie);
     expect(res.status).toBe(404);
     const html = await res.text();
-    expect(html).toContain("<h1>There is no such page</h1>");
+    expect(html).toContain("<h1>This page doesn&#39;t exist</h1>");
     expect(html).toContain("Back home");
   });
 

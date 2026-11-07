@@ -2,6 +2,7 @@ import { env } from "cloudflare:workers";
 import type { Child } from "hono/jsx";
 import { raw } from "hono/html";
 import { type Lang, tFor } from "../worker/i18n/t";
+import { normalized } from "../worker/security/origin";
 import { unseenReactions } from "../worker/reaction-notice";
 import type { Listener } from "../worker/types";
 
@@ -105,15 +106,16 @@ function SiteHeader({ listener, path, lang }: { listener?: Listener; path?: stri
 /** `lang` is the listener's; pages outside the session (admin, health) leave it at Japanese. */
 export function Layout({ title, children, script, lang = "ja", listener, path, og, embed = false }: LayoutProps) {
   const t = tFor(lang);
-  const origin = env.PUBLIC_ORIGIN;
-  const preview = og ?? { title: t("app.name"), description: t("app.tagline"), url: `${origin}${path ?? "/"}` };
+  const origin = normalized(env.PUBLIC_ORIGIN);
+  // The default preview names the page without its query (a letter link, a welcome flag).
+  const preview = og ?? { title: t("app.name"), description: t("app.tagline"), url: `${origin}${path?.split("?")[0] ?? "/"}` };
   return (
     <html lang={lang}>
       <head>
         <meta charset="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <title>{title === t("app.name") ? title : `${title} · ${t("app.name")}`}</title>
-        <meta name="description" content={t("app.tagline")} />
+        <meta name="description" content={preview.description} />
         <meta name="theme-color" content="#121a2e" />
         <meta property="og:site_name" content={t("app.name")} />
         <meta property="og:title" content={preview.title} />

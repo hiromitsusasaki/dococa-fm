@@ -360,6 +360,8 @@ describe("GET /?letter=", () => {
     expect(html).toContain('<meta property="og:title" content="雨の日の曲"');
     expect(html).toContain(`<meta property="og:description" content="${"い".repeat(79)}ろ"`);
     expect(html).toContain(`<meta property="og:url" content="http://127.0.0.1:5173/?letter=${l.id}"`);
+    // The page's description is the preview's, not the tagline.
+    expect(html).toContain(`<meta name="description" content="${"い".repeat(79)}ろ"`);
     // A work without a picture previews with the key visual.
     expect(html).toContain('<meta property="og:image" content="http://127.0.0.1:5173/kv.jpg"');
   });

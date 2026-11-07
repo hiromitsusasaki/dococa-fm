@@ -102,6 +102,7 @@ export async function listRecentPublicLetters(db: D1Database, limit = 6): Promis
        LEFT JOIN listeners ON listeners.id = letters.listener_id
        WHERE letters.status = 'public'
          AND (letters.kind = 'letter' OR (letters.kind = 'found' AND TRIM(COALESCE(letters.source_url, '')) <> '' AND TRIM(COALESCE(letters.source_author, '')) <> ''))
+       -- A found voice (listener_id NULL) sorts with people's letters on purpose: real words with a source.
        ORDER BY COALESCE(listeners.demo, 0) ASC, letters.created_at DESC, letters.id
        LIMIT ?`,
     )
