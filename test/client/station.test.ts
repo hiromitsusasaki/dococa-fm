@@ -1146,7 +1146,10 @@ describe("the home's send modal", () => {
     dialog.close = close as unknown as HTMLDialogElement["close"];
     unwire = wireSendModal(document);
   });
-  afterEach(() => unwire());
+  afterEach(() => {
+    unwire();
+    vi.useRealTimers();
+  });
 
   const press = (init: MouseEventInit = {}) => document.querySelector("[data-open-send]")!.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, ...init }));
   /** From the dialog's frame unless `source` says otherwise. */
@@ -1190,10 +1193,13 @@ describe("the home's send modal", () => {
   });
 
   it("ignores the same message from another origin, and other messages", () => {
+    vi.useFakeTimers();
     press();
     message({ type: "dfm:sent" }, "https://evil.example");
     message({ type: "other" }, location.origin);
     message(null, location.origin);
+    // Past the sent page's delay, so an accepted dfm:sent would have closed it by now.
+    vi.advanceTimersByTime(2000);
     expect(close).not.toHaveBeenCalled();
   });
 
@@ -1208,9 +1214,12 @@ describe("the home's send modal", () => {
   });
 
   it("ignores a same-origin message from a window other than its frame", () => {
+    vi.useFakeTimers();
     press();
     message({ type: "dfm:sent" }, location.origin, window);
+    message({ type: "dfm:close" }, location.origin, window);
     message({ type: "dfm:close" }, location.origin, null);
+    vi.advanceTimersByTime(2000);
     expect(close).not.toHaveBeenCalled();
   });
 });
