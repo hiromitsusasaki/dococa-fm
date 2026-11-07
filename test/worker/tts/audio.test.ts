@@ -1,6 +1,6 @@
 import { env } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { audioKey, countSynthesizedToday, ensureAudio, voiceOf } from "../../../src/worker/tts/audio";
+import { MAX_SYNTH_PER_KEY, audioKey, countSynthesizedToday, ensureAudio, voiceOf } from "../../../src/worker/tts/audio";
 import { resetBucket } from "../../helpers/bucket";
 import { resetDb } from "../../helpers/db";
 import { json, stubFetch } from "../../helpers/fetch";
@@ -142,6 +142,27 @@ describe("ensureAudio", () => {
     expect(await ensureAudio({ ...capped, BUCKET: failing }, env.DB, line)).toEqual({ ok: false, reason: "failed" });
     expect(await ensureAudio(capped, env.DB, { ...line, text: "別の行です。" })).toEqual({ ok: false, reason: "limit" });
     expect(fn).toHaveBeenCalledTimes(2);
+  });
+
+  it("gives up on a key that has used six paid calls and has no clip, without calling Google", async () => {
+    expect(MAX_SYNTH_PER_KEY).toBe(6);
+    const key = await audioKey("ja", "male", line.text);
+    await env.DB.prepare("INSERT INTO tts_audio (key, lang, voice, bytes, synth_count, created_at) VALUES (?, 'ja', 'male', 0, 6, ?)").bind(key, new Date().toISOString()).run();
+    const { fn } = stubFetch([[GOOGLE, () => json({ audioContent: audio })]]);
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    expect(await ensureAudio(keyed, env.DB, line)).toEqual({ ok: false, reason: "failed" });
+    expect(fn).not.toHaveBeenCalled();
+    expect(log.mock.calls).toEqual([["[dococa] tts gave up"]]);
+    expect(await env.DB.prepare("SELECT COUNT(*) AS n FROM tts_claims").first<{ n: number }>()).toEqual({ n: 0 });
+    log.mockRestore();
+  });
+
+  it("tries once more for a key at five paid calls", async () => {
+    const key = await audioKey("ja", "male", line.text);
+    await env.DB.prepare("INSERT INTO tts_audio (key, lang, voice, bytes, synth_count, created_at) VALUES (?, 'ja', 'male', 0, 5, ?)").bind(key, new Date().toISOString()).run();
+    const { fn } = stubFetch([[GOOGLE, () => json({ audioContent: audio })]]);
+    expect(await ensureAudio(keyed, env.DB, line)).toEqual({ ok: true, key, made: true });
+    expect(fn).toHaveBeenCalledTimes(1);
   });
 
   it("answers failed for empty or whitespace text without touching the cap or Google", async () => {

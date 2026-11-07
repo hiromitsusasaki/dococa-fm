@@ -12,6 +12,11 @@ export const DEFAULT_SYNTH_DAILY_LIMIT = 3000;
 /** How long a request that lost the claim waits for the winner's clip to appear in R2. */
 const WAIT_MS = 5_000;
 const POLL_MS = 250;
+/**
+ * Paid calls one key may ever use. A line that keeps speaking the prompt fails after three calls per request;
+ * without this a listener coming back to it would pay three more each time. Six is two full tries.
+ */
+export const MAX_SYNTH_PER_KEY = 6;
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -51,6 +56,11 @@ async function countSynthesis(db: D1Database, key: string, line: { lang: AudioLa
     .run();
 }
 
+async function synthCountOf(db: D1Database, key: string): Promise<number> {
+  const row = await db.prepare("SELECT synth_count FROM tts_audio WHERE key = ?").bind(key).first<{ synth_count: number }>();
+  return row?.synth_count ?? 0;
+}
+
 export type Ensured ={ ok: true; key: string; made: boolean } | { ok: false; reason: "limit" | "busy" | "failed" | "unavailable" };
 
 /**
@@ -60,6 +70,9 @@ export type Ensured ={ ok: true; key: string; made: boolean } | { ok: false; rea
  * again adds one to its `synth_count`. A lost claim waits up to 5 s for the winner's clip (busy after that); the
  * claim keeps two requests for the same key to one call. Misses of distinct keys at once can each pass the
  * last remaining slot (bounded by the `/tts` limiters and the single prepare batch).
+ * A key whose `synth_count` has reached `MAX_SYNTH_PER_KEY` with no clip in R2 is given up (failed, no call):
+ * a line that keeps speaking the prompt costs at most six paid calls ever. Deleting its `tts_audio` row lets
+ * it be tried again.
  */
 export async function ensureAudio(
   env: Env,
@@ -84,6 +97,10 @@ export async function ensureAudio(
   try {
     // The winner of an earlier claim may have stored the clip and released between our R2 miss and this claim.
     if (await env.BUCKET.head(key)) return { ok: true, key, made: false };
+    if ((await synthCountOf(db, key)) >= MAX_SYNTH_PER_KEY) {
+      console.error("[dococa] tts gave up");
+      return { ok: false, reason: "failed" };
+    }
     let made: { audio: ArrayBuffer; calls: number };
     try {
       made = await synthesize(env, line.text, line.voice, line.lang);
