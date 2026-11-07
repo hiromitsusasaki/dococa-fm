@@ -1588,7 +1588,7 @@ body.embed {
 }
 
 body.embed .put {
-  padding-top: var(--sp-4);
+  padding: var(--sp-4) 0;
 }
 
 /* The home's three latest heard programmes, then the way to the archive. No numbers. */
@@ -1622,4 +1622,8 @@ body.embed .put {
 
 .recent-episodes > a {
   justify-self: start;
+}
+
+body.embed .put h1 {
+  margin-top: 0;
 }
