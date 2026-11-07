@@ -2,7 +2,9 @@ import { escapeTags, hasClaude, oneLine } from "../claude/client";
 import { callTool, type ToolSpec } from "../claude/tool-call";
 import { getItem, getItemsByIds, setItemReading } from "../db/items";
 import type { Env } from "../env";
-import { isReadingOf, NEEDS_READING } from "../program/unit";
+import { leadLine } from "../program/compose";
+import { isReadingOf, NEEDS_READING, READING_TEXT_MAX } from "../program/unit";
+import { verifyEpisode } from "../program/verify";
 import type { Item } from "../types";
 
 const SYSTEM = `あなたは、日本語の音声合成が作品の題名と作者名を正しく読めるように、その読み方を返す係です。
@@ -32,12 +34,32 @@ const CONCURRENCY = 3;
 const workTag = (i: Pick<Item, "title" | "creator" | "year" | "kind">): string =>
   `<work>\n題名: ${escapeTags(oneLine(i.title))}\n作者: ${escapeTags(oneLine(i.creator))}\n年: ${i.year ?? ""}\n種類: ${i.kind}\n</work>`;
 
+/** A text short enough to be stood for by one reading (the verifier's span). */
+const fits = (text: string) => Array.from(text).length <= READING_TEXT_MAX;
+
+/**
+ * Whether the lead line, said with this reading, passes the checks every programme runs on it: a reading that trips
+ * them (a word the talk may not say, a span too long) would keep the work off the air, so it is not stored.
+ */
+function leadPasses(item: Item, reading: NonNullable<Item["readingJa"]>): boolean {
+  const voiced = { ...item, readingJa: reading };
+  const report = verifyEpisode([{ itemId: item.id, slot: "near", lines: [leadLine(voiced, "ja")] }], new Map(), { id: "", mcpToken: "" }, new Map([[item.id, voiced]]), "ja");
+  return report.verbatim && report.sources && report.topical && report.pii;
+}
+
+/** The readings to keep, all of them if the lead passes with them, else the one field that passes alone, else none. */
+function safeReading(item: Item, reading: NonNullable<Item["readingJa"]>): NonNullable<Item["readingJa"]> {
+  const tries = [reading, ...(reading.title && reading.creator ? [{ title: reading.title }, { creator: reading.creator }] : [])];
+  return tries.find((r) => Object.keys(r).length > 0 && leadPasses(item, r)) ?? {};
+}
+
 /**
  * The work with its Japanese reading. A work that already has one (`reading_ja`, an empty `{}` too) comes back as
  * it is. A work whose title and creator are kana only is stored `{}` without a call. Otherwise one Claude call with
  * the single strict tool `name_readings { title, creator }`, which sees only the title, the creator, the year and the
  * kind; each reading is kept only when `isReadingOf` accepts it for that text (full-width katakana, bounded by the
- * text's length), else it is empty. The result is stored once (`setItemReading`), `{}` when both are empty, so the
+ * text's length, for a text of at most `READING_TEXT_MAX` code points), else it is empty, and the readings must
+ * leave the lead line passing `verifyEpisode` (`safeReading`). The result is stored once (`setItemReading`), `{}` when both are empty, so the
  * work is not asked about again. Without Claude, or when the call fails or answers out of shape twice, nothing is
  * stored and the work comes back as it was: a later run asks again. Never throws. Nothing is logged but the error's name.
  */
@@ -53,10 +75,10 @@ export async function ensureItemReading(env: Env, db: D1Database, item: Item): P
     for (let attempt = 0; attempt < ATTEMPTS; attempt++) {
       const input = (await callTool(env, { system: SYSTEM, user: workTag(item), tool: TOOL, maxTokens: 200 })) as { title?: unknown; creator?: unknown } | null;
       if (input === null || typeof input.title !== "string" || typeof input.creator !== "string") continue;
-      const reading = {
-        ...(isReadingOf(item.title, input.title) ? { title: input.title.trim() } : {}),
-        ...(isReadingOf(creator, input.creator) ? { creator: input.creator.trim() } : {}),
-      };
+      const reading = safeReading(item, {
+        ...(fits(item.title) && isReadingOf(item.title, input.title) ? { title: input.title.trim() } : {}),
+        ...(fits(creator) && isReadingOf(creator, input.creator) ? { creator: input.creator.trim() } : {}),
+      });
       await setItemReading(db, item.id, reading);
       // Another run may have stored first: what is stored is what every programme says.
       return (await getItem(db, item.id)) ?? item;

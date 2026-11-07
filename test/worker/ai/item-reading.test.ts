@@ -67,6 +67,15 @@ describe("ensureItemReading", () => {
     expect((await ensureItemReading(keyed, env.DB, it)).readingJa).toEqual(kept);
   });
 
+  it("keeps no reading that would fail the lead line's checks, or that stands for more than 40 code points", async () => {
+    const it = await insertItem(env.DB, itemDraft({ title: "Ranking Song", creator: "PSY" }));
+    create.mockResolvedValue(named({ title: "ランキングソング", creator: "サイ" }));
+    expect((await ensureItemReading(keyed, env.DB, it)).readingJa).toEqual({ creator: "サイ" });
+    const long = await insertItem(env.DB, itemDraft({ title: "A".repeat(41), creator: "" }));
+    create.mockResolvedValue(named({ title: "エー", creator: "" }));
+    expect((await ensureItemReading(keyed, env.DB, long)).readingJa).toEqual({});
+  });
+
   it("stores nothing without Claude or when the answer is out of shape twice, so a later run asks again", async () => {
     const it = await insertItem(env.DB, itemDraft({ title: "Gangnam Style", creator: "PSY" }));
     expect(await ensureItemReading(keyless, env.DB, it)).toEqual(it);
