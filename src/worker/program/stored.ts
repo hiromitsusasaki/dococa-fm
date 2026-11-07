@@ -9,9 +9,21 @@ export type Originals = Record<string, { main: string; original: string | null }
 export const letterIdsOf = (episode: Pick<Episode, "segments">): string[] =>
   episode.segments.flatMap((s) => s.lines.flatMap((l) => (l.type === "letter" ? [l.letterId] : [])));
 
-/** The stored letters an episode reads, in one query. */
-export const lettersOf = (db: D1Database, episode: Pick<Episode, "segments">): Promise<Map<string, Letter>> =>
-  getLettersByIds(db, letterIdsOf(episode));
+/**
+ * The stored letters an episode reads. A 一言 goes with its letter: one whose parent is not public takes the parent's status
+ * (`rejected` when the parent is gone), so every reader below treats it as no longer public. A second query, only when a reply is read.
+ */
+export async function lettersOf(db: D1Database, episode: Pick<Episode, "segments">): Promise<Map<string, Letter>> {
+  const letters = await getLettersByIds(db, letterIdsOf(episode));
+  const replies = [...letters.values()].filter((l) => l.kind === "reply" && l.status === "public" && l.parentLetterId !== null);
+  if (replies.length === 0) return letters;
+  const parents = await getLettersByIds(db, replies.map((l) => l.parentLetterId!));
+  for (const l of replies) {
+    const status = parents.get(l.parentLetterId!)?.status ?? "rejected";
+    if (status !== "public") letters.set(l.id, { ...l, status });
+  }
+  return letters;
+}
 
 /** What the screen shows for each letter; the script itself carries only the Japanese text the DJ reads aloud. */
 export function originalsOf(letters: ReadonlyMap<string, Letter>, lang: Lang): Originals {

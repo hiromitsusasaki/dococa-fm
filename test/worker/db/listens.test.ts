@@ -69,4 +69,16 @@ describe("listHeardLetters", () => {
     const rows = await listHeardLetters(env.DB, me.id, 2);
     expect(rows.map((r) => r.letter.id)).toEqual([ls[2]!.id, ls[1]!.id]);
   });
+
+  it.each(["rejected", "withdrawn"] as const)("leaves out a 一言 whose letter is %s", async (status) => {
+    const me = await createListener(env.DB);
+    const a = await insertItem(env.DB, itemDraft());
+    const parent = await insertLetter(env.DB, letterDraft(a.id, { body: "parent" }));
+    const reply = await insertLetter(env.DB, letterDraft(a.id, { kind: "reply", parentLetterId: parent.id, body: "reply" }));
+    const e = await episodeOf(me.id);
+    await recordListen(env.DB, { listenerId: me.id, episodeId: e.id, letterId: reply.id, segmentIndex: 0 });
+    expect((await listHeardLetters(env.DB, me.id)).map((r) => r.letter.id)).toEqual([reply.id]);
+    await setLetterStatus(env.DB, parent.id, status);
+    expect(await listHeardLetters(env.DB, me.id)).toEqual([]);
+  });
 });

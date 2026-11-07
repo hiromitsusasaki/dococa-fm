@@ -24,13 +24,14 @@ export async function recordListen(
     .run();
 }
 
-/** The letters the listener heard, newest first. A letter that is no longer public is left out before the limit applies. */
+/** The letters the listener heard, newest first. A letter that is no longer public, or a 一言 whose letter is not, is left out before the limit applies. */
 export async function listHeardLetters(db: D1Database, listenerId: string, limit = 50): Promise<HeardLetter[]> {
   const { results } = await db
     .prepare(
       `SELECT s.episode_id, s.letter_id, s.segment_index, s.heard_at FROM listens s
        JOIN letters l ON l.id = s.letter_id
        WHERE s.listener_id = ? AND l.status = 'public'
+         AND (l.parent_letter_id IS NULL OR EXISTS (SELECT 1 FROM letters p WHERE p.id = l.parent_letter_id AND p.status = 'public'))
        ORDER BY s.heard_at DESC, s.letter_id LIMIT ?`,
     )
     .bind(listenerId, limit)

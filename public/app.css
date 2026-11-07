@@ -1745,6 +1745,7 @@ body.embed .put {
 .public-radio-list a {
   display: block;
   padding: 10px 0;
+  font-feature-settings: "halt";
 }
 
 /* /me: taking a letter back is quiet and still 44px to tap. */

@@ -4,7 +4,9 @@
  * Nothing here counts or ranks: a pool is a set, not a leaderboard.
  */
 
-const OTHERS_TEXT = "l.status = 'public' AND l.kind IN ('letter', 'reply', 'found')";
+/** A 一言 goes with its letter: one whose parent is no longer public (rejected, withdrawn) is never chosen. */
+const OTHERS_TEXT =
+  "l.status = 'public' AND l.kind IN ('letter', 'reply', 'found') AND (l.parent_letter_id IS NULL OR EXISTS (SELECT 1 FROM letters p WHERE p.id = l.parent_letter_id AND p.status = 'public'))";
 const NOT_ME = "(l.listener_id IS NULL OR l.listener_id != ?1)";
 
 const OWN = `own AS (

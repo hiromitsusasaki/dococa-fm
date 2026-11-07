@@ -1,7 +1,12 @@
-import { describe, expect, it } from "vitest";
+import { env } from "cloudflare:workers";
+import { beforeEach, describe, expect, it } from "vitest";
+import { insertItem } from "../../../src/worker/db/items";
+import { insertLetter, setLetterStatus } from "../../../src/worker/db/letters";
+import { resetDb } from "../../helpers/db";
+import { itemDraft, letterDraft } from "../db/helpers";
 import { t } from "../../../src/worker/i18n/t";
 import { bridgeLine } from "../../../src/worker/program/bridge";
-import { originalsOf, publicView } from "../../../src/worker/program/stored";
+import { lettersOf, originalsOf, publicView } from "../../../src/worker/program/stored";
 import type { ScriptLine, Segment } from "../../../src/worker/types";
 import { byId, letter } from "./fixtures";
 
@@ -147,5 +152,23 @@ describe("publicView sameWork bridge", () => {
     const withReply: Segment[] = [{ itemId: "i1", slot: "near", lines: [open, read("a"), same, read("b"), read("r", "reply")] }];
     const view = publicView(withReply, byId([letter({ id: "a" }), letter({ id: "b", status: "rejected" }), letter({ id: "r" })]));
     expect(view.segments[0]!.lines.some((l) => l.type === "dj" && l.bridge === "bridge.sameWork")).toBe(false);
+  });
+});
+
+describe("lettersOf", () => {
+  beforeEach(() => resetDb(env.DB));
+
+  it.each(["rejected", "withdrawn"] as const)("makes a 一言 follow its letter out of the stored programme when the letter is %s", async (status) => {
+    const item = await insertItem(env.DB, itemDraft());
+    const parent = await insertLetter(env.DB, letterDraft(item.id, { body: "parent" }));
+    const reply = await insertLetter(env.DB, letterDraft(item.id, { kind: "reply", parentLetterId: parent.id, body: "reply" }));
+    const segs: Segment[] = [{ itemId: item.id, slot: "near", lines: [fixed("reply intro"), read(reply.id, "reply"), dj("after")] }];
+    const shown = (await publicView(segs, await lettersOf(env.DB, { segments: segs }))).segments[0]!.lines.map((l) => l.type);
+    expect(shown).toEqual(["dj", "letter", "dj"]);
+    await setLetterStatus(env.DB, parent.id, status);
+    const letters = await lettersOf(env.DB, { segments: segs });
+    expect(letters.get(reply.id)?.status).toBe(status);
+    expect(originalsOf(letters, "ja")).not.toHaveProperty(reply.id);
+    expect(publicView(segs, letters).segments.flatMap((s) => s.lines).some((l) => l.type === "letter")).toBe(false);
   });
 });

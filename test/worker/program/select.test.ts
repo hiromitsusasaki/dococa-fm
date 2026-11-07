@@ -266,6 +266,20 @@ describe("selectProgram", () => {
       }
     });
 
+    it.each(["rejected", "withdrawn"] as const)("never picks a 一言 whose parent letter is %s", async (status) => {
+      const f = await buildFixture();
+      const only = await insertItem(env.DB, itemDraft({ title: "only-a-reply", externalIds: { itunes: "only" } }));
+      const parent = await insertLetter(env.DB, letterDraft(only.id, { listenerId: f.b.id, body: "parent" }));
+      const reply = await insertLetter(env.DB, letterDraft(only.id, { kind: "reply", listenerId: f.c.id, parentLetterId: parent.id, body: "reply" }));
+      await setLetterStatus(env.DB, parent.id, status);
+      for (const seed of ["s", "t", "u", "v", "w", "x", "y", "z", "p", "q"]) {
+        for (const dial of [0, 0.5, 1]) {
+          const p = await selectProgram(env.DB, { ...f.a, dial }, { size: 6, seed });
+          expect(p.flatMap((s) => s.letterIds)).not.toContain(reply.id);
+        }
+      }
+    });
+
     it("ignores a reaction older than the last letter heard on the listener's own station", async () => {
       const f = await buildFixture();
       const x = await insertItem(env.DB, itemDraft({ title: "echo" }));

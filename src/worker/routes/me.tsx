@@ -7,7 +7,7 @@ import type { Variables } from "../auth/session";
 import { listFavorites } from "../db/history";
 import { getItemsByIds } from "../db/items";
 import { listHeardLetters } from "../db/listens";
-import { listOwnPublicLetters, listRecentReactionsToListener, withdrawLetter } from "../db/letters";
+import { getLetter, listOwnPublicLetters, listRecentReactionsToListener, withdrawLetter } from "../db/letters";
 import { markReactionsSeen } from "../db/listeners";
 import type { Env } from "../env";
 import { displayText } from "../letters/display";
@@ -154,6 +154,12 @@ me.get("/me", requireSignin, async (c) => {
 
 /** The sender takes a letter back: it turns `withdrawn`, which every reader treats as rejected. Only one's own letters, never a reply or a reaction. */
 me.post("/letters/:id/withdraw", requireSignin, async (c) => {
-  if (!(await withdrawLetter(c.env.DB, c.req.param("id"), c.get("listener").id))) return c.notFound();
+  const id = c.req.param("id");
+  const listener = c.get("listener");
+  if (!(await withdrawLetter(c.env.DB, id, listener.id))) {
+    // A second press (double submit, back and resubmit) is not an error for the sender; anyone else's id still looks unknown.
+    const again = await getLetter(c.env.DB, id);
+    if (!(again && again.listenerId === listener.id && again.kind === "letter" && again.status === "withdrawn")) return c.notFound();
+  }
   return c.redirect("/me", 303);
 });

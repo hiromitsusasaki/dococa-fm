@@ -245,6 +245,8 @@ describe("own letters and POST /letters/:id/withdraw", () => {
     expect(res.status).toBe(303);
     expect(res.headers.get("location")).toBe("/me");
     expect((await getLetter(env.DB, mine.id))?.status).toBe("withdrawn");
+    // Pressing it again is not an error.
+    expect((await withdraw(mine.id, cookie)).status).toBe(303);
     expect(await (await get(`/items/${item.id}`, cookie)).text()).not.toContain("ひみつの本文");
     expect(await (await get("/", cookie)).text()).not.toContain("ひみつの本文");
     expect((await SELF.fetch(`${BASE}/letters/${mine.id}`)).status).toBe(404);
