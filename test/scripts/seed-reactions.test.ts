@@ -88,3 +88,14 @@ describe("arguments and prompt", () => {
     expect(replyPrompt(persona("P0"), letter("L"))).toContain("<letter>\nI loved this at 15\n</letter>");
   });
 });
+
+describe("replyPrompt retry", () => {
+  it("asks for half the length when the last answer ran long", () => {
+    const letter = { title: "T", creator: "C", body: "b", radioName: "R" } as ListedLetter;
+    expect(replyPrompt(persona("a"), letter)).not.toContain("上限を超えていました");
+    expect(replyPrompt(persona("a"), letter, 190)).toContain("190 文字で、160 文字の上限を超えていました");
+  });
+  it("treats an empty text as no text", () => {
+    expect(checkReply({ text: "  " }, persona("a"), "x")).toEqual({ ok: false, reason: "no text" });
+  });
+});

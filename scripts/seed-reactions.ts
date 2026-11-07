@@ -67,33 +67,47 @@ async function loadLetters(): Promise<ListedLetter[]> {
   return args.letters ? letters.filter((l) => args.letters!.includes(l.id)) : letters;
 }
 
-/** One call, one strict tool, `tool_choice: auto` (Sonnet 5.5 rejects a forced choice); the text, or null unless exactly one call came back. */
-async function writeReply(client: Anthropic, actor: Actor, letter: ListedLetter): Promise<unknown> {
+/**
+ * One call, one strict tool, `tool_choice: auto` (Sonnet 5.5 rejects a forced choice). The tool's input when exactly one call came
+ * back; when the model answered in prose instead (it does now and then), that prose is the answer, so it still goes through the checks.
+ */
+async function writeReply(client: Anthropic, actor: Actor, letter: ListedLetter, tooLong?: number): Promise<unknown> {
   const res = await client.messages.create({
     model: MODEL,
     max_tokens: 400,
     system: `${REPLY_SYSTEM}\n必ず ${REPLY_TOOL.name} ツールを 1 回だけ呼んで答える。ほかの文章は書かない。`,
     tools: [{ ...REPLY_TOOL, strict: true }],
     tool_choice: { type: "auto" },
-    messages: [{ role: "user", content: replyPrompt(actor.persona, letter) }],
+    messages: [{ role: "user", content: replyPrompt(actor.persona, letter, tooLong) }],
   });
   const calls = res.content.filter((b) => b.type === "tool_use" && b.name === REPLY_TOOL.name);
   const [only] = calls;
-  return calls.length === 1 && only?.type === "tool_use" ? only.input : null;
+  if (calls.length === 1 && only?.type === "tool_use") return only.input;
+  if (calls.length === 0) {
+    const prose = res.content
+      .filter((b) => b.type === "text")
+      .map((b) => b.text.trim())
+      .join(" ")
+      .replace(/^["「『]|["」』]$/g, "");
+    return prose ? { text: prose } : null;
+  }
+  return null;
 }
 
-/** A 一言 that passes the checks, or null after the first try and one more. */
+/** A 一言 that passes the checks, or null after three tries; a try that ran long tells the next one so. */
 async function replyText(client: Anthropic, actor: Actor, letter: ListedLetter): Promise<string | null> {
-  for (let attempt = 0; attempt < 2; attempt++) {
+  let tooLong: number | undefined;
+  for (let attempt = 0; attempt < 3; attempt++) {
     let raw: unknown;
     try {
-      raw = await writeReply(client, actor, letter);
+      raw = await writeReply(client, actor, letter, tooLong);
     } catch (e) {
       console.warn(`  reply not written for ${letter.id} (${e instanceof Error ? e.name : "error"})`);
       continue;
     }
     const verdict = checkReply(raw, actor.persona, letter.creator);
     if (verdict.ok) return (raw as { text: string }).text;
+    if (verdict.reason === "too long") tooLong = Array.from((raw as { text: string }).text).length;
     console.warn(`  reply dropped for ${letter.id} by ${actor.persona.radioName}: ${verdict.reason}`);
   }
   return null;
