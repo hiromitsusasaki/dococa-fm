@@ -159,26 +159,21 @@ async function publicProgram(db: D1Database, listener: Listener, ownerId: string
 export const publicRadioHasLetters = async (db: D1Database, ownerId: string): Promise<boolean> => (await db.prepare(PUBLIC_ANY_SQL).bind(ownerId).first()) !== null;
 
 /**
- * Whether a listener may ask to hear this letter (a link to it): someone else's public letter, or a found voice with
- * its source, still readable for them.
+ * Whether a letter may be asked for by name (a card, a share link, `?letter=`): any public letter, the listener's own
+ * too, or a found voice with its source, whether or not it was heard lately. Only what was asked for: the automatic
+ * picks keep their own rules (`readable`, the 7-day wait).
  */
-async function readableAsked(db: D1Database, listener: Listener, since: string, l: Letter): Promise<boolean> {
-  if (l.status !== "public" || l.listenerId === listener.id) return false;
+export function canAskLetter(l: Letter): boolean {
   const sourced = Boolean(l.sourceUrl?.trim()) && Boolean(l.sourceAuthor?.trim());
-  if (!(l.kind === "letter" || (l.kind === "found" && sourced))) return false;
-  const readable = (await lettersByItem(db, listener.id, since, [l.itemId])).get(l.itemId) ?? [];
-  return readable.some((r) => r.id === l.id);
+  return l.status === "public" && (l.kind === "letter" || (l.kind === "found" && sourced));
 }
 
 const heardSince = (): string => new Date(Date.now() - HEARD_WITHIN_MS).toISOString();
 
-/** Whether the letter a link names would take the first seat for this listener (the home primes the radio only then). */
-export const canAskLetter = async (db: D1Database, listener: Listener, l: Letter): Promise<boolean> => readableAsked(db, listener, heardSince(), l);
-
-/** The letter a listener asked to hear (see `readableAsked`): its item takes the first seat, reading that letter. Anything else: null. */
-async function askedLetter(db: D1Database, listener: Listener, since: string, letterId: string): Promise<{ itemId: string; letterIds: string[] } | null> {
+/** The letter a listener asked to hear (see `canAskLetter`): its item takes the first seat, reading that letter. Anything else: null. */
+async function askedLetter(db: D1Database, letterId: string): Promise<{ itemId: string; letterIds: string[] } | null> {
   const l = await getLetter(db, letterId);
-  if (!l || !(await readableAsked(db, listener, since, l))) return null;
+  if (!l || !canAskLetter(l)) return null;
   return { itemId: l.itemId, letterIds: [l.id] };
 }
 
@@ -223,7 +218,7 @@ export async function selectProgram(
   if (opts.station?.kind === "public") return publicProgram(db, listener, opts.station.ownerId, since, size);
   // The dial the player sends wins over the stored one.
   const dial = Math.min(1, Math.max(0, opts.dial ?? listener.dial));
-  const asked = size > 0 && opts.letterId ? await askedLetter(db, listener, since, opts.letterId) : null;
+  const asked = size > 0 && opts.letterId ? await askedLetter(db, opts.letterId) : null;
   const room = size - (asked ? 1 : 0);
 
   const farQuota = Math.min(room, Math.max(1, Math.round(room * dial)));

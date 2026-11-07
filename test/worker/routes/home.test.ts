@@ -67,7 +67,7 @@ describe("GET /", () => {
     expect(html).toContain('<span class="letter-card-art"></span>');
   });
 
-  it("a card has two links: the radio from the letter, and the work page; the viewer's own letter goes to the work page", async () => {
+  it("a card has two links: the radio from the letter, and the work page; the viewer's own letter plays too", async () => {
     const cookie = await newSession();
     const id = cookie.split("=")[1]!.split(".")[0]!;
     await get("/", cookie);
@@ -78,14 +78,12 @@ describe("GET /", () => {
     const html = await (await get("/", cookie)).text();
     // The link stays for a new tab and for no script; the station script plays the letter on the home radio.
     expect(html).toContain(`<a class="letter-card-main" href="/stations/mine?letter=${other.id}" data-play-letter="${other.id}">`);
-    expect(html).toContain(`<a class="letter-card-main" href="/items/${it.id}">`);
-    // The play mark is decoration on the cards that play; the viewer's own card has none.
-    expect((html.match(/<span class="letter-card-playmark" aria-hidden="true"><\/span>/g) ?? []).length).toBe((html.match(/data-play-letter="/g) ?? []).length);
-    expect(html).not.toContain(`letter=${mine.id}`);
-    expect(html).not.toContain(`data-play-letter="${mine.id}"`);
+    expect(html).toContain(`<a class="letter-card-main" href="/stations/mine?letter=${mine.id}" data-play-letter="${mine.id}">`);
+    // The play mark is decoration on the cards that play: every card.
+    expect((html.match(/<span class="letter-card-playmark" aria-hidden="true"><\/span>/g) ?? []).length).toBe(2);
     expect((html.match(new RegExp(`<a class="letter-card-meta" href="/items/${it.id}">曲B`, "g")) ?? []).length).toBe(2);
     // Outside the radio's strings (its primed switch says the same words).
-    expect((html.replace(/<script[\s\S]*?<\/script>/g, "").match(/このお便りから聴く/g) ?? []).length).toBe(1);
+    expect((html.replace(/<script[\s\S]*?<\/script>/g, "").match(/このお便りから聴く/g) ?? []).length).toBe(2);
     expect(html).not.toMatch(/<a\s[^>]*>(?:(?!<\/a>)[\s\S])*<a\s/);
   });
 
@@ -329,17 +327,24 @@ describe("GET /?letter=", () => {
     expect(await (await get("/?letter=", cookie)).text()).not.toContain("data-letter");
   });
 
-  it("renders the ordinary home for the viewer's own letter, a letter no longer public, a reaction or an unknown id", async () => {
+  it("primes the radio for the viewer's own public letter too", async () => {
     const cookie = await newSession();
     const me = cookie.split("=")[1]!.split(".")[0]!;
     await get("/", cookie);
-    const it = await insertItem(env.DB, itemDraft({ title: "届かない曲", externalIds: { itunes: "pr2" } }));
+    const it = await insertItem(env.DB, itemDraft({ title: "自分の曲", externalIds: { itunes: "pr3" } }));
     const own = await insertLetter(env.DB, letterDraft(it.id, { listenerId: me }));
+    expect(await (await get(`/?letter=${own.id}`, cookie)).text()).toMatch(new RegExp(`<div[^>]*id="station"[^>]*data-letter="${own.id}"`));
+  });
+
+  it("renders the ordinary home for a letter no longer public, a reaction or an unknown id", async () => {
+    const cookie = await newSession();
+    await get("/", cookie);
+    const it = await insertItem(env.DB, itemDraft({ title: "届かない曲", externalIds: { itunes: "pr2" } }));
     const withdrawn = await insertLetter(env.DB, letterDraft(it.id, { status: "withdrawn" }));
     const rejected = await insertLetter(env.DB, letterDraft(it.id, { status: "rejected" }));
     const parent = await insertLetter(env.DB, letterDraft(it.id));
     const reply = await insertLetter(env.DB, letterDraft(it.id, { kind: "reply", parentLetterId: parent.id, body: "一言", bodyJa: "一言" }));
-    for (const id of [own.id, withdrawn.id, rejected.id, reply.id, "abc-123"]) {
+    for (const id of [withdrawn.id, rejected.id, reply.id, "abc-123"]) {
       const html = await (await get(`/?letter=${id}`, cookie)).text();
       expect(html, id).not.toContain("data-letter");
       expect(html, id).toContain('<input type="hidden" name="next" value="/"');

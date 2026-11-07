@@ -489,12 +489,32 @@ describe("selectProgram with one seat", () => {
     expect(p[0]!.letterIds[0]).toBe(voice.id);
   });
 
-  it("ignores an asked letter that is the listener's own, not public, a reaction, unknown, or a found voice without a source", async () => {
+  it("seats an own public letter when asked: a card or link names it, whoever wrote it", async () => {
+    const f = await buildFixture();
+    const own = f.letters.own[0]!;
+    const p = await selectProgram(env.DB, f.a, { size: 1, seed: "s", dial: 1, letterId: own });
+    expect(p[0]!.letterIds[0]).toBe(own);
+  });
+
+  it("seats a letter heard yesterday when asked", async () => {
+    const f = await buildFixture();
+    const asked = await insertLetter(env.DB, letterDraft(f.items[9]!, { listenerId: f.b.id, body: "B on 9, heard" }));
+    const ep = await episodeOf(f.a.id, new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(), [f.items[9]!]);
+    await recordListen(env.DB, { listenerId: f.a.id, episodeId: ep.id, letterId: asked.id, segmentIndex: 0, heardAt: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString() });
+    const p = await selectProgram(env.DB, f.a, { size: 1, seed: "s", dial: 0, letterId: asked.id });
+    expect(p[0]!.letterIds[0]).toBe(asked.id);
+  });
+
+  it("ignores an asked letter that is withdrawn or not public, a reaction, unknown, or a found voice without a source", async () => {
     const f = await buildFixture();
     const hidden = await insertLetter(env.DB, letterDraft(f.items[9]!, { listenerId: f.b.id, body: "hidden" }));
     await setLetterStatus(env.DB, hidden.id, "rejected");
+    const withdrawn = await insertLetter(env.DB, letterDraft(f.items[9]!, { listenerId: f.a.id, body: "taken back" }));
+    await setLetterStatus(env.DB, withdrawn.id, "withdrawn");
     const bare = await insertLetter(env.DB, letterDraft(f.items[10]!, { kind: "found", sourceAuthor: null, sourceUrl: null, body: "no source" }));
-    for (const id of [f.letters.own[0]!, hidden.id, f.letters.watashimo[0]!, bare.id, "no-such-letter"]) {
+    const parent = await insertLetter(env.DB, letterDraft(f.items[9]!, { listenerId: f.b.id, body: "B again on 9" }));
+    const reply = await insertLetter(env.DB, letterDraft(f.items[9]!, { listenerId: f.c.id, kind: "reply", parentLetterId: parent.id, body: "一言" }));
+    for (const id of [hidden.id, withdrawn.id, f.letters.watashimo[0]!, reply.id, bare.id, "no-such-letter"]) {
       const p = await selectProgram(env.DB, f.a, { size: 1, seed: "s", dial: 0, letterId: id });
       expect(p).toHaveLength(1);
       expect(p[0]?.slot).toBe("near");

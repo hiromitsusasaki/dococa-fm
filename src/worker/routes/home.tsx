@@ -36,7 +36,7 @@ home.get("/", async (c) => {
   const lang = listener.lang;
   const t = tFor(lang);
   // A letter's link (`/?letter=`): the radio waits for the switch and then starts from it, only when the letter would take
-  // the first seat (someone else's public letter, readable for this listener, as the first `next` checks); otherwise the
+  // the first seat (any public letter or sourced found voice, the listener's own too, as the first `next` checks); otherwise the
   // home is the ordinary one. A public letter also gives the link its preview.
   const asked = c.req.query("letter") ?? "";
   const wanted = asked.length > 0 && asked.length <= 100 ? asked : undefined;
@@ -47,7 +47,7 @@ home.get("/", async (c) => {
     listRecentPublicRadios(c.env.DB, PUBLIC_RADIOS),
     dialAwake(c.env.DB, listener.id),
   ]);
-  const letter = shared && wanted && (await canAskLetter(c.env.DB, listener, shared.letter)) ? wanted : undefined;
+  const letter = shared && wanted && canAskLetter(shared.letter) ? wanted : undefined;
   const og = shared && wanted
     ? { title: shared.title, description: Array.from(displayText(shared.letter, lang).main).slice(0, PREVIEW_CHARS).join(""), url: `${c.env.PUBLIC_ORIGIN}/?letter=${encodeURIComponent(wanted)}`, ...(isHttpUrl(shared.imageUrl) ? { image: shared.imageUrl } : {}) }
     : undefined;
@@ -110,7 +110,7 @@ home.get("/", async (c) => {
             <ul class="letter-cards">
               {recent.map((l) => (
                 <li>
-                  <LetterCard letter={l} item={l.item} lang={lang} viewerId={listener.id} />
+                  <LetterCard letter={l} item={l.item} lang={lang} />
                 </li>
               ))}
             </ul>

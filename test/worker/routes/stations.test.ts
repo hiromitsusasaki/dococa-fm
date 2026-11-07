@@ -2,7 +2,9 @@ import { env } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { upsertHistory } from "../../../src/worker/db/history";
 import { getItemVecs, insertItem, setItemVec } from "../../../src/worker/db/items";
-import { insertLetter } from "../../../src/worker/db/letters";
+import { insertEpisode } from "../../../src/worker/db/episodes";
+import { insertLetter, setLetterStatus } from "../../../src/worker/db/letters";
+import { recordListen } from "../../../src/worker/db/listens";
 import { createListener, getListener, updateListener } from "../../../src/worker/db/listeners";
 import app from "../../../src/worker/index";
 import { angled } from "../../helpers/ai";
@@ -237,14 +239,41 @@ describe("POST /stations/:key/next with the dial, first and a letter", () => {
     expect(plain.episode.segments[0]!.lines[0]!.bridge).toBe("bridge.open");
   });
 
-  it("picks as usual when the letter is the listener's own, and ignores a letter on the world station", async () => {
+  it("an own public letter plays when asked", async () => {
     const cookie = await newSession();
     const { me, mine, near } = await seedMine(cookie);
     await wakeDial(me, near.id);
-    const { episode } = (await (await send("mine", cookie, { dial: 0, letterId: mine.id })).json()) as Full;
-    expect(episode.segments).toHaveLength(1);
-    expect(episode.segments[0]!.itemId).toBe(near.id);
-    expect(episode.segments[0]!.lines.some((l) => l.letterId === mine.id)).toBe(false);
+    const { episode } = (await (await send("mine", cookie, { dial: 0, first: true, letterId: mine.id })).json()) as Full;
+    expect(episode.segments[0]!.lines.some((l) => l.type === "letter" && l.letterId === mine.id)).toBe(true);
+  });
+
+  it("a letter heard yesterday plays when asked", async () => {
+    const cookie = await newSession();
+    const { me } = await seedMine(cookie);
+    const writer = await createListener(env.DB);
+    const far = await insertItem(env.DB, itemDraft({ title: "again", externalIds: { itunes: "903" } }));
+    const asked = await insertLetter(env.DB, letterDraft(far.id, { listenerId: writer.id, body: "もう一度", bodyJa: "もう一度" }));
+    const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    const ep = await insertEpisode(env.DB, { listenerId: me, segments: [{ itemId: far.id, slot: "far", lines: [] }], verified: true, report: { verbatim: true, sources: true, topical: true, pii: true, details: [] }, station: "mine", createdAt: yesterday });
+    await recordListen(env.DB, { listenerId: me, episodeId: ep.id, letterId: asked.id, segmentIndex: 0, heardAt: yesterday });
+    const { episode } = (await (await send("mine", cookie, { dial: 0, first: true, letterId: asked.id })).json()) as Full;
+    expect(episode.segments[0]!.lines.some((l) => l.type === "letter" && l.letterId === asked.id)).toBe(true);
+  });
+
+  it("a withdrawn, private or reply letter is still refused when asked, and a letter is ignored on the world station", async () => {
+    const cookie = await newSession();
+    const { me, mine, near } = await seedMine(cookie);
+    await wakeDial(me, near.id);
+    const other = await createListener(env.DB);
+    const withdrawn = await insertLetter(env.DB, letterDraft(near.id, { listenerId: me, body: "取り下げ", bodyJa: "取り下げ" }));
+    await setLetterStatus(env.DB, withdrawn.id, "withdrawn");
+    const rejected = await insertLetter(env.DB, letterDraft(near.id, { listenerId: other.id, body: "非公開", bodyJa: "非公開" }));
+    await setLetterStatus(env.DB, rejected.id, "rejected");
+    const reply = await insertLetter(env.DB, letterDraft(near.id, { listenerId: other.id, kind: "reply", parentLetterId: mine.id, body: "一言", bodyJa: "一言" }));
+    for (const id of [withdrawn.id, rejected.id, reply.id]) {
+      const { episode } = (await (await send("mine", cookie, { dial: 0, letterId: id })).json()) as Full;
+      expect(episode.segments.flatMap((s) => s.lines).some((l) => l.type === "letter" && l.letterId === id), id).toBe(false);
+    }
     const writer = await createListener(env.DB);
     const asked = await insertLetter(env.DB, letterDraft(near.id, { listenerId: writer.id, body: "別の手紙", bodyJa: "別の手紙" }));
     const world = (await (await send("world", cookie, { letterId: asked.id })).json()) as Full;
