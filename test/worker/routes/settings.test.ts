@@ -228,12 +228,32 @@ describe("public station settings", () => {
     expect(html).toContain('href="http://127.0.0.1:5173/stations/s:my-radio"');
   });
 
-  it("generates radio-xxxx when public is turned on without a slug, never from the google name", async () => {
+  it("generates radio-xxxxxx when public is turned on without a slug, never from the google name", async () => {
     const cookie = await signedInSession("Hiro Sasaki");
     await postForm("/settings", cookie, { radioName: "ちくわ", voice: "", dial: "0.5", stationPublic: "1" });
     const row = await rowOf("Hiro Sasaki");
     expect(row?.pub).toBe(1);
-    expect(row?.slug).toMatch(/^radio-[a-z0-9]{4}$/);
+    expect(row?.slug).toMatch(/^radio-[0-9a-z]{6}$/);
+  });
+
+  it("gives a signed-in listener an address when /settings is opened, and shows it in the url", async () => {
+    const cookie = await signedInSession("Hiro");
+    expect((await rowOf("Hiro"))?.slug).toBeNull();
+    const html = await (await get("/settings", cookie)).text();
+    const slug = (await rowOf("Hiro"))?.slug;
+    expect(slug).toMatch(/^radio-[0-9a-z]{6}$/);
+    expect(html).toContain(`value="${slug}"`);
+    expect(html).toContain(`<code>http://127.0.0.1:5173/stations/s:${slug}</code>`);
+    expect(html).toContain("あとから変えられます");
+    // Opening it again keeps the same address.
+    await get("/settings", cookie);
+    expect((await rowOf("Hiro"))?.slug).toBe(slug);
+  });
+
+  it("does not assign an address to an anonymous listener", async () => {
+    await get("/settings", await newAnon());
+    const { results } = await env.DB.prepare("SELECT station_slug AS slug FROM listeners").all<{ slug: string | null }>();
+    expect(results.every((r) => r.slug === null)).toBe(true);
   });
 
   it("explains that only the radio name appears on the public page", async () => {

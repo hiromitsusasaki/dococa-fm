@@ -7,6 +7,7 @@ import { type Variables, clearSessionCookie, setSessionCookie } from "../auth/se
 import { bindGoogleSub, getListenerByGoogleSub } from "../db/listeners";
 import type { Env } from "../env";
 import { tFor } from "../i18n/t";
+import { ensureStationSlug } from "../program/station";
 import { safeNext } from "../security/next";
 
 const OAUTH_COOKIE = "dfm_oauth";
@@ -83,7 +84,13 @@ authGoogle.get("/auth/google/callback", async (c) => {
     } catch {
       // google_sub is UNIQUE: someone bound the same account between our lookup and this write.
     }
-    if (!bound) {
+    if (bound) {
+      try {
+        await ensureStationSlug(c.env.DB, current);
+      } catch {
+        // Not fatal: /settings assigns the address when it is opened.
+      }
+    } else {
       // Lost a race: either this account now belongs to a listener (switch to it), or this listener got bound to another account (fail).
       const winner = await getListenerByGoogleSub(c.env.DB, profile.sub);
       if (!winner) return c.redirect(FAILED, 303);

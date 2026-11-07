@@ -9,7 +9,7 @@ import { isValidRegion, placeLabel } from "../geo/place-label";
 import { looksLikeContact } from "../program/pii-patterns";
 import type { Env } from "../env";
 import { tFor } from "../i18n/t";
-import { SLUG, slugSuffix, stationUrl } from "../program/station";
+import { SLUG, ensureStationSlug, stationUrl } from "../program/station";
 import { currentPath } from "../auth/require-signin";
 import type { Listener } from "../types";
 
@@ -144,8 +144,10 @@ const isUniqueViolation = (e: unknown) => String((e as Error)?.message ?? e).inc
 
 export const settings = new Hono<{ Bindings: Env; Variables: Variables }>();
 
-settings.get("/settings", (c) => {
-  const listener = c.get("listener");
+settings.get("/settings", async (c) => {
+  const signedIn = c.get("listener");
+  // Every signed-in listener has a public address; one signed in before addresses were assigned gets it here.
+  const listener = signedIn.googleSub !== null && !signedIn.stationSlug ? { ...signedIn, stationSlug: await ensureStationSlug(c.env.DB, signedIn) } : signedIn;
   return c.html(
     <SettingsPage values={listener} listener={listener} path={currentPath(c)} listenerId={listener.id} spotifyConnected={listener.spotifyRefreshToken !== null} spotifyFailed={c.req.query("spotify") === "failed"} signinFailed={c.req.query("signin") === "failed"} saved={c.req.query("saved") === "1"} station={stationViewOf(c.env, listener)} />,
   );
@@ -177,20 +179,16 @@ settings.post(
 
     const isPublic = stationPublic === "1";
     const chosen = stationSlug || null;
-    let slug = chosen ?? listener.stationSlug ?? (isPublic ? `radio-${slugSuffix()}` : null);
-    // A generated slug that collides gets a random suffix once; a slug the listener chose that collides is theirs to change.
-    for (let attempt = 0; ; attempt++) {
-      try {
-        await updateListener(c.env.DB, listener.id, { ...rest, stationPublic: isPublic, ...(slug ? { stationSlug: slug } : {}) });
-        return c.redirect("/settings?saved=1", 303);
-      } catch (e) {
-        if (!isUniqueViolation(e)) throw e;
-        if (chosen || attempt > 0 || !slug) {
-          const shown = { ...listener, ...rest, stationPublic: isPublic };
-          return c.html(<SettingsPage values={shown} listener={listener} path={currentPath(c)} listenerId={listener.id} spotifyConnected={listener.spotifyRefreshToken !== null} station={stationViewOf(c.env, listener, { isPublic, slug: slug ?? "", url: null, taken: true })} />, 422);
-        }
-        slug = `${slug.slice(0, 19).replace(/-+$/, "")}-${slugSuffix()}`;
-      }
+    try {
+      await updateListener(c.env.DB, listener.id, { ...rest, stationPublic: isPublic, ...(chosen ? { stationSlug: chosen } : {}) });
+    } catch (e) {
+      if (!isUniqueViolation(e)) throw e;
+      // The slug the listener typed is held by someone else; it is theirs to change.
+      const shown = { ...listener, ...rest, stationPublic: isPublic };
+      return c.html(<SettingsPage values={shown} listener={listener} path={currentPath(c)} listenerId={listener.id} spotifyConnected={listener.spotifyRefreshToken !== null} station={stationViewOf(c.env, listener, { isPublic, slug: chosen ?? "", url: null, taken: true })} />, 422);
     }
+    // A listener signed in before addresses were assigned still gets one on their first save.
+    await ensureStationSlug(c.env.DB, listener);
+    return c.redirect("/settings?saved=1", 303);
   },
 );

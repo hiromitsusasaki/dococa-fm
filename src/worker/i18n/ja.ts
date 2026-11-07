@@ -206,7 +206,7 @@ export const ja = {
   "settings.station": "公開ラジオ",
   "settings.stationPublic": "あなたの好きなものだけのラジオを公開する",
   "settings.stationSlug": "ラジオの URL",
-  "settings.stationSlugHelp": "英小文字・数字・ハイフン、3〜24 字",
+  "settings.stationSlugHelp": "公開ラジオの URL。あとから変えられます（英小文字・数字・ハイフン、3〜24 文字）",
   "settings.stationUrl": "公開 URL",
   "settings.radioNameHint": "公開されるのはラジオネームだけです。空のままだと名無しのリスナーになります",
   "settings.stationNameHint": "公開ページにはラジオネームだけが出ます",

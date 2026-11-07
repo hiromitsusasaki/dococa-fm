@@ -1,5 +1,7 @@
+import { getListener, setStationSlugIfNone } from "../db/listeners";
 import type { Env } from "../env";
 import { type Lang, t } from "../i18n/t";
+import type { Listener } from "../types";
 
 /** What a listener tunes to: everyone's far shelf, their own radio, or another listener's public favourites. */
 export type StationKey = { kind: "world" } | { kind: "mine" } | { kind: "public"; ownerId: string };
@@ -35,12 +37,32 @@ export function stationLabel(key: StationKey, ownerName: string, lang: Lang): st
 /** Where a public station lives; the one builder for `/me`, the settings page and the og tags. */
 export const stationUrl = (env: Pick<Env, "PUBLIC_ORIGIN">, slug: string): string => `${env.PUBLIC_ORIGIN}/stations/s:${slug}`;
 
-/** Four random lower-case base36 characters, drawn without modulo bias, for an automatic slug or a collision suffix. */
-export function slugSuffix(): string {
+/** Random lower-case base36 characters, drawn without modulo bias, for an automatic slug or a collision suffix. */
+export function slugSuffix(length = 4): string {
   let out = "";
-  while (out.length < 4) {
+  while (out.length < length) {
     const [b] = crypto.getRandomValues(new Uint8Array(1));
     if (b! < 252) out += (b! % 36).toString(36); // 252 = 7 * 36, so every character is equally likely
   }
   return out;
+}
+
+const MAX_SLUG_ATTEMPTS = 3;
+
+/**
+ * The listener's public radio address: the one they have, or a fresh `radio-<6 chars>` that is saved and returned.
+ * A collision with another listener's slug draws again, up to three times.
+ */
+export async function ensureStationSlug(db: D1Database, listener: Listener, suffix: (length: number) => string = slugSuffix): Promise<string> {
+  if (listener.stationSlug) return listener.stationSlug;
+  for (let attempt = 1; ; attempt++) {
+    try {
+      await setStationSlugIfNone(db, listener.id, `radio-${suffix(6)}`);
+      break;
+    } catch (e) {
+      if (!String((e as Error)?.message ?? e).includes("station_slug") || attempt >= MAX_SLUG_ATTEMPTS) throw e;
+    }
+  }
+  // Read back: a concurrent request may have assigned one first.
+  return (await getListener(db, listener.id))?.stationSlug ?? "";
 }

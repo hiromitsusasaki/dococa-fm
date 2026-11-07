@@ -137,6 +137,7 @@ describe("GET /auth/google/callback", () => {
     expect(listener?.googleSub).toBe("g-1");
     expect(listener?.displayName).toBe("Aiko");
     expect(listener?.radioName).toBe("");
+    expect(listener?.stationSlug).toMatch(/^radio-[0-9a-z]{6}$/);
   });
 
   it("uses the email local part as the private display name when there is no name, and keeps an existing radio name", async () => {

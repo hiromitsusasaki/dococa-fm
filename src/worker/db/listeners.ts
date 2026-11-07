@@ -118,6 +118,11 @@ export async function updateListener(db: D1Database, id: string, patch: Partial<
   return getListener(db, id);
 }
 
+/** Writes the slug only while the listener has none, so two requests racing to assign one cannot replace each other. A slug held by another listener throws (UNIQUE). */
+export async function setStationSlugIfNone(db: D1Database, id: string, slug: string): Promise<void> {
+  await db.prepare("UPDATE listeners SET station_slug = ? WHERE id = ? AND station_slug IS NULL").bind(slug, id).run();
+}
+
 /** The dial alone, in one write: the player sends it with every request. */
 export async function setListenerDial(db: D1Database, id: string, dial: number): Promise<void> {
   await db.prepare("UPDATE listeners SET dial = ? WHERE id = ?").bind(dial, id).run();

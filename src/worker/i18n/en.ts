@@ -209,7 +209,7 @@ export const en: Record<keyof typeof ja, string> = {
   "settings.station": "Public radio",
   "settings.stationPublic": "Make a radio of only your favorites public",
   "settings.stationSlug": "Radio URL",
-  "settings.stationSlugHelp": "Lower-case letters, digits and hyphens, 3 to 24 characters",
+  "settings.stationSlugHelp": "Your radio's public address. You can change it later (a–z, 0–9, hyphen, 3–24 characters)",
   "settings.stationUrl": "Public URL",
   "settings.radioNameHint": "Only your radio name is public. Leave it empty to stay anonymous.",
   "settings.stationNameHint": "Only your radio name appears on the public page",
