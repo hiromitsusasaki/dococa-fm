@@ -5,24 +5,15 @@ import { Layout } from "../../views/layout";
 import type { Variables } from "../auth/session";
 import { updateListener } from "../db/listeners";
 import { COUNTRIES, REGIONS } from "../geo/places";
-import { isValidRegion, placeLabel } from "../geo/place-label";
-import { looksLikeContact } from "../program/pii-patterns";
+import { placeLabel } from "../geo/place-label";
+import { isValidPlace, profileFields } from "../listener-profile";
 import type { Env } from "../env";
 import { tFor } from "../i18n/t";
 import { currentPath } from "../auth/require-signin";
 import type { Listener } from "../types";
 
-/** The DJ says radio names and places aloud, so they may not be an address, a phone number or a url. */
-const notContact = (s: string) => !looksLikeContact(s);
-
-const fields = z.object({
-  radioName: z.string().trim().max(20).refine(notContact),
-  /** Empty means no place. */
-  placeCountry: z.string().trim().refine((v) => v === "" || COUNTRIES.some((c) => c.code === v)).default(""),
-  placeRegion: z.string().trim().default(""),
-});
-/** The region has to belong to the chosen country. */
-const schema = fields.refine((v) => isValidRegion(v.placeCountry, v.placeRegion));
+/** The rules for the name and place live in `listener-profile.ts`; the region has to belong to the chosen country. */
+const schema = z.object(profileFields).refine(isValidPlace);
 
 type FormValues = Pick<Listener, "radioName" | "place" | "placeCountry" | "placeRegion" | "lang">;
 
