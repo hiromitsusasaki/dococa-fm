@@ -95,6 +95,8 @@ async function main(): Promise<void> {
 
   const exists = (path: string) => fs.access(path).then(() => true, () => false);
   for (const line of lines) {
+    // The id names the output file: a plain name only, so a narration file cannot write outside `--out`.
+    if (!/^[A-Za-z0-9_-]+$/.test(line.id)) throw new Error(`invalid id: ${line.id}`);
     const path = `${args.out}/${line.id}.mp3`;
     if (!args.force && (await exists(path))) {
       console.log(`${line.id} kept`);
@@ -119,6 +121,6 @@ async function main(): Promise<void> {
 }
 
 main().catch((e: unknown) => {
-  console.error(e instanceof Error && /^(usage:|stopped before|GOOGLE_TTS_SA_JSON)/.test(e.message) ? e.message : `unexpected error: ${e instanceof Error ? e.name : "unknown"}`);
+  console.error(e instanceof Error && /^(usage:|stopped before|invalid id|GOOGLE_TTS_SA_JSON)/.test(e.message) ? e.message : `unexpected error: ${e instanceof Error ? e.name : "unknown"}`);
   process.exitCode = 1;
 });
