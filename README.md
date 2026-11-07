@@ -6,6 +6,8 @@ Built with Claude: Japan 2026 への応募作です。
 
 仕組みの図解: [docs/how-it-works.md](docs/how-it-works.md)
 
+経緯と意思決定: [docs/history.md](docs/history.md) · [docs/adr/](docs/adr/README.md)
+
 ## 何をするか
 
 ホームの「ラジオをつける」を押すと、世界のどこかの誰かの好きなものが流れ続けます。AI の DJ が作品を紹介し、その作品に誰かが書いた一行の「お便り」が、原文のまま読まれます。聴くだけでよく、返事は義務ではありません。スマホのブラウザでも聴けます。
