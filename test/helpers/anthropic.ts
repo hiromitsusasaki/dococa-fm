@@ -6,14 +6,15 @@ import { json, stubFetch } from "./fetch";
  * and returns the response fields (`content`), so tests assert on the real request shape.
  * vi.mock on the client module does not reach the worker's module graph, hence fetch.
  */
-export function stubAnthropic() {
+export function stubAnthropic(opts: { names?: (req: any) => unknown } = {}) {
   const create = vi.fn<(req: any) => unknown>();
   stubFetch([
     [
       "https://api.anthropic.com/v1/messages",
       async (_url, init) => {
         const req = JSON.parse(String(init?.body));
-        const out = await create(req);
+        // With `names`, the work-reading call (`name_readings`) goes there, so `create` sees only the other calls.
+        const out = opts.names && req.tools?.[0]?.name === "name_readings" ? await opts.names(req) : await create(req);
         return json({
           id: "msg_1",
           type: "message",
@@ -57,3 +58,6 @@ export function okReply(req: any) {
   }
   return toolUse("judge_letter", { ok: true });
 }
+
+/** The work-reading call's answer: no reading unless one is given. */
+export const noNames = () => toolUse("name_readings", { title: "", creator: "" });

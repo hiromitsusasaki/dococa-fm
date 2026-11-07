@@ -6,7 +6,7 @@ import { getUnits, upsertUnit } from "../../../src/worker/db/units";
 import type { Env } from "../../../src/worker/env";
 import { prepareBatch, prepareLetter } from "../../../src/worker/program/prepare";
 import type { Item, Letter } from "../../../src/worker/types";
-import { stubAnthropic, toolUse } from "../../helpers/anthropic";
+import { noNames, stubAnthropic, toolUse } from "../../helpers/anthropic";
 import { resetBucket } from "../../helpers/bucket";
 import { claimTts } from "../../../src/worker/tts/claim";
 import { audioKey, voiceOf } from "../../../src/worker/tts/audio";
@@ -16,7 +16,7 @@ import { json } from "../../helpers/fetch";
 import { makeServiceAccount, primeToken } from "../../helpers/service-account";
 import { itemDraft, letterDraft } from "../db/helpers";
 import { fakeAi } from "../../helpers/ai";
-import { getItemVecs } from "../../../src/worker/db/items";
+import { getItem, getItemVecs } from "../../../src/worker/db/items";
 
 const GOOGLE = "https://texttospeech.googleapis.com/v1/text:synthesize";
 const sa = await makeServiceAccount();
@@ -25,10 +25,13 @@ const keylessTts = { ...keyed, GOOGLE_TTS_SA_JSON: "" } as Env;
 const audio = btoa(String.fromCharCode(1, 2, 3));
 
 let create: ReturnType<typeof stubAnthropic>;
+/** The work-reading call (`name_readings`), kept out of `create`'s count. */
+let names: Mock<(req: any) => unknown>;
 let google: Mock<() => Response | Promise<Response>>;
 /** Claude is stubbed by the helper; Google is added in front of it. */
 function stubBoth(googleReply: () => Response | Promise<Response> = () => json({ audioContent: audio })) {
-  create = stubAnthropic();
+  names = vi.fn<(req: any) => unknown>(noNames);
+  create = stubAnthropic({ names });
   create.mockResolvedValue(toolUse("write_unit", { intro: "静かな一曲です。", after: "いいお便りでした。" }));
   const claudeFetch = globalThis.fetch;
   google = vi.fn<() => Response | Promise<Response>>(googleReply);
@@ -40,6 +43,8 @@ function stubBoth(googleReply: () => Response | Promise<Response> = () => json({
 
 async function seed(n = 1, over: Partial<Parameters<typeof letterDraft>[1]> = {}): Promise<{ item: Item; letters: Letter[] }> {
   const item = await insertItem(env.DB, itemDraft({ title: "近くの曲" }));
+  // Its reading was asked for already, so the budget tests below count units and clips only.
+  await env.DB.prepare("UPDATE items SET reading_ja = '{}' WHERE id = ?").bind(item.id).run();
   const letters: Letter[] = [];
   for (let i = 0; i < n; i++) {
     letters.push(await insertLetter(env.DB, letterDraft(item.id, { radioName: `しずく${i}`, place: "松本", body: `雨の日に聴きました${i}。`, bodyJa: `雨の日に聴きました${i}。`, ...over })));
@@ -74,8 +79,10 @@ describe("prepareLetter", () => {
   it("voices the spoken text of the lead and the talk, with the readings the new unit gave, and the letter as written", async () => {
     const it = await insertItem(env.DB, itemDraft({ title: "Gangnam Style", creator: "PSY" }));
     const l = await insertLetter(env.DB, letterDraft(it.id, { radioName: "しずく", place: "松本", body: "PSYで踊った夏。", bodyJa: "PSYで踊った夏。" }));
-    create.mockResolvedValue(toolUse("write_unit", { intro: "PSYらしい明るい一曲です。", after: "いい夏でしたね。", readings: [{ text: "PSY", reading: "サイ" }], titleReading: "", creatorReading: "サイ" }));
+    create.mockResolvedValue(toolUse("write_unit", { intro: "PSYらしい明るい一曲です。", after: "いい夏でしたね。", readings: [{ text: "PSY", reading: "サイ" }] }));
+    names.mockImplementation(() => toolUse("name_readings", { title: "", creator: "サイ" }));
     expect(await prepareLetter(keyed, env.DB, l.id, "ja")).toEqual({ units: 1, audio: 5, failed: 0 });
+    expect(names).toHaveBeenCalledTimes(1);
     const has = async (text: string) => (await env.BUCKET.head(await audioKey("ja", voiceOf(keyed), text))) !== null;
     expect(await has("サイの「Gangnam Style」という曲の紹介です。")).toBe(true);
     expect(await has("PSYの「Gangnam Style」という曲の紹介です。")).toBe(false);
@@ -207,7 +214,7 @@ describe("prepareBatch", () => {
     expect(calls.map((c) => c.text.length)).toEqual([20, 1]);
     expect((await getItemVecs(env.DB, [item.id, ...others.map((o) => o.id)])).size).toBe(21);
     // 21 works took two units of three: one letter job is left.
-    expect(r).toEqual({ units: 1, audio: 0, failed: 0, remaining: { vectors: 0, units: { ja: 1, en: 2 }, audio: { ja: 1, en: 0 }, gaveUp: { ja: 0, en: 0 } } });
+    expect(r).toEqual({ units: 1, audio: 0, failed: 0, remaining: { vectors: 0, readings: 0, units: { ja: 1, en: 2 }, audio: { ja: 1, en: 0 }, gaveUp: { ja: 0, en: 0 } } });
   });
 
   it("without Workers AI makes no vector, spends nothing on them and counts them all", async () => {
@@ -225,7 +232,7 @@ describe("prepareBatch", () => {
       return toolUse("write_unit", { intro: "静かな一曲です。", after: "いいお便りでした。" });
     });
     const r = await prepareBatch(keylessTts, env.DB, 4);
-    expect(r).toEqual({ units: 4, audio: 0, failed: 0, remaining: { vectors: 1, units: { ja: 0, en: 2 }, audio: { ja: 3, en: 1 }, gaveUp: { ja: 0, en: 0 } } });
+    expect(r).toEqual({ units: 4, audio: 0, failed: 0, remaining: { vectors: 1, readings: 0, units: { ja: 0, en: 2 }, audio: { ja: 3, en: 1 }, gaveUp: { ja: 0, en: 0 } } });
     expect(order).toEqual(["ja:0", "ja:1", "ja:2", "en:0"]);
     expect((await getUnits(env.DB, letters.map((l) => l.id), "en")).size).toBe(1);
   });
@@ -308,7 +315,7 @@ describe("prepareBatch", () => {
     await prepareBatch(keylessTts, env.DB, 20);
     const r = await prepareBatch(keyed, env.DB, 20);
     // The stubbed intro and after, and the work's lead, are the same text for both letters, so their clips are shared.
-    expect(r).toEqual({ units: 0, audio: 14, failed: 0, remaining: { vectors: 1, units: { ja: 0, en: 0 }, audio: { ja: 0, en: 0 }, gaveUp: { ja: 0, en: 0 } } });
+    expect(r).toEqual({ units: 0, audio: 14, failed: 0, remaining: { vectors: 1, readings: 0, units: { ja: 0, en: 0 }, audio: { ja: 0, en: 0 }, gaveUp: { ja: 0, en: 0 } } });
     expect(create).toHaveBeenCalledTimes(4);
     expect(await unitOf(letters[1]!.id)).toMatchObject({ audioReady: true });
   });
@@ -353,7 +360,7 @@ describe("prepareBatch", () => {
     const { item } = await seed(0);
     for (const sourceUrl of [null, "", "  "]) await insertLetter(env.DB, letterDraft(item.id, { kind: "found", sourceUrl, sourceAuthor: "@x", radioName: "" }));
     await insertLetter(env.DB, letterDraft(item.id, { kind: "found", sourceUrl: "https://youtu.be/x", sourceAuthor: " ", radioName: "" }));
-    expect(await prepareBatch(keyed, env.DB, 20)).toEqual({ units: 0, audio: 0, failed: 0, remaining: { vectors: 1, units: { ja: 0, en: 0 }, audio: { ja: 0, en: 0 }, gaveUp: { ja: 0, en: 0 } } });
+    expect(await prepareBatch(keyed, env.DB, 20)).toEqual({ units: 0, audio: 0, failed: 0, remaining: { vectors: 1, readings: 0, units: { ja: 0, en: 0 }, audio: { ja: 0, en: 0 }, gaveUp: { ja: 0, en: 0 } } });
     expect(create).not.toHaveBeenCalled();
     const sourced = await insertLetter(env.DB, letterDraft(item.id, { kind: "found", sourceUrl: "https://youtu.be/y", sourceAuthor: "@jazzcat", radioName: "", body: "雨に合う。", bodyJa: "雨に合う。" }));
     expect(await prepareBatch(keyed, env.DB, 20)).toMatchObject({ units: 2, failed: 0 });
@@ -368,7 +375,7 @@ describe("prepareBatch", () => {
     const audioReadyOf = async (lang: string) => (await env.DB.prepare("SELECT audio_ready AS a FROM units WHERE letter_id = ? AND lang = ?").bind(l.id, lang).first<{ a: number }>())?.a;
 
     const first = await prepareBatch(keyed, env.DB, 20);
-    expect(first.remaining).toEqual({ vectors: 1, units: { ja: 0, en: 0 }, audio: { ja: 0, en: 0 }, gaveUp: { ja: 1, en: 0 } });
+    expect(first.remaining).toEqual({ vectors: 1, readings: 0, units: { ja: 0, en: 0 }, audio: { ja: 0, en: 0 }, gaveUp: { ja: 1, en: 0 } });
     expect(await audioReadyOf("ja")).toBe(2);
     expect(await audioReadyOf("en")).toBe(1);
     expect(await unitOf(l.id)).toMatchObject({ audioReady: false });
@@ -399,11 +406,28 @@ describe("prepareBatch", () => {
     expect((await env.DB.prepare("SELECT audio_ready AS a FROM units WHERE letter_id = ? AND lang = 'ja'").bind(l.id).first<{ a: number }>())?.a).toBe(0);
   });
 
+  it("asks for the works' readings after the vectors and before the units, one budget unit each, and counts what is left", async () => {
+    const a = await insertItem(env.DB, itemDraft({ title: "Gangnam Style", creator: "PSY" }));
+    const b = await insertItem(env.DB, itemDraft({ title: "Hangover", creator: "PSY" }));
+    await insertLetter(env.DB, letterDraft(a.id));
+    await insertLetter(env.DB, letterDraft(b.id));
+    const order: string[] = [];
+    names.mockImplementation(() => (order.push("reading"), toolUse("name_readings", { title: "", creator: "サイ" })));
+    create.mockImplementation(() => (order.push("unit"), toolUse("write_unit", { intro: "静かな一曲です。", after: "いいお便りでした。" })));
+    const r = await prepareBatch(keyed, env.DB, 1);
+    expect(r).toMatchObject({ units: 0, remaining: { readings: 1, units: { ja: 2, en: 2 } } });
+    expect(order).toEqual(["reading"]);
+    const s2 = await prepareBatch(keyed, env.DB, 2);
+    expect(s2).toMatchObject({ units: 1, remaining: { readings: 0 } });
+    expect(order).toEqual(["reading", "reading", "unit"]);
+    expect((await getItem(env.DB, a.id))!.readingJa ?? (await getItem(env.DB, b.id))!.readingJa).toEqual({ creator: "サイ" });
+  });
+
   it("never re-makes a letter that was rejected after its unit was made", async () => {
     const { letters } = await seed(1, { status: "rejected" });
     await upsertUnit(env.DB, { letterId: letters[0]!.id, lang: "ja", intro: "a", after: "b", verified: true, audioReady: false });
     const r = await prepareBatch(keyed, env.DB, 20);
-    expect(r).toEqual({ units: 0, audio: 0, failed: 0, remaining: { vectors: 1, units: { ja: 0, en: 0 }, audio: { ja: 0, en: 0 }, gaveUp: { ja: 0, en: 0 } } });
+    expect(r).toEqual({ units: 0, audio: 0, failed: 0, remaining: { vectors: 1, readings: 0, units: { ja: 0, en: 0 }, audio: { ja: 0, en: 0 }, gaveUp: { ja: 0, en: 0 } } });
     expect(create).not.toHaveBeenCalled();
     expect(google).not.toHaveBeenCalled();
   });

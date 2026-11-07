@@ -55,43 +55,41 @@ export async function insertItems(db: D1Database, items: Item[]): Promise<void> 
 }
 
 /**
- * Stores how the Japanese voice says the work's title and creator, laid over what the work had (a field given
- * replaces that field; one not given stays): the most recent verified unit that gives a reading sets it. When the
- * reading changes, the work's Japanese units are marked to be voiced again, since their lead clips said the old
- * one. Nothing when both are absent. One batch.
+ * Stores how the Japanese voice says the work's title and creator, once: only while the work has none
+ * (`reading_ja IS NULL`). An empty reading (`{}`) is stored too, so a work the voice reads fine is not asked about
+ * again. When a reading with a field is stored, the work's voiced Japanese units are marked to be voiced again,
+ * since their lead clips said the work as written. One batch. The operator clears a wrong reading by SQL
+ * (`reading_ja = NULL`), and the next run asks again.
  */
 export async function setItemReading(db: D1Database, id: string, reading: NonNullable<Item["readingJa"]>): Promise<void> {
   const value: NonNullable<Item["readingJa"]> = { ...(reading.title ? { title: reading.title } : {}), ...(reading.creator ? { creator: reading.creator } : {}) };
-  if (Object.keys(value).length === 0) return;
-  const patch = JSON.stringify(value);
-  const changed = "reading_ja IS NULL OR json_patch(reading_ja, ?) <> json(reading_ja)";
-  await db.batch([
-    db
-      .prepare(
-        `UPDATE units SET audio_ready = 0 WHERE lang = 'ja' AND audio_ready = 1
-           AND letter_id IN (SELECT l.id FROM letters l WHERE l.item_id = ?)
-           AND EXISTS (SELECT 1 FROM items WHERE id = ? AND (${changed}))`,
-      )
-      .bind(id, id, patch),
-    db.prepare(`UPDATE items SET reading_ja = json_patch(COALESCE(reading_ja, '{}'), ?) WHERE id = ? AND (${changed})`).bind(patch, id, patch),
-  ]);
+  const stmts: D1PreparedStatement[] = [];
+  if (Object.keys(value).length > 0) {
+    stmts.push(
+      db
+        .prepare(
+          `UPDATE units SET audio_ready = 0 WHERE lang = 'ja' AND audio_ready = 1
+             AND letter_id IN (SELECT l.id FROM letters l WHERE l.item_id = ?)
+             AND EXISTS (SELECT 1 FROM items WHERE id = ? AND reading_ja IS NULL)`,
+        )
+        .bind(id, id),
+    );
+  }
+  stmts.push(db.prepare("UPDATE items SET reading_ja = ? WHERE id = ? AND reading_ja IS NULL").bind(JSON.stringify(value), id));
+  await db.batch(stmts);
 }
 
-/**
- * Forgets how the Japanese voice says the work (the owner's remake of one of its units does this, so a wrong reading
- * that later units never correct can go). The work's Japanese units are marked to be voiced again when it had one.
- */
-export async function clearItemReading(db: D1Database, id: string): Promise<void> {
-  await db.batch([
-    db
-      .prepare(
-        `UPDATE units SET audio_ready = 0 WHERE lang = 'ja' AND audio_ready = 1
-           AND letter_id IN (SELECT l.id FROM letters l WHERE l.item_id = ?)
-           AND EXISTS (SELECT 1 FROM items WHERE id = ? AND reading_ja IS NOT NULL)`,
-      )
-      .bind(id, id),
-    db.prepare("UPDATE items SET reading_ja = NULL WHERE id = ?").bind(id),
-  ]);
+/** Works with a public letter or found voice and no reading asked for yet. */
+const WITHOUT_READING = `reading_ja IS NULL AND EXISTS (SELECT 1 FROM letters l WHERE l.item_id = items.id AND l.status = 'public')`;
+
+/** Up to `limit` works that air and have no reading asked for yet, newest first. */
+export async function listItemsWithoutReading(db: D1Database, limit: number): Promise<Item[]> {
+  const { results } = await db.prepare(`SELECT * FROM items WHERE ${WITHOUT_READING} ORDER BY created_at DESC, id LIMIT ?`).bind(limit).all<Row>();
+  return results.map(rowToItem);
+}
+
+export async function countItemsWithoutReading(db: D1Database): Promise<number> {
+  return (await db.prepare(`SELECT COUNT(*) AS n FROM items WHERE ${WITHOUT_READING}`).first<{ n: number }>())?.n ?? 0;
 }
 
 export async function getItem(db: D1Database, id: string): Promise<Item | null> {

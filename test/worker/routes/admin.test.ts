@@ -7,7 +7,7 @@ import { fakeAi } from "../../helpers/ai";
 import { insertLetter, listLettersForItem } from "../../../src/worker/db/letters";
 import { t } from "../../../src/worker/i18n/t";
 import * as prepare from "../../../src/worker/program/prepare";
-import { stubAnthropic, toolUse } from "../../helpers/anthropic";
+import { noNames, stubAnthropic, toolUse } from "../../helpers/anthropic";
 import { resetDb } from "../../helpers/db";
 import { json, stubFetch } from "../../helpers/fetch";
 import { itemDraft, letterDraft } from "../db/helpers";
@@ -206,20 +206,21 @@ describe("POST /admin/prepare", () => {
   it("makes the missing units and reports what is left", async () => {
     await seedLetters(2);
     vi.mocked(prepare.prepareLetter).mockRestore();
-    stubAnthropic().mockResolvedValue(toolUse("write_unit", { intro: "静かな一曲です。", after: "いいお便りでした。" }));
+    stubAnthropic({ names: noNames }).mockResolvedValue(toolUse("write_unit", { intro: "静かな一曲です。", after: "いいお便りでした。" }));
     vi.spyOn(console, "warn").mockImplementation(() => {});
     const res = await post({});
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ units: 4, audio: 0, failed: 0, remaining: { vectors: 1, units: { ja: 0, en: 0 }, audio: { ja: 2, en: 2 }, gaveUp: { ja: 0, en: 0 } } });
+    expect(await res.json()).toEqual({ units: 4, audio: 0, failed: 0, remaining: { vectors: 1, readings: 0, units: { ja: 0, en: 0 }, audio: { ja: 2, en: 2 }, gaveUp: { ja: 0, en: 0 } } });
   });
 
   it("takes a limit of 1 to 50, 20 by default", async () => {
     await seedLetters(3);
     vi.mocked(prepare.prepareLetter).mockRestore();
-    const create = stubAnthropic();
+    const create = stubAnthropic({ names: noNames });
     create.mockResolvedValue(toolUse("write_unit", { intro: "静かな一曲です。", after: "いいお便りでした。" }));
     vi.spyOn(console, "warn").mockImplementation(() => {});
-    // The limit is the run's budget across both languages.
+    // The limit is the run's budget across the work's reading and both languages' units: the reading comes first.
+    expect(await (await post({ limit: 1 })).json()).toMatchObject({ units: 0, remaining: { readings: 0, units: { ja: 3, en: 3 } } });
     expect(await (await post({ limit: 1 })).json()).toMatchObject({ units: 1, remaining: { units: { ja: 2, en: 3 } } });
     expect(await (await post()).json()).toMatchObject({ units: 5, remaining: { units: { ja: 0, en: 0 } } });
     for (const limit of [0, 51, 1.5, "5"]) expect((await post({ limit })).status).toBe(422);

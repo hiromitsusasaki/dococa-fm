@@ -3,6 +3,7 @@ import { Layout } from "../../views/layout";
 import type { Variables } from "../auth/session";
 import { requireSignin } from "../auth/require-signin";
 import { embedItems } from "../ai/embed";
+import { ensureItemReadings } from "../ai/item-reading";
 import { defer } from "../defer";
 import { upsertHistory } from "../db/history";
 import type { Env } from "../env";
@@ -76,6 +77,8 @@ start.post("/start", requireSignin, async (c) => {
   const stored = await resolveOrCreateMany(c.env.DB, found.map((f) => f.draft));
   const items = found.map(({ n }, i) => ({ n, item: stored[i]! }));
   defer(c, embedItems(c.env, c.env.DB, stored.map((i) => i.id)));
+  // The works' Japanese readings, from their own data only (a no-op for a work that has one).
+  defer(c, ensureItemReadings(c.env, c.env.DB, stored.map((i) => i.id)));
   await upsertHistory(c.env.DB, items.map(({ item }) => ({ listenerId: listener.id, itemId: item.id, source: "manual", occurredAt: null, rank: null })));
 
   // Sequential: the letter checks (duplicates, limits) read what the last one wrote.

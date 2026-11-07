@@ -2,6 +2,7 @@ import { type Context, Hono, type MiddlewareHandler } from "hono";
 import { z } from "zod";
 import type { Variables } from "../auth/session";
 import { embedItems } from "../ai/embed";
+import { ensureItemReadings } from "../ai/item-reading";
 import { moderateLetter } from "../claude/moderate";
 import { type Lang, detectLang, translateToJa } from "../claude/translate";
 import { getEpisode } from "../db/episodes";
@@ -185,6 +186,7 @@ admin.post("/admin/items", async (c) => {
   if (!draft) return c.json({ error: "unresolvable" }, 422);
   const item = await resolveOrCreate(c.env.DB, draft);
   defer(c, embedItems(c.env, c.env.DB, [item.id]));
+  defer(c, ensureItemReadings(c.env, c.env.DB, [item.id]));
   return c.json({ item });
 });
 

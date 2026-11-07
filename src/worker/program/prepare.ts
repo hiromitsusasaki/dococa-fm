@@ -1,5 +1,6 @@
 import { EMBED_BATCH, ensureItemVectors } from "../ai/embed";
-import { getItem } from "../db/items";
+import { ensureItemReading } from "../ai/item-reading";
+import { countItemsWithoutReading, getItem, listItemsWithoutReading } from "../db/items";
 import { getLetter } from "../db/letters";
 import { countLettersWithoutUnit, countUnitsGaveUp, countUnitsWithoutAudio, getUnits, listLettersWithoutUnit, listUnitsWithoutAudio, setUnitAudioGaveUp, setUnitAudioReady } from "../db/units";
 import { hasClaude } from "../claude/client";
@@ -34,11 +35,12 @@ async function run(env: Env, db: D1Database, letterId: string, lang: Unit["lang"
   const out = none();
   const letter = await getLetter(db, letterId);
   if (!letter || letter.status !== "public" || (letter.kind !== "letter" && letter.kind !== "found")) return out;
-  const item = await getItem(db, letter.itemId);
-  if (!item) return out;
+  const stored = await getItem(db, letter.itemId);
+  if (!stored) return out;
+  // The work's reading is asked for from its own data before the unit is checked and voiced with it (Japanese only).
+  const item = lang === "ja" ? await ensureItemReading(env, db, stored) : stored;
 
   let unit = (await getUnits(db, [letter.id], lang)).get(letter.id) ?? null;
-  let made = false;
   if (!unit) {
     if (!steps.unit || !hasClaude(env)) return out;
     if (await unitCapReached(env, db)) {
@@ -49,7 +51,6 @@ async function run(env: Env, db: D1Database, letterId: string, lang: Unit["lang"
     // Another run is making this unit: skipped, neither a failure nor a miss.
     if (result === "busy") return out;
     unit = result;
-    made = true;
     if (!unit) {
       out.failed++;
       out.unitFailed = true;
@@ -60,10 +61,8 @@ async function run(env: Env, db: D1Database, letterId: string, lang: Unit["lang"
   if (!steps.audio) return out;
 
   // An unverified unit is never spoken, so only the fixed lead, the hand-over and the letter are voiced for it.
-  // The voice says each dj line's `spoken` when it has one, so that is the clip made. The work is read again when the
-  // unit was just made: making it may have stored the work's readings.
-  const voiced = made ? ((await getItem(db, item.id)) ?? item) : item;
-  const texts = unitSegment(unit.verified ? unit : null, letter, voiced, lang).lines.flatMap((l) => {
+  // The voice says each dj line's `spoken` when it has one, so that is the clip made.
+  const texts = unitSegment(unit.verified ? unit : null, letter, item, lang).lines.flatMap((l) => {
     const said = l.type === "dj" ? (l.spoken ?? l.text) : l.type === "letter" ? l.text : "";
     return said !== "" ? [said] : [];
   });
@@ -131,12 +130,13 @@ export async function prepareLetter(env: Env, db: D1Database, letterId: string, 
 const OUTAGE_AFTER = 3;
 
 /** `vectors`: works still without an embedding (all of them while Workers AI is not bound). */
+/** `readings`: works with a public letter whose Japanese reading has not been asked for yet. */
 /** `gaveUp`: units at `audio_ready = 2`, whose given-up lines the browser voice reads; they are not in `audio`. */
-export type Remaining = { vectors: number; units: Record<Unit["lang"], number>; audio: Record<Unit["lang"], number>; gaveUp: Record<Unit["lang"], number> };
+export type Remaining = { vectors: number; readings: number; units: Record<Unit["lang"], number>; audio: Record<Unit["lang"], number>; gaveUp: Record<Unit["lang"], number> };
 
 /**
- * `limit` is the whole run's budget, spent in order on work vectors (one per 20 works embedded), then letter-language
- * jobs: ja units, en units, ja audio, en audio, each letter run consuming one, and every listing asks for the remaining budget only. Stops making
+ * `limit` is the whole run's budget, spent in order on work vectors (one per 20 works embedded), then the works' readings
+ * (one per work with a public letter and none asked for yet; `ensureItemReading`), then letter-language jobs: ja units, en units, ja audio, en audio, each letter run consuming one, and every listing asks for the remaining budget only. Stops making
  * audio at the first `limit`/`unavailable` answer, units at `UNIT_DAILY_LIMIT` (a halt, not a failure), and
  * units after 3 letters in a row that cannot get one, in either language (a single bad letter is counted as
  * failed and skipped, so newer letters are still reached).
@@ -151,6 +151,13 @@ export async function prepareBatch(env: Env, db: D1Database, limit = 20): Promis
   // Vectors first: they are cheap, and the next pick by distance needs them.
   const vectors = await ensureItemVectors(env, db, limit);
   let budget = limit - Math.ceil(vectors.made / EMBED_BATCH);
+  // Readings next: a unit is checked, and its lead voiced, with the work's reading, so it is asked for first.
+  if (budget > 0 && hasClaude(env)) {
+    for (const item of await listItemsWithoutReading(db, budget)) {
+      budget--;
+      await ensureItemReading(env, db, item);
+    }
+  }
   let audioHalted = false;
   let unitHalted = false;
   let unitMisses = 0;
@@ -187,7 +194,7 @@ export async function prepareBatch(env: Env, db: D1Database, limit = 20): Promis
       if (!done.has(`${lang}:${u.letterId}`)) await one(u.letterId, lang);
     }
   }
-  const remaining: Remaining = { vectors: vectors.remaining, units: { ja: 0, en: 0 }, audio: { ja: 0, en: 0 }, gaveUp: { ja: 0, en: 0 } };
+  const remaining: Remaining = { vectors: vectors.remaining, readings: await countItemsWithoutReading(db), units: { ja: 0, en: 0 }, audio: { ja: 0, en: 0 }, gaveUp: { ja: 0, en: 0 } };
   for (const lang of LANGS) {
     remaining.units[lang] = await countLettersWithoutUnit(db, lang);
     remaining.audio[lang] = await countUnitsWithoutAudio(db, lang);

@@ -23,7 +23,7 @@ describe("worker", () => {
     const batch = vi.spyOn(prepare, "prepareBatch").mockImplementation(async () => {
       await new Promise((r) => setTimeout(r, 5));
       finished = true;
-      return { units: 0, audio: 0, failed: 0, remaining: { vectors: 0, units: { ja: 0, en: 0 }, audio: { ja: 0, en: 0 }, gaveUp: { ja: 0, en: 0 } } };
+      return { units: 0, audio: 0, failed: 0, remaining: { vectors: 0, readings: 0, units: { ja: 0, en: 0 }, audio: { ja: 0, en: 0 }, gaveUp: { ja: 0, en: 0 } } };
     });
     const waited: Promise<unknown>[] = [];
     await worker.scheduled({ scheduledTime: Date.now(), cron: "*/15 * * * *", noRetry() {} } as ScheduledController, env, { waitUntil: (p: Promise<unknown>) => void waited.push(p), passThroughOnException() {} } as ExecutionContext);

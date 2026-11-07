@@ -1,6 +1,6 @@
 import { env } from "cloudflare:workers";
 import { beforeEach, describe, expect, it } from "vitest";
-import { clearItemReading, countItemsWithoutVec, findItemByExternalId, getItem, getItemVecs, insertItem, listItemsWithoutVec, searchItems, setItemReading, setItemVec, VEC_DIMS } from "../../../src/worker/db/items";
+import { countItemsWithoutReading, countItemsWithoutVec, findItemByExternalId, getItem, getItemVecs, insertItem, listItemsWithoutReading, listItemsWithoutVec, searchItems, setItemReading, setItemVec, VEC_DIMS } from "../../../src/worker/db/items";
 import { insertLetter } from "../../../src/worker/db/letters";
 import { upsertUnit } from "../../../src/worker/db/units";
 import { angled } from "../../helpers/ai";
@@ -86,33 +86,34 @@ describe("items", () => {
     expect(await countItemsWithoutVec(env.DB)).toBe(2);
   });
 
-  it("stores the work's reading over what it had, field by field, and reads it back", async () => {
+  it("stores the work's reading once, an empty one too, and reads it back", async () => {
     const it = await insertItem(env.DB, itemDraft({ creator: "PSY" }));
-    expect(await getItem(env.DB, it.id)).not.toHaveProperty("readingJa");
-    await setItemReading(env.DB, it.id, {});
     expect(await getItem(env.DB, it.id)).not.toHaveProperty("readingJa");
     await setItemReading(env.DB, it.id, { creator: "サイ" });
     expect((await getItem(env.DB, it.id))!.readingJa).toEqual({ creator: "サイ" });
-    await setItemReading(env.DB, it.id, { title: "カンナムスタイル" });
-    expect((await getItem(env.DB, it.id))!.readingJa).toEqual({ creator: "サイ", title: "カンナムスタイル" });
-    await setItemReading(env.DB, it.id, { creator: "サイー" });
-    expect((await getItem(env.DB, it.id))!.readingJa).toEqual({ creator: "サイー", title: "カンナムスタイル" });
+    await setItemReading(env.DB, it.id, { creator: "サイー", title: "カンナムスタイル" });
+    expect((await getItem(env.DB, it.id))!.readingJa).toEqual({ creator: "サイ" });
+    const plain = await insertItem(env.DB, itemDraft({ title: "さくら", creator: "" }));
+    await setItemReading(env.DB, plain.id, {});
+    expect((await getItem(env.DB, plain.id))!.readingJa).toEqual({});
+    await setItemReading(env.DB, plain.id, { title: "サクラ" });
+    expect((await getItem(env.DB, plain.id))!.readingJa).toEqual({});
   });
 
-  it("clears the work's reading, and marks its voiced Japanese units to be voiced again only when it had one", async () => {
-    const it = await insertItem(env.DB, itemDraft({ creator: "PSY" }));
-    const l = await insertLetter(env.DB, letterDraft(it.id));
-    await upsertUnit(env.DB, { letterId: l.id, lang: "ja", intro: "a", after: "b", verified: true, audioReady: true });
-    await clearItemReading(env.DB, it.id);
-    expect((await env.DB.prepare("SELECT audio_ready FROM units").first<{ audio_ready: number }>())?.audio_ready).toBe(1);
-    await setItemReading(env.DB, it.id, { creator: "サイ" });
-    await env.DB.prepare("UPDATE units SET audio_ready = 1").run();
-    await clearItemReading(env.DB, it.id);
-    expect(await getItem(env.DB, it.id)).not.toHaveProperty("readingJa");
-    expect((await env.DB.prepare("SELECT audio_ready FROM units").first<{ audio_ready: number }>())?.audio_ready).toBe(0);
+  it("lists and counts the works with a public letter and no reading asked for yet", async () => {
+    const asked = await insertItem(env.DB, itemDraft());
+    const pending = await insertItem(env.DB, itemDraft());
+    const hidden = await insertItem(env.DB, itemDraft());
+    await insertItem(env.DB, itemDraft());
+    await insertLetter(env.DB, letterDraft(asked.id));
+    await insertLetter(env.DB, letterDraft(pending.id));
+    await insertLetter(env.DB, letterDraft(hidden.id, { status: "rejected" }));
+    await setItemReading(env.DB, asked.id, {});
+    expect((await listItemsWithoutReading(env.DB, 10)).map((i) => i.id)).toEqual([pending.id]);
+    expect(await countItemsWithoutReading(env.DB)).toBe(1);
   });
 
-  it("marks the work's voiced Japanese units to be voiced again only when its reading changes", async () => {
+  it("marks the work's voiced Japanese units to be voiced again only when a reading with a field is first stored", async () => {
     const it = await insertItem(env.DB, itemDraft({ creator: "PSY" }));
     const other = await insertItem(env.DB, itemDraft({ title: "別の曲" }));
     const mine = await insertLetter(env.DB, letterDraft(it.id));
@@ -125,7 +126,9 @@ describe("items", () => {
     await setItemReading(env.DB, it.id, { creator: "サイ" });
     expect(await state()).toEqual({ [`${mine.id}:ja`]: 0, [`${mine.id}:en`]: 1, [`${theirs.id}:ja`]: 1 });
     await env.DB.prepare("UPDATE units SET audio_ready = 1").run();
-    await setItemReading(env.DB, it.id, { creator: "サイ" });
+    await setItemReading(env.DB, it.id, { creator: "サイー" });
+    expect(await state()).toEqual({ [`${mine.id}:ja`]: 1, [`${mine.id}:en`]: 1, [`${theirs.id}:ja`]: 1 });
+    await setItemReading(env.DB, other.id, {});
     expect(await state()).toEqual({ [`${mine.id}:ja`]: 1, [`${mine.id}:en`]: 1, [`${theirs.id}:ja`]: 1 });
   });
 });
