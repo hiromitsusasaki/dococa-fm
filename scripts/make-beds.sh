@@ -13,7 +13,7 @@ rm -f public/bed-[0-9]*.mp3
 n=0
 find "$DIR" -maxdepth 1 -name '*.mp3' -print0 | sort -z | while IFS= read -r -d '' f; do
   n=$((n+1)); out="public/bed-$n.mp3"
-  ffmpeg -y -hide_banner -loglevel error -i "$f" -vn -filter_complex "
+  ffmpeg -nostdin -y -hide_banner -loglevel error -i "$f" -vn -filter_complex "
     [0:a]atrim=start=0:end=$((LEN+XF)),asetpts=PTS-STARTPTS,asplit[x][y];
     [x]atrim=start=0:end=$XF,asetpts=PTS-STARTPTS[head];
     [y]atrim=start=$XF,asetpts=PTS-STARTPTS[body];
