@@ -174,7 +174,9 @@ function senderTerms(l: Letter): string[] {
  * and sources that are shown on screen anyway, so they get only the account and quote checks, and the quote
  * check sees only the filled-in values, never the template wording.
  * A Japanese dj line's `spoken` (names replaced by katakana readings) gets every check its `text` gets, and must be
- * that text with names swapped for katakana and nothing else (`reading:`); an English line never has one.
+ * that text with names swapped for katakana and nothing else (`reading:`); an English line never has one. On a fixed
+ * line (the lead, the hand-over) the katakana the readings added are also held to the talk rules (topical, counts,
+ * playback, PII), since they are the model's words; a failure there reads like one in the talk and is retried.
  * A detail reads `{check}: segment {i} line {j}: {term}` and never carries the dj line itself.
  */
 export function verifyEpisode(
@@ -246,9 +248,9 @@ export function verifyEpisode(
           push(`reading: ${at}: the voice says more than the line's names`);
         }
       }
-      const check = (said: string, isSpoken: boolean) => {
+      const check = (said: string, isSpoken: boolean, fixed: boolean) => {
         const text = norm(said);
-        if (!line.fixed) {
+        if (!fixed) {
           // Titles and creators are data, not talk: 「今夜はブギー・バック」 or 「千本桜」 may be named.
           const talk = mask(text);
           const dated = rules.maskYears(talk, years);
@@ -273,33 +275,33 @@ export function verifyEpisode(
             push(`lead: ${at}: restates the title`);
           }
         }
-        const play = !line.fixed ? mask(text).match(rules.playback) : null;
+        const play = !fixed ? mask(text).match(rules.playback) : null;
         if (play) {
           topical = false;
           push(`playback: ${at}: ${play[0]}`);
         }
         // A segment that reads no letter (a reply counts as one) must not hand over to a reader with nothing to read.
-        if (!line.fixed && !hasLetter && rules.announce.test(text)) {
+        if (!fixed && !hasLetter && rules.announce.test(text)) {
           topical = false;
           push(`announce: ${at}: hands over to a letter in a segment with none`);
         }
-        if (!line.fixed && EMAIL.test(text)) {
+        if (!fixed && EMAIL.test(text)) {
           pii = false;
           push(`pii: ${at}: email address`);
         }
-        if (!line.fixed && PHONE.test(text)) {
+        if (!fixed && PHONE.test(text)) {
           pii = false;
           push(`pii: ${at}: phone number`);
         }
-        if (!line.fixed && URL_RE.test(text)) {
+        if (!fixed && URL_RE.test(text)) {
           pii = false;
           push(`pii: ${at}: url`);
         }
-        if (!line.fixed && POSTAL.test(text)) {
+        if (!fixed && POSTAL.test(text)) {
           pii = false;
           push(`pii: ${at}: postal code`);
         }
-        if (!line.fixed && ADDRESS.test(text)) {
+        if (!fixed && ADDRESS.test(text)) {
           pii = false;
           push(`pii: ${at}: street address`);
         }
@@ -307,13 +309,21 @@ export function verifyEpisode(
           pii = false;
           push(`pii: ${at}: listener account`);
         }
-        if (rules.windows(mask(line.fixed ? filledValues(text, lang) : text)).some((w) => quotes.has(w))) {
+        if (rules.windows(mask(fixed ? filledValues(text, lang) : text)).some((w) => quotes.has(w))) {
           pii = false;
           push(`pii: ${at}: quotes a letter`);
         }
       };
-      check(line.text, false);
-      if (line.spoken !== undefined) check(line.spoken, true);
+      check(line.text, false, line.fixed === true);
+      if (line.spoken !== undefined) {
+        check(line.spoken, true, line.fixed === true);
+        // A fixed line's wording is ours, but its readings are the model's: they are held to the talk rules on their own.
+        if (line.fixed) {
+          const written = norm(line.text);
+          const added = (norm(line.spoken).match(KATAKANA_RUN) ?? []).filter((run) => !written.includes(run)).join("、");
+          if (added !== "") check(added, true, false);
+        }
+      }
     });
   });
 

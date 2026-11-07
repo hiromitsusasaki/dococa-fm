@@ -110,10 +110,19 @@ function reaction(l: Letter, lang: Lang): ScriptLine[] {
   return [fixed(t("script.reaction", { who: who(l, lang) }, lang))];
 }
 
-/** The fixed line that hands over to the letter's reader: the sender, or the found voice's author and site. */
-export function handOver(l: Letter, lang: Lang = "ja"): ScriptLine {
-  if (l.kind === "found") return fixed(t("script.foundVoice", { author: l.sourceAuthor ?? "", site: siteName(l.sourceUrl, lang) }, lang));
-  return fixed(l.radioName === "" ? t("script.readingOnly", undefined, lang) : t("script.letterFrom", { who: who(l, lang) }, lang));
+/**
+ * The fixed line that hands over to the letter's reader: the sender, or the found voice's author and site. With
+ * `readings` (the unit's, in Japanese), `spoken` says the sender's place and radio name as read (大船渡 → オオフナト).
+ */
+export function handOver(l: Letter, lang: Lang = "ja", readings: readonly Reading[] = []): ScriptLine {
+  const text =
+    l.kind === "found"
+      ? t("script.foundVoice", { author: l.sourceAuthor ?? "", site: siteName(l.sourceUrl, lang) }, lang)
+      : l.radioName === ""
+        ? t("script.readingOnly", undefined, lang)
+        : t("script.letterFrom", { who: who(l, lang) }, lang);
+  const spoken = applyReadings(text, readings);
+  return { type: "dj", text, ...(spoken !== text ? { spoken } : {}), fixed: true };
 }
 
 /** The DJ's two lines for one letter, and the readings they are voiced with, as a unit carries them. */
@@ -121,12 +130,13 @@ export type UnitLines = Pick<Unit, "intro" | "after" | "readings">;
 
 /**
  * One letter as it airs: the unit's intro (when asked for), the fixed hand-over, the letter verbatim, the
- * unit's after. With no unit the DJ says the hand-over only. `readings` (see `speechReadings`) voice the unit's lines only.
+ * unit's after. With no unit the DJ says the hand-over only. `readings` (see `speechReadings`) voice the unit's lines and
+ * the hand-over; the letter is always voiced as written.
  */
 export function letterLines(l: Letter, unit: UnitLines | null, withIntro: boolean, lang: Lang = "ja", readings: readonly Reading[] = []): ScriptLine[] {
   const lines: ScriptLine[] = [];
   if (unit && withIntro && unit.intro !== "") lines.push(unitLine(unit.intro, l.id, "intro", readings));
-  lines.push(handOver(l, lang), read(l, lang));
+  lines.push(handOver(l, lang, readings), read(l, lang));
   if (unit && unit.after !== "") lines.push(unitLine(unit.after, l.id, "after", readings));
   return lines;
 }

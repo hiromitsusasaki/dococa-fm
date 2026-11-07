@@ -542,6 +542,13 @@ describe("verifyEpisode spoken lines", () => {
     expect(r.details).toContain("measure: segment 1 line 2: ランキング");
   });
 
+  it("holds the katakana a reading adds to a fixed line to the talk rules", () => {
+    const hand: ScriptLine = { type: "dj", text: "大船渡にお住まいの、そらさんからのお便りです。", spoken: "ランキングにお住まいの、そらさんからのお便りです。", fixed: true };
+    expect(run(hand).details).toEqual(["measure: segment 1 line 2: ランキング"]);
+    const ok: ScriptLine = { ...hand, spoken: "オオフナトにお住まいの、そらさんからのお便りです。" };
+    expect(run(ok).details).toEqual([]);
+  });
+
   it("fails a spoken text on an English line", () => {
     expect(run(dj("A bright PSY song.", "A bright サイ song."), "en").details).toContain("reading: segment 1 line 2: the voice says more than the line's names");
   });

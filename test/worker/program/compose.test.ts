@@ -348,9 +348,11 @@ describe("lead line", () => {
     ["music", "ja", "Miles Davisの「Blue in Green」という曲の紹介です。"],
     ["book", "ja", "Miles Davisの「Blue in Green」という本の紹介です。"],
     ["film", "ja", "Miles Davisの「Blue in Green」という映画の紹介です。"],
+    ["video", "ja", "Miles Davisの「Blue in Green」という動画の紹介です。"],
     ["music", "en", "Here is “Blue in Green”, a song by Miles Davis."],
     ["book", "en", "Here is “Blue in Green”, a book by Miles Davis."],
     ["film", "en", "Here is “Blue in Green”, a film by Miles Davis."],
+    ["video", "en", "Here is “Blue in Green”, a video by Miles Davis."],
   ] as const)("names a %s work by its kind in %s", (kind, lang, text) => {
     expect(leadLine(item({ kind }), lang)).toEqual({ type: "dj", text, fixed: true });
   });
@@ -421,6 +423,13 @@ describe("readings for the voice", () => {
     expect(ja!.lines.some((l) => l.type === "dj" && "spoken" in l)).toBe(false);
     const [en] = composeEpisode(plan, unitsOf({ ...u, lang: "en" }), byId([fan]), byId([psy]), "en");
     expect(en!.lines.some((l) => l.type === "dj" && "spoken" in l)).toBe(false);
+  });
+
+  it("reads the sender's place in the hand-over with the unit's readings, and keeps its text", () => {
+    const far = letter({ id: "o", itemId: "p1", radioName: "そら", place: "大船渡", body: "夏の夜。", bodyJa: "夏の夜。" });
+    const [seg] = composeEpisode([{ itemId: "p1", slot: "near", letterIds: ["o"], reactionIds: [] }], unitsOf({ ...unit("o", "明るい一曲です。", "いいですね。"), readings: [{ text: "大船渡", reading: "オオフナト" }] }), byId([far]), byId([psy]));
+    expect(seg!.lines.find((l) => l.type === "dj" && l.text.includes("お住まい"))).toEqual({ type: "dj", text: "大船渡にお住まいの、そらさんからのお便りです。", spoken: "オオフナトにお住まいの、そらさんからのお便りです。", fixed: true });
+    expect(verifyEpisode([seg!], byId([far]), listener(), byId([psy])).details).toEqual([]);
   });
 
   it("composes lines that pass the verifier", () => {

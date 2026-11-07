@@ -42,7 +42,7 @@ DJ が語る材料は 3 層に分かれ、混ぜません。
 
 ## AI がすること、しないこと
 
-**すること。** 番組の台本（曲間の DJ の語り）を書く。お便りの判定（公開してよいか）と、日本語圏以外のお便りの翻訳。デモ用ペルソナのお便りの下書き。台本と一緒に、音声が読み間違えそうな名前の読み（PSY → サイ）をカタカナで返す。読みが変えるのは DJ の語りの音声だけで、画面は書いたままの表記、お便りは音声も原文のままです。
+**すること。** 番組の台本（曲間の DJ の語り）を書く。お便りの判定（公開してよいか）と、日本語圏以外のお便りの翻訳。デモ用ペルソナのお便りの下書き。台本と一緒に、音声が読み間違えそうな名前や地名の読み（PSY → サイ、大船渡 → オオフナト）をカタカナで返す。読みが変えるのは DJ の行（冒頭の一行・語り・手渡し）の音声だけで、画面は書いたままの表記、お便りは音声も原文のままです。
 
 **しないこと。**
 
@@ -130,7 +130,7 @@ pnpm wrangler login
 pnpm wrangler d1 create dococa            # 出力の database_id を wrangler.jsonc の d1_databases に書く
 pnpm wrangler r2 bucket create dococa-audio
 pnpm wrangler secret put ANTHROPIC_API_KEY   # .dev.vars.example の鍵を 1 つずつ（ADMIN_TOKEN、SESSION_SECRET、SPOTIFY_CLIENT_ID、GOOGLE_TTS_SA_JSON、GOOGLE_OAUTH_CLIENT_ID、GOOGLE_OAUTH_CLIENT_SECRET、TMDB_API_KEY、YOUTUBE_API_KEY、任意で GOOGLE_BOOKS_API_KEY）
-pnpm db:migrate   # migrations/ の 0001〜0024 のうち、まだ当てていないものを順に当てる
+pnpm db:migrate   # migrations/ の 0001〜0025 のうち、まだ当てていないものを順に当てる
 # wrangler.jsonc の routes にカスタムドメイン、vars.PUBLIC_ORIGIN にその origin（例 https://dococafm.app）を書いてから
 pnpm run deploy   # pnpm deploy は pnpm 組み込みの別コマンドなので、run を付ける
 ```

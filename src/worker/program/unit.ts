@@ -40,6 +40,11 @@ export async function unitCapReached(env: Env, db: D1Database): Promise<boolean>
 /**
  * Sonnet 5.5 rejects forced tool_choice and strict schemas drop maxLength, so the call is `auto` +
  * `strict`, the limits are stated in words, and `parse` enforces them.
+ *
+ * Readings (Japanese only) are free model output that only the voice says, so they are held tight: `parse` keeps a
+ * reading only in full-width katakana, at most 3 times its text's length (Latin, digits) or 2 times (CJK), never
+ * for a text of digits alone, and only for a text the unit's lines, the work or the sender's name and place say;
+ * anything else is dropped. The spoken lines then get the same checks as the written ones in `verifyEpisode`.
  */
 const TOOL = {
   name: "write_unit",
@@ -101,6 +106,16 @@ function examplesBlock(examples: string[] | undefined, lang: Unit["lang"]): stri
   return ["", head, ...examples.map((e) => `- ${oneLine(escapeTags(e))}`)];
 }
 
+/**
+ * The sender's place and radio name, which the fixed hand-over says, given only so a reading can be returned for
+ * them; the intro still never names them (the `intro:` check). Nothing for a found voice or a sender without either.
+ */
+function senderForReadings(l: Letter): string[] {
+  const parts = [...(l.place !== "" ? [`お住まい『${escapeTags(l.place)}』`] : []), ...(l.radioName !== "" ? [`ラジオネーム『${escapeTags(l.radioName)}』`] : [])];
+  if (l.kind === "found" || parts.length === 0) return [];
+  return [`手渡しの定型文は ${parts.join("、")} を言う。これは読み方を返すためだけ — intro で名指ししない。読み間違えそうなら readings に入れる。`];
+}
+
 /** One work and one letter; no listener line, since a unit airs in everyone's programme. */
 function userMessage(input: UnitInput): string {
   const examples = examplesBlock(input.examples, input.lang);
@@ -120,7 +135,8 @@ function userMessage(input: UnitInput): string {
     "お便りと見つけた声は、別の読み上げ役が原文のまま読みます。送り主の名前と土地は、その前に定型文が言います。",
     "あなたは引用も要約もせず、intro で作品を紹介し、after でお便りの内容に短く反応します。",
     `直前に『${escapeTags(leadLine(input.item, "ja").text)}』と告げてある。intro はその続きで、題名と作者を繰り返さずに始める。`,
-    "音声合成が読み間違えそうな固有名（英字の略称やアーティスト名、難読の漢字）があれば、その読みをカタカナで readings・titleReading・creatorReading に入れる。読み間違えそうな名前だけでよく、intro と after は書いたままの表記で書く。",
+    "音声合成が読み間違えそうな固有名（英字の略称やアーティスト名、難読の漢字・地名）があれば、その読みをカタカナで readings・titleReading・creatorReading に入れる。読み間違えそうな名前だけでよく、intro と after は書いたままの表記で書く。",
+    ...senderForReadings(input.letter),
   ];
   const retry = input.retryNotes?.length ? ["", retryNote(input.retryNotes)] : [];
   const segment = ["<segment>", workTag(input.item), letterTag(input.letter), "</segment>"].join("\n");
@@ -130,9 +146,19 @@ function userMessage(input: UnitInput): string {
 /** A line in shape: a string, not blank, at most `max` code points. A blank line is asked for again like a missing one. */
 const within = (v: unknown, max: number): v is string => typeof v === "string" && v.trim() !== "" && Array.from(v).length <= max;
 
-/** Katakana only (with ー, ・ and spaces between words), at most `READING_TEXT_MAX` code points. */
-const KATAKANA = /^[\p{Script=Katakana}ー・][\p{Script=Katakana}ー・ 　]*$/u;
-const isReading = (v: unknown): v is string => typeof v === "string" && KATAKANA.test(v.trim()) && Array.from(v.trim()).length <= READING_TEXT_MAX;
+/** Full-width katakana, ー and ・ only, with a space between words. */
+const KATAKANA = /^[ァ-ヶー・](?:[ァ-ヶー・ 　]*[ァ-ヶー・])?$/u;
+/** A text in Latin letters, digits and symbols: its reading may run to 3 times its length; anything else (CJK), 2. */
+const LATIN_TEXT = /^[\p{Script=Latin}\p{N}\p{P}\p{S}\s]+$/u;
+/**
+ * Whether `reading` is a reading the voice may say for `text`: katakana only, and at most 3 times the code points
+ * of a Latin or digit text, 2 times of any other. A text of digits alone has no reading (a number is not a name).
+ */
+function isReadingOf(text: string, reading: unknown): reading is string {
+  if (typeof reading !== "string" || text === "" || /^\p{N}+$/u.test(text)) return false;
+  const r = reading.trim();
+  return KATAKANA.test(r) && Array.from(r).length <= Array.from(text).length * (LATIN_TEXT.test(text) ? 3 : 2);
+}
 /** Kana alone is read as written: a reading is for a name with Latin letters, digits or kanji in it. */
 const NEEDS_READING = /[^\p{Script=Hiragana}\p{Script=Katakana}ー・\s]/u;
 
@@ -141,7 +167,8 @@ export type WrittenUnit = UnitLines & { titleReading?: string; creatorReading?: 
 
 /**
  * The readings worth keeping, in the reply's order: a written text of up to `READING_TEXT_MAX` code points that is not
- * kana alone and appears verbatim in the intro, the after, the title or the creator, with a katakana reading; at most
+ * kana alone and appears verbatim in the intro, the after, the title, the creator, the sender's place or radio name,
+ * with a reading `isReadingOf` accepts; at most
  * `READINGS_MAX`, one per text. Anything else is dropped, never failed: a unit is fine without readings.
  */
 function keptReadings(raw: unknown, said: string[]): Reading[] {
@@ -151,14 +178,14 @@ function keptReadings(raw: unknown, said: string[]): Reading[] {
     if (out.size >= READINGS_MAX) break;
     const text = typeof r?.text === "string" ? r.text.trim() : "";
     if (text === "" || Array.from(text).length > READING_TEXT_MAX || !NEEDS_READING.test(text) || out.has(text)) continue;
-    if (!isReading(r.reading) || !said.some((s) => s.includes(text))) continue;
+    if (!isReadingOf(text, r.reading) || !said.some((s) => s.includes(text))) continue;
     out.set(text, r.reading.trim());
   }
   return [...out].map(([text, reading]) => ({ text, reading }));
 }
 
 /** The tool's input as unit lines, or null when it is missing or out of shape. Readings are Japanese only. */
-function parse(content: { type: string; name?: string; input?: unknown }[], item: Item, lang: Unit["lang"]): WrittenUnit | null {
+function parse(content: { type: string; name?: string; input?: unknown }[], item: Item, letter: Letter, lang: Unit["lang"]): WrittenUnit | null {
   const block = content.find((b) => b.type === "tool_use" && b.name === TOOL.name);
   const input = block?.input as { intro?: unknown; after?: unknown; readings?: unknown; titleReading?: unknown; creatorReading?: unknown } | undefined;
   if (!within(input?.intro, INTRO_MAX) || !within(input?.after, AFTER_MAX)) return null;
@@ -166,16 +193,19 @@ function parse(content: { type: string; name?: string; input?: unknown }[], item
   if (lang !== "ja") return lines;
   const title = item.title;
   const creator = item.creator.trim();
-  const kept = keptReadings(input.readings, [lines.intro, lines.after, title, creator]);
+  // The hand-over says the sender's radio name and place, so a reading may be for them too.
+  const sender = [letter.radioName, letter.place].filter((v) => v !== "");
+  const kept = keptReadings(input.readings, [lines.intro, lines.after, title, creator, ...sender]);
   // A reading given for the whole title or creator in `readings` is the work's reading too, and the other way round.
-  const titleReading = title !== "" && isReading(input.titleReading) ? input.titleReading.trim() : kept.find((r) => r.text === title)?.reading;
-  const creatorReading = creator !== "" && isReading(input.creatorReading) ? input.creatorReading.trim() : kept.find((r) => r.text === creator)?.reading;
+  // The work's reading is shared by every programme, so only for its whole title or creator, never a part of it.
+  const titleReading = isReadingOf(title, input.titleReading) ? input.titleReading.trim() : kept.find((r) => r.text === title)?.reading;
+  const creatorReading = isReadingOf(creator, input.creatorReading) ? input.creatorReading.trim() : kept.find((r) => r.text === creator)?.reading;
   const own = new Map(kept.map((r) => [r.text, r.reading]));
   const fits = (text: string) => text !== "" && Array.from(text).length <= READING_TEXT_MAX && !own.has(text);
   if (titleReading && fits(title)) own.set(title, titleReading);
   if (creatorReading && fits(creator)) own.set(creator, creatorReading);
-  // Only what the talk says: the lead is voiced with the work's readings.
-  const readings = [...own].filter(([text]) => lines.intro.includes(text) || lines.after.includes(text)).map(([text, reading]) => ({ text, reading }));
+  // Only what the unit's lines say (talk and hand-over): the lead is voiced with the work's readings.
+  const readings = [...own].filter(([text]) => [lines.intro, lines.after, ...sender].some((s) => s.includes(text))).map(([text, reading]) => ({ text, reading }));
   return { ...lines, ...(readings.length ? { readings } : {}), ...(titleReading ? { titleReading } : {}), ...(creatorReading ? { creatorReading } : {}) };
 }
 
@@ -210,7 +240,7 @@ export async function writeUnitLines(env: Env, input: UnitInput): Promise<Writte
       tool_choice: { type: "auto" },
       messages: [{ role: "user", content }],
     });
-    const lines = parse(res.content, input.item, input.lang);
+    const lines = parse(res.content, input.item, input.letter, input.lang);
     if (lines) return lines;
   }
   throw new Error("dj unit invalid");
@@ -290,7 +320,11 @@ export async function remakeUnit(env: Env, db: D1Database, letter: Letter, item:
   }
 }
 
-/** The work's readings from the reply, stored when the work has none yet; a work that has them keeps them. */
+/**
+ * The work's readings from the reply, stored when the work has none yet; a work that has them keeps them. Every
+ * programme says the work this way, so only readings `parse` accepted for the whole title or creator (katakana,
+ * bounded length) get here, and only from a verified unit. Nothing is logged: the reading is the model's output.
+ */
 async function storeItemReading(db: D1Database, item: Item, written: WrittenUnit): Promise<void> {
   const reading = readingOf(written);
   if (reading && !item.readingJa) await setItemReading(db, item.id, reading);
