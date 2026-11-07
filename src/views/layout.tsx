@@ -24,6 +24,9 @@ const THEME_BOOT = `try{var t=localStorage.getItem("dfm.theme");if(t==="light"||
 /** Wires the three header buttons: set `data-theme`, remember the choice (best effort) and mirror it in `aria-pressed`. */
 const THEME_WIRE = `(function(){var r=document.documentElement,bs=document.querySelectorAll("[data-theme-set]");function cur(){var t=r.getAttribute("data-theme");return t==="light"||t==="dark"?t:"auto"}function show(){var c=cur();bs.forEach(function(b){b.setAttribute("aria-pressed",String(b.getAttribute("data-theme-set")===c))})}bs.forEach(function(b){b.addEventListener("click",function(){var v=b.getAttribute("data-theme-set");if(v==="auto")r.removeAttribute("data-theme");else r.setAttribute("data-theme",v);try{if(v==="auto")localStorage.removeItem("dfm.theme");else localStorage.setItem("dfm.theme",v)}catch(e){}show()})});show()})();`;
 
+/** In the send modal's frame, Escape reaches the frame's document, not the parent's dialog: ask the parent to close it. */
+export const EMBED_ESCAPE = `addEventListener("keydown",function(e){if(e.key==="Escape")try{parent.postMessage({type:"dfm:close"},location.origin)}catch(_){}});`;
+
 const THEMES = ["light", "dark", "auto"] as const;
 const LANGS = ["ja", "en"] as const;
 
@@ -104,6 +107,7 @@ export function Layout({ title, children, script, lang = "ja", listener, path, o
         {!embed && <SiteHeader listener={listener} path={path} lang={lang} />}
         {children}
         <script>{raw(THEME_WIRE)}</script>
+        {embed && <script>{raw(EMBED_ESCAPE)}</script>}
         {script && (
           <script
             type="module"

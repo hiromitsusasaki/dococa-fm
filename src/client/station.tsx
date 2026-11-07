@@ -74,6 +74,9 @@ const playable = (v: unknown): v is PlayerEpisode => {
   return !!e && typeof e.id === "string" && Array.isArray(e.segments) && e.segments.length > 0 && typeof e.items === "object" && e.items !== null;
 };
 
+/** A left click no one has handled and without a modifier: one that would follow the link in this tab. */
+const plainClick = (e: MouseEvent): boolean => !e.defaultPrevented && e.button === 0 && !e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey;
+
 export function mountStation(root: HTMLElement, opts: StationOptions) {
   const str = (key: string) => opts.strings[key] ?? key;
   const player = createLinePlayer({ voiceURI: opts.voiceURI, ttsUrl: opts.ttsUrl });
@@ -315,7 +318,7 @@ export function mountStation(root: HTMLElement, opts: StationOptions) {
   function onCardClick(e: MouseEvent) {
     const card = (e.target as Element | null)?.closest?.("[data-play-letter]");
     const id = card?.getAttribute("data-play-letter");
-    if (!id || opts.grow || !root.isConnected || e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+    if (!id || opts.grow || !root.isConnected || !plainClick(e)) return;
     e.preventDefault();
     playLetter(id);
   }
@@ -436,8 +439,8 @@ export function mountStation(root: HTMLElement, opts: StationOptions) {
 
 /**
  * The home's send modal: the button (a plain `/put` link without script) opens the `<dialog>`, whose frame loads `/put?embed=1`
- * on the first open and again after a letter is sent. The embedded sent page posts `dfm:sent`, which closes it; a message from
- * any other origin is ignored. Escape and the close button close it natively.
+ * on the first open and again after a letter is sent. The embedded sent page posts `dfm:sent`, which closes it; Escape inside
+ * the frame posts `dfm:close`; a message from any other origin is ignored. Escape on the page and the close button close it natively.
  */
 export function wireSendModal(doc: Document = document): () => void {
   const dialog = doc.querySelector<HTMLDialogElement>("dialog.send-modal");
@@ -445,15 +448,17 @@ export function wireSendModal(doc: Document = document): () => void {
   if (!dialog || !frame || typeof dialog.showModal !== "function") return () => {};
   let fresh = false;
   const open = (e: MouseEvent) => {
-    if (!(e.target as Element | null)?.closest?.("[data-open-send]") || e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+    if (!(e.target as Element | null)?.closest?.("[data-open-send]") || !plainClick(e)) return;
     e.preventDefault();
     if (!fresh) frame.src = frame.dataset.src ?? "/put?embed=1";
     fresh = true;
     dialog.showModal();
   };
+  /** `dfm:sent` closes and reloads the frame next time; `dfm:close` (Escape inside the frame) closes and keeps what was typed. */
   const sent = (e: MessageEvent) => {
-    if (e.origin !== location.origin || (e.data as { type?: unknown } | null)?.type !== "dfm:sent") return;
-    fresh = false;
+    const type = (e.data as { type?: unknown } | null)?.type;
+    if (e.origin !== location.origin || (type !== "dfm:sent" && type !== "dfm:close")) return;
+    if (type === "dfm:sent") fresh = false;
     dialog.close();
   };
   doc.addEventListener("click", open);

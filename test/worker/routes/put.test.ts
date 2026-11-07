@@ -20,6 +20,11 @@ describe("GET /put?embed=1 (the home's send modal)", () => {
     // The url form and the search form answer inside the frame.
     expect((html.match(/<input type="hidden" name="embed" value="1"\/>/g) ?? []).length).toBeGreaterThanOrEqual(2);
     expect(html).not.toContain(SENT);
+    // Escape inside the frame asks the home to close the modal.
+    expect(html).toContain('parent.postMessage({type:"dfm:close"},location.origin)');
+    // The bookmarklet stays on /put itself, not in the modal.
+    expect(html).not.toContain("put-bookmarklet");
+    expect(await (await get("/put", cookie)).text()).toContain("put-bookmarklet");
   });
 
   it("a chosen work's letter form and its settings link: the form stays, the settings page opens over the home", async () => {
@@ -57,6 +62,7 @@ describe("GET /put?embed=1 (the home's send modal)", () => {
       expect(html).toContain('class="site-header"');
       expect(html).not.toContain('name="embed"');
       expect(html).not.toContain(SENT);
+      expect(html).not.toContain("dfm:close");
       expect(html).not.toContain('target="_top"');
     }
   });

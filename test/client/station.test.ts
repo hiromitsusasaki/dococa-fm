@@ -1035,8 +1035,15 @@ describe("station: a letter card plays on this radio", () => {
     const s = mountStation(root, opts({ stationKey: "mine", dial: 0.4 }));
     await power();
     await vi.waitFor(() => expect(s.state().queue.map((e) => e.id)).toEqual(["e2"]));
+    const cancel = (globalThis as unknown as { speechSynthesis: { cancel: ReturnType<typeof vi.fn> } }).speechSynthesis.cancel;
+    const before = cancel.mock.calls.length;
+    expect(spoken.at(-1)).toBe("e1-1");
     press(card("L7"));
+    // The line being read is cut at the press, so the old episode never sounds under the new one.
+    expect(cancel.mock.calls.length).toBeGreaterThan(before);
     await vi.waitFor(() => expect(s.state().current?.id).toBe("e3"));
+    await vi.waitFor(() => expect(spoken.at(-1)).toBe("e3-1"));
+    expect(spoken.filter((t) => t === "e1-1")).toHaveLength(1);
     expect(s.state().power).toBe("on");
     expect(bodies[2]).toEqual({ dial: 0.4, first: true, letterId: "L7" });
     expect(s.state().queue.map((e) => e.id)).not.toContain("e2");
@@ -1119,6 +1126,17 @@ describe("the home's send modal", () => {
     expect(close).toHaveBeenCalledTimes(1);
     press();
     expect(frame.getAttribute("src")).toBe("/put?embed=1");
+  });
+
+  it("closes on dfm:close (Escape inside the frame) from its own origin, keeping the frame's page", () => {
+    press();
+    frame.setAttribute("src", "/put?embed=1&itemId=x");
+    message({ type: "dfm:close" }, "https://evil.example");
+    expect(close).not.toHaveBeenCalled();
+    message({ type: "dfm:close" }, location.origin);
+    expect(close).toHaveBeenCalledTimes(1);
+    press();
+    expect(frame.getAttribute("src")).toBe("/put?embed=1&itemId=x");
   });
 
   it("ignores the same message from another origin, and other messages", () => {

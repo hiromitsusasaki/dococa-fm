@@ -57,6 +57,12 @@ export function isHttpUrl(s: string | null): s is string {
   return s !== null && /^https?:\/\//i.test(s);
 }
 
+/** Who a letter is from, as a card or a list line says it: a found voice by its source's author, else the radio-name line. */
+export const senderLine = (
+  l: Pick<Letter, "radioName" | "place"> & Partial<Pick<Letter, "placeCountry" | "placeRegion">> & { kind: string; sourceAuthor: string | null; demo?: boolean },
+  lang: Lang,
+): string => (l.kind === "found" ? `${tFor(lang)("item.source")}: ${l.sourceAuthor ?? ""}` : whoOf(l, lang));
+
 /** The radio-name line; a demo account carries the 「デモ用」 mark at the end so nobody mistakes its letters for a real listener's. */
 export const whoOf = (l: Pick<Letter, "radioName" | "place"> & Partial<Pick<Letter, "placeCountry" | "placeRegion">> & { demo?: boolean }, lang: Lang): string => {
   const t = tFor(lang);
@@ -161,7 +167,7 @@ export function LetterCard({ letter, item, lang, viewerId }: { letter: Letter; i
   const t = tFor(lang);
   const chars = Array.from(displayText(letter, lang).main);
   const text = chars.length > CARD_CHARS ? `${chars.slice(0, CARD_CHARS).join("")}…` : chars.join("");
-  const from = letter.kind === "found" ? `${t("item.source")}: ${letter.sourceAuthor ?? ""}` : whoOf(letter, lang);
+  const from = senderLine(letter, lang);
   const own = letter.listenerId !== null && letter.listenerId === viewerId;
   return (
     <article class="letter-card">

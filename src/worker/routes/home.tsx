@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { LetterCard, whoOf } from "../../views/components";
+import { LetterCard, senderLine } from "../../views/components";
 import type { Variables } from "../auth/session";
 import { type ArchiveSender, listArchive } from "../db/episodes";
 import { listRecentPublicLetters } from "../db/letters";
@@ -17,9 +17,7 @@ const RECENT_EPISODES = 3;
 function episodeLine(title: string | null, sender: ArchiveSender | null, lang: Lang): string {
   const t = tFor(lang);
   const work = title ?? t("episode.untitled");
-  if (!sender) return work;
-  const from = sender.kind === "found" ? `${t("item.source")}: ${sender.sourceAuthor ?? ""}` : whoOf(sender, lang);
-  return `${work} · ${from}`;
+  return sender ? `${work} · ${senderLine(sender, lang)}` : work;
 }
 
 home.get("/", async (c) => {

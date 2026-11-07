@@ -217,10 +217,13 @@ export function PutPage(props: PutPageProps) {
             )}
           </section>
         )}
-        <section class="panel put-bookmarklet">
-          <h2>{t("bookmarklet.title")}</h2>
-          <BookmarkletHelp code={bookmarklet} lang={lang} heading="h3" />
-        </section>
+        {/* Dragging a link out of a frame is unreliable, and the modal is for sending; /put and /bookmarklet keep it. */}
+        {!embed && (
+          <section class="panel put-bookmarklet">
+            <h2>{t("bookmarklet.title")}</h2>
+            <BookmarkletHelp code={bookmarklet} lang={lang} heading="h3" />
+          </section>
+        )}
       </main>
     </Layout>
   );
