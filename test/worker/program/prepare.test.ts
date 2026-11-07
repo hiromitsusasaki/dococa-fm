@@ -423,6 +423,19 @@ describe("prepareBatch", () => {
     expect((await getItem(env.DB, a.id))!.readingJa ?? (await getItem(env.DB, b.id))!.readingJa).toEqual({ creator: "サイ" });
   });
 
+  it("counts a work whose reading call fails as failed, stores an empty reading, and lists it no more", async () => {
+    const a = await insertItem(env.DB, itemDraft({ title: "Gangnam Style", creator: "PSY" }));
+    await insertLetter(env.DB, letterDraft(a.id));
+    names.mockImplementation(() => ({ content: [{ type: "text", text: "はい" }] }));
+    const r = await prepareBatch(keyed, env.DB, 1);
+    expect(r).toMatchObject({ units: 0, failed: 1, remaining: { readings: 0 } });
+    expect(names).toHaveBeenCalledTimes(2);
+    expect((await getItem(env.DB, a.id))!.readingJa).toEqual({});
+    names.mockClear();
+    await prepareBatch(keyed, env.DB, 1);
+    expect(names).not.toHaveBeenCalled();
+  });
+
   it("never re-makes a letter that was rejected after its unit was made", async () => {
     const { letters } = await seed(1, { status: "rejected" });
     await upsertUnit(env.DB, { letterId: letters[0]!.id, lang: "ja", intro: "a", after: "b", verified: true, audioReady: false });

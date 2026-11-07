@@ -1,7 +1,7 @@
 import { env } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { ensureItemReading, ensureItemReadings } from "../../../src/worker/ai/item-reading";
-import { getItem, insertItem } from "../../../src/worker/db/items";
+import { askItemReading, ensureItemReading, ensureItemReadings } from "../../../src/worker/ai/item-reading";
+import { getItem, insertItem, listItemsWithoutReading } from "../../../src/worker/db/items";
 import { insertLetter } from "../../../src/worker/db/letters";
 import { upsertUnit } from "../../../src/worker/db/units";
 import type { Env } from "../../../src/worker/env";
@@ -76,14 +76,38 @@ describe("ensureItemReading", () => {
     expect((await ensureItemReading(keyed, env.DB, long)).readingJa).toEqual({});
   });
 
-  it("stores nothing without Claude or when the answer is out of shape twice, so a later run asks again", async () => {
+  it("stores nothing without Claude, so a run with the key asks later", async () => {
     const it = await insertItem(env.DB, itemDraft({ title: "Gangnam Style", creator: "PSY" }));
-    expect(await ensureItemReading(keyless, env.DB, it)).toEqual(it);
+    expect(await askItemReading(keyless, env.DB, it)).toEqual({ item: it, failed: false });
     expect(create).not.toHaveBeenCalled();
-    create.mockResolvedValue({ content: [{ type: "text", text: "はい" }] });
-    expect(await ensureItemReading(keyed, env.DB, it)).toEqual(it);
-    expect(create).toHaveBeenCalledTimes(2);
     expect(await getItem(env.DB, it.id)).not.toHaveProperty("readingJa");
+  });
+
+  it("gives up after two answers out of shape: stores an empty reading, says it failed, and never asks again", async () => {
+    const it = await insertItem(env.DB, itemDraft({ title: "Gangnam Style", creator: "PSY" }));
+    create.mockResolvedValue({ content: [{ type: "text", text: "はい" }] });
+    const out = await askItemReading(keyed, env.DB, it);
+    expect(out.failed).toBe(true);
+    expect(out.item.readingJa).toEqual({});
+    expect(create).toHaveBeenCalledTimes(2);
+    await ensureItemReading(keyed, env.DB, (await getItem(env.DB, it.id))!);
+    expect(create).toHaveBeenCalledTimes(2);
+  });
+
+  it("gives up when the call throws twice, logs the failure's kind only, and the work is not listed again", async () => {
+    const it = await insertItem(env.DB, itemDraft({ title: "Gangnam Style", creator: "PSY" }));
+    await insertLetter(env.DB, letterDraft(it.id));
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    vi.stubGlobal("fetch", async () => {
+      throw new TypeError("network down");
+    });
+    const out = await askItemReading({ ...keyed, ANTHROPIC_API_KEY: "sk-test" } as Env, env.DB, it);
+    expect(out.failed).toBe(true);
+    expect((await getItem(env.DB, it.id))!.readingJa).toEqual({});
+    expect(await listItemsWithoutReading(env.DB, 10)).toEqual([]);
+    const logged = warn.mock.calls.map((c) => c.join(" "));
+    expect(logged.some((l) => /^\[dococa\] reading failed \w+$/.test(l))).toBe(true);
+    expect(logged.join("\n")).not.toContain("Gangnam");
   });
 
   it("marks the work's voiced Japanese units to be voiced again when a reading is stored", async () => {

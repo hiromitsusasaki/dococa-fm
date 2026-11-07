@@ -54,41 +54,58 @@ function safeReading(item: Item, reading: NonNullable<Item["readingJa"]>): NonNu
 }
 
 /**
- * The work with its Japanese reading. A work that already has one (`reading_ja`, an empty `{}` too) comes back as
- * it is. A work whose title and creator are kana only is stored `{}` without a call. Otherwise one Claude call with
- * the single strict tool `name_readings { title, creator }`, which sees only the title, the creator, the year and the
- * kind; each reading is kept only when `isReadingOf` accepts it for that text (full-width katakana, bounded by the
- * text's length, for a text of at most `READING_TEXT_MAX` code points), else it is empty, and the readings must
- * leave the lead line passing `verifyEpisode` (`safeReading`). The result is stored once (`setItemReading`), `{}` when both are empty, so the
- * work is not asked about again. Without Claude, or when the call fails or answers out of shape twice, nothing is
- * stored and the work comes back as it was: a later run asks again. Never throws. Nothing is logged but the error's name.
+ * The work with its Japanese reading, and whether asking for it failed. A work that already has one (`reading_ja`,
+ * an empty `{}` too) comes back as it is. A work whose title and creator are kana only is stored `{}` without a call.
+ * Otherwise up to 2 Claude calls with the single strict tool `name_readings { title, creator }`, which sees only the
+ * title, the creator, the year and the kind; each reading is kept only when `isReadingOf` accepts it for that text
+ * (full-width katakana, bounded by the text's length, for a text of at most `READING_TEXT_MAX` code points), else it
+ * is empty, and the readings must leave the lead line passing `verifyEpisode` (`safeReading`). The result is stored
+ * once (`setItemReading`), `{}` when both are empty, so the work is not asked about again. When both calls fail (an
+ * API error or an answer out of shape), `{}` is stored too and `failed` is true: a reading is optional, the voice
+ * says the written form, and a work that keeps failing must not be asked about on every run. Without Claude nothing
+ * is stored, so a later run with the key asks. Never throws. The log names the failure's kind only, never the work.
  */
-export async function ensureItemReading(env: Env, db: D1Database, item: Item): Promise<Item> {
-  if (item.readingJa) return item;
+export async function askItemReading(env: Env, db: D1Database, item: Item): Promise<{ item: Item; failed: boolean }> {
+  if (item.readingJa) return { item, failed: false };
   const creator = item.creator.trim();
   try {
     if (!NEEDS_READING.test(item.title) && !NEEDS_READING.test(creator)) {
       await setItemReading(db, item.id, {});
-      return { ...item, readingJa: {} };
+      return { item: { ...item, readingJa: {} }, failed: false };
     }
-    if (!hasClaude(env)) return item;
+    if (!hasClaude(env)) return { item, failed: false };
+    let kind = "shape";
     for (let attempt = 0; attempt < ATTEMPTS; attempt++) {
-      const input = (await callTool(env, { system: SYSTEM, user: workTag(item), tool: TOOL, maxTokens: 200 })) as { title?: unknown; creator?: unknown } | null;
-      if (input === null || typeof input.title !== "string" || typeof input.creator !== "string") continue;
+      let input: { title?: unknown; creator?: unknown } | null;
+      try {
+        input = (await callTool(env, { system: SYSTEM, user: workTag(item), tool: TOOL, maxTokens: 200 })) as { title?: unknown; creator?: unknown } | null;
+      } catch (e) {
+        kind = e instanceof Error ? e.name : "unknown";
+        continue;
+      }
+      if (input === null || typeof input.title !== "string" || typeof input.creator !== "string") {
+        kind = "shape";
+        continue;
+      }
       const reading = safeReading(item, {
         ...(fits(item.title) && isReadingOf(item.title, input.title) ? { title: input.title.trim() } : {}),
         ...(fits(creator) && isReadingOf(creator, input.creator) ? { creator: input.creator.trim() } : {}),
       });
       await setItemReading(db, item.id, reading);
       // Another run may have stored first: what is stored is what every programme says.
-      return (await getItem(db, item.id)) ?? item;
+      return { item: (await getItem(db, item.id)) ?? item, failed: false };
     }
-    console.warn("[dococa] item reading out of shape", item.id);
+    console.warn(`[dococa] reading failed ${kind}`);
+    await setItemReading(db, item.id, {});
+    return { item: (await getItem(db, item.id)) ?? { ...item, readingJa: {} }, failed: true };
   } catch (e) {
-    console.warn("[dococa] item reading unavailable", item.id, e instanceof Error ? e.name : "unknown error");
+    console.warn(`[dococa] reading failed ${e instanceof Error ? e.name : "unknown"}`);
+    return { item, failed: true };
   }
-  return item;
 }
+
+/** `askItemReading`'s work alone. */
+export const ensureItemReading = async (env: Env, db: D1Database, item: Item): Promise<Item> => (await askItemReading(env, db, item)).item;
 
 /** `ensureItemReading` for the works among `ids` (3 at a time); for a route to `defer`. Never throws. */
 export async function ensureItemReadings(env: Env, db: D1Database, ids: string[]): Promise<void> {

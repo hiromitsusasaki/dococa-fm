@@ -1,5 +1,5 @@
 import { EMBED_BATCH, ensureItemVectors } from "../ai/embed";
-import { ensureItemReading } from "../ai/item-reading";
+import { askItemReading, ensureItemReading } from "../ai/item-reading";
 import { countItemsWithoutReading, getItem, listItemsWithoutReading } from "../db/items";
 import { getLetter } from "../db/letters";
 import { countLettersWithoutUnit, countUnitsGaveUp, countUnitsWithoutAudio, getUnits, listLettersWithoutUnit, listUnitsWithoutAudio, setUnitAudioGaveUp, setUnitAudioReady } from "../db/units";
@@ -136,7 +136,7 @@ export type Remaining = { vectors: number; readings: number; units: Record<Unit[
 
 /**
  * `limit` is the whole run's budget, spent in order on work vectors (one per 20 works embedded), then the works' readings
- * (one per work with a public letter and none asked for yet; `ensureItemReading`), then letter-language jobs: ja units, en units, ja audio, en audio, each letter run consuming one, and every listing asks for the remaining budget only. Stops making
+ * (one per work with a public letter and none asked for yet; `askItemReading`, a failed call counted in `failed`), then letter-language jobs: ja units, en units, ja audio, en audio, each letter run consuming one, and every listing asks for the remaining budget only. Stops making
  * audio at the first `limit`/`unavailable` answer, units at `UNIT_DAILY_LIMIT` (a halt, not a failure), and
  * units after 3 letters in a row that cannot get one, in either language (a single bad letter is counted as
  * failed and skipped, so newer letters are still reached).
@@ -155,7 +155,8 @@ export async function prepareBatch(env: Env, db: D1Database, limit = 20): Promis
   if (budget > 0 && hasClaude(env)) {
     for (const item of await listItemsWithoutReading(db, budget)) {
       budget--;
-      await ensureItemReading(env, db, item);
+      // A failed call stores an empty reading, so the work is not listed first on every later run.
+      if ((await askItemReading(env, db, item)).failed) total.failed++;
     }
   }
   let audioHalted = false;
