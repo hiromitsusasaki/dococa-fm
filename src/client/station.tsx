@@ -523,7 +523,7 @@ export function mountStation(root: HTMLElement, opts: StationOptions) {
         if (!item) return;
         const first = s.lines.find((l): l is LetterLine => l.type === "letter");
         const reading = s.lines.length > 1 ? Math.min(1, state.line / (s.lines.length - 1)) : 0;
-        rows.push({ key: `${ep.id}:${from + n}`, now, kind: item.kind ?? null, title: item.title, creator: item.creator, ...(first ? { sender: whoOf(first, str) } : {}), ...(now && first ? { letterId: first.letterId } : {}), ...(now ? { imageUrl: item.imageUrl, reading } : {}) });
+        rows.push({ key: `${ep.id}:${from + n}`, now, kind: item.kind ?? null, title: item.title, creator: item.creator, ...(first ? { sender: whoOf(first, str) } : {}), ...(now && first ? { letterId: first.letterId, shareable: first.kind !== "reply" && first.kind !== "watashimo" } : {}), ...(now ? { imageUrl: item.imageUrl, reading } : {}) });
       });
     };
     // Off, limit and failed: the panel is empty and shows its hint, so nothing stale is listed.

@@ -5,9 +5,9 @@ import { onReleased } from "./reactions";
 
 /**
  * `sender` is the first reader's name line; absent for a work nobody has written about. `letterId` is only on the row now on air, for the reactions;
- * `reading` too: how far down the segment's lines the voice is (0 at the first line, 1 at the last), drawn as a thin line that moves down the row.
+ * `shareable` is false for a reply or 私も (an echo of the listener's own letter), which has no page to share; `reading` too: how far down the segment's lines the voice is (0 at the first line, 1 at the last), drawn as a thin line that moves down the row.
  */
-export type UpNextRow = { key: string; now: boolean; kind: string | null; title: string; creator: string; sender?: string; letterId?: string; imageUrl?: string | null; reading?: number };
+export type UpNextRow = { key: string; now: boolean; kind: string | null; title: string; creator: string; sender?: string; letterId?: string; imageUrl?: string | null; reading?: number; shareable?: boolean };
 
 export type StationScreenProps = {
   str: (key: string) => string;
@@ -190,7 +190,7 @@ export function StationScreen(p: StationScreenProps) {
               <span class="creator">{r.creator}</span>
               {r.sender && <span class="sender">{r.sender}</span>}
               {r.reading !== undefined && <i class="reading" style={{ "--at": String(r.reading) }} aria-hidden="true"></i>}
-              {r.letterId && <PanelReact id={r.letterId} sent={p.sent} str={str} on={p.on} />}
+              {r.letterId && <PanelReact id={r.letterId} shareable={r.shareable !== false} sent={p.sent} str={str} on={p.on} />}
             </li>
           ))}
         </ul>
@@ -209,16 +209,18 @@ export function StationScreen(p: StationScreenProps) {
 }
 
 /** 私も, the letter's link and 一言 for the letter on air, in the panel; they share `sent` with the player card. */
-function PanelReact({ id, sent, str, on }: { id: string; sent: Record<string, true>; str: (key: string) => string; on: StationScreenProps["on"] }) {
+function PanelReact({ id, shareable, sent, str, on }: { id: string; shareable: boolean; sent: Record<string, true>; str: (key: string) => string; on: StationScreenProps["on"] }) {
   const said = sent[`w:${id}`] === true;
   return (
     <div class="panel-react">
       <button type="button" class={said ? "pill hot said" : "pill hot"} data-action="panel-watashimo" disabled={said} onClick={() => on.watashimo(id)}>
         {str(said ? "player.sent" : "player.watashimo")}
       </button>
-      <button type="button" class="pill share" data-action="share" onClick={() => on.share(id)}>
-        {str("station.share")}
-      </button>
+      {shareable && (
+        <button type="button" class="pill share" data-action="share" onClick={() => on.share(id)}>
+          {str("station.share")}
+        </button>
+      )}
       <form
         class="panel-reply"
         onSubmit={(e: Event) => {

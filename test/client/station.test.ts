@@ -1,6 +1,22 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { forgetReportedListens, resumeAt } from "../../src/client/playback";
-import { isNight, mountStation, type StationOptions, wireSendModal } from "../../src/client/station";
+import { isNight, mountStation as mountStationOnce, type StationOptions, wireSendModal } from "../../src/client/station";
+
+/** Every station a test mounts, so `afterEach` stops it: a station left mounted keeps its document listeners and its line player running into the next test. */
+let live: Array<{ unmount(): void; done: boolean }> = [];
+const mountStation = (...args: Parameters<typeof mountStationOnce>) => {
+  const s = mountStationOnce(...args);
+  const handle = { done: false, unmount: s.unmount };
+  live.push(handle);
+  return {
+    ...s,
+    unmount() {
+      if (handle.done) return;
+      handle.done = true;
+      s.unmount();
+    },
+  };
+};
 
 const strings: Record<string, string> = {
   "station.onOff": "ラジオをつける / 止める",
@@ -166,6 +182,11 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  for (const h of live) if (!h.done) {
+    h.done = true;
+    h.unmount();
+  }
+  live = [];
   vi.unstubAllGlobals();
 });
 
@@ -1398,6 +1419,20 @@ describe("station: a letter's link and sharing", () => {
     mountStation(root, opts({ stationKey: "mine" }));
     await flush();
     expect(label()).toBe("ラジオをつける");
+  });
+
+  it("an echo of the listener's own letter (a reply or 私も) has no share button: it has no page", async () => {
+    for (const kind of ["reply", "watashimo"] as const) {
+      root.innerHTML = "";
+      nextReplies = [ok(view(`ep-${kind}`, [["a", [dj("e1"), { ...letter("R1", "r1"), kind }]]]))];
+      autoEnd = false;
+      const s = mountStation(root, opts());
+      await power();
+      await vi.waitFor(() => expect(root.querySelector(".up-next li.now .panel-react")).not.toBeNull());
+      expect(root.querySelector(".up-next button.share")).toBeNull();
+      expect(root.querySelector('.up-next [data-action="panel-watashimo"]')).not.toBeNull();
+      s.unmount();
+    }
   });
 
   it("the on-air row's share button copies the letter's page and toasts", async () => {
