@@ -5,7 +5,7 @@ import { insertItem, quantise } from "../../src/worker/db/items";
 import { upsertHistory } from "../../src/worker/db/history";
 import { angled } from "../helpers/ai";
 import { insertLetter } from "../../src/worker/db/letters";
-import { createListener } from "../../src/worker/db/listeners";
+import { createListener, updateListener } from "../../src/worker/db/listeners";
 import { getUnits } from "../../src/worker/db/units";
 import { countingD1 } from "../helpers/d1-count";
 import { resetDb } from "../helpers/db";
@@ -143,6 +143,24 @@ describe("D1 statements per request", () => {
     expect(coldStart).toBeLessThan(EPISODE_BUDGET);
     // Three seeded databases in one test: give it room on a loaded machine.
   }, 15_000);
+
+  it(`POST /stations/s:<slug>/next (a public radio: the owner's letters and the ones they answered) stays under ${EPISODE_BUDGET}`, async () => {
+    await seedWorld();
+    const owner = await createListener(env.DB, { radioName: "ヒロ" });
+    await updateListener(env.DB, owner.id, { stationSlug: "hiro", stationPublic: true });
+    const other = await createListener(env.DB);
+    for (let n = 0; n < 10; n++) {
+      const it = await insertItem(env.DB, itemDraft({ title: `owner-${n}`, externalIds: { itunes: `8${n}` } }));
+      await insertLetter(env.DB, letterDraft(it.id, { listenerId: owner.id, body: `owner ${n}` }));
+      const theirs = await insertLetter(env.DB, letterDraft(it.id, { listenerId: other.id, body: `other ${n}` }));
+      await insertLetter(env.DB, letterDraft(it.id, { kind: "reply", listenerId: owner.id, parentLetterId: theirs.id, body: `reply ${n}` }));
+    }
+    const cookie = await newSession();
+    const counted = countingD1(env.DB);
+    const res = await app.request("/stations/s:hiro/next", { method: "POST", headers: { cookie, origin: "http://127.0.0.1:5173", "content-type": "application/json" }, body: JSON.stringify({ dial: 0.5 }) }, { ...env, DB: counted.db });
+    expect(res.status).toBe(200);
+    expect(counted.count()).toBeLessThan(EPISODE_BUDGET);
+  });
 
   it("GET / reads one more statement for a signed-in listener (the reaction notice) and one more for a letter link", async () => {
     await seedWorld();

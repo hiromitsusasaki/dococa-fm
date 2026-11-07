@@ -10,6 +10,7 @@ import type { Env } from "../env";
 import { ja } from "../i18n/ja";
 import { type Lang, tFor } from "../i18n/t";
 import { makeEpisode } from "../program/create";
+import { publicRadioHasLetters } from "../program/select";
 import { readNextBody } from "./next-body";
 import { playerView } from "../program/player-view";
 import { type StationKey, parseStationKey, stationColumn, stationLabel, stationUrl } from "../program/station";
@@ -29,7 +30,7 @@ async function resolve({ DB: db, PUBLIC_ORIGIN }: Pick<Env, "DB" | "PUBLIC_ORIGI
 }
 
 /** What the station player needs to know: the labels it shows, as `t()` values, since `t()` is server-only. */
-const STATION_KEY = /^(station\.|player\.|out\.|kind\.|letter\.(who|whoPlace|whoDemo|showOriginal)|lang\.(code|confirmPlaying)$|home\.(?:put|sendLead)$|share\.(?:x|native|text|textFound|textFoundNoAuthor)$|reply\.(?:addName|invalidName)$|settings\.radioName$|listener\.(?:anonymous|demo)$)/;
+const STATION_KEY = /^(station\.|player\.|out\.|kind\.|letter\.(who|whoPlace|whoDemo|showOriginal)|lang\.(code|confirmPlaying)$|home\.(?:put|sendLead)$|share\.(?:x|native|text)$|reply\.addName$|settings\.radioName$|listener\.(?:anonymous|demo)$)/;
 const stationStrings = (lang: Lang): Record<string, string> =>
   Object.fromEntries(Object.keys(ja).filter((k) => STATION_KEY.test(k)).map((k) => [k, tFor(lang)(k as keyof typeof ja)]));
 
@@ -126,7 +127,14 @@ stations.get("/stations/:key", async (c) => {
     const letter = station.key.kind === "mine" && asked.length > 0 && asked.length <= 100 ? asked : undefined;
     // A letter link plays even before the listener has favourites: after it, the station goes on like the world radio.
     const grow = station.key.kind === "mine" && !letter && (await listHistory(c.env.DB, listener.id, 1)).length === 0;
-    return c.html(<StationPage letter={letter} stationKey={raw} label={label} lang={listener.lang} listener={listener} path={currentPath(c)} voice={listener.voice} dial={listener.dial} grow={grow} og={station.url ? { title: label, description: tFor(listener.lang)("app.tagline"), url: station.url } : undefined} />);
+    // A public radio plays only its owner's letters and the ones they answered: before the first, the page says so.
+    const empty = station.key.kind === "public" && !(await publicRadioHasLetters(c.env.DB, station.key.ownerId));
+    const t = tFor(listener.lang);
+    return c.html(
+      <StationPage letter={letter} stationKey={raw} label={label} lang={listener.lang} listener={listener} path={currentPath(c)} voice={listener.voice} dial={listener.dial} grow={grow} og={station.url ? { title: label, description: t("app.tagline"), url: station.url } : undefined}>
+        {empty && <p class="muted station-empty">{t("station.publicEmpty")}</p>}
+      </StationPage>,
+    );
   }
 
   // Resume after a reload. With `?id=` it is that very episode, if it is this listener's, was made on this station and

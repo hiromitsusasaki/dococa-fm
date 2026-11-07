@@ -218,6 +218,7 @@ export const en: Record<keyof typeof ja, string> = {
   "station.limit": "That's all for today. See you tomorrow",
   "station.failed": "The signal didn't reach you. Wait a moment and try again",
   "station.empty": "No letters yet",
+  "station.publicEmpty": "No letters here yet",
   "station.grow": "Your radio",
   "station.growStart": "Send three things you love",
   "station.growHelp": "Send 3 favorites and a radio made for you begins",

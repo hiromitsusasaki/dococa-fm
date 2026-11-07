@@ -68,26 +68,26 @@ describe("POST /stations/:key/next", () => {
     expect((await postNext("s:hiro", await newSession())).status).toBe(404);
   });
 
-  it("public: airs the owner's favourites to another listener", async () => {
+  it("public: airs the owner's own letter to another listener", async () => {
     const owner = await createListener(env.DB, { radioName: "ヒロ" });
     await updateListener(env.DB, owner.id, { stationSlug: "hiro", stationPublic: true });
-    const fav = await insertItem(env.DB, itemDraft({ title: "owner-fav" }));
-    await upsertHistory(env.DB, [{ listenerId: owner.id, itemId: fav.id, source: "manual", occurredAt: null, rank: 1 }]);
-    const writer = await createListener(env.DB);
-    await insertLetter(env.DB, letterDraft(fav.id, { listenerId: writer.id, body: "手紙", bodyJa: "手紙" }));
+    const work = await insertItem(env.DB, itemDraft({ title: "owner-work" }));
+    const own = await insertLetter(env.DB, letterDraft(work.id, { listenerId: owner.id, body: "手紙", bodyJa: "手紙" }));
     const res = await postNext("s:hiro", await newSession());
     expect(res.status).toBe(200);
-    const body = (await res.json()) as Body;
-    expect(body.episode.segments.map((s) => s.itemId)).toEqual([fav.id]);
+    const body = (await res.json()) as { episode: { segments: { itemId: string; lines: { type: string; letterId?: string }[] }[] } } & Body;
+    expect(body.episode.segments.map((s) => s.itemId)).toEqual([work.id]);
+    expect(body.episode.segments[0]!.lines.filter((l) => l.type === "letter").map((l) => l.letterId)).toEqual([own.id]);
     expect(body.station.key).toBe("s:hiro");
     expect(body.station.label).toContain("ヒロ");
   });
 
-  it("public: a favourite nobody has written about is not aired, and the answer is 409 empty", async () => {
+  it("public: the owner's favourites are not aired, even with someone else's letter; the answer is 409 empty", async () => {
     const owner = await createListener(env.DB);
     await updateListener(env.DB, owner.id, { stationSlug: "hiro", stationPublic: true });
     const fav = await insertItem(env.DB, itemDraft({ title: "owner-fav" }));
     await upsertHistory(env.DB, [{ listenerId: owner.id, itemId: fav.id, source: "manual", occurredAt: null, rank: 1 }]);
+    await insertLetter(env.DB, letterDraft(fav.id, { listenerId: (await createListener(env.DB)).id, body: "手紙", bodyJa: "手紙" }));
     const res = await postNext("s:hiro", await newSession());
     expect(res.status).toBe(409);
     expect(await res.json()).toEqual({ error: "empty" });
@@ -428,14 +428,21 @@ describe("GET /stations/:key (page)", () => {
     expect((await page("s:hiro", await newSession())).status).toBe(404);
   });
 
-  it("a public station with no favourites still renders, and its next answers 409 empty", async () => {
+  it("a public station with no letters still renders, says so, and its next answers 409 empty", async () => {
     const owner = await createListener(env.DB);
     await updateListener(env.DB, owner.id, { stationSlug: "hiro", stationPublic: true });
     const cookie = await newSession();
-    expect((await page("s:hiro", cookie)).status).toBe(200);
+    const res0 = await page("s:hiro", cookie);
+    expect(res0.status).toBe(200);
+    expect(await res0.text()).toContain('<p class="muted station-empty">まだお便りがありません</p>');
     const res = await postNext("s:hiro", cookie);
     expect(res.status).toBe(409);
     expect(await res.json()).toEqual({ error: "empty" });
+    // Once the owner has sent a letter, the line is gone; the other stations never show it.
+    const work = await insertItem(env.DB, itemDraft({ title: "owner-work" }));
+    await insertLetter(env.DB, letterDraft(work.id, { listenerId: owner.id, body: "手紙", bodyJa: "手紙" }));
+    expect(await (await page("s:hiro", cookie)).text()).not.toContain("station-empty");
+    expect(await (await page("world", cookie)).text()).not.toContain("station-empty");
   });
 
   it("an owner without a radio name is anonymous on the page, not named after their google account", async () => {

@@ -341,34 +341,67 @@ describe("selectProgram stations", () => {
     expect(p.every((s) => s.slot === "far" && !own.has(s.itemId))).toBe(true);
   });
 
-  it("a public station reads only works that someone has written about, never the listener's own letters", async () => {
+  it("a public radio reads the owner's own letters and the letters they answered, one per segment", async () => {
     const owner = await createListener(env.DB);
     const guest = await createListener(env.DB);
     const other = await createListener(env.DB);
     const items: string[] = [];
-    for (let n = 0; n < 4; n++) items.push((await insertItem(env.DB, itemDraft({ title: `fav-${n}` }))).id);
-    const outsider = (await insertItem(env.DB, itemDraft({ title: "not-a-favourite" }))).id;
-    await upsertHistory(env.DB, [
-      { listenerId: owner.id, itemId: items[0] as string, source: "manual", occurredAt: null, rank: 1 },
-      { listenerId: owner.id, itemId: items[1] as string, source: "url", occurredAt: null, rank: 2 },
-      { listenerId: owner.id, itemId: items[2] as string, source: "manual", occurredAt: null, rank: null },
-      { listenerId: owner.id, itemId: items[3] as string, source: "spotify", occurredAt: null, rank: 3 },
-    ]);
-    await insertLetter(env.DB, letterDraft(items[0] as string, { listenerId: other.id, body: "other on 0" }));
-    await insertLetter(env.DB, letterDraft(items[0] as string, { listenerId: owner.id, body: "owner on 0" }));
-    await insertLetter(env.DB, letterDraft(outsider, { listenerId: other.id, body: "other on outsider" }));
+    for (let n = 0; n < 8; n++) items.push((await insertItem(env.DB, itemDraft({ title: `w-${n}` }))).id);
+    const put = (n: number, over: Parameters<typeof letterDraft>[1]) => insertLetter(env.DB, letterDraft(items[n]!, over));
+    const own = await put(0, { listenerId: owner.id, body: "owner on 0" });
+    const ownToo = await put(1, { listenerId: owner.id, body: "owner on 1" });
+    const answered = await put(2, { listenerId: other.id, body: "other on 2" });
+    await put(2, { kind: "reply", listenerId: owner.id, parentLetterId: answered.id, body: "owner's 一言" });
+    const voice = await put(3, { kind: "found", sourceAuthor: "zed", sourceUrl: "https://example.com/zed", body: "zed on 3" });
+    await put(3, { kind: "reply", listenerId: owner.id, parentLetterId: voice.id, body: "owner's 一言 on a voice" });
+    // Not in the pool: a 私も, a 一言 taken down, a 一言 on a letter taken down, a withdrawn own letter, a favourite.
+    const meToo = await put(4, { listenerId: other.id, body: "other on 4" });
+    await put(4, { kind: "watashimo", listenerId: owner.id, parentLetterId: meToo.id, body: "me too" });
+    const hiddenReply = await put(5, { listenerId: other.id, body: "other on 5" });
+    const r5 = await put(5, { kind: "reply", listenerId: owner.id, parentLetterId: hiddenReply.id, body: "withdrawn 一言" });
+    await setLetterStatus(env.DB, r5.id, "withdrawn");
+    const gone = await put(6, { listenerId: other.id, body: "other on 6" });
+    await put(6, { kind: "reply", listenerId: owner.id, parentLetterId: gone.id, body: "一言 on a rejected letter" });
+    await setLetterStatus(env.DB, gone.id, "rejected");
+    const withdrawn = await put(7, { listenerId: owner.id, body: "owner withdrew this" });
+    await setLetterStatus(env.DB, withdrawn.id, "withdrawn");
+    await upsertHistory(env.DB, [{ listenerId: owner.id, itemId: items[4]!, source: "manual", occurredAt: null, rank: 1 }]);
+    await put(4, { listenerId: other.id, body: "other on a favourite" });
 
-    const p = await selectProgram(env.DB, guest, { station: { kind: "public", ownerId: owner.id }, size: 6, seed: "p" });
-    expect(p.map((s) => s.itemId)).toEqual([items[0]]);
-    expect(p.every((s) => s.slot === "near" && s.letterIds.length > 0)).toBe(true);
-    expect(p.find((s) => s.itemId === items[0])?.letterIds).toHaveLength(1);
+    const station = { kind: "public" as const, ownerId: owner.id };
+    const expected = new Set([own.id, ownToo.id, answered.id, voice.id]);
+    for (const who of [guest, owner]) {
+      const p = await selectProgram(env.DB, who, { station, size: 10, seed: "p" });
+      expect(p.every((s) => s.slot === "near" && s.letterIds.length === 1)).toBe(true);
+      expect(new Set(p.flatMap((s) => s.letterIds))).toEqual(expected);
+      expect(new Set(p.map((s) => s.itemId)).size).toBe(p.length);
+    }
+  });
 
-    const ownerListening = await selectProgram(env.DB, owner, { station: { kind: "public", ownerId: owner.id }, size: 6, seed: "p" });
-    expect(ownerListening.find((s) => s.itemId === items[0])?.letterIds).toHaveLength(1);
-    expect(ownerListening.every((s) => s.letterIds.length > 0)).toBe(true);
-    const letters = await env.DB.prepare("SELECT id FROM letters WHERE listener_id = ?").bind(owner.id).all<{ id: string }>();
-    const ownIds = new Set(letters.results.map((r) => r.id));
-    expect(ownerListening.flatMap((s) => s.letterIds).some((id) => ownIds.has(id))).toBe(false);
+  it("a public radio plays the oldest letter the visitor has not heard first", async () => {
+    const owner = await createListener(env.DB);
+    const guest = await createListener(env.DB);
+    const ids: string[] = [];
+    for (let n = 0; n < 3; n++) {
+      const it = await insertItem(env.DB, itemDraft({ title: `w-${n}` }));
+      const l = await insertLetter(env.DB, letterDraft(it.id, { listenerId: owner.id, body: `owner ${n}` }));
+      await env.DB.prepare("UPDATE letters SET created_at = ? WHERE id = ?").bind(`2026-01-0${n + 1}T00:00:00Z`, l.id).run();
+      ids.push(l.id);
+    }
+    const station = { kind: "public" as const, ownerId: owner.id };
+    expect((await selectProgram(env.DB, guest, { station, size: 1, seed: "s" }))[0]?.letterIds).toEqual([ids[0]]);
+    const ep = await episodeOf(guest.id, new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(), [], "world");
+    await recordListen(env.DB, { listenerId: guest.id, episodeId: ep.id, letterId: ids[0]!, segmentIndex: 0, heardAt: new Date(Date.now() - 60_000).toISOString() });
+    expect((await selectProgram(env.DB, guest, { station, size: 1, seed: "s" }))[0]?.letterIds).toEqual([ids[1]]);
+  });
+
+  it("a public radio with nothing to play is empty", async () => {
+    const owner = await createListener(env.DB);
+    const guest = await createListener(env.DB);
+    const it = await insertItem(env.DB, itemDraft({ title: "fav" }));
+    await upsertHistory(env.DB, [{ listenerId: owner.id, itemId: it.id, source: "manual", occurredAt: null, rank: 1 }]);
+    await insertLetter(env.DB, letterDraft(it.id, { listenerId: guest.id, body: "someone else on the owner's favourite" }));
+    expect(await selectProgram(env.DB, guest, { station: { kind: "public", ownerId: owner.id }, size: 1, seed: "s" })).toEqual([]);
   });
 });
 
@@ -621,15 +654,12 @@ describe("selectProgram never airs the same work twice in a row", () => {
     expect((await selectProgram(env.DB, me, { station: { kind: "world" }, size: 1, seed: "s" }))[0]?.itemId).toBe(only);
   });
 
-  it("public: the same rule, and a favourite nobody wrote about never takes the seat from one with a letter", async () => {
+  it("public: the same rule", async () => {
     const owner = await createListener(env.DB);
-    const writer = await createListener(env.DB);
     const guest = await createListener(env.DB);
     const items: string[] = [];
-    for (let n = 0; n < 6; n++) items.push((await insertItem(env.DB, itemDraft({ title: `fav-${n}` }))).id);
-    await upsertHistory(env.DB, items.map((itemId, n) => ({ listenerId: owner.id, itemId, source: "manual" as const, occurredAt: null, rank: n + 1 })));
-    // Only fav-0..2 have letters.
-    for (const n of [0, 1, 2]) await insertLetter(env.DB, letterDraft(items[n]!, { listenerId: writer.id, body: `on fav ${n}` }));
+    for (let n = 0; n < 3; n++) items.push((await insertItem(env.DB, itemDraft({ title: `w-${n}` }))).id);
+    for (const n of [0, 1, 2]) await insertLetter(env.DB, letterDraft(items[n]!, { listenerId: owner.id, body: `owner on ${n}` }));
     const station = { kind: "public" as const, ownerId: owner.id };
     const column = `public:${owner.id}`;
     await episodeOf(guest.id, ago(120_000), [items[1]!], column);

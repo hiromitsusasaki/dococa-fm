@@ -306,35 +306,29 @@ describe("buildEpisode", () => {
     expect((err as EpisodeUnverifiedError).report.pii).toBe(false);
   });
 
-  it("a public station builds a verified episode from a favourite someone has written about", async () => {
+  it("a public station builds a verified episode from the owner's own letter, read to a guest", async () => {
     const owner = await createListener(env.DB);
     const guest = await createListener(env.DB);
     const writer = await createListener(env.DB);
-    const item = (await insertItem(env.DB, itemDraft({ title: "お気に入り" }))).id;
-    const bare = (await insertItem(env.DB, itemDraft({ title: "まだ誰も書いていない" }))).id;
-    await upsertHistory(env.DB, [
-      { listenerId: owner.id, itemId: item, source: "manual", occurredAt: null, rank: 1 },
-      { listenerId: owner.id, itemId: bare, source: "manual", occurredAt: null, rank: 2 },
-    ]);
-    await insertLetter(env.DB, letterDraft(item, { listenerId: writer.id, body: "好きです。", bodyJa: "好きです。" }));
+    const item = (await insertItem(env.DB, itemDraft({ title: "持ち主の曲" }))).id;
+    const fav = (await insertItem(env.DB, itemDraft({ title: "お気に入り" }))).id;
+    await upsertHistory(env.DB, [{ listenerId: owner.id, itemId: fav, source: "manual", occurredAt: null, rank: 1 }]);
+    await insertLetter(env.DB, letterDraft(fav, { listenerId: writer.id, body: "好きです。", bodyJa: "好きです。" }));
+    const own = await insertLetter(env.DB, letterDraft(item, { listenerId: owner.id, body: "持ち主の一通。", bodyJa: "持ち主の一通。" }));
     const ep = await buildEpisode(keyless, env.DB, guest, { station: { kind: "public", ownerId: owner.id }, seed: "t" });
     expect(ep.verified).toBe(true);
     expect(ep.listenerId).toBe(guest.id);
     expect(ep.segments.map((s) => s.itemId)).toEqual([item]);
-    expect(ep.segments[0]?.lines.filter((l) => l.type === "letter")).toHaveLength(1);
+    expect(ep.segments[0]?.lines.filter((l) => l.type === "letter").map((l) => (l as { letterId: string }).letterId)).toEqual([own.id]);
   });
 
   it("a public station bridges its later segments with the neutral next line", async () => {
     const owner = await createListener(env.DB);
     const guest = await createListener(env.DB);
-    const writer = await createListener(env.DB);
-    const ids: string[] = [];
     for (const title of ["一つ目", "二つ目"]) {
       const id = (await insertItem(env.DB, itemDraft({ title }))).id;
-      ids.push(id);
-      await insertLetter(env.DB, letterDraft(id, { listenerId: writer.id, body: `${title}が好きです。`, bodyJa: `${title}が好きです。` }));
+      await insertLetter(env.DB, letterDraft(id, { listenerId: owner.id, body: `${title}が好きです。`, bodyJa: `${title}が好きです。` }));
     }
-    await upsertHistory(env.DB, ids.map((itemId, i) => ({ listenerId: owner.id, itemId, source: "manual" as const, occurredAt: null, rank: i + 1 })));
     const ep = await buildEpisode(keyless, env.DB, guest, { station: { kind: "public", ownerId: owner.id }, seed: "t" });
     expect(ep.verified).toBe(true);
     expect(ep.segments).toHaveLength(2);

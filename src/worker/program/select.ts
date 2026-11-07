@@ -1,7 +1,7 @@
 import { getItemVecs } from "../db/items";
 import { getLetter } from "../db/letters";
 import type { Letter, Listener } from "../types";
-import { ECHO_SQL, EXCLUDED_SQL, FAR_SQL, FRESH_PLACE_LETTERS_SQL, letterIdsSql, NEAR_SQL, NEIGHBOR_SQL, OWNER_FAVORITES_SQL } from "./select-sql";
+import { ECHO_SQL, EXCLUDED_SQL, FAR_SQL, FRESH_PLACE_LETTERS_SQL, letterIdsSql, NEAR_SQL, NEIGHBOR_SQL, PUBLIC_ANY_SQL, PUBLIC_LETTERS_SQL } from "./select-sql";
 import { type StationKey, stationColumn } from "./station";
 import { farness, pickByDial, standingOf } from "./taste";
 
@@ -132,15 +132,28 @@ async function worldProgram(db: D1Database, listener: Listener, since: string, s
 }
 
 /**
- * A public station: the owner's favourites that someone has written about, one letter each. The rest wait until a
- * letter arrives. The works of the listener's last segments here wait too; a favourite without a letter never takes a
- * seat from one with.
+ * A public radio: the owner's own public letters and the letters they answered with a public 一言, one per segment,
+ * the oldest the visitor has not heard first. The works of the visitor's last segments there wait, and the latest
+ * one's comes last; a letter heard lately waits behind those not heard. The owner's own letters are the content here,
+ * whoever listens. One letter per work, so a longer programme never reads a work twice.
  */
-async function publicProgram(db: D1Database, listener: Listener, ownerId: string, since: string, size: number, rng: () => number): Promise<Selection[]> {
+async function publicProgram(db: D1Database, listener: Listener, ownerId: string, since: string, size: number): Promise<Selection[]> {
   const recent = await recentOn(db, listener.id, since, stationColumn({ kind: "public", ownerId }));
-  const lettered = (await withLetters(db, listener, since, shuffle(await ids(db, OWNER_FAVORITES_SQL, ownerId), rng), "near")).filter(hasLetters);
-  return freshestFirst(lettered, recent, (s) => s.itemId).slice(0, size);
+  const { results } = await db.prepare(PUBLIC_LETTERS_SQL).bind(listener.id, since, ownerId).all<{ id: string; item_id: string; heard: number }>();
+  const wait = (r: { item_id: string; heard: number }) => (recent.latest.has(r.item_id) ? 3 : recent.aired.has(r.item_id) ? 2 : r.heard === 1 ? 1 : 0);
+  const out: Selection[] = [];
+  const works = new Set<string>();
+  for (const r of [...results].sort((a, b) => wait(a) - wait(b))) {
+    if (out.length >= size) break;
+    if (works.has(r.item_id)) continue;
+    works.add(r.item_id);
+    out.push({ itemId: r.item_id, slot: "near", letterIds: [r.id] });
+  }
+  return out;
 }
+
+/** Whether the owner's public radio has a letter to play: the station page says so when it has none. */
+export const publicRadioHasLetters = async (db: D1Database, ownerId: string): Promise<boolean> => (await db.prepare(PUBLIC_ANY_SQL).bind(ownerId).first()) !== null;
 
 /**
  * Whether a listener may ask to hear this letter (a link to it): someone else's public letter, or a found voice with
@@ -204,7 +217,7 @@ export async function selectProgram(
   const rng = seededRng(opts.seed ?? crypto.randomUUID());
   const since = heardSince();
   if (opts.station?.kind === "world") return worldProgram(db, listener, since, size, rng);
-  if (opts.station?.kind === "public") return publicProgram(db, listener, opts.station.ownerId, since, size, rng);
+  if (opts.station?.kind === "public") return publicProgram(db, listener, opts.station.ownerId, since, size);
   // The dial the player sends wins over the stored one.
   const dial = Math.min(1, Math.max(0, opts.dial ?? listener.dial));
   const asked = size > 0 && opts.letterId ? await askedLetter(db, listener, since, opts.letterId) : null;

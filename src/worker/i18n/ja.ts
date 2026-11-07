@@ -215,6 +215,7 @@ export const ja = {
   "station.limit": "今日の分はここまで。また明日",
   "station.failed": "電波が届きませんでした。少し待ってもう一度",
   "station.empty": "まだお便りがありません",
+  "station.publicEmpty": "まだお便りがありません",
   "station.grow": "あなたのラジオ",
   "station.growStart": "好きなものを 3 つ送る",
   "station.growHelp": "好きなものを 3 つ送ると、あなた向けのラジオが始まります",

@@ -117,11 +117,22 @@ export const letterIdsSql = (items: number): string => `SELECT l.id, l.item_id, 
   WHERE l.item_id IN (${Array.from({ length: items }, (_, i) => `?${i + 3}`).join(", ")}) AND ${readable("l")}
   ORDER BY l.item_id, heard, l.created_at, l.id`;
 
-/** A public station's pool (?1 = the owner): the owner's favourites, best-ranked first. Letters are read separately. Keep the predicate and ORDER in step with `listFavorites` in db/history.ts. */
-export const OWNER_FAVORITES_SQL = `SELECT h.item_id FROM history h
-  WHERE h.listener_id = ?1 AND h.source IN ('manual', 'url')
-  ORDER BY h.rank IS NULL, h.rank ASC, h.occurred_at DESC, h.item_id
-  LIMIT 200`;
+/**
+ * A public radio's letters (`owner` = the owner's parameter): the owner's own public letters, and the public letters
+ * the owner left a public 一言 on. Never their favourites, never anything withdrawn or rejected.
+ */
+const publicPool = (owner: string): string => `l.status = 'public' AND (
+    (l.listener_id = ${owner} AND l.kind = 'letter')
+    OR (${letterOrSourced("l")} AND l.id IN (SELECT r.parent_letter_id FROM letters r WHERE r.listener_id = ${owner} AND r.kind = 'reply' AND r.status = 'public'))
+  )`;
+
+/** The public radio of ?3 for the visitor ?1, with whether they heard each letter since ?2: the unheard first, the oldest first. */
+export const PUBLIC_LETTERS_SQL = `SELECT l.id, l.item_id, (l.id IN (${HEARD_LETTERS})) AS heard FROM letters l
+  WHERE ${publicPool("?3")}
+  ORDER BY heard, l.created_at, l.id`;
+
+/** Whether the public radio of ?1 has a letter to play. */
+export const PUBLIC_ANY_SQL = `SELECT 1 AS found FROM letters l WHERE ${publicPool("?1")} LIMIT 1`;
 
 /** The letter read first in each of the listener's last two segments on their own station (verified episodes, newest first). */
 const LAST_TWO_LEADS = `SELECT (SELECT json_extract(ln.value, '$.letterId') FROM json_each(seg.value, '$.lines') ln
