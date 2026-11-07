@@ -19,6 +19,16 @@ about.get("/about", (c) => {
         {SECTIONS.map((key) => (
           <section class="panel">
             <h2>{t(`about.${key}.title`)}</h2>
+            <figure class="about-art">
+              <img
+                src={`/about/${key}.jpg`}
+                alt={t(`about.${key}.alt`)}
+                width="1280"
+                height="720"
+                loading={key === "listen" ? "eager" : "lazy"}
+                decoding="async"
+              />
+            </figure>
             <p>{t(`about.${key}.body`)}</p>
           </section>
         ))}

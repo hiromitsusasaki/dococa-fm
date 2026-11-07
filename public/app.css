@@ -1149,6 +1149,19 @@ button:disabled,
   line-height: 1.8;
 }
 
+.about-art {
+  margin: 0 0 var(--sp-3);
+}
+
+.about-art img {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  border-radius: 16px; /* same as .hero .kv img */
+}
+
 .about .panel p {
   margin: 0;
   line-height: 1.8;

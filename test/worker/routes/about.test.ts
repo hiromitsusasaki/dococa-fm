@@ -18,6 +18,22 @@ describe("GET /about", () => {
     expect(html).not.toContain("局");
   });
 
+  it("puts one illustration in each section", async () => {
+    const html = await (await get("/about", await newSession())).text();
+    for (const name of ["listen", "send", "mine", "rules"]) {
+      expect(html).toMatch(new RegExp(`<img src="/about/${name}\\.jpg" alt="[^"]+" width="1280" height="720"`));
+    }
+  });
+
+  it("opens the rules with what the AI never does", async () => {
+    const ja = await (await get("/about", await newSession())).text();
+    expect(ja).toMatch(/<h2>できること・しないこと<\/h2>\s*<figure[^>]*>.*?<\/figure>\s*<p>AI は、お便りに書き足しません。/);
+    const cookie = await newSession();
+    await postForm("/lang", cookie, { lang: "en", next: "/about" });
+    const en = await (await get("/about", cookie)).text();
+    expect(en).toMatch(/<h2>What we do and don[^<]*t do<\/h2>\s*<figure[^>]*>.*?<\/figure>\s*<p>The AI never adds to a letter\./);
+  });
+
   it("answers in English for an English listener", async () => {
     const cookie = await newSession();
     await postForm("/lang", cookie, { lang: "en", next: "/about" });
