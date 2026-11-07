@@ -70,6 +70,24 @@ describe("GET /letters/:id", () => {
     expect(html).toMatch(/src="\/(src\/client\/embed\.tsx|assets\/embed\.js)"/);
   });
 
+  it("puts share links under the letter: its public url and a short text, nothing private, wired by the small share script", async () => {
+    const { letter } = await shared();
+    const html = await (await get(`/letters/${letter.id}`)).text();
+    const url = `${ORIGIN}/letters/${letter.id}`;
+    const block = html.match(/<div class="share">[\s\S]*?<\/div>/)?.[0] ?? "";
+    expect(html.indexOf('<div class="share">')).toBeGreaterThan(html.indexOf('<article class="letter"'));
+    expect(html.indexOf('<div class="share">')).toBeLessThan(html.indexOf('class="embed-player"'));
+    const x = new URL(block.match(/<a class="pill" href="([^"]+)"/)![1]!.replaceAll("&amp;", "&"));
+    expect(x.origin + x.pathname).toBe("https://x.com/intent/post");
+    expect([...x.searchParams.keys()].sort()).toEqual(["text", "url"]);
+    expect(x.searchParams.get("url")).toBe(url);
+    expect(x.searchParams.get("text")).toBe("PSYの歌 · しずくさんのお便り — Dococa FM");
+    expect(block).toContain(`data-share="${url}"`);
+    expect(block).toContain(`data-copy="${url}"`);
+    expect(block).not.toContain("松本");
+    expect(html).toMatch(/<script type="module" src="(\/assets\/share-page\.js|\/src\/client\/share-page\.tsx)"><\/script>/);
+  });
+
   it("carries the OGP and the X player card", async () => {
     const { item, letter } = await shared();
     const html = await (await get(`/letters/${letter.id}`)).text();

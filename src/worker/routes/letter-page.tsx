@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { ItemCard, LetterSource, LetterText, PlaceFields, ReactionForms, ReportForm, isHttpUrl, senderLine, whoOf } from "../../views/components";
+import { ItemCard, LetterSource, LetterText, PlaceFields, ReactionForms, ReportForm, ShareLinks, isHttpUrl, letterShareText, senderLine, whoOf } from "../../views/components";
 import { Layout } from "../../views/layout";
 import { currentPath } from "../auth/require-signin";
 import type { Variables } from "../auth/session";
@@ -123,7 +123,7 @@ letterPage.get("/letters/:id", async (c) => {
   };
 
   return c.html(
-    <Layout title={item.title} lang={lang} listener={listener} path={currentPath(c)} og={og}>
+    <Layout title={item.title} script="share-page" lang={lang} listener={listener} path={currentPath(c)} og={og}>
       <main class="letter-page">
         <ItemCard item={item} lang={lang} />
         <article class="letter">
@@ -135,6 +135,7 @@ letterPage.get("/letters/:id", async (c) => {
             <ReportForm letterId={letter.id} lang={lang} />
           </div>
         </article>
+        <ShareLinks url={url} text={letterShareText(item.title, letter, lang)} lang={lang} />
         <EmbedPlayer shared={shared} lang={voiceLang} openSite={false} />
         <p>
           <a class="button" href={`/?letter=${letter.id}`}>{t("share.continue")}</a>

@@ -1561,13 +1561,15 @@ button:disabled,
   gap: var(--sp-2) var(--sp-4);
 }
 
-.me .share {
+.me .share,
+.letter-page .share {
   display: flex;
   flex-wrap: wrap;
   gap: var(--sp-2);
 }
 
 .me .share .pill,
+.letter-page .share .pill,
 .me-radio-url .pill {
   min-height: 44px;
 }
