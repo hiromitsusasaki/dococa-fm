@@ -70,6 +70,8 @@ export const en: Record<keyof typeof ja, string> = {
   "episode.archiveEmpty": "No shows yet",
   "episode.untitled": "(no work)",
   "episode.home": "Back home",
+  "notFound.title": "There is no such page",
+  "notFound.body": "Let's go back to the radio.",
   "episode.continueOnStation": "Keep listening on your radio",
   "rate.limited": "Too many requests in a short time. Please wait a moment and try again",
   "player.play": "Play",

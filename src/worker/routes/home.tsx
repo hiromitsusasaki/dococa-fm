@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { raw } from "hono/html";
-import { EpisodeRow, LetterCard, senderLine, whoOf } from "../../views/components";
+import { EpisodeRow, LetterCard, isHttpUrl, senderLine, whoOf } from "../../views/components";
 import type { Variables } from "../auth/session";
 import { listArchive } from "../db/episodes";
 import { getPublicLetterWithTitle, listRecentPublicLetters } from "../db/letters";
@@ -49,7 +49,7 @@ home.get("/", async (c) => {
   ]);
   const letter = shared && wanted && (await canAskLetter(c.env.DB, listener, shared.letter)) ? wanted : undefined;
   const og = shared && wanted
-    ? { title: shared.title, description: Array.from(displayText(shared.letter, lang).main).slice(0, PREVIEW_CHARS).join(""), url: `${c.env.PUBLIC_ORIGIN}/?letter=${encodeURIComponent(wanted)}` }
+    ? { title: shared.title, description: Array.from(displayText(shared.letter, lang).main).slice(0, PREVIEW_CHARS).join(""), url: `${c.env.PUBLIC_ORIGIN}/?letter=${encodeURIComponent(wanted)}`, ...(isHttpUrl(shared.imageUrl) ? { image: shared.imageUrl } : {}) }
     : undefined;
   const hero = (
     <section class="hero">

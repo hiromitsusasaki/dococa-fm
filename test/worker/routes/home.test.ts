@@ -284,8 +284,9 @@ describe("GET /", () => {
     expect(html).toContain('<source media="(max-width: 760px)" srcset="/kv-mobile.jpg"');
     expect(html).toContain('alt="机でレトロなラジオを聴く人と、世界の誰かの好きなもの"');
     expect(html.indexOf('class="hero"')).toBeLessThan(html.indexOf('id="station"'));
-    // The tagline lives in the hero only.
-    expect(html.match(/世界のどこかにいる誰かの好きなものが聴こえてくるラジオ/g)).toHaveLength(1);
+    // On the page the tagline lives in the hero only (the head's description and preview carry it too).
+    const body = html.slice(html.indexOf("<body"));
+    expect(body.match(/世界のどこかにいる誰かの好きなものが聴こえてくるラジオ/g)).toHaveLength(1);
   });
 
   it("has an English alt for an English listener", async () => {
@@ -347,13 +348,23 @@ describe("GET /?letter=", () => {
 
   it("previews a public letter with its work's title and the letter's first 80 characters", async () => {
     const cookie = await newSession();
-    const it = await insertItem(env.DB, itemDraft({ title: "雨の日の曲", externalIds: { itunes: "og1" } }));
+    const it = await insertItem(env.DB, itemDraft({ title: "雨の日の曲", imageUrl: null, externalIds: { itunes: "og1" } }));
     const body = "い".repeat(79) + "ろは";
     const l = await insertLetter(env.DB, letterDraft(it.id, { body, bodyJa: body }));
     const html = await (await get(`/?letter=${l.id}`, cookie)).text();
     expect(html).toContain('<meta property="og:title" content="雨の日の曲"');
     expect(html).toContain(`<meta property="og:description" content="${"い".repeat(79)}ろ"`);
     expect(html).toContain(`<meta property="og:url" content="http://127.0.0.1:5173/?letter=${l.id}"`);
+    // A work without a picture previews with the key visual.
+    expect(html).toContain('<meta property="og:image" content="http://127.0.0.1:5173/kv.jpg"');
+  });
+
+  it("previews a public letter with its work's picture when it has one", async () => {
+    const cookie = await newSession();
+    const it = await insertItem(env.DB, itemDraft({ title: "絵のある曲", imageUrl: "https://img.example/a.jpg", externalIds: { itunes: "og3" } }));
+    const l = await insertLetter(env.DB, letterDraft(it.id));
+    const html = await (await get(`/?letter=${l.id}`, cookie)).text();
+    expect(html).toContain('<meta property="og:image" content="https://img.example/a.jpg"');
   });
 
   it("previews nothing for a letter that is not public, a reaction, or no letter at all", async () => {
@@ -364,10 +375,11 @@ describe("GET /?letter=", () => {
     const reply = await insertLetter(env.DB, letterDraft(it.id, { kind: "reply", parentLetterId: parent.id, body: "一言", bodyJa: "一言" }));
     for (const id of [hidden.id, reply.id, "nope"]) {
       const html = await (await get(`/?letter=${id}`, cookie)).text();
-      expect(html).not.toContain("og:title");
+      // The app's own preview, never the letter's.
+      expect(html).toContain('<meta property="og:title" content="Dococa FM"');
       expect(html).not.toContain("data-letter");
     }
-    expect(await (await get("/", cookie)).text()).not.toContain("og:title");
+    expect(await (await get("/", cookie)).text()).toContain('<meta property="og:title" content="Dococa FM"');
   });
 });
 

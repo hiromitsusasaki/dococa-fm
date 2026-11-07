@@ -16,6 +16,7 @@ import { isFramedPath, letterPage } from "./routes/letter-page";
 import { letters } from "./routes/letters";
 import { listens } from "./routes/listens";
 import { me } from "./routes/me";
+import { notFoundPage } from "./routes/not-found";
 import { put } from "./routes/put";
 import { settings } from "./routes/settings";
 import { start } from "./routes/start";
@@ -73,10 +74,14 @@ app.route("/", tts);
 app.route("/", home);
 
 // A copy, because the headers of an assets response are immutable and secureHeaders() sets its own.
+// A path that is no file either gets the app's 404.
 app.get("*", async (c) => {
   const res = await c.env.ASSETS.fetch(c.req.raw);
+  if (res.status === 404) return c.notFound();
   return new Response(res.body, res);
 });
+
+app.notFound(notFoundPage);
 
 /** Every 15 minutes: units for letters that have none and audio that is still missing. */
 /** Awaited, not handed to `waitUntil`: the batch never throws, and the cron invocation lasts as long as it runs. */

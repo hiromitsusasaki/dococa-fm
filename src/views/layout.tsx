@@ -1,3 +1,4 @@
+import { env } from "cloudflare:workers";
 import type { Child } from "hono/jsx";
 import { raw } from "hono/html";
 import { type Lang, tFor } from "../worker/i18n/t";
@@ -6,7 +7,7 @@ import type { Listener } from "../worker/types";
 
 type LayoutProps = { title: string; children?: Child; /** The client entry to load: `player`, `station`, or `share-page` (only the share buttons). */
   script?: "player" | "station" | "share-page"; lang?: Lang;
-  /** Link-preview tags, for pages meant to be shared. */
+  /** Link-preview tags, for pages meant to be shared. Without them a page previews as the app (its name, tagline and key visual). */
   og?: {
     title: string;
     description: string;
@@ -104,30 +105,32 @@ function SiteHeader({ listener, path, lang }: { listener?: Listener; path?: stri
 /** `lang` is the listener's; pages outside the session (admin, health) leave it at Japanese. */
 export function Layout({ title, children, script, lang = "ja", listener, path, og, embed = false }: LayoutProps) {
   const t = tFor(lang);
+  const origin = env.PUBLIC_ORIGIN;
+  const preview = og ?? { title: t("app.name"), description: t("app.tagline"), url: `${origin}${path ?? "/"}` };
   return (
     <html lang={lang}>
       <head>
         <meta charset="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <title>{title === t("app.name") ? title : `${title} | ${t("app.name")}`}</title>
+        <title>{title === t("app.name") ? title : `${title} · ${t("app.name")}`}</title>
+        <meta name="description" content={t("app.tagline")} />
         <meta name="theme-color" content="#121a2e" />
-        {og && (
+        <meta property="og:site_name" content={t("app.name")} />
+        <meta property="og:title" content={preview.title} />
+        <meta property="og:description" content={preview.description} />
+        <meta property="og:url" content={preview.url} />
+        <meta property="og:type" content={preview.type ?? "website"} />
+        <meta property="og:image" content={preview.image ?? `${origin}/kv.jpg`} />
+        {preview.audio && <meta property="og:audio" content={preview.audio} />}
+        {preview.twitter ? (
           <>
-            <meta property="og:title" content={og.title} />
-            <meta property="og:description" content={og.description} />
-            <meta property="og:url" content={og.url} />
-            <meta property="og:type" content={og.type ?? "website"} />
-            {og.image && <meta property="og:image" content={og.image} />}
-            {og.audio && <meta property="og:audio" content={og.audio} />}
-            {og.twitter && (
-              <>
-                <meta name="twitter:card" content={og.twitter.card} />
-                <meta name="twitter:player" content={og.twitter.player} />
-                <meta name="twitter:player:width" content={String(og.twitter.width)} />
-                <meta name="twitter:player:height" content={String(og.twitter.height)} />
-              </>
-            )}
+            <meta name="twitter:card" content={preview.twitter.card} />
+            <meta name="twitter:player" content={preview.twitter.player} />
+            <meta name="twitter:player:width" content={String(preview.twitter.width)} />
+            <meta name="twitter:player:height" content={String(preview.twitter.height)} />
           </>
+        ) : (
+          <meta name="twitter:card" content="summary_large_image" />
         )}
         <link rel="manifest" href="/manifest.webmanifest" />
         <link rel="icon" href="/icon.svg" type="image/svg+xml" />

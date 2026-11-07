@@ -461,7 +461,7 @@ describe("GET /stations/:key (page)", () => {
     expect(html).toContain('<meta property="og:title" content="ちくわさんのラジオ"');
     expect(html).toContain('<meta property="og:description" content="世界のどこかにいる誰かの好きなものが聴こえてくるラジオ"');
     expect(html).toContain('<meta property="og:url" content="http://127.0.0.1:5173/stations/s:hiro"');
-    expect(html).toContain("<title>ちくわさんのラジオ | Dococa FM</title>");
+    expect(html).toContain("<title>ちくわさんのラジオ · Dococa FM</title>");
     expect(html).not.toContain("Hiro");
   });
 

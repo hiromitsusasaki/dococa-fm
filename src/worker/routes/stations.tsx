@@ -47,7 +47,7 @@ export type StationPageProps = {
   /** The page title when it differs from the station label (the home page is titled by the app). */
   title?: string;
   /** Link-preview tags (a public station is meant to be shared). */
-  og?: { title: string; description: string; url: string };
+  og?: { title: string; description: string; url: string; image?: string };
   /** Extra content under the player (the home page's links). */
   children?: unknown;
   /** The home page has no heading of its own yet (the hero brings it); other stations show their name. */

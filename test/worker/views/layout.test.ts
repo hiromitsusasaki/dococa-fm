@@ -5,7 +5,8 @@ import { insertItem } from "../../../src/worker/db/items";
 import { insertLetter } from "../../../src/worker/db/letters";
 import { createListener } from "../../../src/worker/db/listeners";
 import { itemDraft, letterDraft } from "../db/helpers";
-import { get, newSession, postForm, signedInSession } from "../routes/helpers";
+import { BASE, get, newSession, postForm, signedInSession } from "../routes/helpers";
+import { SELF } from "cloudflare:test";
 
 beforeEach(() => resetDb(env.DB));
 
@@ -150,5 +151,69 @@ describe("the header's notice of new reactions", () => {
     await react(mine);
     const html = await (await get("/", cookie)).text();
     expect(html).not.toContain('class="dot"');
+  });
+});
+
+describe("link previews and page titles", () => {
+  const meta = (html: string, key: string) => html.match(new RegExp(`<meta (?:property|name)="${key}" content="([^"]*)"`))?.[1];
+
+  it("gives every page the app's preview, with the key visual and the tagline, unless the page has its own", async () => {
+    const cookie = await newSession();
+    for (const path of ["/", "/about", "/put", "/episodes", "/settings"]) {
+      const html = await (await get(path, cookie)).text();
+      expect(meta(html, "og:title"), path).toBe("Dococa FM");
+      expect(meta(html, "og:description"), path).toBe("世界のどこかにいる誰かの好きなものが聴こえてくるラジオ");
+      expect(meta(html, "og:url"), path).toBe(`http://127.0.0.1:5173${path}`);
+      expect(meta(html, "og:image"), path).toBe("http://127.0.0.1:5173/kv.jpg");
+      expect(meta(html, "twitter:card"), path).toBe("summary_large_image");
+      expect(meta(html, "description"), path).toBe("世界のどこかにいる誰かの好きなものが聴こえてくるラジオ");
+    }
+  });
+
+  it("titles each page by what it is, then the app", async () => {
+    const cookie = await newSession();
+    const title = async (path: string) => (await (await get(path, cookie)).text()).match(/<title>([^<]*)<\/title>/)?.[1];
+    expect(await title("/")).toBe("Dococa FM");
+    expect(await title("/about")).toBe("Dococa FM とは · Dococa FM");
+    expect(await title("/put")).toBe("お便りを送る · Dococa FM");
+    expect(await title("/settings")).toBe("設定 · Dococa FM");
+    expect(await title("/episodes")).toBe("これまでの番組 · Dococa FM");
+    await postForm("/lang", cookie, { lang: "en", next: "/about" });
+    expect(await title("/about")).toBe("About Dococa FM · Dococa FM");
+  });
+});
+
+describe("the 404 page", () => {
+  const asBrowser = (path: string, cookie: string) => SELF.fetch(`${BASE}${path}`, { headers: { cookie, accept: "text/html,application/xhtml+xml" } });
+
+  it("shows the header and a way home for an unknown path, with status 404", async () => {
+    const res = await asBrowser("/nope", await newSession());
+    expect(res.status).toBe(404);
+    const html = await res.text();
+    expect(html).toContain('class="site-header"');
+    expect(html).toContain('<meta name="viewport"');
+    expect(html).toContain("<h1>このページはありません</h1>");
+    expect(html).toContain("ラジオに戻りましょう。");
+    expect(html).toContain('<a href="/">ホームへ</a>');
+  });
+
+  it("is the page a route's own not-found gives too, in the listener's language", async () => {
+    const cookie = await newSession();
+    await postForm("/lang", cookie, { lang: "en", next: "/" });
+    const res = await asBrowser("/items/nope", cookie);
+    expect(res.status).toBe(404);
+    const html = await res.text();
+    expect(html).toContain("<h1>There is no such page</h1>");
+    expect(html).toContain("Back home");
+  });
+
+  it("stays plain for a fetch that does not ask for HTML, and JSON routes keep their JSON", async () => {
+    const cookie = await newSession();
+    const plain = await get("/nope", cookie);
+    expect(plain.status).toBe(404);
+    expect(await plain.text()).not.toContain("<html");
+    const json = await SELF.fetch(`${BASE}/stations/bogus.json`, { headers: { cookie, accept: "text/html" } });
+    expect(json.status).toBe(404);
+    expect(json.headers.get("content-type")).toContain("application/json");
   });
 });
