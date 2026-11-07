@@ -7,12 +7,13 @@ const LINES = [
   { n: 3, type: "letter", text: "夜の帰り道に聴きます。" },
 ];
 
+const BASE = "/letters/6b1c2f0e-1111-4aaa-8bbb-0c0ffee00011";
 let audios: HTMLAudioElement[] = [];
 let play: ReturnType<typeof vi.fn>;
 
-function mount() {
+function mount(base = BASE) {
   document.body.innerHTML = `
-    <section class="embed-player" data-embed="/letters/abc" data-play="再生" data-pause="一時停止">
+    <section class="embed-player" data-embed="${base}" data-play="再生" data-pause="一時停止">
       <p class="embed-line"></p>
       <button type="button" class="embed-toggle" aria-pressed="false">再生</button>
     </section>`;
@@ -55,8 +56,8 @@ describe("the shared letter's player", () => {
     expect(fetch).not.toHaveBeenCalled();
     button.click();
     await flush();
-    expect(fetch).toHaveBeenCalledWith("/letters/abc/lines.json");
-    expect(audio().src).toMatch(/\/letters\/abc\/audio\/0$/);
+    expect(fetch).toHaveBeenCalledWith(`${BASE}/lines.json`);
+    expect(new URL(audio().src).pathname).toBe(`${BASE}/audio/0`);
     expect(line.textContent).toBe(LINES[0]!.text);
     expect(button.textContent).toBe("一時停止");
     expect(button.getAttribute("aria-pressed")).toBe("true");
@@ -123,5 +124,16 @@ describe("the shared letter's player", () => {
     button.click();
     vi.advanceTimersByTime(readMs(LINES[0]!.text));
     expect(audio().src).toMatch(/\/audio\/2$/);
+  });
+
+  it("does nothing for a base that is not a shared letter's own path", async () => {
+    for (const base of ["https://evil.example/letters/6b1c2f0e-1111-4aaa-8bbb-0c0ffee00011", "//evil.example/x", "/letters/abc", "/admin/x"]) {
+      const { button } = mount(base);
+      button.click();
+      await flush();
+      expect(button.textContent, base).toBe("再生");
+    }
+    expect(fetch).not.toHaveBeenCalled();
+    expect(audios).toHaveLength(0);
   });
 });

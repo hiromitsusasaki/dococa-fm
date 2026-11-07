@@ -8,11 +8,15 @@ type Line = { n: number; type: "dj" | "letter"; text: string };
 /** How long a line without a clip stays on screen. */
 export const readMs = (text: string): number => Math.max(2000, Array.from(text).length * 110);
 
+/** The only base a player accepts: a shared letter's own path on this site. */
+const BASE = /^\/letters\/[0-9a-f-]{36}$/;
+
 export function mountEmbed(root: HTMLElement): void {
   const base = root.dataset.embed;
+  if (!base || !BASE.test(base)) return;
   const button = root.querySelector<HTMLButtonElement>(".embed-toggle");
   const shown = root.querySelector<HTMLElement>(".embed-line");
-  if (!base || !button || !shown) return;
+  if (!button || !shown) return;
   const audio = new Audio();
   let lines: Line[] | null = null;
   let at = 0;
