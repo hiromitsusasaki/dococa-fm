@@ -63,8 +63,8 @@ describe("checkReply", () => {
   it("accepts a plain line and keeps the work's creator allowed", () => {
     expect(checkReply({ text: "Same here, it takes me right back." }, persona("a"), "Maker").ok).toBe(true);
   });
-  it("refuses over 120 characters, numbers about works, contact text, topical words, and a wrong script", () => {
-    expect(checkReply({ text: "a".repeat(121) }, persona("a"), "x")).toEqual({ ok: false, reason: "too long" });
+  it("refuses over 160 characters, numbers about works, contact text, topical words, and a wrong script", () => {
+    expect(checkReply({ text: "a".repeat(161) }, persona("a"), "x")).toEqual({ ok: false, reason: "too long" });
     expect(checkReply({ text: "It was number one for me." }, persona("a"), "x").ok).toBe(false);
     expect(checkReply({ text: "Write me at me@example.com" }, persona("a"), "x").ok).toBe(false);
     expect(checkReply({ text: "最近ずっと聴いてます" }, persona("a", "ja"), "x").ok).toBe(false);
