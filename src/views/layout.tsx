@@ -4,8 +4,8 @@ import { type Lang, tFor } from "../worker/i18n/t";
 import { unseenReactions } from "../worker/reaction-notice";
 import type { Listener } from "../worker/types";
 
-type LayoutProps = { title: string; children?: Child; /** The client entry to load: `player` or `station`. */
-  script?: "player" | "station"; lang?: Lang;
+type LayoutProps = { title: string; children?: Child; /** The client entry to load: `player`, `station`, or `share-page` (only the share buttons). */
+  script?: "player" | "station" | "share-page"; lang?: Lang;
   /** Link-preview tags, for pages meant to be shared. */
   og?: {
     title: string;

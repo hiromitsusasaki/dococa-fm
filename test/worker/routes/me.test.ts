@@ -250,6 +250,13 @@ describe("own letters and POST /letters/:id/withdraw", () => {
     expect(panel).not.toContain("那覇");
   });
 
+  it("wires the share buttons with the small share script, not the radio's script and not inline code", async () => {
+    const html = await (await get("/me", await signedInSession())).text();
+    expect(html).toMatch(/<script type="module" src="(\/assets\/share-page\.js|\/src\/client\/share-page\.tsx)"><\/script>/);
+    expect(html).not.toMatch(/src="[^"]*station\.(js|tsx)"/);
+    expect(html).not.toContain("navigator.share");
+  });
+
   it("shows a line instead of a list when there is no letter", async () => {
     const html = await (await get("/me", await signedInSession())).text();
     expect(html).toContain(t("me.myLettersNone"));

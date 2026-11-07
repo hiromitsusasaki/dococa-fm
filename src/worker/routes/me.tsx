@@ -23,12 +23,6 @@ const JST_OFFSET_MS = 9 * 60 * 60 * 1000;
 const jstDate = (iso: string): string => new Date(Date.parse(iso) + JST_OFFSET_MS).toISOString().slice(0, 10);
 const isHttp = (s: string | null): s is string => s !== null && /^https?:\/\//i.test(s);
 
-/**
- * The page has no client bundle, so `div.share` and the url's copy button are wired here, as `wireShare` does on the radio:
- * the share sheet only where the browser has one, else the link to the clipboard with a toast, or shown to copy by hand.
- */
-const SHARE_WIRE = `(function(){var can=typeof navigator.share==="function";if(can)document.querySelectorAll("[data-share][hidden]").forEach(function(b){b.hidden=false});var el,tm;function toast(s){if(el)el.remove();clearTimeout(tm);el=document.createElement("div");el.className="toast";el.setAttribute("role","status");el.textContent=s;document.body.append(el);tm=setTimeout(function(){if(el)el.remove();el=null},2500)}document.addEventListener("click",function(e){var b=e.target&&e.target.closest&&e.target.closest("[data-share],[data-copy]");if(!b)return;var d=b.dataset;if(d.share!==undefined&&can){navigator.share({title:"Dococa FM",text:d.text||"",url:d.share}).catch(function(){});return}if(d.copy===undefined)return;var ask=function(){prompt(b.textContent||"",d.copy)};if(!navigator.clipboard||!navigator.clipboard.writeText)return ask();navigator.clipboard.writeText(d.copy).then(function(){toast(d.copied||"")},ask)})})();`;
-
 type MeContext = Context<{ Bindings: Env; Variables: Variables }>;
 
 /** What the public radio panel shows after a refused change: the slug as typed, and why. */
@@ -54,7 +48,7 @@ async function renderMe(c: MeContext, signedIn: Listener, radioError?: RadioErro
   // Shown once: the script drops the query, so a reload does not repeat it. A listener who is already public has no news in it.
   const welcome = c.req.query("welcome") === "1" && radioUrl && !listener.stationPublic ? radioUrl : null;
   return c.html(
-    <Layout title={t("me.title")} lang={lang} listener={listener} path={currentPath(c)}>
+    <Layout title={t("me.title")} script="share-page" lang={lang} listener={listener} path={currentPath(c)}>
       <main class="me">
         <h1>{t("me.title")}</h1>
         {welcome && (
@@ -162,7 +156,6 @@ async function renderMe(c: MeContext, signedIn: Listener, radioError?: RadioErro
             </ul>
           )}
         </section>
-        <script>{raw(SHARE_WIRE)}</script>
       </main>
     </Layout>,
     radioError ? 422 : 200,
