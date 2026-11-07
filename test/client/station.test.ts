@@ -48,6 +48,7 @@ const strings: Record<string, string> = {
   "station.volumeHigh": "大",
   "station.dialHint": "次のお便りから効きます",
   "station.dialLocked": "お便りを 3 通送ると、ダイヤルが効きはじめます",
+  "station.verbatim": "原文のまま読んでいます",
   "station.dialReady": "ダイヤルが効くようになりました",
   "station.searching": "電波を探しています…",
   "station.playFromToast": "このお便りから流します",
@@ -495,6 +496,8 @@ describe("station: playing", () => {
     expect(q.textContent).toContain("しずくさん（松本）");
     expect(q.querySelector("details summary")!.textContent).toBe("原文を見る");
     expect(root.querySelector(".react")).not.toBeNull();
+    // The letter is read as written, and the card says so in one quiet line.
+    expect(root.querySelector(".now .verbatim")!.textContent).toBe("原文のまま読んでいます");
   });
 
   it("OFF stops the sound and keeps the place; ON reads the same line again", async () => {
@@ -848,6 +851,8 @@ describe("station: on-air panel", () => {
     await vi.waitFor(() => expect(spoken).toEqual(["x1"]));
     expect(root.querySelector(".up-next li.now")).not.toBeNull();
     expect(root.querySelector(".now .react")).toBeNull();
+    // Only a letter (or a found voice) is read verbatim; the DJ's own words get no such note.
+    expect(root.querySelector(".now .verbatim")).toBeNull();
   });
 });
 

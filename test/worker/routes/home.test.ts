@@ -102,15 +102,15 @@ describe("GET /", () => {
     expect(html).not.toContain("URL なしの声");
   });
 
-  it("explains that three letters lean the radio to the listener's taste, with no link to /start, for every listener", async () => {
+  it("explains the switch and the dial's far shelves, with no link to /start, for every listener", async () => {
     const cookie = await newSession();
-    const explain = '<p class="muted">お便りを 3 通送ると、あなたの好みに近いお便りが流れてきます。</p>';
+    const explain = '<p class="muted">スイッチを入れると、世界のどこかの誰かのお便りが流れます。ダイヤルを右に回すほど、遠くの棚から届きます。</p>';
     const html = await (await get("/", cookie)).text();
     expect(html).toContain(explain);
     expect(html).not.toContain('href="/start"');
     expect(html).not.toContain("あなたのラジオをつける");
     const en = await (await SELF.fetch(`${BASE}/`, { headers: { "accept-language": "en" } })).text();
-    expect(en).toContain('<p class="muted">Send 3 letters and the radio plays letters closer to your taste.</p>');
+    expect(en).toContain('<p class="muted">Turn the switch on and someone&#39;s letter from somewhere in the world plays. Turn the dial to the right and letters come from farther shelves.</p>');
     expect(en).not.toContain('href="/start"');
   });
 
@@ -242,7 +242,7 @@ describe("GET /", () => {
       expect(i, s).toBeGreaterThan(-1);
       return i;
     };
-    const order = [at('id="station"'), at('<section class="home">'), at('<dialog class="send-modal"'), at('<p class="muted">お便りを 3 通送ると'), at('<section class="panel recent-episodes">'), at('class="letter-cards"')];
+    const order = [at('id="station"'), at('<section class="home">'), at('<dialog class="send-modal"'), at('<p class="muted">スイッチを入れると、世界のどこかの誰か'), at('<section class="panel recent-episodes">'), at('class="letter-cards"')];
     expect([...order].sort((a, b) => a - b)).toEqual(order);
   });
 

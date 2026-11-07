@@ -932,7 +932,8 @@ blockquote.player-letter,
 }
 
 .player-letter footer,
-.letter-who {
+.letter-who,
+.now .verbatim {
   margin: 6px 0 0;
   color: var(--ink-2);
   font-size: 12px;

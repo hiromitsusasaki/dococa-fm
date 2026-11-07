@@ -22,6 +22,12 @@ about.get("/about", (c) => {
           </picture>
         </figure>
         <p class="about-lead">{t("about.lead")}</p>
+        {/* Why it exists: text only, no illustration. */}
+        <section class="panel panel-rule-under about-why">
+          <h2>{t("about.why.title")}</h2>
+          <div class="rule" aria-hidden="true" />
+          <p>{t("about.why.body")}</p>
+        </section>
         {/* The home opens its tour again on `?tour=1`. */}
         <p>
           <a class="pill tour-again" href="/?tour=1">
