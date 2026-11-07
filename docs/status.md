@@ -16,7 +16,9 @@
 
 - [x] `pnpm run deploy`（migration なし。2026-11-08 JST 未明に反映。Version e648ff2f。`post-deploy-check.sh` 全項目 ok）。main は origin に push 済み。
 - [x] ダイヤルを目覚めさせる: 本人の了承で、司令塔が本人のセッションから他の人のお便り 2 通に「私も」を付けた（ファイト・クラブ、千と千尋）。動画の録画で「Waltz for Debby」のお便りが 1 通増える。不要なら `/me` から非公開に。
-- [ ] 動画の撮り直し（司令塔が本番で録画 → mix → render。`~/agent_workspace/workspace/2026-11-07-dococa-fm-submission/video/`）。通しで見て、ナレーションの読みを聴く。
+- [x] 動画の撮り直し（本番で録画 → mix → render 済み。`~/agent_workspace/workspace/2026-11-07-dococa-fm-submission/video/draft.mp4`、170.8 秒）。
+- [ ] draft.mp4 を通しで見て、ナレーションの読み（「ドコカ エフエム」、n05 の一人称）を聴く。直すなら `lines.json` → `./make.sh narrate` → `render`。
+- [ ] YouTube に限定公開で上げる（題と説明文は `submission-form.md` §5）。
 - [ ] 提出フォーム（`submission-form.md`。概要は改稿済み 485 字。§7 の【要確認】を本人の言葉で）。
 - [ ] public 化チェックリスト → private → public。
 - [ ] 提出。
