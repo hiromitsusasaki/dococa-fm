@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { raw } from "hono/html";
 import { ItemCard, LetterSource, LetterText, ReactionForms, whoOf } from "../../views/components";
 import { Layout } from "../../views/layout";
 import { currentPath, requireSignin } from "../auth/require-signin";
@@ -30,10 +31,18 @@ me.get("/me", requireSignin, async (c) => {
   const items = await getItemsByIds(c.env.DB, reactions.map((r) => r.itemId));
   const heard = await listHeardLetters(c.env.DB, listener.id);
   const publicUrl = listener.stationPublic && listener.stationSlug ? stationUrl(c.env, listener.stationSlug) : null;
+  // Shown once: the script drops the query, so a reload does not repeat it. A listener who is already public has no news in it.
+  const welcome = c.req.query("welcome") === "1" && listener.stationSlug && !listener.stationPublic ? stationUrl(c.env, listener.stationSlug) : null;
   return c.html(
     <Layout title={t("me.title")} lang={lang} listener={listener} path={currentPath(c)}>
       <main class="me">
         <h1>{t("me.title")}</h1>
+        {welcome && (
+          <>
+            <p class="notice" role="status">{t("me.welcome", { url: welcome })}</p>
+            <script>{raw(`try{history.replaceState(null,"",location.pathname)}catch(e){}`)}</script>
+          </>
+        )}
         {!listener.radioName && (
           <p class="muted">
             {t("me.radioNameHint")} <a href="/settings">{t("settings.title")}</a>

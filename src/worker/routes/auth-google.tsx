@@ -73,6 +73,8 @@ authGoogle.get("/auth/google/callback", async (c) => {
   const existing = await getListenerByGoogleSub(c.env.DB, profile.sub);
   /** The listener this callback signed in as; every one of them gets a public radio address. */
   let signedIn: Listener;
+  /** A listener who just got an account or a public radio address is shown the address once, on /me. */
+  let welcome = false;
   if (existing) {
     // The anonymous listener we leave behind stays as it was.
     if (existing.id !== current.id) await setSessionCookie(c, existing.id);
@@ -90,6 +92,7 @@ authGoogle.get("/auth/google/callback", async (c) => {
     }
     if (bound) {
       signedIn = current;
+      welcome = true;
     } else {
       // Lost a race: either this account now belongs to a listener (switch to it), or this listener got bound to another account (fail).
       const winner = await getListenerByGoogleSub(c.env.DB, profile.sub);
@@ -100,11 +103,12 @@ authGoogle.get("/auth/google/callback", async (c) => {
   }
   try {
     // Listeners who signed in before addresses were assigned get theirs here; one they already have is kept.
-    await ensureStationSlug(c.env.DB, signedIn);
+    const slug = await ensureStationSlug(c.env.DB, signedIn);
+    if (!signedIn.stationSlug && slug) welcome = true;
   } catch {
     // Not fatal: /settings and /me assign the address when they are opened.
   }
-  return c.redirect(next, 303);
+  return c.redirect(welcome ? "/me?welcome=1" : next, 303);
 });
 
 authGoogle.post("/auth/signout", (c) => {

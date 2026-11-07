@@ -76,8 +76,9 @@ describe("GET /auth/google", () => {
     expect((await start(sid, bad)).next).toBe("/me");
   });
 
-  it("keeps a next path that contains a dot through the callback", async () => {
+  it("keeps a next path that contains a dot through the callback, for a listener who already has an account and an address", async () => {
     const sid = await newSession();
+    await updateListener(env.DB, sid.split("=")[1]!.split(".")[0]!, { googleSub: "g-1", stationSlug: "has-one" });
     const s = await start(sid, "/stations/a.b?x=1");
     expect(s.next).toBe("/stations/a.b?x=1");
     stubGoogle({}, s.nonce);
@@ -129,7 +130,8 @@ describe("GET /auth/google/callback", () => {
     const stub = stubGoogle({}, s.nonce);
     const res = await manual(`/auth/google/callback?code=abc&state=${s.state}`, s.cookie);
     expect(res.status).toBe(303);
-    expect(res.headers.get("location")).toBe("/settings");
+    // A new account is shown its public radio address on /me, whatever page it came from.
+    expect(res.headers.get("location")).toBe("/me?welcome=1");
     expect(res.headers.get("set-cookie")).toMatch(/dfm_oauth=;.*Max-Age=0/);
     expect(sidOf(res)).toBeUndefined();
     expect(stub.calls()).toEqual(["https://oauth2.googleapis.com/token"]);
@@ -147,7 +149,7 @@ describe("GET /auth/google/callback", () => {
     const s = await start(sid);
     stubGoogle({ name: "" }, s.nonce);
     const res = await manual(`/auth/google/callback?code=abc&state=${s.state}`, s.cookie);
-    expect(res.headers.get("location")).toBe("/me");
+    expect(res.headers.get("location")).toBe("/me?welcome=1");
     const listener = await getListener(env.DB, id);
     expect(listener?.displayName).toBe("aiko");
     expect(listener?.radioName).toBe("My Radio");
@@ -180,7 +182,7 @@ describe("GET /auth/google/callback", () => {
     });
     const res = await manual(`/auth/google/callback?code=abc&state=${s.state}`, s.cookie);
     spy.mockRestore();
-    expect(res.headers.get("location")).toBe("/me");
+    expect(res.headers.get("location")).toBe("/me?welcome=1");
     expect(sidOf(res)).toBe(owner.id);
   });
 
@@ -222,7 +224,7 @@ describe("GET /auth/google/callback", () => {
     });
     const res = await manual(`/auth/google/callback?code=abc&state=${s.state}`, s.cookie);
     spy.mockRestore();
-    expect(res.headers.get("location")).toBe("/me");
+    expect(res.headers.get("location")).toBe("/me?welcome=1");
     expect(sidOf(res)).toBeUndefined();
   });
 
@@ -276,7 +278,7 @@ describe("GET /auth/google/callback", () => {
     const s = await start(sid);
     stubGoogle({}, s.nonce);
     const res = await manual(`/auth/google/callback?code=abc&state=${s.state}`, s.cookie);
-    expect(res.headers.get("location")).toBe("/me");
+    expect(res.headers.get("location")).toBe("/me?welcome=1");
     expect((await getListener(env.DB, id))?.stationSlug).toMatch(/^radio-[0-9a-z]{6}$/);
   });
 

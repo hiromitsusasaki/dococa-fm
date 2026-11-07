@@ -23,6 +23,21 @@ describe("GET /me", () => {
     expect(res.headers.get("location")).toBe("/auth/google?next=%2Fme");
   });
 
+  it("shows the new public radio address once, in one line, when sent here by the sign-in", async () => {
+    const cookie = await signedInSession();
+    const id = idOf(cookie);
+    await updateListener(env.DB, id, { stationSlug: "kiku-radio" });
+    const plain = await (await get("/me", cookie)).text();
+    expect(plain).not.toContain('role="status"');
+    const html = await (await get("/me?welcome=1", cookie)).text();
+    const url = `${env.PUBLIC_ORIGIN}/stations/s:kiku-radio`;
+    expect(html).toContain(`公開ラジオの URL ができました: ${url}（設定で公開にすると誰でも聴けます）`);
+    // Shown once: the page drops the query, so a reload has no banner.
+    expect(html).toContain("history.replaceState");
+    await updateListener(env.DB, id, { stationPublic: true });
+    expect(await (await get("/me?welcome=1", cookie)).text()).not.toContain("公開ラジオの URL ができました");
+  });
+
   it("shows favorites, who reacted and how, and no counts", async () => {
     const cookie = await signedInSession();
     const me = idOf(cookie);
