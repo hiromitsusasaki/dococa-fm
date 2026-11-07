@@ -157,4 +157,14 @@ describe("dialAwake", () => {
     expect(await dialAwake(env.DB, me.id)).toBe(true);
     expect(await dialAwake(env.DB, other.id)).toBe(false);
   });
+
+  it("does not count the listener's own answers on their own letter, for the dial or the taste", async () => {
+    const me = await createListener(env.DB);
+    const it1 = await insertItem(env.DB, itemDraft({ externalIds: {} }));
+    const mine = await insertLetter(env.DB, letterDraft(it1.id, { listenerId: me.id, body: "one" }));
+    await insertLetter(env.DB, letterDraft(it1.id, { kind: "reply", listenerId: me.id, parentLetterId: mine.id, body: "again" }));
+    await insertLetter(env.DB, letterDraft(it1.id, { kind: "reply", listenerId: me.id, parentLetterId: mine.id, body: "and again" }));
+    expect(await countOwnLetters(env.DB, me.id)).toBe(1);
+    expect(await dialAwake(env.DB, me.id)).toBe(false);
+  });
 });
