@@ -12,7 +12,7 @@ type LayoutProps = { title: string; children?: Child; /** The client entry to lo
 } & (
   /** With the session's listener the header needs the current path, so its sign-in link comes back here. */
   | { listener: Listener; path: string }
-  /** Without one the header shows only the wordmark. */
+  /** Without one the header shows the wordmark, the About link and the theme toggle. */
   | { listener?: undefined; path?: undefined }
 );
 
@@ -39,7 +39,8 @@ function SiteHeader({ listener, path, lang }: { listener?: Listener; path?: stri
       <nav>
         <a href="/about" aria-current={path === "/about" ? "page" : undefined}>{t("about.link")}</a>
         {listener && <a href="/put">{t("home.put")}</a>}
-        {listener && (signedIn ? (
+        {listener &&
+          (signedIn ? (
             <>
               <a href="/me">{t("me.title")}</a>
               <span class="site-user">{t("signin.as", { name: listener.displayName })}</span>

@@ -1138,26 +1138,12 @@ button:disabled,
   color: var(--ink-2);
 }
 
-/* The about page: a lead and four panels, set like the send page. */
-.about {
-  display: grid;
-  gap: var(--sp-4);
-}
-
-.about h1 {
-  margin-bottom: 0;
-}
-
+/* The about page: a lead and four panels, set like the send page (shared rules sit with .put below). */
 .about-lead {
   margin: 0;
   color: var(--ink-2);
   font-size: var(--fs-16);
   line-height: 1.8;
-}
-
-.about .panel h2 {
-  margin: 0 0 var(--sp-3);
-  font-size: var(--fs-20);
 }
 
 .about .panel p {
@@ -1172,16 +1158,19 @@ button:disabled,
 }
 
 /* The send page: three panels (choose the work, write the letter, the bookmarklet). */
-.put {
+.put,
+.about {
   display: grid;
   gap: var(--sp-4);
 }
 
-.put h1 {
+.put h1,
+.about h1 {
   margin-bottom: 0;
 }
 
-.put .panel h2 {
+.put .panel h2,
+.about .panel h2 {
   margin: 0 0 var(--sp-3);
   font-size: var(--fs-20);
 }
