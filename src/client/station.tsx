@@ -392,6 +392,14 @@ export function mountStation(root: HTMLElement, opts: StationOptions) {
     setState({ volume: v });
   }
 
+  /** The letter's own page (the share page) to the clipboard; where there is no clipboard, shown to copy by hand. */
+  function share(id: string) {
+    const url = `${location.origin}/letters/${encodeURIComponent(id)}`;
+    const ask = () => void prompt(str("station.share"), url);
+    if (!navigator.clipboard?.writeText) return ask();
+    navigator.clipboard.writeText(url).then(() => toast(str("station.shared")), ask);
+  }
+
   /** Reactions on their way, so a second tap before the answer does not post twice. */
   const sending = new Set<string>();
   /** True when the post was taken. `fromPlayer` closes the player card's reply input; the panel has its own. */
@@ -451,6 +459,7 @@ export function mountStation(root: HTMLElement, opts: StationOptions) {
       volume: state.volume,
       dial: opts.stationKey === "mine" ? dial : null,
       grow: opts.grow === true,
+      primed: letterId !== undefined,
       send: opts.send === true,
       item: itemOf(state.current, state.seg),
       itemId: state.current?.segments[state.seg]?.itemId,
@@ -467,6 +476,7 @@ export function mountStation(root: HTMLElement, opts: StationOptions) {
         toggleReply: () => setState({ replyOpen: !state.replyOpen }),
         watashimo: (letterId?: string) => void react("watashimo", undefined, letterId),
         reply: (body: string, letterId?: string) => react("reply", body, letterId),
+        share,
       },
     };
   }

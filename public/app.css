@@ -818,6 +818,10 @@ button.pill {
   margin-top: var(--sp-2);
 }
 
+.panel-react .share {
+  font-size: 12px;
+}
+
 .panel-reply {
   display: flex;
   flex-direction: column;

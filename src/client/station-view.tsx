@@ -17,6 +17,8 @@ export type StationScreenProps = {
   volume: number;
   dial: number | null;
   grow: boolean;
+  /** A letter link is waiting for the switch: it says it plays from that letter. */
+  primed: boolean;
   /** The home: the on-air panel opens with the button that opens the send modal. */
   send: boolean;
   item: PlayerItem | undefined;
@@ -34,6 +36,7 @@ export type StationScreenProps = {
     toggleReply: () => void;
     watashimo: (letterId?: string) => void;
     reply: (body: string, letterId?: string) => Promise<boolean> | void;
+    share: (letterId: string) => void;
   };
 };
 
@@ -61,7 +64,7 @@ export function StationScreen(p: StationScreenProps) {
           <div class="control">
             <button type="button" class="switch" data-action="power" aria-pressed={String(lit)} aria-label={str("station.onOff")} disabled={p.grow} onClick={p.on.power}></button>
             <span id="station-switch-label" class="control-label">
-              {str(lit ? "station.off" : "station.on")}
+              {str(lit ? "station.off" : p.primed ? "station.playFromLetter" : "station.on")}
             </span>
           </div>
           <label class="knob knob-volume">
@@ -196,13 +199,16 @@ export function StationScreen(p: StationScreenProps) {
   );
 }
 
-/** 私も and 一言 for the letter on air, in the panel; they share `sent` with the player card. */
+/** 私も, the letter's link and 一言 for the letter on air, in the panel; they share `sent` with the player card. */
 function PanelReact({ id, sent, str, on }: { id: string; sent: Record<string, true>; str: (key: string) => string; on: StationScreenProps["on"] }) {
   const said = sent[`w:${id}`] === true;
   return (
     <div class="panel-react">
       <button type="button" class="pill hot" data-action="panel-watashimo" disabled={said} onClick={() => on.watashimo(id)}>
         {str(said ? "player.sent" : "player.watashimo")}
+      </button>
+      <button type="button" class="pill share" data-action="share" onClick={() => on.share(id)}>
+        {str("station.share")}
       </button>
       <form
         class="panel-reply"

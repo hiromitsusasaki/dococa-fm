@@ -4,6 +4,7 @@ import { insertItem } from "../../../src/worker/db/items";
 import {
   countRecentDuplicate,
   getLetter,
+  getPublicLetterWithTitle,
   insertLetter,
   listLettersByListener,
   listLettersForItem,
@@ -117,5 +118,19 @@ describe("letters", () => {
     expect(got[0]!.item.title).toBe("B");
     expect(got[2]!.item.title).toBe("A");
     expect(await listRecentPublicLetters(env.DB, 2)).toHaveLength(2);
+  });
+
+  it("getPublicLetterWithTitle: a public letter or sourced found voice with its work's title, nothing else", async () => {
+    const item = await insertItem(env.DB, itemDraft({ title: "題" }));
+    const l = await insertLetter(env.DB, letterDraft(item.id));
+    const found = await insertLetter(env.DB, letterDraft(item.id, { kind: "found", sourceUrl: "https://x.example/p", sourceAuthor: "@a" }));
+    const bare = await insertLetter(env.DB, letterDraft(item.id, { kind: "found" }));
+    const reply = await insertLetter(env.DB, letterDraft(item.id, { kind: "reply", parentLetterId: l.id }));
+    const hidden = await insertLetter(env.DB, letterDraft(item.id, { status: "rejected" }));
+    const got = await getPublicLetterWithTitle(env.DB, l.id);
+    expect(got?.letter.id).toBe(l.id);
+    expect(got?.title).toBe("題");
+    expect((await getPublicLetterWithTitle(env.DB, found.id))?.letter.id).toBe(found.id);
+    for (const id of [bare.id, reply.id, hidden.id, "nope"]) expect(await getPublicLetterWithTitle(env.DB, id)).toBeNull();
   });
 });

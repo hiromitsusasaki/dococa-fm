@@ -34,6 +34,9 @@ const strings: Record<string, string> = {
   "station.dialHint": "次のお便りから効きます",
   "station.searching": "電波を探しています…",
   "station.playFromToast": "このお便りから流します",
+  "station.playFromLetter": "このお便りから聴く",
+  "station.share": "リンクをコピー",
+  "station.shared": "リンクをコピーしました",
   "home.put": "お便りを送る",
   "lang.confirmPlaying": "切り替えると再生が止まります。続けますか？",
   "letter.showOriginal": "原文を見る",
@@ -1364,5 +1367,72 @@ describe("station: the face explains itself", () => {
     expect(thumb.getAttribute("src")).toBe("https://img/a.jpg");
     expect(thumb.getAttribute("width")).toBe("40");
     expect(root.querySelectorAll(".up-next li:not(.now) img")).toHaveLength(0);
+  });
+});
+
+describe("station: a letter's link and sharing", () => {
+  const toastText = () => document.body.querySelector(".toast")?.textContent ?? null;
+  const label = () => root.querySelector("#station-switch-label")!.textContent;
+  const one = (id: string) => view(id, [["a", [dj(`${id}-1`)]]]);
+  const setClipboard = (value: unknown) => Object.defineProperty(navigator, "clipboard", { value, configurable: true });
+
+  it("a primed radio's switch says it will play from the letter, and plays nothing before the press", async () => {
+    nextReplies = [ok(one("asked"))];
+    autoEnd = false;
+    const s = mountStation(root, opts({ stationKey: "mine", letterId: "L9" }));
+    await flush();
+    expect(label()).toBe("このお便りから聴く");
+    expect(calls).toEqual([]);
+    expect(s.state().power).toBe("off");
+    await power();
+    expect(bodies[0]).toEqual({ dial: 0.3, first: true, letterId: "L9" });
+    await vi.waitFor(() => expect(s.state().power).toBe("on"));
+    expect(label()).toBe("止める");
+    el("power").click();
+    await flush();
+    // The letter is used: off again is the plain switch.
+    expect(label()).toBe("ラジオをつける");
+  });
+
+  it("an unprimed radio's switch reads as always", async () => {
+    mountStation(root, opts({ stationKey: "mine" }));
+    await flush();
+    expect(label()).toBe("ラジオをつける");
+  });
+
+  it("the on-air row's share button copies the letter's page and toasts", async () => {
+    const writeText = vi.fn(() => Promise.resolve());
+    setClipboard({ writeText });
+    try {
+      nextReplies = [ok(epA())];
+      autoEnd = false;
+      mountStation(root, opts());
+      await power();
+      await vi.waitFor(() => expect(root.querySelector(".up-next li.now button.share")).not.toBeNull());
+      expect(root.querySelectorAll(".up-next button.share")).toHaveLength(1);
+      const button = root.querySelector<HTMLButtonElement>(".up-next li.now button.share")!;
+      expect(button.textContent).toBe("リンクをコピー");
+      button.click();
+      await flush();
+      expect(writeText).toHaveBeenCalledWith(`${location.origin}/letters/L1`);
+      expect(toastText()).toBe("リンクをコピーしました");
+    } finally {
+      setClipboard(undefined);
+    }
+  });
+
+  it("without the clipboard API the share button shows the link to copy by hand", async () => {
+    setClipboard(undefined);
+    const ask = vi.fn(() => null);
+    vi.stubGlobal("prompt", ask);
+    nextReplies = [ok(epA())];
+    autoEnd = false;
+    mountStation(root, opts());
+    await power();
+    await vi.waitFor(() => expect(root.querySelector(".up-next li.now button.share")).not.toBeNull());
+    root.querySelector<HTMLButtonElement>(".up-next li.now button.share")!.click();
+    await flush();
+    expect(ask).toHaveBeenCalledWith("リンクをコピー", `${location.origin}/letters/L1`);
+    expect(toastText()).toBeNull();
   });
 });

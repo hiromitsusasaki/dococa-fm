@@ -83,7 +83,8 @@ describe("GET /", () => {
     expect(html).not.toContain(`letter=${mine.id}`);
     expect(html).not.toContain(`data-play-letter="${mine.id}"`);
     expect((html.match(new RegExp(`<a class="letter-card-meta" href="/items/${it.id}">曲B`, "g")) ?? []).length).toBe(2);
-    expect((html.match(/このお便りから聴く/g) ?? []).length).toBe(1);
+    // Outside the radio's strings (its primed switch says the same words).
+    expect((html.replace(/<script[\s\S]*?<\/script>/g, "").match(/このお便りから聴く/g) ?? []).length).toBe(1);
     expect(html).not.toMatch(/<a\s[^>]*>(?:(?!<\/a>)[\s\S])*<a\s/);
   });
 
@@ -270,5 +271,42 @@ describe("GET /", () => {
     const cookie = await newSession();
     const page = (await (await get("/", cookie)).text()).replace(/<script[\s\S]*?<\/script>/g, "");
     expect(page).not.toContain("/stations/world");
+  });
+});
+
+describe("GET /?letter=", () => {
+  it("primes the home radio with the letter, by its shape only", async () => {
+    const cookie = await newSession();
+    const html = await (await get("/?letter=abc-123", cookie)).text();
+    expect(html).toMatch(/<div[^>]*id="station"[^>]*data-letter="abc-123"/);
+    expect(html).toContain('data-station-key="mine"');
+    expect(await (await get("/", cookie)).text()).not.toContain("data-letter");
+    expect(await (await get(`/?letter=${"x".repeat(101)}`, cookie)).text()).not.toContain("data-letter");
+    expect(await (await get("/?letter=", cookie)).text()).not.toContain("data-letter");
+  });
+
+  it("previews a public letter with its work's title and the letter's first 80 characters", async () => {
+    const cookie = await newSession();
+    const it = await insertItem(env.DB, itemDraft({ title: "雨の日の曲", externalIds: { itunes: "og1" } }));
+    const body = "い".repeat(79) + "ろは";
+    const l = await insertLetter(env.DB, letterDraft(it.id, { body, bodyJa: body }));
+    const html = await (await get(`/?letter=${l.id}`, cookie)).text();
+    expect(html).toContain('<meta property="og:title" content="雨の日の曲"');
+    expect(html).toContain(`<meta property="og:description" content="${"い".repeat(79)}ろ"`);
+    expect(html).toContain(`<meta property="og:url" content="http://127.0.0.1:5173/?letter=${l.id}"`);
+  });
+
+  it("previews nothing for a letter that is not public, a reaction, or no letter at all", async () => {
+    const cookie = await newSession();
+    const it = await insertItem(env.DB, itemDraft({ title: "隠れた曲", externalIds: { itunes: "og2" } }));
+    const hidden = await insertLetter(env.DB, letterDraft(it.id, { status: "rejected", body: "見せない", bodyJa: "見せない" }));
+    const parent = await insertLetter(env.DB, letterDraft(it.id));
+    const reply = await insertLetter(env.DB, letterDraft(it.id, { kind: "reply", parentLetterId: parent.id, body: "一言", bodyJa: "一言" }));
+    for (const id of [hidden.id, reply.id, "nope"]) {
+      const html = await (await get(`/?letter=${id}`, cookie)).text();
+      expect(html).not.toContain("og:title");
+      expect(html).toContain(`data-letter="${id}"`);
+    }
+    expect(await (await get("/", cookie)).text()).not.toContain("og:title");
   });
 });

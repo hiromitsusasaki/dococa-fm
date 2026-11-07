@@ -112,6 +112,22 @@ export async function listRecentPublicLetters(db: D1Database, limit = 6): Promis
   });
 }
 
+/** A public letter, or a found voice with its source, and its work's title, for a link preview; null for anything else. One query. */
+export async function getPublicLetterWithTitle(db: D1Database, id: string): Promise<{ letter: Letter; title: string } | null> {
+  const row = await db
+    .prepare(
+      `SELECT letters.*, COALESCE(listeners.demo, 0) AS demo, items.title AS i_title
+       FROM letters
+       JOIN items ON items.id = letters.item_id
+       LEFT JOIN listeners ON listeners.id = letters.listener_id
+       WHERE letters.id = ? AND letters.status = 'public'
+         AND (letters.kind = 'letter' OR (letters.kind = 'found' AND TRIM(COALESCE(letters.source_url, '')) <> '' AND TRIM(COALESCE(letters.source_author, '')) <> ''))`,
+    )
+    .bind(id)
+    .first<Row>();
+  return row ? { letter: rowToLetter(row), title: row.i_title as string } : null;
+}
+
 export async function listLettersForItem(db: D1Database, itemId: string): Promise<Letter[]> {
   const { results } = await db
     .prepare(`${SELECT} WHERE letters.item_id = ? AND letters.status = 'public' ORDER BY letters.created_at ASC, letters.id ASC`)
