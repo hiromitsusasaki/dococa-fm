@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Six fixes from the owner's first listen to the Phase 4 production: a header language switch, a prompt-reading guard that catches long lines, a crisper English DJ, an on-air panel that always shows something, a settings page without the DJ-voice field and with a ready-made public URL, and a bed track that can be heard.
+**Goal:** The owner's fixes from the first listen to the Phase 4 production: a header language switch, a prompt-reading guard that catches long lines, a simpler and cleaner DJ voice in both languages, an on-air panel that always shows the current letter and takes reactions, a settings page without the DJ-voice field and with a ready-made public URL, a bed track that can be heard, a home page where a card plays on the spot, letters are sent from a modal and the three latest programmes are listed, and an about page.
 
 **Architecture:** No new tables. `POST /lang` writes `listeners.lang`. The TTS guard constants are re-calibrated from production clips and the audio cache key moves to `tts/v4/` (migration 0021 clears the cache and `units.audio_ready`). The on-air panel is a client-only change in `station.tsx` / `station-view.tsx`. The slug is assigned on Google sign-in and lazily on the settings page. The bed is a synthesized loop committed as `public/bed.mp3` with the script that made it.
 
@@ -30,6 +30,7 @@
 3. The on-air panel must show the current letter as soon as the first episode starts, with nothing duplicated when the prefetched episode arrives, and must empty (showing the hint) when the switch goes off. (Task 3)
 4. Slug assignment must never overwrite a slug the listener already has, must survive a unique-index collision, and must not run for anonymous listeners. (Task 4)
 5. The new bed must loop without a click at the seam (fade-matched ends), stay far under the voice (mean about −24 dBFS in the file, 0.4 × volume in the player), and the client must not change how or when it starts and stops. (Task 5)
+6. A card click on the home must never play the viewer's own letter (the server refuses it; the card then has no `data-play-letter`), and the send modal's frame must accept `message` events only from its own origin. (Task 6)
 
 ---
 
@@ -66,14 +67,16 @@ expect(spokeThePrompt(2.5 * 4000, "The next letter.", "en")).toBe(false);
 
 - [ ] **Step 3: Re-calibrate** in `src/worker/tts/google.ts`: `SECONDS_PER_CHAR = { ja: 0.27, en: 0.125 }`, `SLACK_SECONDS = 3`. Rewrite the docblock above `spokeThePrompt` with the measurement: production clips 2026-11-07, ja median 0.20 s/char (clean p90 0.23), en median 0.093 (clean max 0.115); a spoken prompt adds 8–21 s; the old 0.5 / 0.35 let every line over ~40 chars through.
 
-- [ ] **Step 4: Crisper English prompt** in `src/worker/tts/style.ts`. Keep the descriptive form (the docblock says why). New text:
+- [ ] **Step 4: Crisper prompts** in `src/worker/tts/style.ts`. Japanese keeps the imperative form, English the descriptive form (the docblock says why). New texts:
 
 ```ts
+export const DJ_STYLE_PROMPT =
+  "次の文を、深夜の都会の FM の男性 DJ のように読んでください。落ち着いて澄んだ、自然で簡潔な話し方で。テンポは急がず、抑揚は軽く、声を張らず、粘らず、母音を伸ばさず、誇張しないでください。";
 export const DJ_STYLE_PROMPT_EN =
   "A late-night city FM host with a clear, crisp, natural delivery. Easy, unhurried pace; light, clean intonation; warm but understated, like talking to a friend. Not breathy, not sultry, no drawn-out vowels, no exaggeration.";
 ```
 
-  Update the docblock's second paragraph: the suave/low wording was heard as too sticky (ねっとり) in production on 2026-11-07.
+  Update the docblock: the suave / dandy wording (sample "P" / "Q") was heard as too sticky (ねっとり) in both languages in production on 2026-11-07; the owner asked for simple and clean.
 
 - [ ] **Step 5: Key v4** in `src/worker/tts/audio.ts`: prefix `tts/v4/`; comment: "v4: the guard was too loose for lines over ~40 chars and the English prompt changed (2026-11-07)". In `test/worker/tts/audio.test.ts` add `expect(a.startsWith("tts/v4/ja/male/")).toBe(true)` to the `audioKey` describe (check lines 25–26 first; replace any `v3` literal).
 
@@ -158,6 +161,8 @@ UPDATE units SET audio_ready = 0;
 
 - [ ] **Step 3: Implement.** `upNextRows()`: `if (state.current) { add(state.current, state.seg, true); addRest(state.current, state.seg + 1); }` then the queue. View: heading `t("station.onAir")` (ja「オンエア」/ en "On air"); each `li` gets `class={row.now ? "now" : ""}` and a leading `<span class="tag">` with `station.now`（ja「いま」/ en "Now"）or `station.next`（ja「このあと」/ en "Next"）; empty + off → `<p class="muted">{t("station.offHint")}</p>`（ja「スイッチを入れると、ここにお便りが並びます。」/ en "Turn the switch on and the letters line up here."）. Remove `station.upNext` if nothing else uses it. CSS: `.up-next li.now` gets the coral left rule the design tokens already define for emphasis (`--accent`), nothing else.
 
+- [ ] **Step 3b: Reactions on the now row.** The player already has 私も / 一言 (`react()` in `station.tsx:316`, buttons in `station-view.tsx:117`), but only inside the player card. Put the same two controls under the `now` row of the panel for the segment's first letter (`letterId` / `itemId` from the segment, as `react()` uses them): a `pill hot` 私も button (disabled once sent, label `player.sent`) and a 一言 form (textarea 200 chars, `player.reply` send button) that call the existing `react("watashimo")` / `react("reply", body)`. One `sent` map serves both places, so a 私も said in the player shows as sent in the panel. Test: pressing 私も in the panel posts `kind=watashimo&itemId=…&parentLetterId=…` once and disables both buttons; a reply posts `kind=reply` with the body. No counts anywhere.
+
 - [ ] **Step 4: Browser check** at 1120 dark and 390 light, radio on, first segment playing: `docs/screenshots/2026-11-07-onair-pc.png`, `2026-11-07-onair-phone.png`. `station.js` gzip in the report.
 
 - [ ] **Step 5: Run all, commit** (`feat: on-air panel shows the current letter`).
@@ -211,10 +216,58 @@ UPDATE units SET audio_ready = 0;
 
 ---
 
-### Task 6: Close-out docs
+### Task 6: Home page: play from a card, send in a modal, three recent programmes
 
 **Files:**
-- Modify: `docs/status.md` (Phase 5 heading, table, 本人作業: `pnpm db:migrate` 0021 → `pnpm run deploy` → `/admin/prepare` loop until audio remaining is 0 (about 700 lines, within the 8000/day cap) → listen: opening line, an English episode, the bed; check the header switch, `/settings`), `README.md` (features list: language switch in the header; bed), `docs/DESIGN.md` (anything the tasks reported as needed), `SECURITY.md` (`POST /lang` in the rate-limit list).
+- Modify: `src/worker/routes/home.tsx`, `src/views/components.tsx` (`LetterCard`), `src/client/station.tsx` (card → player), `src/client/station-view.tsx` (the send button above the on-air panel), `src/worker/routes/put.tsx` (`?embed=1`), `src/views/layout.tsx` (embed layout: no header, no footer), `public/app.css` (`dialog.send-modal`, `.recent-episodes`), `src/worker/i18n/ja.ts`, `src/worker/i18n/en.ts`, `docs/DESIGN.md` (home screen), `docs/status.md`
+- Test: `test/worker/routes/home.test.ts`, `test/worker/routes/put.test.ts`, `test/client/station.test.ts`, `test/worker/views/components.test.ts` (or wherever `LetterCard` is tested)
+
+**Interfaces:**
+- Consumes: `POST /stations/world/next` with `{dial, first: true, letterId}` (confirm in `src/worker/program/create.ts` / `routes/stations.tsx` that `letterId` is honoured on the `world` station exactly as on `mine`: public, readable, not the viewer's own; if it is `mine`-only, extend it to every station in this task and say so in the report). `listArchive(db, listenerId, limit)` (`src/worker/db/episodes.ts`) for the recent programmes.
+- Produces: `GET /put?embed=1` renders the same page without header and footer, with `<base target="_top">` NOT set (forms stay inside the frame) and a `postMessage({ type: "dfm:sent" }, location.origin)` to `window.parent` on the "届きました" state. Home markup order inside `section.home`: (1) `<button type="button" class="button" data-open-send>` 「お便りを送る」 + `<dialog class="send-modal">` with an `<iframe src="/put?embed=1" title=…>` and a close button; (2) `<p class="muted">` 「好きなものを 3 つ送ると、あなたの好みに近いお便りが流れてきます。<a href="/start">始める</a>」 (en: "Send three things you love and the letters drift closer to your taste. <a>Start</a>"), shown for every listener; (3) `<section class="recent-episodes">` with `<h2>` 「これまでの番組」 and up to 3 of the viewer's heard episodes (title line = the first work's title · the sender, link to `/episodes/<id>`), then `<a href="/episodes">` 「すべて見る」; nothing but the link when there are none; (4) the letter cards as now.
+
+- [ ] **Step 1: Failing tests.**
+  - `home.test.ts`: the send button and the dialog with the iframe; the explanation paragraph with the `/start` link; three recent episodes for a listener with four heard, and only the link for a new listener; the order of the sections.
+  - `put.test.ts`: `GET /put?embed=1` has no `header.site-header`, and the sent state carries the `postMessage` script; `GET /put` is unchanged.
+  - `LetterCard` test: the card's main link keeps `href="/stations/mine?letter=<id>"` (no-JS fallback) and gains `data-play-letter="<id>"`; an own letter keeps its `/items/` link and has no `data-play-letter`.
+  - `station.test.ts`: a click on an element with `data-play-letter` inside the page (dispatch on `document`) prevents the navigation, turns the radio on (or restarts it) and the first `next` body carries `letterId` and `first: true`; the page scrolls to the player (`scrollIntoView` stubbed).
+  - `station.test.ts`: the send button opens the dialog (`showModal` stubbed), a `message` event `{type:"dfm:sent"}` from the frame's origin closes it; a foreign origin does nothing.
+
+- [ ] **Step 2: Implement.** Card → player: in `station.tsx`, one delegated `click` listener on `document` for `[data-play-letter]` (the station mounted on the home is `world`, so the letter plays there; `/stations/mine?letter=` stays as the no-JS route). Modal: `<dialog>` + `showModal()`; the frame loads only when opened (set `src` on open) so the home stays light; `Escape` and the close button close it; after `dfm:sent` close and do nothing else (the radio keeps playing). The embed layout drops header/footer and the key visual; the sent page posts the message. Remove the old `home.start` / `home.listen` button row (the explanation replaces it). The `home.put` button text stays 「お便りを送る」.
+
+- [ ] **Step 3: Browser check** at 1120 dark and 390 light: the modal open (ja), a card click starting the radio (snapshot of the on-air panel), the recent list: `docs/screenshots/2026-11-07-home-modal-pc.png`, `2026-11-07-home-phone.png`. `station.js` gzip in the report (the delegated listener and the dialog wiring are small; the budget is 6 kB).
+
+- [ ] **Step 4: Run all, commit** (three commits: `feat: letter cards play on the home radio`, `feat: send letters from a modal on the home`, `feat: three recent programmes on the home`).
+
+---
+
+### Task 7: About page
+
+**Files:**
+- Create: `src/worker/routes/about.tsx`, `test/worker/routes/about.test.ts`
+- Modify: `src/views/layout.tsx` (header nav link), `src/worker/i18n/ja.ts`, `src/worker/i18n/en.ts`, `src/worker/routes` registration, `docs/DESIGN.md`, `docs/status.md`
+
+**Interfaces:**
+- Produces: `GET /about` (session-less is fine; use the listener's language when there is one, else the Accept-Language rule), linked from the header nav as 「Dococa FM とは」/ "About" before 「お便りを送る」, visible to everyone (also when no `listener` prop is passed).
+
+- [ ] **Step 1: Failing tests.** `/about` is 200 in ja and en, carries `<h1>`, the four sections below, and the header shows the link on `/` and on `/about` (`aria-current="page"` on `/about`).
+
+- [ ] **Step 2: Content** (ja below; write the en counterparts yourself, same keys `about.*`; no counts, no 時事, no 「局」):
+  - `<h1>` 「Dococa FM とは」. Lead: 「世界のどこかにいる誰かの好きなものが聴こえてくるラジオです。誰かが好きな曲・本・映画について書いたお便りを、DJ が読み上げます。」
+  - 「聴く」: 「スイッチを入れると、お便りが流れはじめます。ダイヤルを回すと、自分の好みに近いお便りと、少し遠くのお便りの割合が変わります（次のお便りから効きます）。流れているお便りには「私も」と一言を返せます。」
+  - 「送る」: 「好きな作品の URL を貼るか、題名で探して、お便りを書きます。お便りは原文のまま読まれます。AI は時事を話さず、数で人や作品を測りません。」
+  - 「自分のラジオ」: 「好きなものを 3 つ送ると、あなたの好みに近いお便りが流れるラジオになります。Google でサインインすると、公開の URL で誰かに聴いてもらえます。」
+  - 「できること・しないこと」: 「お便りは書いた人のものです。AI が勝手に書き足したり、出典の無い声を作ったりしません。通報されたお便りは非公開になります。」
+  Layout: `.panel` sections with `<h2>`, the same tokens as `/put`. Screenshots at 1120 light and 390 dark: `docs/screenshots/2026-11-07-about-pc.png`, `2026-11-07-about-phone.png`.
+
+- [ ] **Step 3: Run all, commit** (`feat: about page`).
+
+---
+
+### Task 8: Close-out docs
+
+**Files:**
+- Modify: `docs/status.md` (Phase 5 heading, table, 本人作業: `pnpm db:migrate` 0021 → `pnpm run deploy` → `/admin/prepare` loop until audio remaining is 0 (about 700 lines, within the 8000/day cap) → listen: opening line, a Japanese and an English episode, the bed; check the header switches, `/settings`, the home modal, a card click, `/about`), `README.md` (features list: language switch, about page, home modal, bed), `docs/DESIGN.md` (anything the tasks reported as needed), `SECURITY.md` (`POST /lang` in the rate-limit list; the embed frame is same-origin only).
 
 - [ ] **Step 1:** Write the sections; `pnpm test` still green.
 - [ ] **Step 2: Commit** (`docs: phase 5 close-out`).
