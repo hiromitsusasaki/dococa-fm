@@ -90,6 +90,7 @@ export const en: Record<keyof typeof ja, string> = {
   "slot.far": "Far away",
   "home.kvAlt": "Someone listening to a vintage radio at a desk, and what people around the world love",
   "home.put": "Send a letter",
+  "home.sendLead": "About a song, a book or a film you love, up to 200 characters. The DJ reads it out.",
   "home.playFrom": "Listen from this letter",
   "home.recent": "Letters arriving now",
   "home.start": "Send 3 favorites to start your radio",
@@ -287,4 +288,7 @@ export const en: Record<keyof typeof ja, string> = {
   "share.continue": "Keep listening on the radio",
   "share.player": "Listen to this letter",
   "share.openSite": "Listen on Dococa FM",
+  "share.x": "Share on X",
+  "share.native": "Share",
+  "share.text": "{work} · a letter from {sender} — Dococa FM",
 };

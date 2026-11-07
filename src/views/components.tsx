@@ -3,6 +3,7 @@ import { displayText } from "../worker/letters/display";
 import { type Lang, tFor } from "../worker/i18n/t";
 import { ja } from "../worker/i18n/ja";
 import { whoLine } from "../worker/letters/label";
+import { shareSender, xIntentUrl } from "./share";
 
 type CardItem = Pick<Item, "kind" | "title" | "creator" | "year" | "imageUrl">;
 
@@ -68,6 +69,33 @@ export const whoOf = (l: Pick<Letter, "radioName" | "place"> & Partial<Pick<Lett
   const t = tFor(lang);
   return whoLine(l, (key, params) => t(key, params), lang);
 };
+
+/** The short text a shared letter goes out with: the work and who wrote it, no place, nothing private. */
+export const letterShareText = (work: string, l: { kind: string; radioName: string; sourceAuthor: string | null }, lang: Lang): string => {
+  const t = tFor(lang);
+  return t("share.text", { work, sender: shareSender(l, (key, params) => t(key, params)) });
+};
+
+/**
+ * A letter's public page to X, to the device's share sheet and to the clipboard. The share-sheet button is drawn hidden; the
+ * page's script (`wireShare`) shows it where the browser has one and wires both buttons.
+ */
+export function ShareLinks({ url, text, lang }: { url: string; text: string; lang: Lang }) {
+  const t = tFor(lang);
+  return (
+    <div class="share">
+      <a class="pill" href={xIntentUrl(text, url)} target="_blank" rel="noopener">
+        {t("share.x")}
+      </a>
+      <button type="button" class="pill" data-share={url} data-text={text} hidden>
+        {t("share.native")}
+      </button>
+      <button type="button" class="pill" data-copy={url} data-copied={t("station.shared")}>
+        {t("station.share")}
+      </button>
+    </div>
+  );
+}
 
 export function ReportForm({ letterId, lang }: { letterId: string; lang: Lang }) {
   const t = tFor(lang);

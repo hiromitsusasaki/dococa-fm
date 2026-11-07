@@ -87,6 +87,7 @@ export const ja = {
   "slot.far": "遠く",
   "home.kvAlt": "机でレトロなラジオを聴く人と、世界の誰かの好きなもの",
   "home.put": "お便りを送る",
+  "home.sendLead": "好きな曲・本・映画について、200 字まで。DJ が読み上げます。",
   "home.playFrom": "このお便りから聴く",
   "home.recent": "いま届いているお便り",
   "home.start": "好きなものを 3 つ送って、あなたのラジオを始める",
@@ -284,4 +285,7 @@ export const ja = {
   "share.continue": "ラジオで続きを聴く",
   "share.player": "このお便りを聴く",
   "share.openSite": "Dococa FM で聴く",
+  "share.x": "X で共有",
+  "share.native": "共有",
+  "share.text": "{work} · {sender}のお便り — Dococa FM",
 } as const;

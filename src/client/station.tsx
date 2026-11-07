@@ -3,6 +3,7 @@ import { flushSync } from "hono/jsx/dom";
 import { createRoot } from "hono/jsx/dom/client";
 import { bindMediaSession, createLinePlayer, fetchNext, type LetterLine, type PlayerEpisode, type PlayerItem, reportListen, resumeAt, type StoredPosition, syncMediaSession, whoOf } from "./playback";
 import { loadDial, postLetter, reactionOf, storeDial } from "./reactions";
+import { clearToast, toast as showToast, wireShare } from "./share";
 import { createSounds } from "./sounds";
 import { StationScreen, type UpNextRow } from "./station-view";
 
@@ -46,7 +47,6 @@ const POS_KEY = "dfm.pos:";
 const DEFAULT_VOLUME = 0.8;
 /** A turn of the dial is sent once it rests this long, so a sweep is one new ask, not many. */
 const DIAL_SETTLE_MS = 300;
-const TOAST_MS = 2500;
 const HINT_KEY = "dfm.dialHinted";
 /** Set at the first switch-on; the home then shows its hero short (wordmark and tagline only) on later visits. */
 const SEEN_KEY = "dfm.seen";
@@ -134,23 +134,8 @@ export function mountStation(root: HTMLElement, opts: StationOptions) {
   let letterId = opts.letterId;
   player.setVolume(state.volume);
 
-  /** One `div.toast` at a time: a new message replaces the last, and it goes away after 2.5 s. */
-  let toastEl: HTMLElement | null = null;
-  let toastTimer: ReturnType<typeof setTimeout> | undefined;
-  function toast(text: string) {
-    if (!mounted) return;
-    toastEl?.remove();
-    clearTimeout(toastTimer);
-    toastEl = document.createElement("div");
-    toastEl.className = "toast";
-    toastEl.setAttribute("role", "status");
-    toastEl.textContent = text;
-    document.body.append(toastEl);
-    toastTimer = setTimeout(() => {
-      toastEl?.remove();
-      toastEl = null;
-    }, TOAST_MS);
-  }
+  /** The page's one toast (see `share.ts`); none once the radio is unmounted. */
+  const toast = (text: string) => mounted && showToast(text);
   /** Once per session, the first time the dial rests: a turn only counts from the next letter. */
   function hintDial() {
     try {
@@ -593,11 +578,10 @@ export function mountStation(root: HTMLElement, opts: StationOptions) {
     unmount() {
       mounted = false;
       clearTimeout(dialTimer);
-      clearTimeout(toastTimer);
       clearInterval(nightTimer);
       if (typeof cancelAnimationFrame === "function") cancelAnimationFrame(lampFrame);
       sounds.close();
-      toastEl?.remove();
+      clearToast();
       flight?.remove();
       document.documentElement.removeAttribute("data-on-air");
       document.documentElement.removeAttribute("data-night");
@@ -680,4 +664,5 @@ function boot() {
 if (typeof document !== "undefined") {
   boot();
   wireSendModal();
+  wireShare();
 }
