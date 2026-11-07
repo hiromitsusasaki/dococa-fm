@@ -105,12 +105,15 @@ describe("GET /", () => {
     expect(html).toContain("あなたのラジオをつける");
   });
 
-  it("is the world station: tuning in needs no registration", async () => {
+  it("is the listener's own radio, with the dial: tuning in needs no registration", async () => {
     const cookie = await newSession();
     const html = await (await get("/", cookie)).text();
     expect(html).toContain('id="station"');
-    expect(html).toContain('data-station-key="world"');
-    expect(html).toContain('data-next-url="/stations/world/next"');
+    expect(html).toContain('data-station-key="mine"');
+    expect(html).toContain('data-next-url="/stations/mine/next"');
+    expect(html).toContain('data-resume-url="/stations/mine.json"');
+    // The player shows the dial on `mine` only (station.test.ts); the page hands it the listener's value.
+    expect(html).toMatch(/data-dial="[0-9.]+"/);
     expect(html).toContain('data-grow="0"');
     expect(html).toContain('id="station-i18n"');
     const page = html.replace(/<script[\s\S]*?<\/script>/g, "");

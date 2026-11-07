@@ -28,7 +28,7 @@ home.get("/", async (c) => {
     </section>
   );
   return c.html(
-    <StationPage stationKey="world" title={t("app.name")} label={stationLabel({ kind: "world" }, "", lang)} lang={lang} listener={listener} path="/" voice={listener.voice} dial={listener.dial} grow={false} hideName top={hero}>
+    <StationPage stationKey="mine" title={t("app.name")} label={stationLabel({ kind: "mine" }, "", lang)} lang={lang} listener={listener} path="/" voice={listener.voice} dial={listener.dial} grow={false} hideName top={hero}>
       <section class="home">
         <p>{active ? <a class="button" href="/stations/mine">{t("home.listen")}</a> : <a class="button" href="/start">{t("home.start")}</a>}</p>
         <p>
