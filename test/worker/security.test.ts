@@ -57,7 +57,7 @@ describe("origin check", () => {
   });
 
   it("covers every write route outside /admin, and does not mint a listener for a refused one", async () => {
-    for (const path of ["/start", "/episodes", "/settings", "/takedown", "/listens"]) {
+    for (const path of ["/start", "/episodes", "/settings", "/me/radio", "/takedown", "/listens"]) {
       const res = await form({ origin: "https://evil.example" }, path);
       expect(res.status, path).toBe(403);
       expect(res.headers.get("set-cookie")).toBeNull();
@@ -296,6 +296,13 @@ describe("isRateLimited for the withdraw post", () => {
   it("limits the withdraw post and not a get", () => {
     expect(isRateLimited("POST", "/letters/abc/withdraw", new URLSearchParams())).toBe(true);
     expect(isRateLimited("GET", "/letters/abc/withdraw", new URLSearchParams())).toBe(false);
+  });
+});
+
+describe("isRateLimited for the public radio controls", () => {
+  it("limits POST /me/radio and not a get of the my page", () => {
+    expect(isRateLimited("POST", "/me/radio", new URLSearchParams())).toBe(true);
+    expect(isRateLimited("GET", "/me", new URLSearchParams())).toBe(false);
   });
 });
 

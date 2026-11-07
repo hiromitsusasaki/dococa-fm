@@ -1,47 +1,58 @@
-import { Hono } from "hono";
+import { zValidator } from "@hono/zod-validator";
+import { type Context, Hono } from "hono";
 import { raw } from "hono/html";
-import { ItemCard, LetterSource, LetterText, ReactionForms, whoOf } from "../../views/components";
+import { z } from "zod";
+import { ShareLinks, letterShareText, whoOf } from "../../views/components";
 import { Layout } from "../../views/layout";
 import { currentPath, requireSignin } from "../auth/require-signin";
 import type { Variables } from "../auth/session";
-import { listFavorites } from "../db/history";
 import { getItemsByIds } from "../db/items";
 import { listHeardLetters } from "../db/listens";
 import { getLetter, listOwnPublicLetters, listRecentReactionsToListener, withdrawLetter } from "../db/letters";
-import { markReactionsSeen } from "../db/listeners";
+import { markReactionsSeen, updateListener } from "../db/listeners";
 import type { Env } from "../env";
 import { displayText } from "../letters/display";
 import { tFor } from "../i18n/t";
-import { ensureStationSlug, stationUrl } from "../program/station";
+import { SLUG, ensureStationSlug, isSlugTaken, stationUrl } from "../program/station";
+import type { Listener } from "../types";
 
-const FAVORITES_LIMIT = 20;
 const REACTIONS_LIMIT = 50;
 /** A letter in the list of one's own quotes this many characters. */
-const OWN_PREVIEW_CHARS = 60;
+const OWN_PREVIEW_CHARS = 80;
 const JST_OFFSET_MS = 9 * 60 * 60 * 1000;
 const jstDate = (iso: string): string => new Date(Date.parse(iso) + JST_OFFSET_MS).toISOString().slice(0, 10);
+const isHttp = (s: string | null): s is string => s !== null && /^https?:\/\//i.test(s);
+
+/**
+ * The page has no client bundle, so `div.share` and the url's copy button are wired here, as `wireShare` does on the radio:
+ * the share sheet only where the browser has one, else the link to the clipboard with a toast, or shown to copy by hand.
+ */
+const SHARE_WIRE = `(function(){var can=typeof navigator.share==="function";if(can)document.querySelectorAll("[data-share][hidden]").forEach(function(b){b.hidden=false});var el,tm;function toast(s){if(el)el.remove();clearTimeout(tm);el=document.createElement("div");el.className="toast";el.setAttribute("role","status");el.textContent=s;document.body.append(el);tm=setTimeout(function(){if(el)el.remove();el=null},2500)}document.addEventListener("click",function(e){var b=e.target&&e.target.closest&&e.target.closest("[data-share],[data-copy]");if(!b)return;var d=b.dataset;if(d.share!==undefined&&can){navigator.share({title:"Dococa FM",text:d.text||"",url:d.share}).catch(function(){});return}if(d.copy===undefined)return;var ask=function(){prompt(b.textContent||"",d.copy)};if(!navigator.clipboard||!navigator.clipboard.writeText)return ask();navigator.clipboard.writeText(d.copy).then(function(){toast(d.copied||"")},ask)})})();`;
+
+type MeContext = Context<{ Bindings: Env; Variables: Variables }>;
+
+/** What the public radio panel shows after a refused change: the slug as typed, and why. */
+type RadioError = { slug: string; reason: "taken" | "invalid" };
 
 export const me = new Hono<{ Bindings: Env; Variables: Variables }>();
 
-me.get("/me", requireSignin, async (c) => {
-  const signedIn = c.get("listener");
-  // As on /settings: a listener signed in before addresses were assigned gets one here; a failure renders without it.
+async function renderMe(c: MeContext, signedIn: Listener, radioError?: RadioError) {
+  // A listener signed in before addresses were assigned gets one here; a failure renders without it.
   const listener = !signedIn.stationSlug ? { ...signedIn, stationSlug: await ensureStationSlug(c.env.DB, signedIn).catch(() => null) } : signedIn;
   const lang = listener.lang;
   const t = tFor(lang);
-  const favorites = await listFavorites(c.env.DB, listener.id, FAVORITES_LIMIT);
   // Taken before the read: a reaction that lands while the page is made lights the dot again rather than going unseen.
   const seenAt = new Date();
-  const reactions = await listRecentReactionsToListener(c.env.DB, listener.id, REACTIONS_LIMIT);
-  const items = await getItemsByIds(c.env.DB, reactions.map((r) => r.itemId));
-  const heard = await listHeardLetters(c.env.DB, listener.id);
   const own = await listOwnPublicLetters(c.env.DB, listener.id);
-  const ownItems = await getItemsByIds(c.env.DB, own.map((l) => l.itemId));
+  const reactions = await listRecentReactionsToListener(c.env.DB, listener.id, REACTIONS_LIMIT);
+  // One row per letter, at its newest listen (the list comes newest first).
+  const heard = (await listHeardLetters(c.env.DB, listener.id)).filter((h, i, all) => all.findIndex((o) => o.letter.id === h.letter.id) === i);
+  const items = await getItemsByIds(c.env.DB, [...own.map((l) => l.itemId), ...reactions.map((r) => r.itemId)]);
   // The dot is a decoration: a failed write leaves it lit, it does not fail the page.
   await markReactionsSeen(c.env.DB, listener.id, seenAt).catch(() => {});
-  const publicUrl = listener.stationPublic && listener.stationSlug ? stationUrl(c.env, listener.stationSlug) : null;
+  const radioUrl = listener.stationSlug ? stationUrl(c.env, listener.stationSlug) : null;
   // Shown once: the script drops the query, so a reload does not repeat it. A listener who is already public has no news in it.
-  const welcome = c.req.query("welcome") === "1" && listener.stationSlug && !listener.stationPublic ? stationUrl(c.env, listener.stationSlug) : null;
+  const welcome = c.req.query("welcome") === "1" && radioUrl && !listener.stationPublic ? radioUrl : null;
   return c.html(
     <Layout title={t("me.title")} lang={lang} listener={listener} path={currentPath(c)}>
       <main class="me">
@@ -57,62 +68,32 @@ me.get("/me", requireSignin, async (c) => {
             {t("me.radioNameHint")} <a href="/settings">{t("settings.title")}</a>
           </p>
         )}
-        <section class="panel me-favorites">
-          <h2>{t("me.favorites")}</h2>
-          <ul class="me-cards">
-            {favorites.map(({ item }) => (
-              <li>
-                <a class="me-card-link" href={`/items/${item.id}`}>
-                  <ItemCard item={item} heading="h3" lang={lang} art />
-                </a>
-                <a class="me-card-put" href={`/put?itemId=${item.id}`}>{t("put.title")}</a>
-              </li>
-            ))}
-          </ul>
-        </section>
-        <section class="panel me-heard">
-          <h2>{t("me.heard")}</h2>
-          {heard.length === 0 ? (
-            <p class="muted">{t("me.heardNone")}</p>
-          ) : (
-            <ul class="me-list">
-              {heard.map((h) => (
-                <li>
-                  <a class="me-card-link" href={`/items/${h.item.id}`}>
-                    <ItemCard item={h.item} heading="h3" lang={lang} />
-                  </a>
-                  <LetterText letter={h.letter} lang={lang} />
-                  {h.letter.kind === "found" ? <LetterSource letter={h.letter} lang={lang} /> : <p class="letter-who">{whoOf(h.letter, lang)}</p>}
-                  <p class="muted">{t("me.heardOn", { date: jstDate(h.heardAt) })}</p>
-                  <p>
-                    <a href={`/episodes/${h.episodeId}?letter=${encodeURIComponent(h.letter.id)}`}>{t("me.replay")}</a>
-                  </p>
-                  <div class="letter-actions">
-                    <ReactionForms letterId={h.letter.id} itemId={h.item.id} lang={lang} />
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
         <section class="panel me-letters">
           <h2>{t("me.myLetters")}</h2>
           {own.length === 0 ? (
             <p class="muted">{t("me.myLettersNone")}</p>
           ) : (
             <ul class="me-list">
-              {own.map((l) => (
-                <li>
-                  <p>
-                    <a href={`/items/${l.itemId}`}>{ownItems.get(l.itemId)?.title ?? ""}</a>
-                  </p>
-                  <p class="letter-body">{Array.from(displayText(l, lang).main).slice(0, OWN_PREVIEW_CHARS).join("")}</p>
-                  <p class="muted">{jstDate(l.createdAt)}</p>
-                  <form method="post" action={`/letters/${l.id}/withdraw`} onsubmit={`return confirm(${JSON.stringify(t("me.withdrawConfirm"))})`}>
-                    <button type="submit" class="quiet">{t("me.withdraw")}</button>
-                  </form>
-                </li>
-              ))}
+              {own.map((l) => {
+                const item = items.get(l.itemId);
+                const title = item?.title ?? "";
+                return (
+                  <li class="me-letter">
+                    <a class="me-letter-work" href={`/items/${l.itemId}`}>
+                      <span class="me-thumb">{item && isHttp(item.imageUrl) && <img src={item.imageUrl} alt="" width="56" height="56" loading="lazy" />}</span>
+                      <span class="title">{title}</span>
+                    </a>
+                    <p class="letter-body">{Array.from(displayText(l, lang).main).slice(0, OWN_PREVIEW_CHARS).join("")}</p>
+                    <p class="muted">{jstDate(l.createdAt)}</p>
+                    <div class="me-letter-actions">
+                      <ShareLinks url={`${c.env.PUBLIC_ORIGIN}/letters/${l.id}`} text={letterShareText(title, l, lang)} lang={lang} />
+                      <form method="post" action={`/letters/${l.id}/withdraw`} onsubmit={`return confirm(${JSON.stringify(t("me.withdrawConfirm"))})`}>
+                        <button type="submit" class="quiet">{t("me.withdraw")}</button>
+                      </form>
+                    </div>
+                  </li>
+                );
+              })}
             </ul>
           )}
         </section>
@@ -135,22 +116,93 @@ me.get("/me", requireSignin, async (c) => {
             </ul>
           )}
         </section>
-        <section class="panel me-station">
+        <section class="panel me-station" id="radio">
           <h2>{t("me.station")}</h2>
-          {publicUrl ? (
-            <p>
-              <a href={publicUrl}>{publicUrl}</a>
-            </p>
+          <p class="muted">{t("me.radioWhat")}</p>
+          {radioUrl && (
+            <div class="me-radio-url">
+              <p>
+                <span class={listener.stationPublic ? "me-radio-state on" : "me-radio-state"}>{t(listener.stationPublic ? "me.radioIsPublic" : "me.radioIsPrivate")}</span>{" "}
+                {listener.stationPublic ? <a href={radioUrl}>{radioUrl}</a> : <code>{radioUrl}</code>}
+              </p>
+              <button type="button" class="pill" data-copy={radioUrl} data-copied={t("station.shared")}>{t("me.radioCopy")}</button>
+            </div>
+          )}
+          <form method="post" action="/me/radio" class="me-radio-toggle">
+            <input type="hidden" name="public" value={listener.stationPublic ? "0" : "1"} />
+            <button type="submit" class={listener.stationPublic ? "quiet" : undefined}>{t(listener.stationPublic ? "me.radioMakePrivate" : "me.radioMakePublic")}</button>
+          </form>
+          <form method="post" action="/me/radio" class="me-radio-slug">
+            <label>
+              <span>{t("me.radioSlug")}</span>
+              <input type="text" name="slug" maxlength={24} pattern="[a-z0-9-]{3,24}" required value={radioError?.slug ?? listener.stationSlug ?? ""} autocapitalize="none" spellcheck={false} />
+            </label>
+            <button type="submit" class="quiet">{t("me.radioSlugSave")}</button>
+            <small>{t("me.radioSlugHelp")}</small>
+            {radioError && <p class="settings-error" role="alert">{t(radioError.reason === "taken" ? "me.slugTaken" : "me.slugInvalid")}</p>}
+          </form>
+          <p class="muted">{t("me.radioNameOnly")}</p>
+        </section>
+        <section class="panel me-heard">
+          <h2>{t("me.heard")}</h2>
+          {heard.length === 0 ? (
+            <p class="muted">{t("me.heardNone")}</p>
           ) : (
-            <p>
-              <a href="/settings">{t("settings.station")}</a>
-            </p>
+            <ul class="me-rows">
+              {heard.map((h) => (
+                <li>
+                  {isHttp(h.item.imageUrl) ? <img class="thumb" src={h.item.imageUrl} alt="" width="40" height="40" loading="lazy" /> : <span class="thumb"></span>}
+                  <span class="me-row-what">
+                    <a href={`/items/${h.item.id}`}>{h.item.title}</a> · {h.letter.kind === "found" ? (h.letter.sourceAuthor ?? "") : whoOf(h.letter, lang)}
+                  </span>
+                  <span class="muted">{jstDate(h.heardAt)}</span>
+                  <a class="me-row-replay" href={`/episodes/${h.episodeId}?letter=${encodeURIComponent(h.letter.id)}`}>{t("me.replay")}</a>
+                </li>
+              ))}
+            </ul>
           )}
         </section>
+        <script>{raw(SHARE_WIRE)}</script>
       </main>
     </Layout>,
+    radioError ? 422 : 200,
   );
-});
+}
+
+me.get("/me", requireSignin, (c) => renderMe(c, c.get("listener")));
+
+/** Exactly one of the two: the public toggle, or a new slug (the `/settings` rule: trimmed, lower-cased, `SLUG`). */
+const radioForm = z.union([z.object({ public: z.enum(["0", "1"]) }).strict(), z.object({ slug: z.string().trim().toLowerCase().refine((v) => SLUG.test(v)) }).strict()]);
+
+/** The caller's own public radio and nothing else: `station_public` or `station_slug` on their row. */
+me.post(
+  "/me/radio",
+  requireSignin,
+  zValidator("form", radioForm, async (result, ctx) => {
+    if (result.success) return;
+    const c = ctx as MeContext;
+    const typed = (await c.req.parseBody()).slug;
+    return renderMe(c, c.get("listener"), { slug: typeof typed === "string" ? typed : (c.get("listener").stationSlug ?? ""), reason: "invalid" });
+  }),
+  async (c) => {
+    const listener = c.get("listener");
+    const form = c.req.valid("form");
+    if ("public" in form) {
+      // Turning it on needs an address; one signed in before addresses were assigned gets it now.
+      if (form.public === "1") await ensureStationSlug(c.env.DB, listener);
+      await updateListener(c.env.DB, listener.id, { stationPublic: form.public === "1" });
+      return c.redirect("/me#radio", 303);
+    }
+    try {
+      await updateListener(c.env.DB, listener.id, { stationSlug: form.slug });
+    } catch (e) {
+      if (!isSlugTaken(e)) throw e;
+      // Held by someone else: one UPDATE that failed, so nothing changed; the slug is theirs to change.
+      return renderMe(c, listener, { slug: form.slug, reason: "taken" });
+    }
+    return c.redirect("/me#radio", 303);
+  },
+);
 
 /** The sender takes a letter back: it turns `withdrawn`, which every reader treats as rejected. Only one's own letters, never a reply or a reaction. */
 me.post("/letters/:id/withdraw", requireSignin, async (c) => {

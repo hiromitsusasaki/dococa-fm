@@ -76,7 +76,7 @@ export class WindowStore implements Store<AppEnv> {
 export function isRateLimited(method: string, path: string, query: URLSearchParams): boolean {
   if (method === "GET") return path === "/auth/google" || (path === "/put" && (query.has("itemId") || query.has("url")));
   if (method !== "POST") return false;
-  return path === "/letters" || path === "/settings" || path.startsWith("/settings/") || path === "/auth/signout" || path === "/lang" || path === "/episodes" || path === "/start" || path === "/takedown" || path === "/put/register" || /^\/episodes\/[^/]+\/next$/.test(path) || /^\/stations\/[^/]+\/next$/.test(path) || /^\/letters\/[^/]+\/(report|withdraw)$/.test(path);
+  return path === "/letters" || path === "/settings" || path === "/me/radio" || path.startsWith("/settings/") || path === "/auth/signout" || path === "/lang" || path === "/episodes" || path === "/start" || path === "/takedown" || path === "/put/register" || /^\/episodes\/[^/]+\/next$/.test(path) || /^\/stations\/[^/]+\/next$/.test(path) || /^\/letters\/[^/]+\/(report|withdraw)$/.test(path);
 }
 
 const limitOf = (c: { env: Env }): number => {

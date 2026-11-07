@@ -31,14 +31,14 @@ describe("GET /me", () => {
     expect(plain).not.toContain('role="status"');
     const html = await (await get("/me?welcome=1", cookie)).text();
     const url = `${env.PUBLIC_ORIGIN}/stations/s:kiku-radio`;
-    expect(html).toContain(`公開ラジオの URL ができました: ${url}（設定で公開にすると誰でも聴けます）`);
+    expect(html).toContain(`公開ラジオの URL ができました: ${url}（下の「あなたの公開ラジオ」で公開にすると誰でも聴けます）`);
     // Shown once: the page drops the query, so a reload has no banner.
     expect(html).toContain("history.replaceState");
     await updateListener(env.DB, id, { stationPublic: true });
     expect(await (await get("/me?welcome=1", cookie)).text()).not.toContain("公開ラジオの URL ができました");
   });
 
-  it("shows favorites, who reacted and how, and no counts", async () => {
+  it("shows who reacted and how, no favourites panel, and no counts", async () => {
     const cookie = await signedInSession();
     const me = idOf(cookie);
     const item = await insertItem(env.DB, itemDraft({ title: "Blue in Green" }));
@@ -48,34 +48,21 @@ describe("GET /me", () => {
     await insertLetter(env.DB, letterDraft(item.id, { kind: "reply", body: "いい曲ですね", bodyJa: "いい曲ですね", parentLetterId: mine.id, radioName: "キタ", place: "札幌" }));
 
     const html = await (await get("/me", cookie)).text();
-    expect(html).toContain(t("me.favorites"));
-    expect(html).toContain(`href="/items/${item.id}"`);
-    expect(html).toContain(`href="/put?itemId=${item.id}"`);
+    expect(html).not.toContain("あなたの好きなもの");
+    expect(html).not.toContain(`href="/put?itemId=${item.id}"`);
     expect(html).toContain("ミナミ");
     expect(html).toContain("那覇");
     expect(html).toContain("いい曲ですね");
     expect(html).not.toMatch(/\d+ ?件/);
   });
 
-  it("lays the page out as five panels, with an image on a favourite and no sign-out form", async () => {
+  it("lays the page out as four panels: your letters, reactions, your public radio, heard; no sign-out form", async () => {
     const cookie = await signedInSession();
-    const me = idOf(cookie);
-    const withArt = await insertItem(env.DB, itemDraft({ title: "With art", imageUrl: "https://example.com/a.jpg", externalIds: { itunes: "11" } }));
-    const noArt = await insertItem(env.DB, itemDraft({ title: "No art", imageUrl: null, externalIds: { itunes: "12" } }));
-    await upsertHistory(env.DB, [
-      { listenerId: me, itemId: withArt.id, source: "manual", occurredAt: null, rank: 1 },
-      { listenerId: me, itemId: noArt.id, source: "manual", occurredAt: null, rank: 2 },
-    ]);
     const html = await (await get("/me", cookie)).text();
     const main = html.slice(html.indexOf('<main class="me"'));
     const panels = [...main.matchAll(/<section class="panel (me-[a-z]+)"/g)].map((m) => m[1]);
-    expect(panels).toEqual(["me-favorites", "me-heard", "me-letters", "me-reactions", "me-station"]);
+    expect(panels).toEqual(["me-letters", "me-reactions", "me-station", "me-heard"]);
     expect(main).not.toContain('action="/auth/signout"');
-    expect(main).toMatch(/<img src="https:\/\/example\.com\/a\.jpg"[^>]*width="96"[^>]*height="96"/);
-    expect(main.match(/<img /g)).toHaveLength(1);
-    // The art box stays, empty, for the favourite without an image.
-    expect(main.match(/class="item-card-box"/g)).toHaveLength(2);
-    expect(main).toContain(`href="/put?itemId=${noArt.id}"`);
   });
 
   it("lists reactions newest first and shows no counts in English either", async () => {
@@ -115,11 +102,27 @@ describe("GET /me", () => {
     expect(html).toContain(t("me.nobody"));
   });
 
-  it("shows the public url when the station is public, else a way to settings", async () => {
+  it("shows the radio's url with a copy button, a public/private toggle, a slug form and what the radio plays", async () => {
     const cookie = await signedInSession();
-    expect(await (await get("/me", cookie)).text()).toContain('href="/settings"');
-    await updateListener(env.DB, idOf(cookie), { stationPublic: true, stationSlug: "hiro-fm" });
-    expect(await (await get("/me", cookie)).text()).toContain("/stations/s:hiro-fm");
+    await updateListener(env.DB, idOf(cookie), { stationSlug: "hiro-fm" });
+    const url = `${env.PUBLIC_ORIGIN}/stations/s:hiro-fm`;
+    const panelOf = (html: string) => html.slice(html.indexOf('class="panel me-station"'), html.indexOf('class="panel me-heard"'));
+    const off = panelOf(await (await get("/me", cookie)).text());
+    expect(off).toContain(t("me.station"));
+    expect(off).toContain(url);
+    expect(off).toContain(`data-copy="${url}"`);
+    // Private: the url is shown but not a link, and the toggle offers to make it public.
+    expect(off).not.toContain(`href="${url}"`);
+    expect(off).toMatch(/<form method="post" action="\/me\/radio"[^>]*>[\s\S]*?name="public" value="1"[\s\S]*?<button type="submit"[^>]*>公開する<\/button>/);
+    expect(off).toMatch(/<input type="text" name="slug"[^>]*value="hiro-fm"/);
+    expect(off).toContain("公開ラジオには、あなたが送ったお便りと、一言を返したお便りが流れます。");
+    expect(off).toContain(t("me.radioNameOnly"));
+    expect(off).not.toContain('href="/settings"');
+    await updateListener(env.DB, idOf(cookie), { stationPublic: true });
+    const on = panelOf(await (await get("/me", cookie)).text());
+    expect(on).toContain(`href="${url}"`);
+    expect(on).toMatch(/name="public" value="0"[\s\S]*?<button type="submit"[^>]*>非公開にする<\/button>/);
+    expect(on).not.toMatch(/\d+ ?件/);
   });
 
   it("gives a signed-in listener without an address one, and shows it once the station is public", async () => {
@@ -133,35 +136,43 @@ describe("GET /me", () => {
     expect((await env.DB.prepare("SELECT station_slug FROM listeners WHERE id = ?").bind(idOf(cookie)).first<{ station_slug: string }>())?.station_slug).toBe(slug);
   });
 
-  it("lists letters heard, with replay link, reactions and no counts", async () => {
+  it("lists letters heard one row each: picture, work · sender, date and replay; no text, no forms, no counts", async () => {
     const cookie = await signedInSession();
     const me = idOf(cookie);
     const a = await insertItem(env.DB, itemDraft({ title: "曲A" }));
-    const b = await insertItem(env.DB, itemDraft({ title: "曲B", externalIds: { itunes: "2" } }));
+    const b = await insertItem(env.DB, itemDraft({ title: "曲B", imageUrl: "https://example.com/b.jpg", externalIds: { itunes: "2" } }));
     const la = await insertLetter(env.DB, letterDraft(a.id, { body: "Aへのお便り", bodyJa: "Aへのお便り", radioName: "ミナミ", place: "那覇" }));
-    const lb = await insertLetter(env.DB, letterDraft(b.id, { body: "Bへのお便り", bodyJa: "Bへのお便り" }));
+    const lb = await insertLetter(env.DB, letterDraft(b.id, { body: "Bへのお便り", bodyJa: "Bへのお便り", radioName: "キタ", place: "札幌" }));
     const line = (l: typeof la) => ({ type: "letter" as const, letterId: l.id, text: l.body, radioName: l.radioName, place: l.place, kind: "letter" as const, sourceUrl: null, sourceAuthor: null });
-    const ep = await insertEpisode(env.DB, {
-      listenerId: me,
-      segments: [
-        { itemId: a.id, slot: "near", lines: [line(la)] },
-        { itemId: b.id, slot: "far", lines: [line(lb)] },
-      ],
-      verified: true,
-      report: { verbatim: true, sources: true, topical: true, pii: true, details: [] },
-    });
+    const episode = () =>
+      insertEpisode(env.DB, {
+        listenerId: me,
+        segments: [
+          { itemId: a.id, slot: "near", lines: [line(la)] },
+          { itemId: b.id, slot: "far", lines: [line(lb)] },
+        ],
+        verified: true,
+        report: { verbatim: true, sources: true, topical: true, pii: true, details: [] },
+      });
+    const ep = await episode();
+    const later = await episode();
     // Only what was actually played counts: the programme also holds la, which was never started.
     await recordListen(env.DB, { listenerId: me, episodeId: ep.id, letterId: lb.id, segmentIndex: 1 });
+    await recordListen(env.DB, { listenerId: me, episodeId: later.id, letterId: lb.id, segmentIndex: 1 });
     const html = await (await get("/me", cookie)).text();
-    expect(html).not.toContain("Aへのお便り");
-    expect(html).toContain(t("me.heard"));
-    expect(html).toContain("Bへのお便り");
-    expect(html).not.toContain("那覇");
-    expect(html).toContain(`href="/episodes/${ep.id}?letter=${lb.id}"`);
-    expect(html).toContain(`name="parentLetterId" value="${lb.id}"`);
-    expect(html).toContain(`<a class="me-card-link" href="/items/${b.id}">`);
-    expect(html).not.toMatch(/\d+ ?件/);
-    expect(html).not.toMatch(/\d+ letters/);
+    const panel = html.slice(html.indexOf('class="panel me-heard"'));
+    expect(panel).toContain(t("me.heard"));
+    expect(panel).not.toContain("曲A");
+    // Heard twice, listed once, with the newest replay.
+    expect(panel.match(/<li/g)).toHaveLength(1);
+    expect(panel).toContain(`href="/episodes/${later.id}?letter=${lb.id}"`);
+    expect(panel).toContain(t("me.replay"));
+    expect(panel).toMatch(/<img[^>]*src="https:\/\/example\.com\/b\.jpg"[^>]*width="40"/);
+    expect(panel.replace(/<[^>]+>/g, "")).toContain("曲B · キタさん（札幌）");
+    expect(panel).toMatch(/\d{4}-\d{2}-\d{2}/);
+    expect(panel).not.toContain("Bへのお便り");
+    expect(panel).not.toContain("<form");
+    expect(panel).not.toMatch(/\d+ ?件/);
   });
 
   it("says so when nothing has been heard, even if an episode holds letters", async () => {
@@ -177,7 +188,7 @@ describe("GET /me", () => {
     expect(html).toContain(t("me.heardNone"));
   });
 
-  it("shows a heard found voice with its source, not as an anonymous listener", async () => {
+  it("names a heard found voice by its source's author, not as an anonymous listener", async () => {
     const cookie = await signedInSession();
     const a = await insertItem(env.DB, itemDraft());
     const found = await insertLetter(env.DB, letterDraft(a.id, { kind: "found", radioName: "", place: "", sourceAuthor: "@jazzcat", sourceUrl: "https://youtu.be/x", body: "so good", bodyJa: "とてもいい" }));
@@ -189,24 +200,24 @@ describe("GET /me", () => {
     });
     await recordListen(env.DB, { listenerId: idOf(cookie), episodeId: ep.id, letterId: found.id, segmentIndex: 0 });
     const html = await (await get("/me", cookie)).text();
-    expect(html).toContain("@jazzcat");
-    expect(html).toContain('href="https://youtu.be/x"');
-    expect(html).toContain(`/takedown?letterId=${found.id}`);
-    expect(html).not.toContain(t("listener.anonymous"));
+    const panel = html.slice(html.indexOf('class="panel me-heard"'));
+    expect(panel).toContain("@jazzcat");
+    expect(panel).not.toContain(t("listener.anonymous"));
   });
 });
 
 describe("own letters and POST /letters/:id/withdraw", () => {
   const withdraw = (id: string, cookie: string) => postForm(`/letters/${id}/withdraw`, cookie, {});
 
-  it("lists own public letters with the work, the first 60 characters and the date, and a withdraw button with its confirm text", async () => {
+  it("lists own public letters with the work and its picture, the first 80 characters, the date, share links and a withdraw button", async () => {
     const cookie = await signedInSession();
     const me = idOf(cookie);
-    const a = await insertItem(env.DB, itemDraft({ title: "Blue in Green", externalIds: { itunes: "a1" } }));
+    await updateListener(env.DB, me, { radioName: "ちくわ" });
+    const a = await insertItem(env.DB, itemDraft({ title: "Blue in Green", imageUrl: "https://example.com/a.jpg", externalIds: { itunes: "a1" } }));
     const b = await insertItem(env.DB, itemDraft({ title: "Kind of Blue", externalIds: { itunes: "b1" } }));
-    const long = "あ".repeat(80);
-    const l1 = await insertLetter(env.DB, letterDraft(a.id, { listenerId: me, body: long, bodyJa: long }));
-    const l2 = await insertLetter(env.DB, letterDraft(b.id, { listenerId: me, body: "二通目", bodyJa: "二通目" }));
+    const long = "あ".repeat(100);
+    const l1 = await insertLetter(env.DB, letterDraft(a.id, { listenerId: me, body: long, bodyJa: long, radioName: "ちくわ", place: "那覇" }));
+    const l2 = await insertLetter(env.DB, letterDraft(b.id, { listenerId: me, body: "二通目", bodyJa: "二通目", radioName: "ちくわ" }));
     const gone = await insertLetter(env.DB, letterDraft(b.id, { listenerId: me, body: "取り下げ済み", bodyJa: "取り下げ済み" }));
     await setLetterStatus(env.DB, gone.id, "withdrawn");
     await insertLetter(env.DB, letterDraft(b.id, { listenerId: (await createListener(env.DB)).id, body: "他人のお便り", bodyJa: "他人のお便り" }));
@@ -215,8 +226,9 @@ describe("own letters and POST /letters/:id/withdraw", () => {
     expect(panel).toContain(t("me.myLetters"));
     expect(panel).toContain("Blue in Green");
     expect(panel).toContain("Kind of Blue");
-    expect(panel).toContain("あ".repeat(60));
-    expect(panel).not.toContain("あ".repeat(61));
+    expect(panel).toMatch(/<img[^>]*src="https:\/\/example\.com\/a\.jpg"/);
+    expect(panel).toContain("あ".repeat(80));
+    expect(panel).not.toContain("あ".repeat(81));
     expect(panel).toContain("二通目");
     expect(panel).not.toContain("取り下げ済み");
     expect(panel).not.toContain("他人のお便り");
@@ -224,6 +236,18 @@ describe("own letters and POST /letters/:id/withdraw", () => {
     expect(panel).toContain(t("me.withdraw"));
     expect(panel).toContain(t("me.withdrawConfirm"));
     expect(panel).not.toMatch(/\d+ ?件/);
+    // Share: the letter's public page and a short text with the work and the radio name; nothing private.
+    const url = `${env.PUBLIC_ORIGIN}/letters/${l1.id}`;
+    expect(panel.match(/<div class="share">/g)).toHaveLength(2);
+    const x = panel.match(/<a class="pill" href="(https:\/\/x\.com\/intent\/post\?[^"]+)"/)?.[1]?.replaceAll("&amp;", "&") ?? "";
+    const intent = new URL(x);
+    expect([...intent.searchParams.keys()].sort()).toEqual(["text", "url"]);
+    expect(intent.searchParams.get("url")).toMatch(new RegExp(`^${env.PUBLIC_ORIGIN}/letters/(${l1.id}|${l2.id})$`));
+    expect(intent.searchParams.get("text")).toMatch(/^(Blue in Green|Kind of Blue) · ちくわさんのお便り — Dococa FM$/);
+    expect(panel).toContain(`data-copy="${url}"`);
+    expect(panel).toContain(t("share.x"));
+    expect(panel).not.toContain(me);
+    expect(panel).not.toContain("那覇");
   });
 
   it("shows a line instead of a list when there is no letter", async () => {
@@ -273,5 +297,72 @@ describe("own letters and POST /letters/:id/withdraw", () => {
     expect(res.status).toBe(303);
     expect(res.headers.get("location")).toContain("/auth/google");
     expect((await getLetter(env.DB, mine.id))?.status).toBe("public");
+  });
+});
+
+describe("POST /me/radio", () => {
+  const radio = (cookie: string, body: Record<string, string>) => postForm("/me/radio", cookie, body);
+  const rowOf = async (id: string) => env.DB.prepare("SELECT station_public AS pub, station_slug AS slug FROM listeners WHERE id = ?").bind(id).first<{ pub: number; slug: string | null }>();
+
+  it("makes the caller's radio public and private again, keeping the slug, and leaves everyone else alone", async () => {
+    const cookie = await signedInSession("Hiro");
+    const other = idOf(await signedInSession("Other"));
+    await updateListener(env.DB, other, { stationSlug: "other-fm" });
+    await updateListener(env.DB, idOf(cookie), { stationSlug: "hiro-fm" });
+    const on = await radio(cookie, { public: "1" });
+    expect(on.status).toBe(303);
+    expect(on.headers.get("location")).toBe("/me#radio");
+    expect(await rowOf(idOf(cookie))).toEqual({ pub: 1, slug: "hiro-fm" });
+    expect(await rowOf(other)).toEqual({ pub: 0, slug: "other-fm" });
+    expect((await radio(cookie, { public: "0" })).status).toBe(303);
+    expect(await rowOf(idOf(cookie))).toEqual({ pub: 0, slug: "hiro-fm" });
+  });
+
+  it("gives an address to a listener who has none when the radio is made public", async () => {
+    const cookie = await signedInSession();
+    expect((await radio(cookie, { public: "1" })).status).toBe(303);
+    const row = await rowOf(idOf(cookie));
+    expect(row?.pub).toBe(1);
+    expect(row?.slug).toMatch(/^radio-[0-9a-z]{6}$/);
+  });
+
+  it("changes the slug (trimmed, lower-cased) without touching public", async () => {
+    const cookie = await signedInSession();
+    await updateListener(env.DB, idOf(cookie), { stationSlug: "hiro-fm", stationPublic: true });
+    expect((await radio(cookie, { slug: "  My-Radio " })).status).toBe(303);
+    expect(await rowOf(idOf(cookie))).toEqual({ pub: 1, slug: "my-radio" });
+    expect(await (await get("/me", cookie)).text()).toContain(`href="${env.PUBLIC_ORIGIN}/stations/s:my-radio"`);
+  });
+
+  it("422s with 「この URL は使われています」 on a slug another listener holds, and changes nothing", async () => {
+    const other = idOf(await signedInSession("Other"));
+    await updateListener(env.DB, other, { stationSlug: "my-radio", stationPublic: true });
+    const cookie = await signedInSession("Hiro");
+    await updateListener(env.DB, idOf(cookie), { stationSlug: "hiro-fm" });
+    const res = await radio(cookie, { slug: "my-radio" });
+    expect(res.status).toBe(422);
+    const html = await res.text();
+    expect(html).toContain("この URL は使われています");
+    expect(html).toMatch(/<input type="text" name="slug"[^>]*value="my-radio"/);
+    expect(await rowOf(idOf(cookie))).toEqual({ pub: 0, slug: "hiro-fm" });
+    expect(await rowOf(other)).toEqual({ pub: 1, slug: "my-radio" });
+  });
+
+  it("422s for a slug that breaks the rule, an unknown public value or an empty post, and changes nothing", async () => {
+    const cookie = await signedInSession();
+    await updateListener(env.DB, idOf(cookie), { stationSlug: "hiro-fm" });
+    const bodies: Record<string, string>[] = [{ slug: "ab" }, { slug: "has space" }, { slug: "UPPER_x" }, { slug: "a".repeat(25) }, { slug: "" }, { public: "yes" }, {}];
+    for (const body of bodies) {
+      expect((await radio(cookie, body)).status, JSON.stringify(body)).toBe(422);
+    }
+    expect(await rowOf(idOf(cookie))).toEqual({ pub: 0, slug: "hiro-fm" });
+  });
+
+  it("sends an anonymous listener to sign-in and changes nothing", async () => {
+    const cookie = await newSession();
+    const res = await radio(cookie, { public: "1", slug: "sneaky" });
+    expect(res.status).toBe(303);
+    expect(res.headers.get("location")).toContain("/auth/google");
+    expect(await rowOf(idOf(cookie))).toEqual({ pub: 0, slug: null });
   });
 });
