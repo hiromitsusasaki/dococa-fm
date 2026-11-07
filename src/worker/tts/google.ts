@@ -42,15 +42,20 @@ function fromBase64(b64: string): Uint8Array {
 /** The API's MP3 is 32 kbps CBR mono, so a clip's length follows from its bytes. */
 const BYTES_PER_SECOND = 4000;
 /** A clip may run this long per code point of its text, plus a fixed allowance for the pauses of a short line. */
-const SECONDS_PER_CHAR = { ja: 0.5, en: 0.35 } as const;
-const SLACK_SECONDS = 4;
+const SECONDS_PER_CHAR = { ja: 0.27, en: 0.125 } as const;
+const SLACK_SECONDS = 3;
 /** Clips that spoke the prompt are made again up to this many paid calls per chunk. */
 const ATTEMPTS = 3;
 
 /**
- * Gemini-TTS now and then reads the style prompt aloud before the text (20–25 s of voice direction; seen on
- * 2026-11-06 on every short fixed line with a descriptive prompt and on 1 in 6 with an imperative one). Such a
- * clip is far longer than its text can account for, which is the one mechanical sign of it.
+ * Gemini-TTS now and then reads the style prompt aloud before the text. Such a clip is far longer than its text
+ * can account for, which is the one mechanical sign of it. A spoken prompt adds about 8-21 s.
+ *
+ * The constants come from 170 ja and 194 en unit clips measured in production on 2026-11-07. ja: median 0.201
+ * s/char, clean p90 about 0.23; 27 clips had +4...+21 s of excess. en: median 0.093, clean max about 0.115; 3
+ * clips had +8...+10 s. The ja opening line (41 chars) took 16.6 s where about 8 s is normal. The earlier 0.5 / 0.35
+ * s/char with 4 s of slack let every line over about 40 chars through, so the allowance is now just above the
+ * slowest clean clip.
  */
 export function spokeThePrompt(bytes: number, text: string, lang: AudioLang): boolean {
   return bytes / BYTES_PER_SECOND > SLACK_SECONDS + Array.from(text).length * SECONDS_PER_CHAR[lang];

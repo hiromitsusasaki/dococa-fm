@@ -103,14 +103,21 @@ describe("synthesize", () => {
 
 describe("spokeThePrompt", () => {
   // 32 kbps: 4,000 bytes per second.
-  it("flags a clip far longer than its text", () => {
-    expect(spokeThePrompt(25 * 4000, "ここで一息。", "ja")).toBe(true); // 25 s for 6 code points
+  it("flags a clip that spoke the prompt", () => {
+    // Measured in production 2026-11-07
+    expect(spokeThePrompt(16.6 * 4000, "Dococa FM。世界のどこかにいる誰かの好きなものへのお便りを、お届けします。", "ja")).toBe(true); // 41 ch
+    expect(spokeThePrompt(33.6 * 4000, "あ".repeat(64), "ja")).toBe(true);
+    expect(spokeThePrompt(25 * 4000, "ここで一息。", "ja")).toBe(true);
+    expect(spokeThePrompt(21.1 * 4000, "a".repeat(117), "en")).toBe(true);
     expect(spokeThePrompt(22 * 4000, "The next letter.", "en")).toBe(true);
   });
-  it("accepts a clip within the per-character allowance", () => {
-    expect(spokeThePrompt(3 * 4000, "ここで一息。", "ja")).toBe(false); // 3 s ≤ 4 + 6 × 0.5
-    expect(spokeThePrompt(100 * 4000, "あ".repeat(300), "ja")).toBe(false); // 100 s ≤ 4 + 150
-    expect(spokeThePrompt(6 * 4000, "The next letter.", "en")).toBe(false);
+  it("accepts honest clips, including the slowest clean ones measured", () => {
+    expect(spokeThePrompt(17.9 * 4000, "あ".repeat(68), "ja")).toBe(false);
+    expect(spokeThePrompt(24.4 * 4000, "あ".repeat(120), "ja")).toBe(false);
+    expect(spokeThePrompt(3 * 4000, "ここで一息。", "ja")).toBe(false);
+    expect(spokeThePrompt(13.8 * 4000, "a".repeat(94), "en")).toBe(false);
+    expect(spokeThePrompt(16.6 * 4000, "a".repeat(148), "en")).toBe(false);
+    expect(spokeThePrompt(2.5 * 4000, "The next letter.", "en")).toBe(false);
   });
 });
 
