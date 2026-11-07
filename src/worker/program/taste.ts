@@ -34,6 +34,9 @@ export async function standingOf(db: D1Database, listener: Pick<Listener, "id">)
 /** The dial wakes once the listener has this many own voices: letters sent and reactions. */
 export const DIAL_WAKES_AT = 3;
 
+/** The dial a locked radio chooses with: the centre. */
+export const LOCKED_DIAL = 0.5;
+
 /** Whether the listener's dial works yet (see `DIAL_WAKES_AT`). Before, the radio shows it locked. */
 export async function dialAwake(db: D1Database, listenerId: string): Promise<boolean> {
   return (await countOwnLetters(db, listenerId)) >= DIAL_WAKES_AT;

@@ -146,6 +146,11 @@ describe("POST /stations/:key/next with the dial, first and a letter", () => {
     return { me, near, mine, other };
   }
 
+  /** Two more own letters on the item, so with `seedMine`'s one the listener's dial is awake. */
+  async function wakeDial(me: string, itemId: string) {
+    for (const body of ["二通目", "三通目"]) await insertLetter(env.DB, letterDraft(itemId, { listenerId: me, body, bodyJa: body }));
+  }
+
   /** Every key of a JSON value, at any depth. */
   const keysOf = (v: unknown): string[] =>
     Array.isArray(v) ? v.flatMap(keysOf) : v && typeof v === "object" ? Object.entries(v).flatMap(([k, x]) => [k, ...keysOf(x)]) : [];
@@ -234,7 +239,8 @@ describe("POST /stations/:key/next with the dial, first and a letter", () => {
 
   it("picks as usual when the letter is the listener's own, and ignores a letter on the world station", async () => {
     const cookie = await newSession();
-    const { mine, near } = await seedMine(cookie);
+    const { me, mine, near } = await seedMine(cookie);
+    await wakeDial(me, near.id);
     const { episode } = (await (await send("mine", cookie, { dial: 0, letterId: mine.id })).json()) as Full;
     expect(episode.segments).toHaveLength(1);
     expect(episode.segments[0]!.itemId).toBe(near.id);
@@ -245,17 +251,30 @@ describe("POST /stations/:key/next with the dial, first and a letter", () => {
     expect(world.episode.segments[0]!.slot).toBe("far");
   });
 
-  it("keeps a signed-in listener's dial from the request, and only theirs", async () => {
+  it("keeps a signed-in listener's dial from the request once the dial is awake, and only theirs", async () => {
     const signed = await signedInSession();
-    await seedMine(signed);
+    await wakeDial(idOf(signed), (await seedMine(signed)).near.id);
     expect((await send("mine", signed, { dial: 0.9 })).status).toBe(200);
     expect((await getListener(env.DB, idOf(signed)))!.dial).toBe(0.9);
 
     const anon = await newSession();
-    await seedMine(anon);
+    await wakeDial(idOf(anon), (await seedMine(anon)).near.id);
     const before = (await getListener(env.DB, idOf(anon)))!.dial;
     expect((await send("mine", anon, { dial: 0.9 })).status).toBe(200);
     expect((await getListener(env.DB, idOf(anon)))!.dial).toBe(before);
+  });
+
+  it("a locked dial chooses with the centre and leaves the stored dial as it is", async () => {
+    const signed = await signedInSession();
+    await seedWorld();
+    await updateListener(env.DB, idOf(signed), { dial: 0.9 });
+    const res = await send("mine", signed, { dial: 0.5 });
+    expect(res.status).toBe(200);
+    expect(((await res.json()) as { dialReady?: unknown }).dialReady).toBe(false);
+    expect((await getListener(env.DB, idOf(signed)))!.dial).toBe(0.9);
+    // Even a request that sends another value does not reach the account while locked.
+    expect((await send("mine", signed, { dial: 0.1 })).status).toBe(200);
+    expect((await getListener(env.DB, idOf(signed)))!.dial).toBe(0.9);
   });
 });
 

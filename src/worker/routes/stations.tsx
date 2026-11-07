@@ -10,7 +10,7 @@ import { ja } from "../i18n/ja";
 import { type Lang, tFor } from "../i18n/t";
 import { makeEpisode } from "../program/create";
 import { publicRadioHasLetters } from "../program/select";
-import { dialAwake } from "../program/taste";
+import { dialAwake, LOCKED_DIAL } from "../program/taste";
 import { readNextBody } from "./next-body";
 import { playerView } from "../program/player-view";
 import { type StationKey, parseStationKey, stationColumn, stationLabel, stationUrl } from "../program/station";
@@ -103,15 +103,19 @@ stations.post("/stations/:key/next", async (c) => {
   if (!body) return c.json({ error: "bad request" }, 400);
   // A letter link is for the listener's own station; the world and public stations pick from their own pools.
   const { letterId, ...rest } = body;
-  const made = await makeEpisode(c.env, listener, { ...rest, ...(station.key.kind === "mine" && letterId ? { letterId } : {}), station: station.key });
+  // The own radio's dial wakes once three letters and reactions are in. Until then it chooses with the centre and
+  // leaves the stored dial as it is.
+  const dialReady = station.key.kind === "mine" ? await dialAwake(c.env.DB, listener.id) : undefined;
+  const dialOpts = dialReady === false ? { dial: LOCKED_DIAL, keepDial: false } : {};
+  const made = await makeEpisode(c.env, listener, { ...rest, ...dialOpts, ...(station.key.kind === "mine" && letterId ? { letterId } : {}), station: station.key });
   if (!made.ok) return c.json({ error: made.reason }, made.reason === "limit" ? 429 : made.reason === "empty" ? 409 : 503);
   const stored = await getVerifiedEpisode(c.env.DB, made.id);
   if (!stored) return c.json({ error: "unavailable" }, 503);
   return c.json({
     episode: await playerView(c.env.DB, stored, listener.lang),
     station: { key: raw, label: stationLabel(station.key, station.ownerName, listener.lang) },
-    // The own radio's dial wakes once three letters and reactions are in: the player unlocks it when this turns true.
-    ...(station.key.kind === "mine" ? { dialReady: await dialAwake(c.env.DB, listener.id) } : {}),
+    // The player unlocks the dial when this turns true.
+    ...(dialReady !== undefined ? { dialReady } : {}),
   });
 });
 

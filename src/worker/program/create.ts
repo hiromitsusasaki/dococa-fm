@@ -14,6 +14,8 @@ export type MakeOptions = {
   station?: StationKey;
   /** The player's dial for this request (0..1); a signed-in listener's stored dial follows it. */
   dial?: number;
+  /** false: choose with `dial` but leave the stored dial as it is (a locked dial). */
+  keepDial?: boolean;
   /** The first programme of a visit: the DJ opens it. */
   first?: boolean;
   /** A letter the listener came to hear: it takes the seat when it may be read. */
@@ -32,7 +34,7 @@ export type Made = { ok: true; id: string } | { ok: false; reason: "limit" | "un
  */
 export async function makeEpisode(env: Env, listener: Listener, opts: MakeOptions = {}): Promise<Made> {
   // Only a signed-in listener's dial is kept: an anonymous one lives in the browser alone.
-  if (opts.dial !== undefined && listener.googleSub !== null && opts.dial !== listener.dial) await setListenerDial(env.DB, listener.id, opts.dial);
+  if (opts.dial !== undefined && opts.keepDial !== false && listener.googleSub !== null && opts.dial !== listener.dial) await setListenerDial(env.DB, listener.id, opts.dial);
   // The per-listener cap resets with a new cookie, so a global cap bounds what a cookie-reset loop can spend.
   if ((await countEpisodesToday(env.DB, listener.id)) >= limitFrom(env.EPISODE_DAILY_LIMIT, DEFAULT_DAILY_LIMIT)) return { ok: false, reason: "limit" };
   if ((await countAllEpisodesToday(env.DB)) >= limitFrom(env.EPISODE_GLOBAL_DAILY_LIMIT, DEFAULT_GLOBAL_DAILY_LIMIT)) return { ok: false, reason: "limit" };
