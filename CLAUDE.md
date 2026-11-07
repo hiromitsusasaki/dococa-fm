@@ -6,7 +6,7 @@
 
 1. `docs/status.md` — 現在地と次の一手（タスクの進み、決定の記録、本人側の宿題）
 2. `docs/superpowers/specs/2026-11-03-dococa-fm-design.md` — 設計書（承認済み。設計の正本）
-3. `docs/superpowers/plans/2026-11-03-dococa-fm.md` — 実装計画（Task 1〜16。各タスクにテストとコミットがある）
+3. `docs/superpowers/plans/2026-11-03-dococa-fm.md` — 実装計画（Task 1〜17。各タスクにテストとコミットがある）
 4. `docs/superpowers/plans/2026-11-05-dococa-fm-phase2.md` — Phase 2 の計画（局・識別・公開局・見た目。2026-11-05 の本人フィードバックから）
 5. `docs/superpowers/plans/2026-11-06-dococa-fm-phase3.md` — Phase 3 の計画（単位・音声の鍵・つなぎ・事前生成・聴いた記録・土地コード・英語 DJ。設計書の追記 K が正本）
 6. `docs/superpowers/plans/2026-11-06-dococa-fm-phase4.md` — Phase 4 の計画（お住まい・MCP 外し・ダイヤルと枠ごとの番組・遠さ・ホーム・送るページ・マイページ・選別・台本の改善ループ。設計書の追記 L が正本）
