@@ -57,7 +57,7 @@ async function run(env: Env, db: D1Database, letterId: string, lang: Unit["lang"
   }
   if (!steps.audio) return out;
 
-  // An unverified unit is never spoken, so only the fixed hand-over and the letter are voiced for it.
+  // An unverified unit is never spoken, so only the fixed lead, the hand-over and the letter are voiced for it.
   const texts = unitSegment(unit.verified ? unit : null, letter, item, lang).lines.flatMap((l) => (l.type === "dj" || l.type === "letter") && l.text !== "" ? [l.text] : []);
   const voice = voiceOf(env);
   let complete = true;

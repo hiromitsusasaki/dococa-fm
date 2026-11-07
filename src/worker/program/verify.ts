@@ -76,13 +76,21 @@ const RULES = {
 /** The intro's first sentence: up to the first 。！？!? or a full stop before a space, or all of it. */
 const firstSentence = (text: string): string => text.match(/^[\s\S]*?(?:[。！？!?]|\.(?=\s|$)|$)/u)![0];
 
+/** A title written in Latin letters, digits, punctuation and spaces: it is matched as whole words. */
+const LATIN_TITLE = /^[\p{Script=Latin}\p{N}\p{P}\p{S}\p{Zs}]+$/u;
+
 /**
  * Whether an intro's first sentence says the work's title again, which the fixed lead has just said. A title of
- * one code point is not checked, since it would turn up by chance. Normalised and lower-cased on both sides.
+ * one code point is not checked, since it would turn up by chance. A Latin title counts only where no Latin letter
+ * or digit touches it (「Time」 is not in "Sometimes"; 「Blue in Greenは」 still counts); any other title (CJK) as a
+ * substring. Normalised and lower-cased on both sides.
  */
 function restatesTitle(text: string, item: Item | undefined): boolean {
   const title = item ? norm(item.title).trim().toLowerCase() : "";
-  return Array.from(title).length >= 2 && firstSentence(text).toLowerCase().includes(title);
+  if (Array.from(title).length < 2) return false;
+  const head = firstSentence(text).toLowerCase();
+  if (!LATIN_TITLE.test(title)) return head.includes(title);
+  return new RegExp(`(?<![\\p{Script=Latin}\\p{N}])${escapeRe(title)}(?![\\p{Script=Latin}\\p{N}])`, "u").test(head);
 }
 
 /**

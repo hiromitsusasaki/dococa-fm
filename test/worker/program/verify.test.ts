@@ -506,4 +506,13 @@ describe("verifyEpisode intro after the lead", () => {
     const lines: ScriptLine[] = [fixedDj("Miles Davisの「Blue in Green」という曲の紹介です。"), read(plain), { type: "dj", text: "Blue in Greenはいい曲です。", unit: { letterId: plain.id, part: "after" } }];
     expect(verifyEpisode([{ itemId: "i1", slot: "near", lines }], byId([plain]), me, new Map([["i1", item()]])).details).toEqual([]);
   });
+
+  it("matches a Latin title as whole words only, and a CJK title as a substring", () => {
+    expect(run("Sometimes a song finds you.", "en", "Time")).toEqual([]);
+    expect(run("A brainy little record.", "en", "Rain")).toEqual([]);
+    expect(run("Time is a quiet piece.", "en", "Time")).toEqual(["lead: segment 1 line 1: restates the title"]);
+    expect(run("静かなTimeです。", "ja", "Time")).toEqual(["lead: segment 1 line 1: restates the title"]);
+    expect(run("Timelessな一曲です。", "ja", "Time")).toEqual([]);
+    expect(run("夜の千本桜のような一曲です。", "ja", "千本桜")).toEqual(["lead: segment 1 line 1: restates the title"]);
+  });
 });
