@@ -4,14 +4,14 @@ import { BookmarkletHelp, bookmarkletCode } from "../../views/bookmarklet";
 import { ItemCard, whoOf } from "../../views/components";
 import { Layout } from "../../views/layout";
 import type { Variables } from "../auth/session";
-import { elicitQuestions } from "../claude/elicit";
+import { askBack, elicitQuestions } from "../claude/elicit";
 import { isInHistory, listFavorites, listHistory, listImported, upsertHistory } from "../db/history";
 import { findItemsByExternalIds, getItem } from "../db/items";
 import type { Env } from "../env";
 import { requireSignin } from "../auth/require-signin";
 import { tFor } from "../i18n/t";
 import { type ItemDraft, resolveUrl, searchByText } from "../resolve";
-import { searchRateLimit } from "../security/rate-limit";
+import { askRateLimit, searchRateLimit } from "../security/rate-limit";
 import type { Item, Listener } from "../types";
 
 type AppEnv = { Bindings: Env; Variables: Variables };
@@ -159,7 +159,7 @@ export function PutPage(props: PutPageProps) {
   const here = itemId ? `/put?itemId=${itemId}` : url ? `/put?url=${encodeURIComponent(url)}` : "/put";
   const chosen = Boolean(card || itemId);
   return (
-    <Layout title={t("put.title")} lang={lang} listener={listener} path={here} embed={embed}>
+    <Layout title={t("put.title")} lang={lang} listener={listener} path={here} embed={embed} script="put-page">
       <main class="put">
         <h1>{t("put.title")}</h1>
         {error && <p class="form-error" role="alert">{error}</p>}
@@ -202,11 +202,19 @@ export function PutPage(props: PutPageProps) {
                   </section>
                 )}
                 {itemId ? <input type="hidden" name="itemId" value={itemId} /> : <input type="hidden" name="url" value={url ?? ""} />}
+                {/* Only a stored work can be asked about; `put-page.tsx` fills this in, and shows `data-none` for 3 seconds when nothing comes back. */}
+                {itemId && <p class="put-askback" role="status" aria-live="polite" data-none={t("put.askNone")} hidden></p>}
                 <label>
                   <span>{t("put.body")}</span>
                   <textarea name="body" maxlength={200} rows={5} required>{body ?? ""}</textarea>
                   <small>{t("put.bodyHelp")}</small>
                 </label>
+                {itemId && (
+                  <p class="put-ask-row">
+                    <button type="button" class="put-ask" data-ask-url="/put/ask">{t("put.ask")}</button>
+                    <small>{t("put.askNote")}</small>
+                  </p>
+                )}
                 <p class="put-from">
                   {t("put.from")}: {whoOf(listener, lang)} <a href="/settings" target={embed ? "_top" : undefined}>{t("put.editSettings")}</a>
                   <br />
@@ -292,7 +300,7 @@ put.get("/put", limitSearch, async (c) => {
   if (itemId) {
     const item = await getItem(c.env.DB, itemId);
     if (!item) return c.html(<PutPage embed={embed} listener={listener} bookmarklet={bookmarklet} card={null} error={t("put.notFound")} />, 404);
-    const questions = (await isInHistory(c.env.DB, listener.id, item.id)) ? await elicitQuestions(c.env, item, listener) : [];
+    const questions = await elicitQuestions(c.env, item, listener);
     return c.html(<PutPage embed={embed} listener={listener} bookmarklet={bookmarklet} card={item} itemId={item.id} questions={questions} />);
   }
   if (url) {
@@ -324,4 +332,21 @@ put.post("/put/register", requireSignin, async (c) => {
   if (!itemId || !(await isInHistory(c.env.DB, listener.id, itemId))) return c.notFound();
   await upsertHistory(c.env.DB, [{ listenerId: listener.id, itemId, source: "manual", occurredAt: null, rank: null }]);
   return c.redirect(putHref(`/put?itemId=${encodeURIComponent(itemId)}`, form.embed === "1"), 303);
+});
+
+const MAX_DRAFT = 200;
+
+/**
+ * A question back for a letter still being written. The draft arrives in the request body, goes to Claude and is
+ * dropped: it is not stored and not logged. `question` is null when nothing fit (a normal answer, 200).
+ */
+put.post("/put/ask", requireSignin, askRateLimit, async (c) => {
+  const body = (await c.req.json().catch(() => null)) as { itemId?: unknown; draft?: unknown } | null;
+  const itemId = typeof body?.itemId === "string" ? body.itemId : "";
+  const draft = typeof body?.draft === "string" ? body.draft.trim().slice(0, MAX_DRAFT) : "";
+  if (draft === "") return c.json({ error: "empty" }, 422);
+  const item = itemId ? await getItem(c.env.DB, itemId) : null;
+  if (!item) return c.json({ error: "not_found" }, 404);
+  c.header("cache-control", "no-store");
+  return c.json({ question: await askBack(c.env, item, draft, c.get("listener").lang) });
 });

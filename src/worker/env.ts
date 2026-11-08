@@ -24,6 +24,8 @@ export type Env = {
   CLOUD_TTS_GLOBAL_DAILY_LIMIT?: string;
   /** Units (one Claude-written intro/after per letter and language) made per JST day; default 1000, `0` pauses. */
   UNIT_DAILY_LIMIT?: string;
+  /** Page questions (one Claude call each, made when a work is chosen on /put) per JST day; default 600, `0` pauses. */
+  ELICIT_DAILY_LIMIT?: string;
   /** Letters and replies (each a moderation and translation call) stored per JST day, everyone together; default 500, `0` pauses. 私も is neither counted nor capped. */
   LETTER_GLOBAL_DAILY_LIMIT?: string;
   RATE_LIMIT_PER_MINUTE?: string;
