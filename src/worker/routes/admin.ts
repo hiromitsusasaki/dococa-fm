@@ -15,7 +15,7 @@ import { isValidRegion, placeLabel } from "../geo/place-label";
 import { COUNTRIES } from "../geo/places";
 import { createLetter } from "../letters/create";
 import { makeEpisode } from "../program/create";
-import { prepareBatch, prepareLetter } from "../program/prepare";
+import { prepareBatch, prepareLetter, reactToWatashimo } from "../program/prepare";
 import { looksLikeContact } from "../program/pii-patterns";
 import { resolveOrCreate, resolveUrl } from "../resolve";
 import { isFetchableUrl } from "../resolve/url";
@@ -282,6 +282,7 @@ admin.post("/admin/letters", async (c) => {
   defer(c, embedItems(c.env, c.env.DB, [made.itemId]));
   // Reactions are fixed phrases or short replies and have no unit to make, as on the public route.
   if (made.letter.kind === "letter") defer(c, prepareLetter(c.env, c.env.DB, made.letter.id));
+  if (made.letter.kind === "watashimo" && made.letter.parentLetterId) defer(c, reactToWatashimo(c.env, c.env.DB, made.letter.parentLetterId));
   return c.json({ letterId: made.letter.id, itemId: made.itemId });
 });
 

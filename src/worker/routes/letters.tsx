@@ -17,7 +17,7 @@ import type { ja } from "../i18n/ja";
 import { type Lang, tFor } from "../i18n/t";
 import { defer } from "../defer";
 import { createLetter } from "../letters/create";
-import { prepareLetter } from "../program/prepare";
+import { prepareLetter, reactToWatashimo } from "../program/prepare";
 import type { ItemDraft } from "../resolve";
 import type { Listener } from "../types";
 import { PutPage } from "./put";
@@ -87,6 +87,8 @@ letters.post(
       defer(c, embedItems(c.env, c.env.DB, [result.itemId]));
       // Reactions are fixed phrases and have no unit to make.
       if (result.letter.kind === "letter") defer(c, prepareLetter(c.env, c.env.DB, result.letter.id));
+      // A 私も may change what the DJ says after the letter it answers (the first one, or one from a third country).
+      if (result.letter.kind === "watashimo" && result.letter.parentLetterId) defer(c, reactToWatashimo(c.env, c.env.DB, result.letter.parentLetterId));
       return c.redirect(form.embed === "1" ? `/put?embed=1&sent=${encodeURIComponent(result.itemId)}` : `/items/${result.itemId}`, 303);
     }
     const message = result.reason ? `${t(result.key)} ${t(`letters.reason.${result.reason}` as keyof typeof ja)}` : t(result.key);
