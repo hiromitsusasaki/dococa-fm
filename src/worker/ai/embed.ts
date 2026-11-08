@@ -155,10 +155,14 @@ export async function embedLetters(env: Pick<Env, "AI">, db: D1Database, which: 
     } else {
       pending = (await db.prepare(`${UNEMBEDDED_LETTERS} ORDER BY l.created_at DESC, l.id LIMIT ?`).bind(Math.max(0, which.limit)).all<UnembeddedLetter>()).results;
     }
-    return await embedEach(ai, pending, letterText, async (entries) => {
+    // Each work's mix is remade once, after every batch is stored, however many of its letters were embedded.
+    const touched = new Set<string>();
+    const made = await embedEach(ai, pending, letterText, async (entries) => {
       await setLetterVecs(db, entries.map(([l, v]) => [l.id, v]));
-      for (const itemId of new Set(entries.map(([l]) => l.itemId))) await refreshItemMix(db, itemId);
+      for (const [l] of entries) touched.add(l.itemId);
     });
+    for (const itemId of touched) await refreshItemMix(db, itemId);
+    return made;
   } catch (e) {
     console.error(`[dococa] embed letters failed: ${e instanceof Error ? e.name : "unknown"}`);
     return 0;

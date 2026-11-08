@@ -153,6 +153,20 @@ describe("tasteOf with letter vectors", () => {
     await recordListen(env.DB, { listenerId: listener.id, episodeId: ep.id, letterId: withVec.id, segmentIndex: 0 });
     expect((await tasteOf(env.DB, listener))![1]).toBeCloseTo(1, 2);
   });
+
+  it("hears a heard letter's own vector only while it is public: a withdrawn one gives its work's", async () => {
+    const a = await insertItem(env.DB, itemDraft({ externalIds: {} }));
+    await setItemVec(env.DB, a.id, angled(0));
+    const letter = await insertLetter(env.DB, letterDraft(a.id, { body: "heard" }));
+    await setLetterVecs(env.DB, [[letter.id, angled(Math.PI / 2)]]);
+    const listener = await createListener(env.DB);
+    const ep = await insertEpisode(env.DB, { listenerId: listener.id, segments: [], verified: true, report: { verbatim: true, sources: true, topical: true, pii: true, details: [] } });
+    await recordListen(env.DB, { listenerId: listener.id, episodeId: ep.id, letterId: letter.id, segmentIndex: 0 });
+    expect((await tasteOf(env.DB, listener))![1]).toBeCloseTo(1, 2);
+    // Withdrawn behind setLetterStatus's back, its vector still stored: the taste does not read it.
+    await env.DB.prepare("UPDATE letters SET status = 'withdrawn' WHERE id = ?").bind(letter.id).run();
+    expect((await tasteOf(env.DB, listener))![0]).toBeCloseTo(1, 2);
+  });
 });
 
 describe("standingOf", () => {

@@ -155,4 +155,19 @@ describe("the ask-back on the send page", () => {
     expect(statuses.slice(0, 6).every((s) => s === 200)).toBe(true);
     expect(statuses[6]).toBe(429);
   });
+
+  it("answers question null, without calling Claude, once the day's ELICIT_DAILY_LIMIT is spent", async () => {
+    const cookie = await signedInSession();
+    const item = await insertItem(env.DB, itemDraft());
+    said("どんな場面でしたか？");
+    (env as { ELICIT_DAILY_LIMIT?: string }).ELICIT_DAILY_LIMIT = "0";
+    try {
+      const res = await ask(cookie, { itemId: item.id, draft: "あいう" });
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({ question: null });
+      expect(create).not.toHaveBeenCalled();
+    } finally {
+      (env as { ELICIT_DAILY_LIMIT?: string }).ELICIT_DAILY_LIMIT = "";
+    }
+  });
 });

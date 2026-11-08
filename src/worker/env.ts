@@ -24,7 +24,7 @@ export type Env = {
   CLOUD_TTS_GLOBAL_DAILY_LIMIT?: string;
   /** Units (one Claude-written intro/after per letter and language) made per JST day; default 1000, `0` pauses. */
   UNIT_DAILY_LIMIT?: string;
-  /** Page questions (one Claude call each, made when a work is chosen on /put) per JST day; default 600, `0` pauses. */
+  /** Page questions and ask-backs on /put, counted together (one Claude call each) per JST day; default 600, `0` pauses. */
   ELICIT_DAILY_LIMIT?: string;
   /** Far bridges (one Claude-written line per listener, far work and language, on the listener's own radio) made per JST day; default 400, `0` pauses. */
   BRIDGE_DAILY_LIMIT?: string;

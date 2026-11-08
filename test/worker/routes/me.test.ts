@@ -2,13 +2,14 @@ import { SELF } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { upsertHistory } from "../../../src/worker/db/history";
-import { insertItem } from "../../../src/worker/db/items";
-import { getLetter, insertLetter, setLetterStatus } from "../../../src/worker/db/letters";
+import { insertItem, refreshItemMix, setItemVec } from "../../../src/worker/db/items";
+import { getLetter, insertLetter, setLetterStatus, setLetterVecs } from "../../../src/worker/db/letters";
 import * as listeners from "../../../src/worker/db/listeners";
 import { createListener, updateListener } from "../../../src/worker/db/listeners";
 import { insertEpisode } from "../../../src/worker/db/episodes";
 import { recordListen } from "../../../src/worker/db/listens";
 import { t } from "../../../src/worker/i18n/t";
+import { angled } from "../../helpers/ai";
 import { resetDb } from "../../helpers/db";
 import { itemDraft, letterDraft } from "../db/helpers";
 import { BASE, get, newSession, postForm, signedInSession } from "./helpers";
@@ -283,6 +284,20 @@ describe("own letters and POST /letters/:id/withdraw", () => {
     expect(await (await get("/", cookie)).text()).not.toContain("ひみつの本文");
     expect((await SELF.fetch(`${BASE}/letters/${mine.id}`)).status).toBe(404);
     expect(await (await get("/me", cookie)).text()).not.toContain("ひみつの本文");
+  });
+
+  it("drops the letter's vector and remakes its work's mix without it", async () => {
+    const cookie = await signedInSession();
+    const item = await insertItem(env.DB, itemDraft());
+    await setItemVec(env.DB, item.id, angled(0));
+    const mine = await insertLetter(env.DB, letterDraft(item.id, { listenerId: idOf(cookie), body: "x" }));
+    await setLetterVecs(env.DB, [[mine.id, angled(Math.PI / 2)]]);
+    await refreshItemMix(env.DB, item.id);
+    const row = () => env.DB.prepare("SELECT i.vec_mix AS mix, l.vec AS vec FROM items i JOIN letters l ON l.item_id = i.id WHERE l.id = ?").bind(mine.id).first<{ mix: unknown; vec: unknown }>();
+    expect((await row())!.mix).not.toBeNull();
+    expect((await withdraw(mine.id, cookie)).status).toBe(303);
+    expect((await row())!.vec).toBeNull();
+    await vi.waitFor(async () => expect((await row())!.mix).toBeNull());
   });
 
   it("answers 404 for another listener's letter, an own reply, a reaction and an unknown id, and changes nothing", async () => {

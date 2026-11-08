@@ -24,7 +24,7 @@
 
 ### 本人作業（この順）
 
-- [ ] Phase 9 Task 1 のデプロイ: `pnpm db:migrate`（0026_letter_vec）→ `pnpm run deploy` → `/admin/prepare` を、返る `remaining.letterVecs` が 0 になるまで繰り返す（`{"limit":20}` 程度。0 になれば、お便りのベクトルと作品の混ぜたベクトルが揃う。この段は Workers AI の埋め込みだけで、Claude は呼ばない）。
+- [ ] Phase 9 Task 1 のデプロイ: `pnpm db:migrate`（0026_letter_vec）→ `pnpm run deploy` → `/admin/prepare` を、返る `remaining.letterVecs` が 0 になるまで繰り返す（最初の埋め戻しは `{"limit":5}` と小さく始め、`remaining.letterVecs` が 0 になるまでその大きさで回す。1 回の D1 の呼び出しが多すぎて止まらないようにするため。0 になれば、お便りのベクトルと作品の混ぜたベクトルが揃う。この段は Workers AI の埋め込みだけで、Claude は呼ばない）。
 - [x] `pnpm run deploy`（migration なし。2026-11-08 JST 未明に反映。Version e648ff2f。朝のフィードバック分は Version 105b39d7、スマホのスライダーは Version 8bcf5f8c。`post-deploy-check.sh` 全項目 ok）。main は origin に push 済み。
 - [x] ダイヤルを目覚めさせる: 本人の了承で、司令塔が本人のセッションから他の人のお便り 2 通に「私も」を付けた（ファイト・クラブ、千と千尋）。動画の録画で「Waltz for Debby」のお便りが 1 通増える。不要なら `/me` から非公開に。
 - [x] 動画の撮り直し（本番で録画 → mix → render。`~/agent_workspace/workspace/2026-11-07-dococa-fm-submission/video/draft.mp4`。朝のフィードバック反映後にもう一度撮り直し）。

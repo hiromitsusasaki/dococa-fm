@@ -2,9 +2,9 @@ import { env } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import app from "../../../src/worker/index";
 import { createListener, getListener } from "../../../src/worker/db/listeners";
-import { getItemVecs, insertItem } from "../../../src/worker/db/items";
-import { fakeAi } from "../../helpers/ai";
-import { insertLetter, listLettersForItem } from "../../../src/worker/db/letters";
+import { getItemVecs, insertItem, refreshItemMix, setItemVec } from "../../../src/worker/db/items";
+import { angled, fakeAi } from "../../helpers/ai";
+import { insertLetter, listLettersForItem, setLetterVecs } from "../../../src/worker/db/letters";
 import { t } from "../../../src/worker/i18n/t";
 import * as prepare from "../../../src/worker/program/prepare";
 import { noNames, stubAnthropic, toolUse } from "../../helpers/anthropic";
@@ -433,6 +433,19 @@ describe("POST /admin/letters/:id/reject", () => {
 
   it("answers 404 for a missing letter", async () => {
     expect((await call("POST", "/admin/letters/nope/reject")).status).toBe(404);
+  });
+
+  it("drops the letter's vector and remakes its work's mix without it", async () => {
+    const item = await insertItem(env.DB, itemDraft());
+    await setItemVec(env.DB, item.id, angled(0));
+    const letter = await insertLetter(env.DB, letterDraft(item.id, { body: "x" }));
+    await setLetterVecs(env.DB, [[letter.id, angled(Math.PI / 2)]]);
+    await refreshItemMix(env.DB, item.id);
+    const row = () => env.DB.prepare("SELECT i.vec_mix AS mix, l.vec AS vec FROM items i JOIN letters l ON l.item_id = i.id WHERE l.id = ?").bind(letter.id).first<{ mix: unknown; vec: unknown }>();
+    expect((await row())!.mix).not.toBeNull();
+    expect((await call("POST", `/admin/letters/${letter.id}/reject`)).status).toBe(200);
+    expect((await row())!.vec).toBeNull();
+    await vi.waitFor(async () => expect((await row())!.mix).toBeNull());
   });
 });
 

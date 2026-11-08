@@ -248,8 +248,9 @@ export async function setLetterVecs(db: D1Database, entries: Array<[string, Floa
   await db.batch(entries.map(([id, v]) => db.prepare("UPDATE letters SET vec = ? WHERE id = ?").bind(quantise(normalise(v)), id)));
 }
 
+/** Sets the status; a letter that stops being public loses its vector too, so nothing reads its text through it. */
 export async function setLetterStatus(db: D1Database, id: string, status: Letter["status"]): Promise<void> {
-  await db.prepare("UPDATE letters SET status = ? WHERE id = ?").bind(status, id).run();
+  await db.prepare("UPDATE letters SET status = ?1, vec = CASE WHEN ?1 = 'public' THEN vec ELSE NULL END WHERE id = ?2").bind(status, id).run();
 }
 
 /** The listener's own public letters (kind `letter` only), newest first: what /me lets them take back. */
@@ -261,10 +262,10 @@ export async function listOwnPublicLetters(db: D1Database, listenerId: string): 
   return results.map(rowToLetter);
 }
 
-/** The sender takes a public letter back. One write that checks owner, kind and status; false when it matched none. */
+/** The sender takes a public letter back, and its vector goes with it. One write that checks owner, kind and status; false when it matched none. */
 export async function withdrawLetter(db: D1Database, id: string, listenerId: string): Promise<boolean> {
   const res = await db
-    .prepare("UPDATE letters SET status = 'withdrawn' WHERE id = ? AND listener_id = ? AND kind = 'letter' AND status = 'public'")
+    .prepare("UPDATE letters SET status = 'withdrawn', vec = NULL WHERE id = ? AND listener_id = ? AND kind = 'letter' AND status = 'public'")
     .bind(id, listenerId)
     .run();
   return (res.meta.changes ?? 0) > 0;

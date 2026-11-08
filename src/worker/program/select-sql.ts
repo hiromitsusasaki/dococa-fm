@@ -109,10 +109,10 @@ export const TASTE_OWN_SQL = `SELECT COALESCE(v.vec, i.vec_mix, i.vec) AS vec FR
   JOIN items i ON i.id = v.item_id`;
 
 /**
- * The vectors of the 20 letters the listener heard most recently: the letter's own, else its work's (`vec_mix`, else
- * `vec`); null when neither has one.
+ * The vectors of the 20 letters the listener heard most recently: the letter's own while it is public, else its work's
+ * (`vec_mix`, else `vec`); null when neither has one.
  */
-export const TASTE_HEARD_SQL = `SELECT COALESCE(l.vec, i.vec_mix, i.vec) AS vec FROM
+export const TASTE_HEARD_SQL = `SELECT COALESCE(CASE WHEN l.status = 'public' THEN l.vec END, i.vec_mix, i.vec) AS vec FROM
     (SELECT s.letter_id, MAX(s.heard_at) AS at FROM listens s WHERE s.listener_id = ?1 GROUP BY s.letter_id ORDER BY at DESC, s.letter_id LIMIT 20) h
   JOIN letters l ON l.id = h.letter_id
   JOIN items i ON i.id = l.item_id`;

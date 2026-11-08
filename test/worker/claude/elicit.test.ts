@@ -104,4 +104,15 @@ describe("askBack", () => {
     expect(await askBack(keyed, item, draft)).toBeNull();
     expect(JSON.stringify(warn.mock.calls)).not.toContain("雨の日");
   });
+
+  it("shares the page questions' daily cap: past it, null without calling Claude", async () => {
+    await env.DB.prepare("DELETE FROM tts_claims WHERE key LIKE 'elicit:%'").run();
+    const capped = { ...keyed, ELICIT_DAILY_LIMIT: "1" } as Env;
+    create.mockResolvedValue(asked(["どこで聴きましたか？"]));
+    expect(await elicitQuestions(capped, item, listener)).toHaveLength(1);
+    create.mockClear();
+    expect(await askBack(capped, item, draft)).toBeNull();
+    expect(await askBack({ ...keyed, ELICIT_DAILY_LIMIT: "0" } as Env, item, draft)).toBeNull();
+    expect(create).not.toHaveBeenCalled();
+  });
 });

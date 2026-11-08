@@ -6,11 +6,11 @@ import type { Item, Listener } from "../types";
 import { escapeTags, hasClaude } from "./client";
 import { callTool, type ToolSpec } from "./tool-call";
 
-/** Page questions shown per JST day when `ELICIT_DAILY_LIMIT` is unset. */
+/** Page questions and ask-backs (one shared count) per JST day when `ELICIT_DAILY_LIMIT` is unset. */
 export const DEFAULT_ELICIT_DAILY_LIMIT = 600;
 
 /**
- * Counts one page question call against the day's cap and says whether it may go ahead (`0` pauses). Nothing is
+ * Counts one page question or ask-back call against the day's cap and says whether it may go ahead (`0` pauses). Nothing is
  * stored about the work or the listener: a row in `tts_claims` named `elicit:<day>:<random>` is the tally, and
  * earlier days' rows are swept as a later day's call comes in.
  */
@@ -118,11 +118,13 @@ function quotesDraft(question: string, draft: string): boolean {
 /**
  * One soft question that draws out the rest of a letter being written. The draft goes to the model and nowhere else:
  * it is neither stored nor logged (the failure log names the error only). Every failure, and a question that is too
- * long, topical or quotes the draft, ends in null: asking back is optional.
+ * long, topical or quotes the draft, ends in null: asking back is optional. It shares the page questions' daily cap
+ * (`ELICIT_DAILY_LIMIT`); past it, the answer is null too.
  */
 export async function askBack(env: Env, item: Item, draft: string, lang: "ja" | "en" = "ja"): Promise<string | null> {
   if (!hasClaude(env)) return null;
   try {
+    if (!(await claimElicit(env))) return null;
     const input = (await callTool(env, {
       system: ASK_BACK_SYSTEM[lang],
       user: `<work>題名: ${escapeTags(item.title)}\n作者: ${escapeTags(item.creator)}${item.year !== null ? `\n年: ${item.year}` : ""}\n種類: ${item.kind}</work>\n<draft>${escapeTags(draft)}</draft>`,
