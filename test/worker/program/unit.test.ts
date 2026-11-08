@@ -677,7 +677,11 @@ describe("the DJ's reaction to 私も", () => {
     const it = await insertItem(env.DB, itemDraft());
     const l = await insertLetter(env.DB, letterDraft(it.id, { radioName: "みなと", place: "大船渡", body: "夜に聴きました。", bodyJa: "夜に聴きました。", bodyEn: "I listened at night." }));
     for (const lang of ["ja", "en"] as const) await upsertUnit(env.DB, { letterId: l.id, lang, intro: "もとの紹介。", after: "もとの感想。", verified: true, audioReady: true });
-    const say = (place: string, placeCountry: string | null) => insertLetter(env.DB, letterDraft(it.id, { ...WATASHIMO, parentLetterId: l.id, place, placeCountry, radioName: "誰か" }));
+    // A beat between rows: the places are read oldest first, and two 私も in the same millisecond would tie on created_at.
+    const say = async (place: string, placeCountry: string | null) => {
+      await new Promise((r) => setTimeout(r, 2));
+      return insertLetter(env.DB, letterDraft(it.id, { ...WATASHIMO, parentLetterId: l.id, place, placeCountry, radioName: "誰か" }));
+    };
     return { it, l, say };
   }
   const run = (f: Awaited<ReturnType<typeof parent>>) => remakeForReaction(keyed, env.DB, f.l, f.it);
