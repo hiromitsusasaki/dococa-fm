@@ -35,7 +35,7 @@ Dococa FM は、誰かが好きな作品について書いた「お便り」を�
 
 ## どう作ったか
 
-Claude Code を中心に、Sonnet が実装し、Opus がレビューし、Codex を第二の目にして 5 日間で作りました。役割分担・数字・裁定の例は [docs/process.md](docs/process.md)、経緯と意思決定は [docs/history.md](docs/history.md) と [docs/adr/](docs/adr/README.md)。
+Claude Code を中心に、Sonnet が実装し、Opus がレビューし、Codex を第二の目にして 5 日間で作りました。製品の中で AI が何をしているか（判定・翻訳・紹介・読み・声・好みのベクトル・橋渡し・問い返し）と、何をしないかは [docs/ai.md](docs/ai.md) に一枚でまとめてあります。役割分担・数字・裁定の例は [docs/process.md](docs/process.md)、経緯と意思決定は [docs/history.md](docs/history.md) と [docs/adr/](docs/adr/README.md)。
 
 ## 何をするか
 
