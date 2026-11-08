@@ -37,7 +37,7 @@ export async function verifySession(cookie: string | undefined, secret: string):
 }
 
 const EXEMPT_PREFIXES = ["/admin", "/assets", "/src"];
-const EXEMPT_PATHS = new Set(["/healthz", "/app.css", "/favicon.ico", "/manifest.webmanifest", "/icon.svg"]);
+const EXEMPT_PATHS = new Set(["/healthz", "/app.css", "/favicon.ico", "/manifest.webmanifest", "/icon.svg", "/icon-192.png", "/icon-512.png", "/apple-touch-icon.png"]);
 const BED_PATH = /^\/bed-\d+\.mp3$/;
 /** The key visuals and the about page's pictures; `/about` itself still needs the listener. */
 const STATIC_IMAGE = /^\/(kv|kv-mobile)\.jpg$|^\/about\/[^/]+\.jpg$/;

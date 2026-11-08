@@ -262,7 +262,7 @@ describe("canonical host", () => {
 describe("session exemptions", () => {
   it("do not create listener rows for static assets", async () => {
     const shared = "/letters/00000000-0000-4000-8000-000000000000";
-    for (const path of ["/app.css", "/icon.svg", "/manifest.webmanifest", "/bed-3.mp3", "/healthz", `${shared}/player`, `${shared}/lines.json`, `${shared}/audio/3`]) {
+    for (const path of ["/app.css", "/icon.svg", "/favicon.ico", "/icon-192.png", "/apple-touch-icon.png", "/manifest.webmanifest", "/bed-3.mp3", "/healthz", `${shared}/player`, `${shared}/lines.json`, `${shared}/audio/3`]) {
       const res = await SELF.fetch(`http://example.com${path}`);
       expect(res.headers.get("set-cookie"), path).toBeNull();
     }
