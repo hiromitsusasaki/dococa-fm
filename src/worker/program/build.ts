@@ -3,6 +3,7 @@ import { getLettersByIds, listReactionsToListener } from "../db/letters";
 import type { Env } from "../env";
 import type { Episode, Item, Letter, Listener, Unit, VerifyReport } from "../types";
 import { composeEpisode, MAX_REACTIONS, type SegmentPlan } from "./compose";
+import { farBridgeIds, farBridges, withFarBridges } from "./far-bridge";
 import { selectProgram } from "./select";
 import type { StationKey } from "./station";
 import { ensureUnits } from "./unit";
@@ -29,7 +30,7 @@ function segmentsNamed(details: string[]): Set<number> {
 }
 
 /**
- * select → load → units → compose → verify. The DJ's talk comes from the letters' units (made here when
+ * select → load → units and far bridges → compose → verify. The DJ's talk comes from the letters' units (made here when
  * missing); a unit that verified alone can still fail inside this programme (quoting another letter of the
  * segment), so the units of the segments the report names are left out and the episode verified again,
  * then every unit is left out. The unit rows are never changed here. A found voice without a source never
@@ -103,10 +104,16 @@ export async function buildEpisode(
   };
 
   const readLetters = plan.flatMap((p) => p.letterIds.map((id) => letters.get(id)!));
-  const units = readLetters.length > 0 ? await ensureUnits(env, db, readLetters, items, lang) : new Map<string, Unit>();
+  const station = opts.station?.kind ?? "mine";
+  const opens = opts.first ?? true;
+  // On the listener's own radio, a far work after the first is bridged by a line written for them (else the fixed one).
+  const [units, bridges] = await Promise.all([
+    readLetters.length > 0 ? ensureUnits(env, db, readLetters, items, lang) : Promise.resolve(new Map<string, Unit>()),
+    farBridges(env, db, listener, farBridgeIds(plan, station, opens), items, letters, lang),
+  ]);
   // The letter a card or link asked for, when it took the first seat: a first programme then starts right at it.
   const asked = opts.letterId !== undefined && plan[0]?.letterIds[0] === opts.letterId;
-  const compose = (u: ReadonlyMap<string, Unit> | null) => finish(composeEpisode(plan, u, letters, items, lang, opts.station?.kind ?? "mine", { first: opts.first ?? true, asked }));
+  const compose = (u: ReadonlyMap<string, Unit> | null) => finish(withFarBridges(composeEpisode(plan, u, letters, items, lang, station, { first: opens, asked }), bridges));
 
   const usable = (u: ReadonlyMap<string, Unit>) => [...u.values()].some((x) => x.verified);
   if (usable(units)) {

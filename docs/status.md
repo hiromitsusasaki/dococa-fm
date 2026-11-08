@@ -2,6 +2,8 @@
 
 > 新しいセッションはまずここを読む。更新はタスクの区切りごと（最新を上に）。
 
+- 2026-11-08 Phase 9 Task 2（遠い枠の橋渡し）: 自分のラジオの遠い枠で、聴く人の作品を 1 つ名指しする Claude の 1 文を固定の `bridge.far` の代わりに置く（`program/far-bridge.ts`、D1 `bridges` に作り置き、上限 `BRIDGE_DAILY_LIMIT` 既定 400）。デプロイ: `pnpm db:migrate`（0027_bridges）→ deploy。
+
 ## 2026-11-08 提出前の仕上げ（Phase 8。本番は Phase 7 = 71ccfc6d。次は本人のデプロイ → 録画 → 提出）
 
 11-07 深夜から 11-08 の提出（20:00 JST）に向けて、審査員の目のレビュー・仕様と実装の矛盾の監査・本番の画面の総当たり（いずれも `~/agent_workspace/workspace/2026-11-07-dococa-fm-submission/` の `judge-review.md`、`audit-spec.md`、`smoke/report.md`）を元に直した。設計の変更はしない（ダイヤルのロック・選曲・migration・音声の作り直しは触らない）。本人の決定（11-07 深夜）: 画面の変更 1〜6 と、明示的に頼んだお便りは自分のものでも流す、サインイン文言の修正を承認。仕様・UI/UX を大きく変えるときは事前に本人に確認する。
