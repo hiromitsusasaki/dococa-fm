@@ -3,6 +3,7 @@
 > 新しいセッションはまずここを読む。更新はタスクの区切りごと（最新を上に）。
 
 - Phase 9 Task 3（「私も」への DJ の反応。branch は司令塔が merge）: 私もが届いたお便りの単位を、1 件目と別々の国からの 3 件目で書き直す（Claude には土地だけ渡す。数は言わない）。**デプロイ: `pnpm db:migrate`（0028 `units.reactions_seen`）→ deploy。** 書き直しは「私も」を返した直後の `defer` で動き、新しい文は音声を作り直してから流れる。
+- 2026-11-08 Phase 9 Task 4（ブランチ `worktree-agent-a70fc139217988674`）: 問いは履歴に無い作品でも出す（`ELICIT_DAILY_LIMIT` 既定 600）。書きかけへの問い返し `POST /put/ask` と `put-page` のボタンを追加。
 
 ## 2026-11-08 提出前の仕上げ（Phase 8。本番は Phase 7 = 71ccfc6d。次は本人のデプロイ → 録画 → 提出）
 

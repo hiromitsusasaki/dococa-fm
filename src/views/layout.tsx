@@ -6,8 +6,8 @@ import { normalized } from "../worker/security/origin";
 import { unseenReactions } from "../worker/reaction-notice";
 import type { Listener } from "../worker/types";
 
-type LayoutProps = { title: string; children?: Child; /** The client entry to load: `player`, `station`, or `share-page` (only the share buttons). */
-  script?: "player" | "station" | "share-page"; lang?: Lang;
+type LayoutProps = { title: string; children?: Child; /** The client entry to load: `player`, `station`, `share-page` (only the share buttons), or `put-page` (the send page's ask-back button). */
+  script?: "player" | "station" | "share-page" | "put-page"; lang?: Lang;
   /** Link-preview tags, for pages meant to be shared. Without them a page previews as the app (its name, tagline and key visual). */
   og?: {
     title: string;

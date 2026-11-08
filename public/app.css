@@ -1479,6 +1479,27 @@ button:disabled,
   margin-top: var(--sp-4);
 }
 
+/* Ask the DJ back: the question shows above the textarea, the button and its note sit under it. */
+.put-askback {
+  margin: var(--sp-2) 0 0;
+  padding: var(--sp-2) var(--sp-3);
+  border-left: 3px solid var(--aqua);
+  color: var(--ink-2);
+}
+
+.put-ask-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2) var(--sp-3);
+  margin: 0;
+  color: var(--ink-2);
+}
+
+.put-form .put-ask-row button {
+  margin-top: 0;
+}
+
 .bookmarklet pre {
   white-space: pre-wrap;
   word-break: break-all;

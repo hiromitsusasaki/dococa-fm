@@ -76,7 +76,7 @@ export class WindowStore implements Store<AppEnv> {
 export function isRateLimited(method: string, path: string, query: URLSearchParams): boolean {
   if (method === "GET") return path === "/auth/google" || (path === "/put" && (query.has("itemId") || query.has("url")));
   if (method !== "POST") return false;
-  return path === "/letters" || path === "/settings" || path === "/me/radio" || path.startsWith("/settings/") || path === "/auth/signout" || path === "/lang" || path === "/episodes" || path === "/start" || path === "/takedown" || path === "/put/register" || /^\/episodes\/[^/]+\/next$/.test(path) || /^\/stations\/[^/]+\/next$/.test(path) || /^\/letters\/[^/]+\/(report|withdraw)$/.test(path);
+  return path === "/letters" || path === "/settings" || path === "/me/radio" || path.startsWith("/settings/") || path === "/auth/signout" || path === "/lang" || path === "/episodes" || path === "/start" || path === "/takedown" || path === "/put/register" || path === "/put/ask" || /^\/episodes\/[^/]+\/next$/.test(path) || /^\/stations\/[^/]+\/next$/.test(path) || /^\/letters\/[^/]+\/(report|withdraw)$/.test(path);
 }
 
 const limitOf = (c: { env: Env }): number => {
@@ -176,3 +176,11 @@ export const searchRateLimit = (onLimited: (c: Context<AppEnv>) => Response | Pr
     },
     onLimited,
   );
+
+/** `POST /put/ask` is a Claude call per press: its own bucket, 6 a minute per signed-in listener (scaled with RATE_LIMIT_PER_MINUTE). */
+export const ASK_LISTENER_LIMIT_PER_WINDOW = 6;
+
+export const askRateLimit = routeLimiter(ASK_LISTENER_LIMIT_PER_WINDOW, (c) => {
+  const listener = c.get("listener");
+  return listener && listener.googleSub !== null ? `listener:${listener.id}` : null;
+});
