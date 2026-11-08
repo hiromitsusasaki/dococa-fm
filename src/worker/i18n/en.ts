@@ -312,7 +312,7 @@ export const en: Record<keyof typeof ja, string> = {
   "about.mine.title": "Your own radio",
   "about.mine.body": "Your radio gathers the letters you sent and the letters you replied to. Sign in with Google and make it public on My page, and others can listen to it at your radio's URL.",
   "about.rules.title": "What we do and don't do",
-  "about.rules.body": "A letter belongs to the person who wrote it, so it is introduced exactly as written, without adding or rewording anything. The DJ introduces, to you alone, letters about things you might love and things you have never met, in the balance you choose with the dial.",
+  "about.rules.body": "A letter belongs to the person who wrote it, so it is read exactly as written, without adding or rewording anything. The DJ introduces, to you alone, letters about things you might love and things you have never met, in the balance you choose with the dial.",
   "share.continue": "Keep listening on the radio",
   "share.player": "Listen to this letter",
   "share.openSite": "Listen on Dococa FM",
