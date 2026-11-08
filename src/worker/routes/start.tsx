@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { Layout } from "../../views/layout";
 import type { Variables } from "../auth/session";
 import { requireSignin } from "../auth/require-signin";
-import { embedItems } from "../ai/embed";
+import { embedItems, embedLetters } from "../ai/embed";
 import { ensureItemReadings } from "../ai/item-reading";
 import { defer } from "../defer";
 import { upsertHistory } from "../db/history";
@@ -83,11 +83,15 @@ start.post("/start", requireSignin, async (c) => {
 
   // Sequential: the letter checks (duplicates, limits) read what the last one wrote.
   // A one-liner that fails its judgement is skipped; it never stops the first episode.
+  const sent: string[] = [];
   for (const { n, item } of items) {
     const body = values[`note${n}`];
     if (!body) continue;
     const result = await createLetter(c.env, c.env.DB, listener, { itemId: item.id, body }, { item });
-    if (!result.ok) console.warn("[dococa] start one-liner skipped", result.key, result.reason ?? "");
+    if (result.ok) sent.push(result.letter.id);
+    else console.warn("[dococa] start one-liner skipped", result.key, result.reason ?? "");
   }
+  // The one-liners' vectors, so the first taste hears what was written (a work still without its own vector gets its mix in the prepare run).
+  if (sent.length > 0) defer(c, embedLetters(c.env, c.env.DB, { ids: sent }));
   return c.redirect("/stations/mine", 303);
 });

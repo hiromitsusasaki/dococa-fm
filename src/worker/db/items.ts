@@ -188,7 +188,10 @@ export function dequantise(raw: unknown): Float32Array | null {
   return normalise(v);
 }
 
-/** Dequantised vectors kept per isolate, oldest dropped first past the cap. A vector only changes through `setItemVecs`. */
+/**
+ * Dequantised vectors kept per isolate, oldest dropped first past the cap. A vector only changes through `setItemVecs`
+ * and `refreshItemMix`; another isolate keeps the one it read until it drops it (the mix moves slowly, so that is fine).
+ */
 const VEC_CACHE_MAX = 2000;
 const vecCache = new Map<string, Float32Array>();
 function cacheVec(id: string, v: Float32Array): void {
@@ -213,7 +216,10 @@ export async function setItemVec(db: D1Database, id: string, vec: Float32Array):
   await setItemVecs(db, [[id, vec]]);
 }
 
-/** The vectors of the items that have one, dequantised; from the isolate cache first, the rest in one statement per 90 ids. */
+/**
+ * The vectors of the items that have one, dequantised: the mix with their letters (`vec_mix`) when there is one, else the
+ * work's own; from the isolate cache first, the rest in one statement per 90 ids.
+ */
 export async function getItemVecs(db: D1Database, ids: Iterable<string>): Promise<Map<string, Float32Array>> {
   const out = new Map<string, Float32Array>();
   const missing: string[] = [];
@@ -225,7 +231,7 @@ export async function getItemVecs(db: D1Database, ids: Iterable<string>): Promis
   for (let i = 0; i < missing.length; i += IN_CHUNK) {
     const chunk = missing.slice(i, i + IN_CHUNK);
     const { results } = await db
-      .prepare(`SELECT id, vec FROM items WHERE vec IS NOT NULL AND id IN (${chunk.map(() => "?").join(", ")})`)
+      .prepare(`SELECT id, COALESCE(vec_mix, vec) AS vec FROM items WHERE vec IS NOT NULL AND id IN (${chunk.map(() => "?").join(", ")})`)
       .bind(...chunk)
       .all<{ id: string; vec: unknown }>();
     for (const r of results) {
@@ -246,4 +252,53 @@ export async function listItemsWithoutVec(db: D1Database, limit: number): Promis
 
 export async function countItemsWithoutVec(db: D1Database): Promise<number> {
   return (await db.prepare("SELECT COUNT(*) AS n FROM items WHERE vec IS NULL").first<{ n: number }>())?.n ?? 0;
+}
+
+/** Public letters and 一言 whose vectors go into their work's mix. `a` is the letters table alias. */
+export const MIXED_LETTER = (a: string): string => `${a}.status = 'public' AND ${a}.kind IN ('letter', 'reply')`;
+
+/**
+ * Remakes the work's `vec_mix`: normalise(its vector + the mean of its public letters' and 一言's vectors), or NULL when
+ * it has no vector or none of those letters has one (readers then use `vec`). Called whenever a letter's vector is made
+ * and when a letter stops being public; the prepare run mends any work a missed call left without one.
+ */
+export async function refreshItemMix(db: D1Database, itemId: string): Promise<void> {
+  const own = dequantise((await db.prepare("SELECT vec FROM items WHERE id = ?").bind(itemId).first<{ vec: unknown }>())?.vec);
+  const { results } = await db
+    .prepare(`SELECT l.vec FROM letters l WHERE l.item_id = ? AND ${MIXED_LETTER("l")} AND l.vec IS NOT NULL`)
+    .bind(itemId)
+    .all<{ vec: unknown }>();
+  let sum: Float32Array | null = null;
+  let n = 0;
+  for (const r of results) {
+    const v = dequantise(r.vec);
+    if (!own || !v || v.length !== own.length) continue;
+    sum ??= new Float32Array(v.length);
+    for (let i = 0; i < v.length; i++) sum[i] = (sum[i] as number) + (v[i] as number);
+    n++;
+  }
+  if (!own || !sum) {
+    await db.prepare("UPDATE items SET vec_mix = NULL WHERE id = ?").bind(itemId).run();
+    if (own) cacheVec(itemId, own);
+    return;
+  }
+  const mix = new Float32Array(own.length);
+  for (let i = 0; i < own.length; i++) mix[i] = (own[i] as number) + (sum[i] as number) / n;
+  const unit = normalise(mix);
+  await db.prepare("UPDATE items SET vec_mix = ? WHERE id = ?").bind(quantise(unit), itemId).run();
+  const back = dequantise(quantise(unit));
+  if (back) cacheVec(itemId, back);
+}
+
+/** Works with a vector and a public letter vector but no mix yet (a refresh that was missed), newest first. */
+export async function listItemsWithoutMix(db: D1Database, limit: number): Promise<string[]> {
+  const { results } = await db
+    .prepare(
+      `SELECT id FROM items WHERE vec IS NOT NULL AND vec_mix IS NULL
+         AND EXISTS (SELECT 1 FROM letters l WHERE l.item_id = items.id AND ${MIXED_LETTER("l")} AND l.vec IS NOT NULL)
+       ORDER BY created_at DESC, id LIMIT ?`,
+    )
+    .bind(Math.max(0, limit))
+    .all<{ id: string }>();
+  return results.map((r) => r.id);
 }

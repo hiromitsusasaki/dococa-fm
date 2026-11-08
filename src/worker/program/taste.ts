@@ -19,9 +19,9 @@ async function meanOf(db: D1Database, sql: string, listenerId: string): Promise<
 }
 
 /**
- * Where the listener stands: the mean of the vectors of up to 50 works they spoke about themselves (their own letters,
- * and the letters they answered with a 私も or a 一言; favourites never count), else of up to 20 works they heard most
- * recently, as a unit vector; null when none of those has a vector. `blank`: the listener has written nothing, reacted
+ * Where the listener stands: the mean of the vectors of up to 50 letters they spoke to themselves (their own letters,
+ * and the letters they answered with a 私も or a 一言; favourites never count), else of up to 20 letters they heard most
+ * recently, as a unit vector: each letter's own vector (its work and its text), else its work's; null when none has one. `blank`: the listener has written nothing, reacted
  * to nothing and heard nothing yet (a cold start), whether or not the works have vectors.
  */
 export async function standingOf(db: D1Database, listener: Pick<Listener, "id">): Promise<{ taste: Float32Array | null; blank: boolean }> {
