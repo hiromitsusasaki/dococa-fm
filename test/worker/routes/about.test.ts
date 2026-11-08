@@ -71,11 +71,11 @@ describe("GET /about", () => {
 
   it("opens the rules with what the AI never does", async () => {
     const ja = await (await get("/about", await newSession())).text();
-    expect(ja).toMatch(/<h2>できること・しないこと<\/h2>\s*<div class="rule"[^>]*><\/div>\s*<figure[^>]*>.*?<\/figure>\s*<p>お便りはそれを書いた人のものなので、書き足しも言い換えもせずに読まれます。DJ は、あなたが好きかもしれないものと、まだ出会ったことのない新しいものへのお便りを、ダイヤルで選んだバランスで、あなただけに紹介します。<\/p>/);
+    expect(ja).toMatch(/<h2>できること・しないこと<\/h2>\s*<div class="rule"[^>]*><\/div>\s*<figure[^>]*>.*?<\/figure>\s*<p>お便りはそれを書いた人のものなので、書き足しも言い換えもせずにそのまま紹介されます。DJ は、あなたが好きかもしれないものと、まだ出会ったことのない新しいものへのお便りを、ダイヤルで選んだバランスで、あなただけに紹介します。<\/p>/);
     const cookie = await newSession();
     await postForm("/lang", cookie, { lang: "en", next: "/about" });
     const en = await (await get("/about", cookie)).text();
-    expect(en).toMatch(/<h2>What we do and don[^<]*t do<\/h2>\s*<div class="rule"[^>]*><\/div>\s*<figure[^>]*>.*?<\/figure>\s*<p>A letter belongs to the person who wrote it, so it is read without adding or rewording anything\. The DJ introduces, to you alone, letters about things you might love and things you have never met, in the balance you choose with the dial\.<\/p>/);
+    expect(en).toMatch(/<h2>What we do and don[^<]*t do<\/h2>\s*<div class="rule"[^>]*><\/div>\s*<figure[^>]*>.*?<\/figure>\s*<p>A letter belongs to the person who wrote it, so it is introduced exactly as written, without adding or rewording anything\. The DJ introduces, to you alone, letters about things you might love and things you have never met, in the balance you choose with the dial\.<\/p>/);
   });
 
   it("answers in English for an English listener", async () => {
