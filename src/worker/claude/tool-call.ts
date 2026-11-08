@@ -13,19 +13,23 @@ export const callInstruction = (name: string): string => `必ず ${name} ツー�
 /**
  * One request with a single strict tool and `tool_choice: auto`. Returns the tool's input, or null unless
  * the reply holds exactly one call to that tool; callers validate the input and decide what null means.
+ * `signal` aborts the request (retries included).
  */
 export async function callTool(
   env: Env,
-  req: { system: string; user: string; tool: ToolSpec; maxTokens: number },
+  req: { system: string; user: string; tool: ToolSpec; maxTokens: number; signal?: AbortSignal },
 ): Promise<unknown | null> {
-  const res = await claude(env).messages.create({
-    model: model(env),
-    max_tokens: req.maxTokens,
-    system: `${req.system}\n${callInstruction(req.tool.name)}`,
-    tools: [{ ...req.tool, strict: true }],
-    tool_choice: { type: "auto" },
-    messages: [{ role: "user", content: req.user }],
-  });
+  const res = await claude(env).messages.create(
+    {
+      model: model(env),
+      max_tokens: req.maxTokens,
+      system: `${req.system}\n${callInstruction(req.tool.name)}`,
+      tools: [{ ...req.tool, strict: true }],
+      tool_choice: { type: "auto" },
+      messages: [{ role: "user", content: req.user }],
+    },
+    req.signal ? { signal: req.signal } : undefined,
+  );
   const calls = res.content.filter((b) => b.type === "tool_use" && b.name === req.tool.name);
   const [only] = calls;
   return calls.length === 1 && only?.type === "tool_use" ? only.input : null;

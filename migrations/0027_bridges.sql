@@ -1,5 +1,6 @@
 -- The DJ's line before a far work on the listener's own radio, written once per listener, work and language and
 -- reused. Only verified lines are stored; `spoken` is what the Japanese voice says (readings applied), or NULL.
+-- `named_item_id` is the listener's work the line names: once it is no longer one of theirs, the line is written again.
 -- created_at also counts the lines made per JST day toward BRIDGE_DAILY_LIMIT.
 CREATE TABLE bridges (
   listener_id TEXT NOT NULL,
@@ -7,6 +8,7 @@ CREATE TABLE bridges (
   lang TEXT NOT NULL,
   text TEXT NOT NULL,
   spoken TEXT,
+  named_item_id TEXT,
   created_at TEXT NOT NULL,
   PRIMARY KEY (listener_id, item_id, lang)
 );

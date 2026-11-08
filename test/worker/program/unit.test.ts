@@ -721,12 +721,13 @@ describe("the DJ's reaction to 私も", () => {
     create.mockImplementation(answer);
     expect(await run(f)).toEqual(["ja", "en"]);
     expect(create).toHaveBeenCalledTimes(2);
-    for (const call of [0, 1]) {
+    // The Japanese unit hears the place as written; the English one, in English from its code.
+    for (const [call, place] of [[0, "札幌"], [1, "Japan"]] as const) {
       const req = create.mock.calls[call]![0];
       const sent = JSON.stringify(req);
-      expect(sent).toContain("札幌");
+      expect(sent).toContain(place);
       for (const never of ["誰か", "Me too", "1 人", "1人"]) expect(sent).not.toContain(never);
-      expect(String(req.messages[0].content)).not.toContain("札幌");
+      expect(String(req.messages[0].content)).not.toContain(place);
     }
     expect(await stored(f, "ja")).toMatchObject({ after: "同じ気持ちの人がいるようです。", verified: true, audioReady: false });
     expect(await stored(f, "en")).toMatchObject({ after: "Others feel the same, it seems." });
@@ -760,6 +761,10 @@ describe("the DJ's reaction to 私も", () => {
     expect(await run(f)).toEqual(["ja", "en"]);
     const sent = JSON.stringify(create.mock.calls[0]![0]);
     for (const place of ["札幌", "Boston", "Lyon"]) expect(sent).toContain(place);
+    // The English unit hears the places in English, from their country codes.
+    const sentEn = JSON.stringify(create.mock.calls[1]![0]);
+    for (const place of ["Japan", "United States", "France"]) expect(sentEn).toContain(place);
+    expect(sentEn).not.toContain("札幌");
     expect(await seen("ja")).toBe(3);
     expect(await seen("en")).toBe(3);
     create.mockClear();

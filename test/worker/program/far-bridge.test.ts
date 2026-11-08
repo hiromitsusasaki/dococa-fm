@@ -1,7 +1,7 @@
 import { env } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { getItem, insertItem, setItemReading } from "../../../src/worker/db/items";
-import { insertLetter } from "../../../src/worker/db/letters";
+import { insertLetter, setLetterStatus } from "../../../src/worker/db/letters";
 import { createListener } from "../../../src/worker/db/listeners";
 import type { Env } from "../../../src/worker/env";
 import { composeEpisode } from "../../../src/worker/program/compose";
@@ -121,6 +121,31 @@ describe("farBridges", () => {
     const second = await farBridges(keyed, env.DB, f.a, [f.next.id], f.items, f.letters, "ja");
     expect(second.get(f.next.id)).toEqual(first.get(f.next.id));
     expect(create).toHaveBeenCalledTimes(1);
+  });
+
+  it("writes the line again once the work it named is no longer one of the listener's", async () => {
+    const f = await fixture();
+    create.mockReturnValue(reply("あなたの好きな『夜の窓』とは少し違う一冊です。"));
+    await farBridges(keyed, env.DB, f.a, [f.next.id], f.items, f.letters, "ja");
+    expect(await env.DB.prepare("SELECT named_item_id AS n FROM bridges").first<{ n: string }>()).toEqual({ n: f.mine.id });
+    // The listener takes their letter on 「夜の窓」 back, and writes about another work.
+    await setLetterStatus(env.DB, (await env.DB.prepare("SELECT id FROM letters WHERE item_id = ?").bind(f.mine.id).first<{ id: string }>())!.id, "withdrawn");
+    const other = await insertItem(env.DB, itemDraft({ title: "朝の駅", creator: "誰か" }));
+    await insertLetter(env.DB, letterDraft(other.id, { listenerId: f.a.id, body: "駅のベンチで。", bodyJa: "駅のベンチで。" }));
+    create.mockReturnValue(reply("あなたの好きな『朝の駅』とは少し違う一冊です。"));
+    const again = await farBridges(keyed, env.DB, f.a, [f.next.id], f.items, f.letters, "ja");
+    expect(again.get(f.next.id)?.text).toBe("あなたの好きな『朝の駅』とは少し違う一冊です。");
+    expect(create).toHaveBeenCalledTimes(2);
+    expect(await env.DB.prepare("SELECT named_item_id AS n, COUNT(*) AS c FROM bridges").first()).toEqual({ n: other.id, c: 1 });
+  });
+
+  it("does not count a one-character title as named", async () => {
+    const a = await createListener(env.DB);
+    const short = await insertItem(env.DB, itemDraft({ title: "海", creator: "誰か" }));
+    await insertLetter(env.DB, letterDraft(short.id, { listenerId: a.id, body: "x", bodyJa: "x" }));
+    const next = await insertItem(env.DB, itemDraft({ title: "遠い山", creator: "誰か", kind: "book" }));
+    create.mockReturnValue(reply("海の向こうから届いたような一冊です。"));
+    expect((await farBridges(keyed, env.DB, a, [next.id], new Map([[next.id, next]]), new Map(), "ja")).size).toBe(0);
   });
 
   it("asks in English for an English programme, and stores it apart", async () => {

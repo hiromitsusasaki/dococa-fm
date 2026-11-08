@@ -1,6 +1,6 @@
 import { hasClaude, oneLine } from "../claude/client";
 import { callTool, type ToolSpec } from "../claude/tool-call";
-import { countBridgesToday, getBridges, insertBridge, listOwnWorks, type StoredBridge } from "../db/bridges";
+import { countBridgesToday, getBridges, insertBridge, listOwnWorks, ownWorksAmong, type StoredBridge } from "../db/bridges";
 import type { Env } from "../env";
 import type { Lang } from "../i18n/t";
 import { limitFrom } from "../limits";
@@ -69,20 +69,24 @@ export function bridgePrompt(own: readonly Item[], next: Item, lang: Lang): stri
 
 const lower = (s: string) => norm(s).trim().toLowerCase();
 
+/** A title shorter than this is not matched in a line: one character turns up anywhere. */
+const MIN_TITLE = 2;
+
 /**
- * The reply's line, or null when it is out of shape: one line, not blank, at most `BRIDGE_MAX` code points, naming one
- * of the listener's works by its title and never the next work's title (the lead says it right after).
+ * The reply's line and the listener's work it names, or null when it is out of shape: one line, not blank, at most
+ * `BRIDGE_MAX` code points, naming one of the listener's works by its title (at least `MIN_TITLE` characters) and
+ * never the next work's title (the lead says it right after).
  */
-export function parseBridge(input: unknown, own: readonly Item[], next: Item, lang: Lang): string | null {
+export function parseBridge(input: unknown, own: readonly Item[], next: Item, lang: Lang): { text: string; named: Item } | null {
   const line = (input as { line?: unknown } | null)?.line;
   if (typeof line !== "string") return null;
   const text = oneLine(line).trim();
   if (text === "" || Array.from(text).length > BRIDGE_MAX[lang]) return null;
   const said = lower(text);
   const title = lower(next.title);
-  if (Array.from(title).length >= 2 && said.includes(title)) return null;
-  if (!own.some((i) => lower(i.title) !== "" && said.includes(lower(i.title)))) return null;
-  return text;
+  if (Array.from(title).length >= MIN_TITLE && said.includes(title)) return null;
+  const named = own.find((i) => Array.from(lower(i.title)).length >= MIN_TITLE && said.includes(lower(i.title)));
+  return named ? { text, named } : null;
 }
 
 /** The dj line a bridge airs as: written by the model, so never `fixed`, and held to every talk rule. */
@@ -105,14 +109,18 @@ function passes(b: StoredBridge, next: Item, letters: ReadonlyMap<string, Letter
   return ok;
 }
 
-/** The reply's line within `BRIDGE_TIMEOUT_MS`, or null (late, an API error, or out of shape). */
-async function writeBridge(env: Env, own: readonly Item[], next: Item, lang: Lang): Promise<string | null> {
+/** The reply's line and the work it names within `BRIDGE_TIMEOUT_MS`, or null (late, an API error, or out of shape). A late call is aborted. */
+async function writeBridge(env: Env, own: readonly Item[], next: Item, lang: Lang): Promise<{ text: string; named: Item } | null> {
+  const abort = new AbortController();
   let timer: ReturnType<typeof setTimeout> | undefined;
   const late = new Promise<null>((resolve) => {
-    timer = setTimeout(() => resolve(null), BRIDGE_TIMEOUT_MS);
+    timer = setTimeout(() => {
+      abort.abort();
+      resolve(null);
+    }, BRIDGE_TIMEOUT_MS);
   });
   try {
-    const input = await Promise.race([callTool(env, { system: SYSTEM[lang], user: bridgePrompt(own, next, lang), tool: TOOL[lang], maxTokens: 256 }), late]);
+    const input = await Promise.race([callTool(env, { system: SYSTEM[lang], user: bridgePrompt(own, next, lang), tool: TOOL[lang], maxTokens: 256, signal: abort.signal }), late]);
     return input === null ? null : parseBridge(input, own, next, lang);
   } catch (e) {
     console.warn("[dococa] far bridge unavailable", e instanceof Error ? e.name : "unknown error");
@@ -124,7 +132,7 @@ async function writeBridge(env: Env, own: readonly Item[], next: Item, lang: Lan
 
 /**
  * The model's bridges before the far works `farIds` on the listener's own radio, keyed by item id; a work missing from
- * the map keeps the fixed `bridge.far`, as every work does when Claude is unavailable. A stored bridge (per listener, work and language) is reused; else, when the
+ * the map keeps the fixed `bridge.far`, as every work does when Claude is unavailable. A stored bridge (per listener, work and language) is reused while the work it names is still the listener's; else, when the
  * listener has an own voice (`OWN_VOICES_SQL`), Claude is reachable and today's bridges are under `BRIDGE_DAILY_LIMIT`,
  * one is written from up to three of the listener's works (title, creator, kind; never a letter) and the next work,
  * with the works' readings in `spoken` (Japanese), verified, and stored. Never throws: any failure is the fixed line.
@@ -144,7 +152,12 @@ export async function farBridges(
   if (ids.length === 0 || !hasClaude(env)) return out;
   try {
     const stored = await getBridges(db, listener.id, ids, lang);
-    for (const [id, b] of stored) if (passes(b, items.get(id)!, letters, items, listener, lang)) out.set(id, farBridgeLine(b));
+    // A line whose named work is no longer one of the listener's is written again.
+    const still = await ownWorksAmong(db, listener.id, [...stored.values()].flatMap((b) => (b.namedItemId ? [b.namedItemId] : [])));
+    for (const [id, b] of stored) {
+      if (b.namedItemId === null || !still.has(b.namedItemId)) stored.delete(id);
+      else if (passes(b, items.get(id)!, letters, items, listener, lang)) out.set(id, farBridgeLine(b));
+    }
     const missing = ids.filter((id) => !stored.has(id));
     if (missing.length === 0) return out;
     // A few more than shown, so a next work that is itself one of the listener's still leaves three.
@@ -159,10 +172,11 @@ export async function farBridges(
         const next = items.get(id)!;
         const own = works.filter((w) => w.id !== id).slice(0, OWN_WORKS);
         if (own.length === 0) return;
-        const text = await writeBridge(env, own, next, lang);
-        if (text === null) return;
+        const written = await writeBridge(env, own, next, lang);
+        if (written === null) return;
+        const { text, named } = written;
         const spoken = lang === "ja" ? applyReadings(text, [...own.flatMap(itemReadings), ...itemReadings(next)]) : text;
-        const b: StoredBridge = { text, spoken: spoken !== text ? spoken : null };
+        const b: StoredBridge = { text, spoken: spoken !== text ? spoken : null, namedItemId: named.id };
         if (!passes(b, next, letters, items, listener, lang)) return;
         await insertBridge(db, listener.id, id, lang, b);
         out.set(id, farBridgeLine(b));

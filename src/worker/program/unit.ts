@@ -5,7 +5,7 @@ import type { Env } from "../env";
 import { limitFrom } from "../limits";
 import { claimTts, releaseTts } from "../tts/claim";
 import type { Item, Letter, Reading, Segment, Unit } from "../types";
-import { leadLine, letterLines, speechReadings, type UnitLines } from "./compose";
+import { leadLine, letterLines, placeSaid, speechReadings, type UnitLines } from "./compose";
 import { DJ_SYSTEM, DJ_SYSTEM_EN, letterTag, retryNote, workTag } from "./script";
 import { verifyEpisode } from "./verify";
 
@@ -433,13 +433,14 @@ export async function remakeForReaction(env: Env, db: D1Database, letter: Letter
     const reactions = (await listReactionsForLetter(db, letter.id)).filter((r) => r.kind === "watashimo");
     if (reactions.length === 0) return remade;
     const countries = (rs: Letter[]) => new Set(rs.flatMap((r) => (r.placeCountry ? [r.placeCountry] : [])));
-    const places = [...new Set(reactions.map((r) => r.place.trim()).filter((p) => p !== ""))].slice(0, REACTION_PLACES_MAX);
+    // English units hear the places in English, from their codes; a place without a known country stays as written.
+    const placesIn = (lang: Unit["lang"]) => [...new Set(reactions.map((r) => placeSaid(r, lang).trim()).filter((p) => p !== ""))].slice(0, REACTION_PLACES_MAX);
     for (const lang of ["ja", "en"] as const) {
       const seen = await getReactionsSeen(db, letter.id, lang);
       if (seen === null || seen >= reactions.length) continue;
       const spread = countries(reactions).size >= REACTION_COUNTRIES && countries(reactions.slice(0, seen)).size < REACTION_COUNTRIES;
       if (seen > 0 && !spread) continue;
-      if ((await remakeUnit(env, db, letter, item, lang, { places, seen: reactions.length })) === "remade") remade.push(lang);
+      if ((await remakeUnit(env, db, letter, item, lang, { places: placesIn(lang), seen: reactions.length })) === "remade") remade.push(lang);
     }
   } catch (e) {
     console.warn("[dococa] reaction remake failed", e instanceof Error ? e.name : "unknown error");
