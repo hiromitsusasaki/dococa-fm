@@ -2,6 +2,7 @@
 
 > 新しいセッションはまずここを読む。更新はタスクの区切りごと（最新を上に）。
 
+- 2026-11-08 14:40 本番 ac78b140: `/privacy`（プライバシーポリシー）と `/terms`（利用規約）を追加し、全ページのフッターからリンク（Google OAuth 同意画面を本番モードにするのに必要。同意画面は本番に切替済み）。アイコンを目盛りと針のダイヤル（`public/icon.svg` + PNG + favicon.ico）に差し替え。`docs/ai.md` の「遠い枠」を「好みから遠いお便り」に。
 - Phase 9 Task 3（「私も」への DJ の反応。branch は司令塔が merge）: 私もが届いたお便りの単位を、1 件目と別々の国からの 3 件目で書き直す（Claude には土地だけ渡す。数は言わない）。**デプロイ: `pnpm db:migrate`（0028 `units.reactions_seen`）→ deploy。** 書き直しは「私も」を返した直後の `defer` で動き、新しい文は音声を作り直してから流れる。
 - 2026-11-08 Phase 9 Task 4（ブランチ `worktree-agent-a70fc139217988674`）: 問いは履歴に無い作品でも出す（`ELICIT_DAILY_LIMIT` 既定 600）。書きかけへの問い返し `POST /put/ask` と `put-page` のボタンを追加。
 - 2026-11-08 Phase 9 Task 2（遠い枠の橋渡し）: 自分のラジオの遠い枠で、聴く人の作品を 1 つ名指しする Claude の 1 文を固定の `bridge.far` の代わりに置く（`program/far-bridge.ts`、D1 `bridges` に作り置き、上限 `BRIDGE_DAILY_LIMIT` 既定 400）。デプロイ: `pnpm db:migrate`（0027_bridges）→ deploy。
