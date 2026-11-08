@@ -306,7 +306,7 @@ export const en: Record<keyof typeof ja, string> = {
   "about.mine.alt": "A record, a book and a film reel glow on a shelf; small figures light up on a world map on the wall",
   "about.rules.alt": "A DJ at a microphone holding a sealed letter with both hands",
   "about.listen.title": "Listen",
-  "about.listen.body": "Switch the radio on and the letters start playing, each with an introduction. Turn the dial to change how many letters are close to your taste and how many come from a little further away. You can answer the letter that is playing with a \"Me too\" or a short \"reply\".",
+  "about.listen.body": "Switch the radio on and letters about what someone, somewhere, loves start playing, each with an introduction. Turn the dial to change how many letters are close to your taste and how many come from a little further away. You can answer the letter that is playing with a \"Me too\" or a short \"reply\".",
   "about.send.title": "Send",
   "about.send.body": "Paste the link of a work you love, or search for it by title, then write your letter. Your letter is read exactly as you wrote it. Listeners who use another language hear a translation, with the original kept as written.",
   "about.mine.title": "Your own radio",
