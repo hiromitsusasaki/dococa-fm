@@ -1,6 +1,6 @@
 import { env } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { elicitQuestions } from "../../../src/worker/claude/elicit";
+import { askBack, elicitQuestions } from "../../../src/worker/claude/elicit";
 import type { Env } from "../../../src/worker/env";
 import type { Item, Listener } from "../../../src/worker/types";
 import { expectInstructedTool, stubAnthropic, toolUse } from "../../helpers/anthropic";
@@ -72,5 +72,47 @@ describe("elicitQuestions", () => {
   it("returns [] when the call fails", async () => {
     create.mockRejectedValue(new Error("boom"));
     expect(await elicitQuestions(keyed, item, listener)).toEqual([]);
+  });
+});
+
+describe("askBack", () => {
+  const said = (question: unknown) => toolUse("ask_back", { question });
+  const draft = "雨の日に聴くと落ち着きます";
+
+  it("returns the one question, and sends the work and the draft inside tags", async () => {
+    create.mockResolvedValue(said("どんな場面でしたか？"));
+    expect(await askBack(keyed, item, draft)).toBe("どんな場面でしたか？");
+    const req = create.mock.calls[0]![0];
+    expectInstructedTool(req, "ask_back");
+    expect(JSON.stringify(req.messages)).toContain(`<draft>${draft}</draft>`);
+    expect(req.system).toContain("書きかけの文を引用しない");
+  });
+
+  it("drops a question that is empty, over 60 characters, topical or quotes the draft; English may be longer", async () => {
+    for (const q of ["", "あ".repeat(61), "今日のニュースは？", `${draft}、とは？`, 5]) {
+      create.mockResolvedValueOnce(said(q));
+      expect(await askBack(keyed, item, draft)).toBeNull();
+    }
+    create.mockResolvedValueOnce(said("What were you doing when it first played, and who was nearby?"));
+    expect(await askBack(keyed, item, draft, "en")).not.toBeNull();
+  });
+
+  it("returns null without a key or when the call fails, and never logs the draft", async () => {
+    expect(await askBack(keyless, item, draft)).toBeNull();
+    create.mockRejectedValue(new Error(draft));
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    expect(await askBack(keyed, item, draft)).toBeNull();
+    expect(JSON.stringify(warn.mock.calls)).not.toContain("雨の日");
+  });
+
+  it("shares the page questions' daily cap: past it, null without calling Claude", async () => {
+    await env.DB.prepare("DELETE FROM tts_claims WHERE key LIKE 'elicit:%'").run();
+    const capped = { ...keyed, ELICIT_DAILY_LIMIT: "1" } as Env;
+    create.mockResolvedValue(asked(["どこで聴きましたか？"]));
+    expect(await elicitQuestions(capped, item, listener)).toHaveLength(1);
+    create.mockClear();
+    expect(await askBack(capped, item, draft)).toBeNull();
+    expect(await askBack({ ...keyed, ELICIT_DAILY_LIMIT: "0" } as Env, item, draft)).toBeNull();
+    expect(create).not.toHaveBeenCalled();
   });
 });

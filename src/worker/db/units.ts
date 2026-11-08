@@ -202,7 +202,11 @@ export async function listLikedUnits(db: D1Database, lang: Unit["lang"], limit: 
  * made today is first noted in `unit_remakes`, so the call that made it still counts toward today's cap. One batch:
  * when it fails, the old row is as it was.
  */
-export async function replaceUnit(db: D1Database, u: Pick<Unit, "letterId" | "lang" | "intro" | "after" | "readings">, now: Date = new Date()): Promise<void> {
+export async function replaceUnit(
+  db: D1Database,
+  u: Pick<Unit, "letterId" | "lang" | "intro" | "after" | "readings"> & { reactionsSeen?: number },
+  now: Date = new Date(),
+): Promise<void> {
   const at = now.toISOString();
   await db.batch([
     db
@@ -210,9 +214,16 @@ export async function replaceUnit(db: D1Database, u: Pick<Unit, "letterId" | "la
       .bind(at, u.letterId, u.lang, jstDayStartIso(now)),
     db
       .prepare(
-        `INSERT INTO units (letter_id, lang, intro, after, readings, verified, audio_ready, created_at) VALUES (?, ?, ?, ?, ?, 1, 0, ?)
-         ON CONFLICT(letter_id, lang) DO UPDATE SET intro = excluded.intro, after = excluded.after, readings = excluded.readings, verified = 1, audio_ready = 0, created_at = excluded.created_at`,
+        `INSERT INTO units (letter_id, lang, intro, after, readings, verified, audio_ready, created_at, reactions_seen) VALUES (?1, ?2, ?3, ?4, ?5, 1, 0, ?6, COALESCE(?7, 0))
+         ON CONFLICT(letter_id, lang) DO UPDATE SET intro = excluded.intro, after = excluded.after, readings = excluded.readings, verified = 1, audio_ready = 0, created_at = excluded.created_at,
+           reactions_seen = COALESCE(?7, units.reactions_seen)`,
       )
-      .bind(u.letterId, u.lang, u.intro, u.after, readingsJson(u.readings), at),
+      .bind(u.letterId, u.lang, u.intro, u.after, readingsJson(u.readings), at, u.reactionsSeen ?? null),
   ]);
+}
+
+/** The number of 私も the stored unit was last written with (`units.reactions_seen`); null when the unit is not stored. */
+export async function getReactionsSeen(db: D1Database, letterId: string, lang: Unit["lang"]): Promise<number | null> {
+  const row = await db.prepare("SELECT reactions_seen AS n FROM units WHERE letter_id = ? AND lang = ?").bind(letterId, lang).first<{ n: number }>();
+  return row ? row.n : null;
 }

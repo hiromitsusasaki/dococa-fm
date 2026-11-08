@@ -60,12 +60,21 @@ describe("GET /put with a history", () => {
     expect(html.indexOf("誰かと一緒でしたか？")).toBeLessThan(html.indexOf("<textarea"));
   });
 
-  it("asks nothing for an item that is not in the history", async () => {
+  it("asks for an item that is not in the history too, once, and stops at ELICIT_DAILY_LIMIT", async () => {
     const cookie = await signedInSession();
     const item = await insertItem(env.DB, itemDraft());
     const html = await (await get(`/put?itemId=${item.id}`, cookie)).text();
-    expect(html).not.toContain(t("put.questions"));
-    expect(create).not.toHaveBeenCalled();
+    expect(html).toContain(t("put.questions"));
+    expect(html).toContain("誰かと一緒でしたか？");
+    expect(create).toHaveBeenCalledTimes(1);
+    (env as { ELICIT_DAILY_LIMIT?: string }).ELICIT_DAILY_LIMIT = "1";
+    try {
+      const again = await (await get(`/put?itemId=${item.id}`, cookie)).text();
+      expect(again).not.toContain(t("put.questions"));
+      expect(create).toHaveBeenCalledTimes(1);
+    } finally {
+      delete (env as { ELICIT_DAILY_LIMIT?: string }).ELICIT_DAILY_LIMIT;
+    }
   });
 
   it("shows the imported notice without a number", async () => {

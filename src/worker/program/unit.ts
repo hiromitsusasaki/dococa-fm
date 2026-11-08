@@ -1,10 +1,11 @@
 import { claude, escapeTags, hasClaude, model, oneLine } from "../claude/client";
-import { countUnitsToday, getUnits, listLikedUnits, replaceUnit, upsertUnit } from "../db/units";
+import { listReactionsForLetter } from "../db/letters";
+import { countUnitsToday, getReactionsSeen, getUnits, listLikedUnits, replaceUnit, upsertUnit } from "../db/units";
 import type { Env } from "../env";
 import { limitFrom } from "../limits";
 import { claimTts, releaseTts } from "../tts/claim";
 import type { Item, Letter, Reading, Segment, Unit } from "../types";
-import { leadLine, letterLines, speechReadings, type UnitLines } from "./compose";
+import { leadLine, letterLines, placeSaid, speechReadings, type UnitLines } from "./compose";
 import { DJ_SYSTEM, DJ_SYSTEM_EN, letterTag, retryNote, workTag } from "./script";
 import { verifyEpisode } from "./verify";
 
@@ -97,7 +98,37 @@ const TOOL_EN = {
 /** Liked intros shown to the DJ, newest first. */
 const EXAMPLES = 5;
 
-type UnitInput = { item: Item; letter: Letter; lang: Unit["lang"]; retryNotes?: string[]; examples?: string[] };
+/** Places of the people who said 私も that reach the prompt, at most. */
+export const REACTION_PLACES_MAX = 3;
+
+/**
+ * 私も has reached the letter. `places`: where the people who said it live (`place` strings, at most
+ * `REACTION_PLACES_MAX`, none empty). Never their bodies, names or how many they are.
+ */
+export type ReactionNote = { places: string[] };
+
+type UnitInput = { item: Item; letter: Letter; lang: Unit["lang"]; retryNotes?: string[]; examples?: string[]; reaction?: ReactionNote };
+
+const placesJa = (r: ReactionNote) => r.places.map((p) => `『${escapeTags(oneLine(p))}』`).join("、");
+const placesEn = (r: ReactionNote) => r.places.map((p) => `"${escapeTags(oneLine(p))}"`).join(", ");
+
+/** The sentence added to the `after` description when 私も has reached the letter; nothing for a letter without one. */
+function reactionDescription(lang: Unit["lang"], reaction: ReactionNote | undefined): string {
+  if (!reaction) return "";
+  const some = reaction.places.length > 0;
+  if (lang === "en") {
+    return `. People who feel the same have said "me too" to this letter${some ? `, from: ${placesEn(reaction)}` : ""}. In after you may say, in a few words, that others feel the same. Never say how many people or how many times. You may name the places`;
+  }
+  return `。このお便りには${some ? "、次の土地の人から" : ""}『私も』が届いている${some ? `: ${placesJa(reaction)}` : ""}。after で、同じ気持ちの人がいることに一言触れてよい。人数や件数は言わない。土地は言ってもよい`;
+}
+
+/** `TOOL` or `TOOL_EN`, with the `after` description told about the 私も of the unit being written. */
+function toolFor(lang: Unit["lang"], reaction: ReactionNote | undefined) {
+  const tool = lang === "en" ? TOOL_EN : TOOL;
+  if (!reaction) return tool;
+  const props = tool.input_schema.properties;
+  return { ...tool, input_schema: { ...tool.input_schema, properties: { ...props, after: { ...props.after, description: props.after.description + reactionDescription(lang, reaction) } } } };
+}
 
 /** The owner's liked intros, one per line under a heading; intros only, so no letter ever reaches another unit's prompt. */
 function examplesBlock(examples: string[] | undefined, lang: Unit["lang"]): string[] {
@@ -223,7 +254,7 @@ export async function writeUnitLines(env: Env, input: UnitInput): Promise<Writte
       model: model(env),
       max_tokens: 1024,
       system: input.lang === "en" ? DJ_SYSTEM_EN : DJ_SYSTEM,
-      tools: [input.lang === "en" ? TOOL_EN : TOOL],
+      tools: [toolFor(input.lang, input.reaction)],
       tool_choice: { type: "auto" },
       messages: [{ role: "user", content }],
     });
@@ -285,16 +316,16 @@ export type Remade = "remade" | "busy" | "capped" | "failed";
  * verification, or a failed write: `"failed"`, the old row untouched. Today's cap reached: `"capped"`. Another run
  * holds the claim: `"busy"`. The clips are not made here. The work's reading (`items.reading_ja`) is not touched.
  */
-export async function remakeUnit(env: Env, db: D1Database, letter: Letter, item: Item, lang: Unit["lang"]): Promise<Remade> {
+export async function remakeUnit(env: Env, db: D1Database, letter: Letter, item: Item, lang: Unit["lang"], reaction?: ReactionNote & { seen: number }): Promise<Remade> {
   if (!hasClaude(env)) return "failed";
   const claim = `unit:${letter.id}:${lang}`;
   if (!(await claimTts(db, claim, Date.now(), UNIT_CLAIM_TTL_MS))) return "busy";
   try {
     if (await unitCapReached(env, db)) return "capped";
-    const written = await writeChecked(env, db, letter, item, lang);
+    const written = await writeChecked(env, db, letter, item, lang, reaction ? { places: reaction.places } : undefined);
     if (!written?.ok) return "failed";
     try {
-      await replaceUnit(db, { letterId: letter.id, lang, intro: written.lines.intro, after: written.lines.after, readings: written.lines.readings });
+      await replaceUnit(db, { letterId: letter.id, lang, intro: written.lines.intro, after: written.lines.after, readings: written.lines.readings, ...(reaction ? { reactionsSeen: reaction.seen } : {}) });
     } catch (e) {
       // The name only: a D1 error message can quote the statement and its bound values, which carry the lines.
       console.warn("[dococa] dj unit could not be stored", e instanceof Error ? e.name : "unknown error");
@@ -310,18 +341,18 @@ export async function remakeUnit(env: Env, db: D1Database, letter: Letter, item:
  * write → verify, with one retry on the retryable details. Null when Claude is unavailable (an API error, or replies
  * out of shape). The lines are verified as they will air: with their readings, and the work's stored ones.
  */
-async function writeChecked(env: Env, db: D1Database, letter: Letter, item: Item, lang: Unit["lang"]): Promise<{ lines: WrittenUnit; ok: boolean } | null> {
+async function writeChecked(env: Env, db: D1Database, letter: Letter, item: Item, lang: Unit["lang"], reaction?: ReactionNote): Promise<{ lines: WrittenUnit; ok: boolean } | null> {
   let lines: WrittenUnit;
   let ok: boolean;
   const examples = await likedIntros(db, lang);
   try {
-    lines = await writeUnitLines(env, { item, letter, lang, examples });
+    lines = await writeUnitLines(env, { item, letter, lang, examples, reaction });
     let check = verifyUnit(lines, letter, item, lang);
     if (!check.ok) {
       console.warn("[dococa] dj unit failed verification", check.details.join("; "));
       const retryNotes = check.details.filter((d) => RETRYABLE.test(d));
       if (retryNotes.length > 0) {
-        lines = await writeUnitLines(env, { item, letter, lang, retryNotes, examples });
+        lines = await writeUnitLines(env, { item, letter, lang, retryNotes, examples, reaction });
         check = verifyUnit(lines, letter, item, lang);
         if (!check.ok) console.warn("[dococa] dj unit failed verification again", check.details.join("; "));
       }
@@ -382,4 +413,37 @@ export async function ensureUnits(env: Env, db: D1Database, letters: Letter[], i
   await Promise.all(Array.from({ length: Math.min(CONCURRENCY, missing.length) }, worker));
   if (busy.length > 0) for (const [id, u] of await getUnits(db, busy, lang)) units.set(id, u);
   return units;
+}
+
+/** A unit is written again when 私も reaches this many distinct countries (for the first time). */
+export const REACTION_COUNTRIES = 3;
+
+/**
+ * A 私も reached the letter: the unit is written again (`remakeUnit`) in each language it exists in, in two cases only:
+ * the first 私も, and the senders now spanning `REACTION_COUNTRIES` distinct `placeCountry` values for the first time.
+ * `units.reactions_seen` is the number of 私も (oldest first) the unit was last written with, so each case fires
+ * once: the first when it is 0, the second when the first `reactions_seen` senders spanned fewer countries than all
+ * do now. Claude gets the places only (`ReactionNote`). A remake that fails leaves the count, and the old unit airs on.
+ * Returns the languages remade. Never throws.
+ */
+export async function remakeForReaction(env: Env, db: D1Database, letter: Letter, item: Item): Promise<Unit["lang"][]> {
+  const remade: Unit["lang"][] = [];
+  if (!hasClaude(env) || letter.status !== "public" || (letter.kind !== "letter" && letter.kind !== "found")) return remade;
+  try {
+    const reactions = (await listReactionsForLetter(db, letter.id)).filter((r) => r.kind === "watashimo");
+    if (reactions.length === 0) return remade;
+    const countries = (rs: Letter[]) => new Set(rs.flatMap((r) => (r.placeCountry ? [r.placeCountry] : [])));
+    // English units hear the places in English, from their codes; a place without a known country stays as written.
+    const placesIn = (lang: Unit["lang"]) => [...new Set(reactions.map((r) => placeSaid(r, lang).trim()).filter((p) => p !== ""))].slice(0, REACTION_PLACES_MAX);
+    for (const lang of ["ja", "en"] as const) {
+      const seen = await getReactionsSeen(db, letter.id, lang);
+      if (seen === null || seen >= reactions.length) continue;
+      const spread = countries(reactions).size >= REACTION_COUNTRIES && countries(reactions.slice(0, seen)).size < REACTION_COUNTRIES;
+      if (seen > 0 && !spread) continue;
+      if ((await remakeUnit(env, db, letter, item, lang, { places: placesIn(lang), seen: reactions.length })) === "remade") remade.push(lang);
+    }
+  } catch (e) {
+    console.warn("[dococa] reaction remake failed", e instanceof Error ? e.name : "unknown error");
+  }
+  return remade;
 }

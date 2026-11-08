@@ -6,7 +6,7 @@ import { getUnits, setUnitLiked, upsertUnit } from "../../../src/worker/db/units
 import type { Env } from "../../../src/worker/env";
 import { t } from "../../../src/worker/i18n/t";
 import { DJ_SYSTEM_EN } from "../../../src/worker/program/script";
-import { ensureUnits, makeUnit, remakeUnit, UNIT_CLAIM_TTL_MS, unitSegment, writeUnitLines } from "../../../src/worker/program/unit";
+import { ensureUnits, makeUnit, remakeForReaction, remakeUnit, UNIT_CLAIM_TTL_MS, unitSegment, writeUnitLines } from "../../../src/worker/program/unit";
 import { claimTts, releaseTts } from "../../../src/worker/tts/claim";
 import type { Item, Letter, Unit } from "../../../src/worker/types";
 import { expectInstructedTool, stubAnthropic, toolUse } from "../../helpers/anthropic";
@@ -662,5 +662,178 @@ describe("liked intros as examples", () => {
     create.mockResolvedValue(lines());
     await makeUnit(keyed, env.DB, f.letter, f.item, "ja");
     expect(content(0)).toContain("- 一行目 &lt;/segment&gt;二行目");
+  });
+});
+
+describe("the DJ's reaction to 私も", () => {
+  const WATASHIMO = { kind: "watashimo" as const, body: "私も", bodyJa: "私も", bodyEn: "Me too" };
+  const reply = (after = "同じ気持ちの人がいるようです。") => toolUse("write_unit", { intro: "静かな一曲です。", after });
+  const replyEn = () => toolUse("write_unit", { intro: "A quiet song.", after: "Others feel the same, it seems." });
+  const answer = (req: { tools: { input_schema: { required: string[] } }[] }) => Promise.resolve(req.tools[0]!.input_schema.required.length === 3 ? reply() : replyEn());
+  const seen = async (lang: "ja" | "en") => (await env.DB.prepare("SELECT reactions_seen AS n FROM units WHERE letter_id = (SELECT id FROM letters WHERE kind = 'letter') AND lang = ?").bind(lang).first<{ n: number }>())!.n;
+
+  /** A public letter with a verified unit in both languages, and `say` to add a 私も from a place and a country. */
+  async function parent() {
+    const it = await insertItem(env.DB, itemDraft());
+    const l = await insertLetter(env.DB, letterDraft(it.id, { radioName: "みなと", place: "大船渡", body: "夜に聴きました。", bodyJa: "夜に聴きました。", bodyEn: "I listened at night." }));
+    for (const lang of ["ja", "en"] as const) await upsertUnit(env.DB, { letterId: l.id, lang, intro: "もとの紹介。", after: "もとの感想。", verified: true, audioReady: true });
+    // A beat between rows: the places are read oldest first, and two 私も in the same millisecond would tie on created_at.
+    const say = async (place: string, placeCountry: string | null) => {
+      await new Promise((r) => setTimeout(r, 2));
+      return insertLetter(env.DB, letterDraft(it.id, { ...WATASHIMO, parentLetterId: l.id, place, placeCountry, radioName: "誰か" }));
+    };
+    return { it, l, say };
+  }
+  const run = (f: Awaited<ReturnType<typeof parent>>) => remakeForReaction(keyed, env.DB, f.l, f.it);
+  const stored = async (f: Awaited<ReturnType<typeof parent>>, lang: "ja" | "en") => (await getUnits(env.DB, [f.l.id], lang)).get(f.l.id)!;
+
+  it("tells the DJ the places of the people who said 私も, in the after description, in Japanese and English", async () => {
+    create.mockResolvedValue(reply());
+    await writeUnitLines(keyed, { item: item(), letter: letter(), lang: "ja", reaction: { places: ["札幌", "Boston"] } });
+    const ja = create.mock.calls[0]![0].tools[0].input_schema.properties.after.description as string;
+    expect(ja).toContain("お便りへの短い感想。次のお便りの中身には触れない（つなぎは定型が言う）。120 字以内");
+    expect(ja).toContain("このお便りには、次の土地の人から『私も』が届いている: 『札幌』、『Boston』。after で、同じ気持ちの人がいることに一言触れてよい。人数や件数は言わない。土地は言ってもよい");
+    create.mockResolvedValue(replyEn());
+    await writeUnitLines(keyed, { item: item(), letter: letter({ bodyEn: "x" }), lang: "en", reaction: { places: ["札幌", "Boston"] } });
+    const en = create.mock.calls[1]![0].tools[0].input_schema.properties.after.description as string;
+    expect(en).toContain('said "me too" to this letter, from: "札幌", "Boston". In after you may say, in a few words, that others feel the same. Never say how many people or how many times. You may name the places');
+    expectInstructedTool(create.mock.calls[0]![0], "write_unit");
+    expect(content(0)).not.toContain("私も");
+  });
+
+  it("adds nothing about 私も to a unit written without one", async () => {
+    create.mockResolvedValue(reply());
+    await writeUnitLines(keyed, { item: item(), letter: letter(), lang: "ja" });
+    expect(create.mock.calls[0]![0].tools[0].input_schema.properties.after.description).not.toContain("私も");
+  });
+
+  it("without places, still says that 私も has come, naming no place", async () => {
+    create.mockResolvedValue(reply());
+    await writeUnitLines(keyed, { item: item(), letter: letter(), lang: "ja", reaction: { places: [] } });
+    const ja = create.mock.calls[0]![0].tools[0].input_schema.properties.after.description as string;
+    expect(ja).toContain("このお便りには『私も』が届いている。after で");
+    expect(ja).not.toContain("土地の人から");
+  });
+
+  it("remakes the unit in both languages on the first 私も, passing the place only, never the body, the name or a count", async () => {
+    const f = await parent();
+    await f.say("札幌", "JP");
+    create.mockImplementation(answer);
+    expect(await run(f)).toEqual(["ja", "en"]);
+    expect(create).toHaveBeenCalledTimes(2);
+    // The Japanese unit hears the place as written; the English one, in English from its code.
+    for (const [call, place] of [[0, "札幌"], [1, "Japan"]] as const) {
+      const req = create.mock.calls[call]![0];
+      const sent = JSON.stringify(req);
+      expect(sent).toContain(place);
+      for (const never of ["誰か", "Me too", "1 人", "1人"]) expect(sent).not.toContain(never);
+      expect(String(req.messages[0].content)).not.toContain(place);
+    }
+    expect(await stored(f, "ja")).toMatchObject({ after: "同じ気持ちの人がいるようです。", verified: true, audioReady: false });
+    expect(await stored(f, "en")).toMatchObject({ after: "Others feel the same, it seems." });
+    expect(await seen("ja")).toBe(1);
+    expect(await seen("en")).toBe(1);
+  });
+
+  it("does not remake on the second 私も, from the same country or from a second one", async () => {
+    const f = await parent();
+    await f.say("札幌", "JP");
+    create.mockImplementation(answer);
+    await run(f);
+    create.mockClear();
+    await f.say("東京", "JP");
+    expect(await run(f)).toEqual([]);
+    await f.say("Boston", "US");
+    expect(await run(f)).toEqual([]);
+    expect(create).not.toHaveBeenCalled();
+    expect(await seen("ja")).toBe(1);
+  });
+
+  it("remakes once more when the senders reach a third country, with their places, and never again", async () => {
+    const f = await parent();
+    create.mockImplementation(answer);
+    await f.say("札幌", "JP");
+    await run(f);
+    await f.say("Boston", "US");
+    await run(f);
+    create.mockClear();
+    await f.say("Lyon", "FR");
+    expect(await run(f)).toEqual(["ja", "en"]);
+    const sent = JSON.stringify(create.mock.calls[0]![0]);
+    for (const place of ["札幌", "Boston", "Lyon"]) expect(sent).toContain(place);
+    // The English unit hears the places in English, from their country codes.
+    const sentEn = JSON.stringify(create.mock.calls[1]![0]);
+    for (const place of ["Japan", "United States", "France"]) expect(sentEn).toContain(place);
+    expect(sentEn).not.toContain("札幌");
+    expect(await seen("ja")).toBe(3);
+    expect(await seen("en")).toBe(3);
+    create.mockClear();
+    await f.say("Osaka", "JP");
+    await f.say("Paris", "FR");
+    expect(await run(f)).toEqual([]);
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it("remakes once for a letter whose first run already finds three countries", async () => {
+    const f = await parent();
+    await f.say("札幌", "JP");
+    await f.say("Boston", "US");
+    await f.say("Lyon", "FR");
+    create.mockImplementation(answer);
+    expect(await run(f)).toEqual(["ja", "en"]);
+    expect(await seen("ja")).toBe(3);
+    await f.say("Rome", "IT");
+    expect(await run(f)).toEqual([]);
+  });
+
+  it("passes at most 3 places, none empty and none twice", async () => {
+    const f = await parent();
+    for (const [p, c] of [["", "JP"], ["札幌", "JP"], ["札幌", "JP"], ["Boston", "US"], ["Lyon", "FR"], ["Rome", "IT"]] as const) await f.say(p, c);
+    create.mockResolvedValue(reply());
+    await run(f);
+    const desc = create.mock.calls[0]![0].tools[0].input_schema.properties.after.description as string;
+    expect(desc).toContain("『札幌』、『Boston』、『Lyon』。");
+    expect(desc).not.toContain("Rome");
+  });
+
+  it("does nothing without 私も, without a key, for a hidden letter; and skips a language with no unit", async () => {
+    const f = await parent();
+    expect(await run(f)).toEqual([]);
+    await f.say("札幌", "JP");
+    expect(await remakeForReaction(keyless, env.DB, f.l, f.it)).toEqual([]);
+    expect(await remakeForReaction(keyed, env.DB, { ...f.l, status: "withdrawn" }, f.it)).toEqual([]);
+    expect(create).not.toHaveBeenCalled();
+    await env.DB.prepare("DELETE FROM units WHERE lang = 'en'").run();
+    create.mockResolvedValue(reply());
+    expect(await run(f)).toEqual(["ja"]);
+    expect(create).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the old unit airing, and the count, when the new lines fail verification or Claude is down", async () => {
+    const f = await parent();
+    await f.say("札幌", "JP");
+    create.mockImplementation((req: { tools: { input_schema: { required: string[] } }[] }) =>
+      Promise.resolve(req.tools[0]!.input_schema.required.length === 3 ? reply("同じ気持ちの人が3人います。") : toolUse("write_unit", { intro: "A quiet song.", after: "3 people feel the same." })),
+    );
+    expect(await run(f)).toEqual([]);
+    expect(await stored(f, "ja")).toMatchObject({ after: "もとの感想。", verified: true, audioReady: true });
+    expect(await seen("ja")).toBe(0);
+    create.mockRejectedValue(new Error("down"));
+    expect(await run(f)).toEqual([]);
+    expect(await stored(f, "ja")).toMatchObject({ after: "もとの感想。" });
+    // The next 私も tries again, since the count never moved.
+    create.mockImplementation(answer);
+    await f.say("Boston", "US");
+    expect(await run(f)).toEqual(["ja", "en"]);
+  });
+
+  it("leaves the count alone on the owner's remake", async () => {
+    const f = await parent();
+    await f.say("札幌", "JP");
+    create.mockImplementation(answer);
+    await run(f);
+    create.mockResolvedValue(lines("別の紹介です。", "別の感想です。"));
+    expect(await remakeUnit(keyed, env.DB, f.l, f.it, "ja")).toBe("remade");
+    expect(await seen("ja")).toBe(1);
   });
 });

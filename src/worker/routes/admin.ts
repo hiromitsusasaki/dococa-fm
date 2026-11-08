@@ -1,7 +1,7 @@
 import { type Context, Hono, type MiddlewareHandler } from "hono";
 import { z } from "zod";
 import type { Variables } from "../auth/session";
-import { embedItems } from "../ai/embed";
+import { embedItems, embedLetters, remixAfterTakedown } from "../ai/embed";
 import { ensureItemReadings } from "../ai/item-reading";
 import { moderateLetter } from "../claude/moderate";
 import { type Lang, detectLang, translateToJa } from "../claude/translate";
@@ -15,7 +15,7 @@ import { isValidRegion, placeLabel } from "../geo/place-label";
 import { COUNTRIES } from "../geo/places";
 import { createLetter } from "../letters/create";
 import { makeEpisode } from "../program/create";
-import { prepareBatch, prepareLetter } from "../program/prepare";
+import { prepareBatch, prepareLetter, reactToWatashimo } from "../program/prepare";
 import { looksLikeContact } from "../program/pii-patterns";
 import { resolveOrCreate, resolveUrl } from "../resolve";
 import { isFetchableUrl } from "../resolve/url";
@@ -220,6 +220,7 @@ admin.post("/admin/letters/:id/reject", async (c) => {
   const id = c.req.param("id");
   if (!(await getLetter(c.env.DB, id))) return c.json({ error: "letter not found" }, 404);
   await setLetterStatus(c.env.DB, id, "rejected");
+  defer(c, remixAfterTakedown(c.env.DB, id));
   return c.json({ ok: true });
 });
 
@@ -279,9 +280,10 @@ admin.post("/admin/letters", async (c) => {
   if (!listener.demo) return c.json({ error: "not a demo listener" }, 403);
   const made = await createLetter(c.env, c.env.DB, listener, { itemId, url, body: body ?? "", kind, parentLetterId });
   if (!made.ok) return c.json({ error: made.key, ...(made.reason ? { reason: made.reason } : {}) }, made.status);
-  defer(c, embedItems(c.env, c.env.DB, [made.itemId]));
+  defer(c, embedItems(c.env, c.env.DB, [made.itemId]).then(() => embedLetters(c.env, c.env.DB, { ids: [made.letter.id] })));
   // Reactions are fixed phrases or short replies and have no unit to make, as on the public route.
   if (made.letter.kind === "letter") defer(c, prepareLetter(c.env, c.env.DB, made.letter.id));
+  if (made.letter.kind === "watashimo" && made.letter.parentLetterId) defer(c, reactToWatashimo(c.env, c.env.DB, made.letter.parentLetterId));
   return c.json({ letterId: made.letter.id, itemId: made.itemId });
 });
 
@@ -355,6 +357,7 @@ admin.post("/admin/rejudge", async (c) => {
       judged++;
       if (!verdict.ok) {
         await setLetterStatus(c.env.DB, row.id, "rejected");
+        await remixAfterTakedown(c.env.DB, row.id);
         rejected.push({ id: row.id, reason: verdict.reason });
       }
     } catch (e) {

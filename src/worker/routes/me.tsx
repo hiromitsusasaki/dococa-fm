@@ -9,6 +9,8 @@ import type { Variables } from "../auth/session";
 import { getItemsByIds } from "../db/items";
 import { listHeardLetters } from "../db/listens";
 import { getLetter, listOwnPublicLetters, listRecentReactionsToListener, withdrawLetter } from "../db/letters";
+import { remixAfterTakedown } from "../ai/embed";
+import { defer } from "../defer";
 import { markReactionsSeen, updateListener } from "../db/listeners";
 import type { Env } from "../env";
 import { displayText } from "../letters/display";
@@ -215,6 +217,9 @@ me.post("/letters/:id/withdraw", requireSignin, async (c) => {
     // A second press (double submit, back and resubmit) is not an error for the sender; anyone else's id still looks unknown.
     const again = await getLetter(c.env.DB, id);
     if (!(again && again.listenerId === listener.id && again.kind === "letter" && again.status === "withdrawn")) return c.notFound();
+  } else {
+    // The work's mix no longer hears this letter.
+    defer(c, remixAfterTakedown(c.env.DB, id));
   }
   return c.redirect("/me", 303);
 });

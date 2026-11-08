@@ -1,4 +1,4 @@
-import { EMBED_BATCH, ensureItemVectors } from "../ai/embed";
+import { EMBED_BATCH, ensureItemVectors, ensureLetterVectors } from "../ai/embed";
 import { askItemReading, ensureItemReading } from "../ai/item-reading";
 import { countItemsWithoutReading, getItem, listItemsWithoutReading } from "../db/items";
 import { getLetter } from "../db/letters";
@@ -7,7 +7,7 @@ import { hasClaude } from "../claude/client";
 import type { Env } from "../env";
 import { ensureAudio, voiceOf } from "../tts/audio";
 import type { Unit } from "../types";
-import { makeUnit, unitCapReached, unitSegment } from "./unit";
+import { makeUnit, remakeForReaction, unitCapReached, unitSegment } from "./unit";
 
 export type Prepared = { units: number; audio: number; failed: number };
 
@@ -130,12 +130,14 @@ export async function prepareLetter(env: Env, db: D1Database, letterId: string, 
 const OUTAGE_AFTER = 3;
 
 /** `vectors`: works still without an embedding (all of them while Workers AI is not bound). */
+/** `letterVecs`: public letters and 一言 still without an embedding (all of them while Workers AI is not bound). */
 /** `readings`: works with a public letter whose Japanese reading has not been asked for yet. */
 /** `gaveUp`: units at `audio_ready = 2`, whose given-up lines the browser voice reads; they are not in `audio`. */
-export type Remaining = { vectors: number; readings: number; units: Record<Unit["lang"], number>; audio: Record<Unit["lang"], number>; gaveUp: Record<Unit["lang"], number> };
+export type Remaining = { vectors: number; letterVecs: number; readings: number; units: Record<Unit["lang"], number>; audio: Record<Unit["lang"], number>; gaveUp: Record<Unit["lang"], number> };
 
 /**
- * `limit` is the whole run's budget, spent in order on work vectors (one per 20 works embedded), then the works' readings
+ * `limit` is the whole run's budget, spent in order on work vectors (one per 20 works embedded), then letter vectors (one
+ * per 20 public letters and 一言 embedded; works a missed refresh left without a mix get it here too), then the works' readings
  * (one per work with a public letter and none asked for yet; `askItemReading`, a failed call counted in `failed`), then letter-language jobs: ja units, en units, ja audio, en audio, each letter run consuming one, and every listing asks for the remaining budget only. Stops making
  * audio at the first `limit`/`unavailable` answer, units at `UNIT_DAILY_LIMIT` (a halt, not a failure), and
  * units after 3 letters in a row that cannot get one, in either language (a single bad letter is counted as
@@ -151,6 +153,9 @@ export async function prepareBatch(env: Env, db: D1Database, limit = 20): Promis
   // Vectors first: they are cheap, and the next pick by distance needs them.
   const vectors = await ensureItemVectors(env, db, limit);
   let budget = limit - Math.ceil(vectors.made / EMBED_BATCH);
+  // Letter vectors next, after the works': a work's mix needs its own vector.
+  const letterVecs = await ensureLetterVectors(env, db, budget);
+  budget -= Math.ceil(letterVecs.made / EMBED_BATCH);
   // Readings next: a unit is checked, and its lead voiced, with the work's reading, so it is asked for first.
   if (budget > 0 && hasClaude(env)) {
     for (const item of await listItemsWithoutReading(db, budget)) {
@@ -195,11 +200,26 @@ export async function prepareBatch(env: Env, db: D1Database, limit = 20): Promis
       if (!done.has(`${lang}:${u.letterId}`)) await one(u.letterId, lang);
     }
   }
-  const remaining: Remaining = { vectors: vectors.remaining, readings: await countItemsWithoutReading(db), units: { ja: 0, en: 0 }, audio: { ja: 0, en: 0 }, gaveUp: { ja: 0, en: 0 } };
+  const remaining: Remaining = { vectors: vectors.remaining, letterVecs: letterVecs.remaining, readings: await countItemsWithoutReading(db), units: { ja: 0, en: 0 }, audio: { ja: 0, en: 0 }, gaveUp: { ja: 0, en: 0 } };
   for (const lang of LANGS) {
     remaining.units[lang] = await countLettersWithoutUnit(db, lang);
     remaining.audio[lang] = await countUnitsWithoutAudio(db, lang);
     remaining.gaveUp[lang] = await countUnitsGaveUp(db, lang);
   }
   return { ...total, remaining };
+}
+
+/**
+ * A 私も reached the letter (a route `defer`s this): the unit is remade when it is the first 私も or the third place
+ * (`remakeForReaction`), and the new text is voiced. The old unit airs until then. Never throws.
+ */
+export async function reactToWatashimo(env: Env, db: D1Database, letterId: string): Promise<void> {
+  try {
+    const letter = await getLetter(db, letterId);
+    const item = letter ? await getItem(db, letter.itemId) : null;
+    if (!letter || !item) return;
+    for (const lang of await remakeForReaction(env, db, letter, item)) await prepareLetter(env, db, letterId, lang);
+  } catch (e) {
+    logFailure(e);
+  }
 }

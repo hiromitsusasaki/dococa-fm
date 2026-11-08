@@ -318,6 +318,22 @@ describe("POST /letters", () => {
     expect(prepared).toHaveBeenCalledTimes(1);
   });
 
+  it("schedules the reaction of the DJ to the letter a watashimo answers, and to nothing else", async () => {
+    const reacted = vi.spyOn(prepare, "reactToWatashimo").mockResolvedValue(undefined);
+    const item = await seedItem();
+    const parent = await insertLetter(env.DB, letterDraft(item.id));
+    const cookie = await signedInSession();
+    expect((await postForm("/letters", cookie, { itemId: item.id, body: "中学の頃、毎日聴いていた" })).status).toBe(303);
+    expect((await postForm("/letters", cookie, { itemId: item.id, kind: "reply", parentLetterId: parent.id, body: "わかります" })).status).toBe(303);
+    expect(reacted).not.toHaveBeenCalled();
+    expect((await postForm("/letters", cookie, { itemId: item.id, kind: "watashimo", parentLetterId: parent.id, body: "x" })).status).toBe(303);
+    expect(reacted).toHaveBeenCalledTimes(1);
+    expect(reacted.mock.calls[0]![2]).toBe(parent.id);
+    // A refused 私も (the same person twice) schedules nothing more.
+    expect((await postForm("/letters", cookie, { itemId: item.id, kind: "watashimo", parentLetterId: parent.id, body: "x" })).status).toBe(409);
+    expect(reacted).toHaveBeenCalledTimes(1);
+  });
+
   it("does not schedule anything for a letter that is turned down", async () => {
     const item = await seedItem();
     create.mockResolvedValue(verdict({ ok: false, reason: "advert" }));

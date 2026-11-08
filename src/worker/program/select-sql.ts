@@ -100,18 +100,22 @@ export const EXCLUDED_SQL = `SELECT item_id, 'spent' AS why FROM (${SPENT_ITEMS}
   UNION ALL SELECT item_id, 'latest' AS why FROM (${lastSegmentItems(1)})`;
 
 /**
- * The vectors of up to 50 works the listener spoke about themselves (`OWN_VOICES_SQL`: their own letters, and the letters
- * they answered with a 私も or a 一言), the most recent first; null for a work without one. Favourites never count.
+ * The vectors of the listener's 50 most recent own voices (`OWN_VOICES_SQL`: their own letters, and the letters they
+ * answered with a 私も or a 一言): the letter's own vector (its work and its text), else its work's (`vec_mix`, else `vec`);
+ * null when neither has one. Favourites never count.
  */
-export const TASTE_OWN_SQL = `SELECT i.vec FROM
-    (SELECT v.item_id, MAX(v.created_at) AS at FROM (${OWN_VOICES_SQL}) v GROUP BY v.item_id ORDER BY at DESC, v.item_id LIMIT 50) f
-  JOIN items i ON i.id = f.item_id`;
+export const TASTE_OWN_SQL = `SELECT COALESCE(v.vec, i.vec_mix, i.vec) AS vec FROM
+    (SELECT v.item_id, v.created_at, v.vec FROM (${OWN_VOICES_SQL}) v ORDER BY v.created_at DESC, v.item_id LIMIT 50) v
+  JOIN items i ON i.id = v.item_id`;
 
-/** The vectors of up to 20 works whose letters the listener heard most recently; null for a work without one. */
-export const TASTE_HEARD_SQL = `SELECT i.vec FROM
-    (SELECT l.item_id, MAX(s.heard_at) AS at FROM listens s JOIN letters l ON l.id = s.letter_id
-     WHERE s.listener_id = ?1 GROUP BY l.item_id ORDER BY at DESC, l.item_id LIMIT 20) h
-  JOIN items i ON i.id = h.item_id`;
+/**
+ * The vectors of the 20 letters the listener heard most recently: the letter's own while it is public, else its work's
+ * (`vec_mix`, else `vec`); null when neither has one.
+ */
+export const TASTE_HEARD_SQL = `SELECT COALESCE(CASE WHEN l.status = 'public' THEN l.vec END, i.vec_mix, i.vec) AS vec FROM
+    (SELECT s.letter_id, MAX(s.heard_at) AS at FROM listens s WHERE s.listener_id = ?1 GROUP BY s.letter_id ORDER BY at DESC, s.letter_id LIMIT 20) h
+  JOIN letters l ON l.id = h.letter_id
+  JOIN items i ON i.id = l.item_id`;
 
 /**
  * Letters the DJ may read for the chosen items (?3…), with whether the listener heard each since ?2: per item, the

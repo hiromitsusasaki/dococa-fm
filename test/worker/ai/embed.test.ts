@@ -1,10 +1,11 @@
 import { env } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { EMBED_MODEL, embed, embedItems, ensureItemVectors, itemText } from "../../../src/worker/ai/embed";
-import { getItemVecs, insertItem, VEC_DIMS } from "../../../src/worker/db/items";
-import { fakeAi } from "../../helpers/ai";
+import { EMBED_MODEL, embed, embedItems, embedLetters, ensureItemVectors, ensureLetterVectors, itemText, remixAfterTakedown } from "../../../src/worker/ai/embed";
+import { dequantise, getItemVecs, insertItem, refreshItemMix, setItemVec, VEC_DIMS } from "../../../src/worker/db/items";
+import { insertLetter, setLetterStatus, setLetterVecs } from "../../../src/worker/db/letters";
+import { angled, fakeAi } from "../../helpers/ai";
 import { resetDb } from "../../helpers/db";
-import { itemDraft } from "../db/helpers";
+import { itemDraft, letterDraft } from "../db/helpers";
 
 beforeEach(async () => {
   await resetDb(env.DB);
@@ -122,5 +123,86 @@ describe("ensureItemVectors", () => {
     vi.spyOn(console, "warn").mockImplementation(() => {});
     await insertItem(env.DB, itemDraft({ title: "new" }));
     expect(await ensureItemVectors({}, env.DB, 5)).toEqual({ made: 0, remaining: 1 });
+  });
+});
+
+const letterVec = async (id: string) => dequantise((await env.DB.prepare("SELECT vec FROM letters WHERE id = ?").bind(id).first<{ vec: unknown }>())?.vec);
+const mixOf = async (id: string) => dequantise((await env.DB.prepare("SELECT vec_mix FROM items WHERE id = ?").bind(id).first<{ vec_mix: unknown }>())?.vec_mix);
+
+describe("embedLetters", () => {
+  it("embeds public letters and 一言 as their work's text and their own, as written; never a 私も, a found voice or a withdrawn letter", async () => {
+    const item = await insertItem(env.DB, itemDraft({ title: "T", creator: "C", year: 1999, kind: "book" }));
+    const letter = await insertLetter(env.DB, letterDraft(item.id, { body: "雨の日に読んだ", bodyJa: "雨の日に読んだ" }));
+    const reply = await insertLetter(env.DB, letterDraft(item.id, { kind: "reply", parentLetterId: letter.id, body: "me too, in the rain" }));
+    const watashimo = await insertLetter(env.DB, letterDraft(item.id, { kind: "watashimo", parentLetterId: letter.id, body: "私も" }));
+    const found = await insertLetter(env.DB, letterDraft(item.id, { kind: "found", body: "from the web", sourceUrl: "https://example.com/r", sourceAuthor: "someone" }));
+    const withdrawn = await insertLetter(env.DB, letterDraft(item.id, { body: "取り下げ" }));
+    await setLetterStatus(env.DB, withdrawn.id, "withdrawn");
+    const { AI, calls } = fakeAi();
+    const ids = [letter.id, reply.id, watashimo.id, found.id, withdrawn.id];
+    expect(await embedLetters({ AI }, env.DB, { ids })).toBe(2);
+    expect(calls.flatMap((c) => c.text).sort()).toEqual(["T — C (1999) [book]\nme too, in the rain", "T — C (1999) [book]\n雨の日に読んだ"]);
+    expect(await letterVec(letter.id)).not.toBeNull();
+    expect(await letterVec(reply.id)).not.toBeNull();
+    for (const l of [watashimo, found, withdrawn]) expect(await letterVec(l.id)).toBeNull();
+    // Already embedded: nothing is asked again.
+    expect(await embedLetters({ AI }, env.DB, { ids })).toBe(0);
+    expect(calls).toHaveLength(1);
+  });
+
+  it("logs neither a letter's text nor a vector when Workers AI refuses, and never throws", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    const item = await insertItem(env.DB, itemDraft());
+    const letter = await insertLetter(env.DB, letterDraft(item.id, { body: "誰にも見せない一文" }));
+    expect(await embedLetters(fakeAi(async () => { throw new TypeError("refused 誰にも見せない一文"); }), env.DB, { ids: [letter.id] })).toBe(0);
+    expect(await embedLetters({}, env.DB, { ids: [letter.id] })).toBe(0);
+    const logged = [...warn.mock.calls, ...error.mock.calls].map((c) => c.join(" ")).join("\n");
+    expect(logged).not.toContain("誰にも見せない");
+    expect(await letterVec(letter.id)).toBeNull();
+  });
+});
+
+describe("refreshItemMix", () => {
+  it("mixes the work's vector with the mean of its public letters' and 一言's, and selection reads the mix", async () => {
+    const item = await insertItem(env.DB, itemDraft({ externalIds: {} }));
+    await setItemVec(env.DB, item.id, angled(0));
+    const a = await insertLetter(env.DB, letterDraft(item.id, { body: "a" }));
+    const b = await insertLetter(env.DB, letterDraft(item.id, { kind: "reply", parentLetterId: a.id, body: "b" }));
+    const w = await insertLetter(env.DB, letterDraft(item.id, { kind: "watashimo", parentLetterId: a.id, body: "私も" }));
+    await setLetterVecs(env.DB, [[a.id, angled(Math.PI / 2)], [b.id, angled(Math.PI / 2)], [w.id, angled(Math.PI)]]);
+    await refreshItemMix(env.DB, item.id);
+    // vec + mean(letters) = (1, 0) + (0, 1): halfway, whatever a 私も carries.
+    const mix = (await mixOf(item.id))!;
+    expect(mix[0]).toBeCloseTo(Math.SQRT1_2, 2);
+    expect(mix[1]).toBeCloseTo(Math.SQRT1_2, 2);
+    expect((await getItemVecs(env.DB, [item.id])).get(item.id)![1]).toBeCloseTo(Math.SQRT1_2, 2);
+
+    // A letter that stops being public leaves the mix; with none left, the work is itself again.
+    await setLetterStatus(env.DB, a.id, "withdrawn");
+    await setLetterStatus(env.DB, b.id, "rejected");
+    await remixAfterTakedown(env.DB, a.id);
+    expect(await mixOf(item.id)).toBeNull();
+    expect((await getItemVecs(env.DB, [item.id])).get(item.id)![0]).toBeCloseTo(1, 2);
+  });
+
+  it("is made when a letter's vector is, and mended by the prepare stage when the work had no vector yet", async () => {
+    const item = await insertItem(env.DB, itemDraft({ externalIds: {} }));
+    const letter = await insertLetter(env.DB, letterDraft(item.id, { body: "x" }));
+    const { AI } = fakeAi();
+    expect(await ensureLetterVectors({ AI }, env.DB, 1)).toEqual({ made: 1, remaining: 0 });
+    // The work had no vector of its own yet: no mix.
+    expect(await mixOf(item.id)).toBeNull();
+    await embedItems({ AI }, env.DB, [item.id]);
+    expect(await ensureLetterVectors({ AI }, env.DB, 1)).toEqual({ made: 0, remaining: 0 });
+    expect(await mixOf(item.id)).not.toBeNull();
+    expect(await letterVec(letter.id)).not.toBeNull();
+  });
+
+  it("counts every public letter as remaining without Workers AI", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const item = await insertItem(env.DB, itemDraft());
+    await insertLetter(env.DB, letterDraft(item.id, { body: "x" }));
+    expect(await ensureLetterVectors({}, env.DB, 5)).toEqual({ made: 0, remaining: 1 });
   });
 });

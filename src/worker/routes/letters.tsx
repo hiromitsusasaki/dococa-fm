@@ -6,7 +6,7 @@ import { LetterText, ReportForm, whoOf } from "../../views/components";
 import { Layout } from "../../views/layout";
 import { currentPath, requireSignin } from "../auth/require-signin";
 import type { Variables } from "../auth/session";
-import { embedItems } from "../ai/embed";
+import { embedItems, embedLetters } from "../ai/embed";
 import { getItem } from "../db/items";
 import { claimProfile } from "../db/listeners";
 import { isValidPlace, profileFields, replyProfilePatch } from "../listener-profile";
@@ -17,7 +17,7 @@ import type { ja } from "../i18n/ja";
 import { type Lang, tFor } from "../i18n/t";
 import { defer } from "../defer";
 import { createLetter } from "../letters/create";
-import { prepareLetter } from "../program/prepare";
+import { prepareLetter, reactToWatashimo } from "../program/prepare";
 import type { ItemDraft } from "../resolve";
 import type { Listener } from "../types";
 import { PutPage } from "./put";
@@ -83,10 +83,13 @@ letters.post(
     // Conditional: a reply that raced another and lost leaves the name the first one wrote.
     if (result.ok && profile) await claimProfile(c.env.DB, listener.id, profile);
     if (result.ok) {
-      // The work may be new: its vector is made after the answer (a no-op when it has one).
-      defer(c, embedItems(c.env, c.env.DB, [result.itemId]));
+      // The work may be new: its vector is made after the answer (a no-op when it has one), then the letter's, whose
+      // mix with the work's needs it (a 私も gets none).
+      defer(c, embedItems(c.env, c.env.DB, [result.itemId]).then(() => embedLetters(c.env, c.env.DB, { ids: [result.letter.id] })));
       // Reactions are fixed phrases and have no unit to make.
       if (result.letter.kind === "letter") defer(c, prepareLetter(c.env, c.env.DB, result.letter.id));
+      // A 私も may change what the DJ says after the letter it answers (the first one, or one from a third country).
+      if (result.letter.kind === "watashimo" && result.letter.parentLetterId) defer(c, reactToWatashimo(c.env, c.env.DB, result.letter.parentLetterId));
       return c.redirect(form.embed === "1" ? `/put?embed=1&sent=${encodeURIComponent(result.itemId)}` : `/items/${result.itemId}`, 303);
     }
     const message = result.reason ? `${t(result.key)} ${t(`letters.reason.${result.reason}` as keyof typeof ja)}` : t(result.key);
