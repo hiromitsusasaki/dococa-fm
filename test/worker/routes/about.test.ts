@@ -48,12 +48,12 @@ describe("GET /about", () => {
 
   it("tells a listener they do not have to reply", async () => {
     const html = await (await get("/about", await newSession())).text();
-    expect(html).toMatch(/<h2>聴く<\/h2>[\s\S]*?「私も」と「一言」を返せます。<\/p>/);
+    expect(html).toMatch(/<h2>聴く<\/h2>[\s\S]*?共感のリアクション（「私も」）やコメント（「一言」）を返すことができます。<\/p>/);
   });
 
   it("offers the home's tour again, through /?tour=1", async () => {
     const html = await (await get("/about", await newSession())).text();
-    expect(html).toMatch(/<a class="pill tour-again" href="\/\?tour=1">使い方<\/a>/);
+    expect(html).toMatch(/<a class="pill tour-again" href="\/\?tour=1">使い方<\/a>\s*<small class="muted">ホームに戻って、画面の案内を順に表示します<\/small>/);
   });
 
   it("opens with the key visual under the title", async () => {
@@ -71,11 +71,11 @@ describe("GET /about", () => {
 
   it("opens the rules with what the AI never does", async () => {
     const ja = await (await get("/about", await newSession())).text();
-    expect(ja).toMatch(/<h2>できること・しないこと<\/h2>\s*<div class="rule"[^>]*><\/div>\s*<figure[^>]*>.*?<\/figure>\s*<p>AI は、お便りに書き足しも言い換えもせずに読みます。別の言語で聴いている人には、原文はそのままに、訳したものを読みます。お便りは書いた人のものです。DJ は、あなたが好きかもしれないものと、まだ出会ったことのない新しいものへのお便りを、ダイヤルで選んだバランスで、あなただけに紹介します。<\/p>/);
+    expect(ja).toMatch(/<h2>できること・しないこと<\/h2>\s*<div class="rule"[^>]*><\/div>\s*<figure[^>]*>.*?<\/figure>\s*<p>お便りはそれを書いた人のものなので、書き足しも言い換えもせずに読まれます。DJ は、あなたが好きかもしれないものと、まだ出会ったことのない新しいものへのお便りを、ダイヤルで選んだバランスで、あなただけに紹介します。<\/p>/);
     const cookie = await newSession();
     await postForm("/lang", cookie, { lang: "en", next: "/about" });
     const en = await (await get("/about", cookie)).text();
-    expect(en).toMatch(/<h2>What we do and don[^<]*t do<\/h2>\s*<div class="rule"[^>]*><\/div>\s*<figure[^>]*>.*?<\/figure>\s*<p>The AI reads each letter without adding or rewording anything\. Listeners who use another language hear a translation, with the original kept as written\. The letter belongs to the person who wrote it\. The DJ introduces, to you alone, letters about things you might love and things you have never met, in the balance you choose with the dial\.<\/p>/);
+    expect(en).toMatch(/<h2>What we do and don[^<]*t do<\/h2>\s*<div class="rule"[^>]*><\/div>\s*<figure[^>]*>.*?<\/figure>\s*<p>A letter belongs to the person who wrote it, so it is read without adding or rewording anything\. The DJ introduces, to you alone, letters about things you might love and things you have never met, in the balance you choose with the dial\.<\/p>/);
   });
 
   it("answers in English for an English listener", async () => {

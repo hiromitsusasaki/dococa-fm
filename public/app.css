@@ -2545,6 +2545,18 @@ body.letter-player .embed-player {
   margin-bottom: var(--sp-2);
 }
 /* The home's first-visit tour (DESIGN.md「チュートリアル」): the page dims around one part, a bubble says what it does. */
+/* The about page's tour link, with its note on where it goes. */
+.about-tour {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+}
+
+.about-tour small {
+  font-size: 12px;
+}
+
 .face .tour-again,
 .tour-actions .quiet {
   border: 0;

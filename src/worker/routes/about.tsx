@@ -23,10 +23,11 @@ about.get("/about", (c) => {
         </figure>
         <p class="about-lead">{t("about.lead")}</p>
         {/* The home opens its tour again on `?tour=1`. */}
-        <p>
+        <p class="about-tour">
           <a class="pill tour-again" href="/?tour=1">
             {t("about.tour")}
           </a>
+          <small class="muted">{t("about.tourNote")}</small>
         </p>
         {SECTIONS.map((key) => (
           <section class="panel panel-rule-under">
