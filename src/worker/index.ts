@@ -4,6 +4,7 @@ import { type Variables, requireSessionSecret, sessionMiddleware } from "./auth/
 import type { Env } from "./env";
 import { prepareBatch } from "./program/prepare";
 import { about } from "./routes/about";
+import { privacy } from "./routes/privacy";
 import { admin } from "./routes/admin";
 import { adminUnits } from "./routes/admin-units";
 import { auth } from "./routes/auth";
@@ -61,6 +62,7 @@ app.route("/", authGoogle);
 app.route("/", langRoutes);
 app.route("/", settings);
 app.route("/", about);
+app.route("/", privacy);
 app.route("/", put);
 app.route("/", start);
 app.route("/", letters);

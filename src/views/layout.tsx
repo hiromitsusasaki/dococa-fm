@@ -136,6 +136,8 @@ export function Layout({ title, children, script, lang = "ja", listener, path, o
         )}
         <link rel="manifest" href="/manifest.webmanifest" />
         <link rel="icon" href="/icon.svg" type="image/svg+xml" />
+        <link rel="icon" href="/favicon.ico" sizes="32x32" />
+        <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous" />
         <link rel="stylesheet" href={FONTS_HREF} />
@@ -145,6 +147,11 @@ export function Layout({ title, children, script, lang = "ja", listener, path, o
       <body class={embed ? "embed" : undefined}>
         {!embed && <SiteHeader listener={listener} path={path} lang={lang} />}
         {children}
+        {!embed && (
+          <footer class="site-footer">
+            <a href="/privacy" aria-current={path === "/privacy" ? "page" : undefined}>{tFor(lang)("privacy.link")}</a>
+          </footer>
+        )}
         <script>{raw(THEME_WIRE)}</script>
         {embed && <script>{raw(EMBED_ESCAPE)}</script>}
         {script && (

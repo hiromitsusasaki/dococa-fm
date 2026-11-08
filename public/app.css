@@ -1558,6 +1558,26 @@ button:disabled,
   gap: var(--sp-4);
 }
 
+.privacy .panel p {
+  margin: 0;
+  line-height: 1.8;
+}
+
+/* Footer: one quiet line under every page. */
+.site-footer {
+  max-width: 1120px;
+  margin: calc(var(--sp-6) * 2) auto 0;
+  padding: var(--sp-4) 0;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  color: var(--ink-2);
+  border-top: 1px solid var(--line);
+}
+
+.site-footer a {
+  color: var(--ink-2);
+}
+
 .put h1,
 .about h1 {
   margin-bottom: 0;
