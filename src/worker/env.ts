@@ -26,6 +26,8 @@ export type Env = {
   UNIT_DAILY_LIMIT?: string;
   /** Page questions (one Claude call each, made when a work is chosen on /put) per JST day; default 600, `0` pauses. */
   ELICIT_DAILY_LIMIT?: string;
+  /** Far bridges (one Claude-written line per listener, far work and language, on the listener's own radio) made per JST day; default 400, `0` pauses. */
+  BRIDGE_DAILY_LIMIT?: string;
   /** Letters and replies (each a moderation and translation call) stored per JST day, everyone together; default 500, `0` pauses. 私も is neither counted nor capped. */
   LETTER_GLOBAL_DAILY_LIMIT?: string;
   RATE_LIMIT_PER_MINUTE?: string;

@@ -35,6 +35,7 @@ export default defineConfig(async () => {
                   CLOUD_TTS_GLOBAL_DAILY_LIMIT: "",
                   UNIT_DAILY_LIMIT: "",
                   ELICIT_DAILY_LIMIT: "",
+                  BRIDGE_DAILY_LIMIT: "",
                   LETTER_GLOBAL_DAILY_LIMIT: "",
                   RATE_LIMIT_PER_MINUTE: "",
                   CLAUDE_MODEL: "",
