@@ -7,7 +7,7 @@ import { hasClaude } from "../claude/client";
 import type { Env } from "../env";
 import { ensureAudio, voiceOf } from "../tts/audio";
 import type { Unit } from "../types";
-import { makeUnit, unitCapReached, unitSegment } from "./unit";
+import { makeUnit, remakeForReaction, unitCapReached, unitSegment } from "./unit";
 
 export type Prepared = { units: number; audio: number; failed: number };
 
@@ -207,4 +207,19 @@ export async function prepareBatch(env: Env, db: D1Database, limit = 20): Promis
     remaining.gaveUp[lang] = await countUnitsGaveUp(db, lang);
   }
   return { ...total, remaining };
+}
+
+/**
+ * A 私も reached the letter (a route `defer`s this): the unit is remade when it is the first 私も or the third place
+ * (`remakeForReaction`), and the new text is voiced. The old unit airs until then. Never throws.
+ */
+export async function reactToWatashimo(env: Env, db: D1Database, letterId: string): Promise<void> {
+  try {
+    const letter = await getLetter(db, letterId);
+    const item = letter ? await getItem(db, letter.itemId) : null;
+    if (!letter || !item) return;
+    for (const lang of await remakeForReaction(env, db, letter, item)) await prepareLetter(env, db, letterId, lang);
+  } catch (e) {
+    logFailure(e);
+  }
 }
