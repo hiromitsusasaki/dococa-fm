@@ -211,7 +211,7 @@ Spotify 連携は開発モードのため、許可リストに入っているア
 ### public 化前チェックリスト（本人）
 
 - [ ] リポの Settings → Code security で **Secret scanning** と **Push protection** を有効にする。同じ画面で **Private vulnerability reporting** も有効にする（SECURITY.md がそこへの報告を案内しているため）。
-- [ ] `CLAUDE.md`・`docs/status.md`・設計書に残る知人の名前（伊豆部など）、手元の端末名やパス、Cloudflare のアカウント名を、公開してよいか見る。消すなら commit してから。
+- [ ] `CLAUDE.md`・`docs/status.md`・設計書に残る知人の名前、手元の端末名やパス、Cloudflare のアカウント名を、公開してよいか見る（2026-11-08: 知人の名前は設計書から外した。端末名 main-mac / ops-mac と workers.dev のサブドメインは残してよいと判断）。
 - [ ] Settings → Actions → General で、fork からの pull request の workflow は承認が要る設定にする（"Require approval for all outside collaborators"）。
 - [ ] Settings → Branches（または Rulesets）で、`main` への直接 push を自分だけに限定する。
 - [ ] 手元で `gitleaks detect --source .` を実行し、検出が 0 であることを確かめる（履歴全体が対象）。
