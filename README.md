@@ -2,7 +2,7 @@
 
 世界のどこかにいる誰かの好きなものが聴こえてくるラジオ。
 
-Built with Claude: Japan 2026 への応募作です。本番: https://dococafm.app
+Built with Claude: Japan 2026 への応募作です（2026-11-08 に提出。チーム promitsu）。本番: https://dococafm.app 、デモ動画: https://youtu.be/V7lNffHKgw4
 
 ![本番のホーム（ダーク。左が PC、右がスマホ）](docs/screenshots/2026-11-08-prod-home.png)
 
@@ -20,7 +20,7 @@ Dococa FM は、誰かが好きな作品について書いた「お便り」を�
 2. 「いま届いているお便り」のカードを押すと、そのお便りから流れます。「私も」と一言は、サインインなしで返せます。
 3. [/about](https://dococafm.app/about) に、聴く・送る・自分のラジオ・AI がしないこと。
 
-お便りを送るには Google サインインが要り、ダイヤル（新しい出会い）はお便りを 3 通送ると効きはじめます。デモ動画では、解けたダイヤルと、送ったお便りが読まれるまでを見られます。
+お便りを送るには Google サインインが要り、ダイヤル（新しい出会い）はお便りを 3 通送ると効きはじめます。[デモ動画](https://youtu.be/V7lNffHKgw4)（3 分）では、解けたダイヤルと、送ったお便りが読まれるまでを見られます。
 
 ## AI に引いた線
 
@@ -185,7 +185,7 @@ pnpm wrangler login
 pnpm wrangler d1 create dococa            # 出力の database_id を wrangler.jsonc の d1_databases に書く（リポの値は本番のもの）
 pnpm wrangler r2 bucket create dococa-audio
 pnpm wrangler secret put ANTHROPIC_API_KEY   # .dev.vars.example の鍵を 1 つずつ（ADMIN_TOKEN、SESSION_SECRET、SPOTIFY_CLIENT_ID、GOOGLE_TTS_SA_JSON、GOOGLE_OAUTH_CLIENT_ID、GOOGLE_OAUTH_CLIENT_SECRET、TMDB_API_KEY、YOUTUBE_API_KEY、任意で GOOGLE_BOOKS_API_KEY）
-pnpm db:migrate   # migrations/ の 0001〜0025 のうち、まだ当てていないものを順に当てる
+pnpm db:migrate   # migrations/ の 0001〜0028 のうち、まだ当てていないものを順に当てる
 # wrangler.jsonc の routes にカスタムドメイン、vars.PUBLIC_ORIGIN にその origin（例 https://dococafm.app）を書いてから
 pnpm run deploy   # pnpm deploy は pnpm 組み込みの別コマンドなので、run を付ける
 ```
@@ -198,7 +198,7 @@ pnpm run deploy   # pnpm deploy は pnpm 組み込みの別コマンドなので
 
 ### Google サインインについて
 
-Google Cloud の OAuth クライアント（ウェブ アプリケーション）を作り、承認済みのリダイレクト URI に `https://dococafm.app/auth/google/callback`（開発は `http://127.0.0.1:5173/auth/google/callback`）を登録します。同意画面は「本番」に公開します（テスト中のままだと、登録したテストユーザーしか入れません）。`GOOGLE_OAUTH_CLIENT_ID` が空のあいだ、`/auth/google` は 503 を返します。
+Google Cloud の OAuth クライアント（ウェブ アプリケーション）を作り、承認済みのリダイレクト URI に `https://dococafm.app/auth/google/callback`（開発は `http://127.0.0.1:5173/auth/google/callback`）を登録します。同意画面は「本番」に公開します（テスト中のままだと、登録したテストユーザーしか入れません）。本番に公開するには、ブランディングにプライバシーポリシーの URL（この本番では https://dococafm.app/privacy 。利用規約 https://dococafm.app/terms は任意）が要ります。ロゴを載せるには Google の審査が要るので、別に申請します。`GOOGLE_OAUTH_CLIENT_ID` が空のあいだ、`/auth/google` は 503 を返します。
 
 ### Spotify 連携について
 
@@ -208,16 +208,18 @@ Spotify 連携は開発モードのため、許可リストに入っているア
 
 書き込みの `POST` は同一オリジンのみ、好きなものの登録・お便り・マイページはサインイン必須、`/admin/*` は `ADMIN_TOKEN` 必須（スクリプトは Bearer、管理画面はブラウザの Basic 認証）、レート制限は書き込みと外部 API を呼ぶ経路で IP とリスナーごとに 1 分 20 回（題名検索 `GET /put?q=` はサインイン済みのリスナーごとに別枠で 1 分 20 回、`GET /tts` と `POST /listens` もそれぞれ別枠）です。詳しくは [SECURITY.md](SECURITY.md) にあります。レート制限のカウンタは Worker の isolate ごとのメモリにあるため、isolate をまたぐ厳密な上限ではありません。番組の作成は D1 を数える 1 日の枠の上限（`EPISODE_DAILY_LIMIT` 既定 60 枠、`EPISODE_GLOBAL_DAILY_LIMIT` 既定 1800 枠。1 回が 1 枠）が、クラウドの声は 1 日に合成する行数の上限（`CLOUD_TTS_GLOBAL_DAILY_LIMIT`、既定 3000）が、DJ の語り（単位）は 1 日に作る数の上限（`UNIT_DAILY_LIMIT`、既定 1000）が、お便りと一言は全員で 1 日に受け付ける数の上限（`LETTER_GLOBAL_DAILY_LIMIT`、既定 500。判定と翻訳で Claude を呼ぶため。「私も」は止めない）が、題名検索の YouTube は全員で 1 日に探す回数の上限（`YOUTUBE_SEARCH_DAILY_LIMIT`、既定 80。1 回で YouTube の枠を 100 ユニット使うため。超えたら YouTube だけ飛ばしてほかで探す。`0` は YouTube を探さない）が最後の歯止めです（`0` は停止）。単位が上限に当たった日は、新しいお便りを定型の手渡しだけで読みます。同じ行の音声は全員で共有し、上限を超えると `GET /tts` は 503 を返してブラウザの音声に切り替わります。ただし判定は原子的ではなく同時実行で数回超えることがあり、cookie を捨てる 1 人に全体の上限を使い切られうることも、[SECURITY.md](SECURITY.md) の既知の制限に書いています。
 
-### public 化前チェックリスト（本人）
+プライバシーポリシー（[/privacy](https://dococafm.app/privacy)）と利用規約（[/terms](https://dococafm.app/terms)）は、埋め込み以外の全ページのフッターにあります。預かるのは Google アカウントの識別子と表示名、ラジオネーム・お住まい・設定、送ったお便りと反応、聴いた記録で、メールアドレスやプロフィール画像は保存しません。
 
-- [ ] リポの Settings → Code security で **Secret scanning** と **Push protection** を有効にする。同じ画面で **Private vulnerability reporting** も有効にする（SECURITY.md がそこへの報告を案内しているため）。
-- [ ] `CLAUDE.md`・`docs/status.md`・設計書に残る知人の名前、手元の端末名やパス、Cloudflare のアカウント名を、公開してよいか見る（2026-11-08: 知人の名前は設計書から外した。端末名 main-mac / ops-mac と workers.dev のサブドメインは残してよいと判断）。
-- [ ] Settings → Actions → General で、fork からの pull request の workflow は承認が要る設定にする（"Require approval for all outside collaborators"）。
-- [ ] Settings → Branches（または Rulesets）で、`main` への直接 push を自分だけに限定する。
-- [ ] 手元で `gitleaks detect --source .` を実行し、検出が 0 であることを確かめる（履歴全体が対象）。
-- [ ] `.gitignore` に `.dev.vars`、`*.pem`、`.wrangler/`、`.found/` があることを確かめる（済み）。
-- [ ] CI（`.github/workflows/ci.yml`）が main で緑になっていることを確かめる。
-- [ ] 上が済んでから、Settings → General → Danger Zone で private を public に切り替え、提出する。
+### public 化前チェックリスト（2026-11-08 に済み）
+
+- [x] リポの Settings → Code security で **Secret scanning** と **Push protection** を有効にする。同じ画面で **Private vulnerability reporting** も有効にする（SECURITY.md がそこへの報告を案内しているため）。
+- [x] `CLAUDE.md`・`docs/status.md`・設計書に残る知人の名前、手元の端末名やパス、Cloudflare のアカウント名を、公開してよいか見る（2026-11-08: 知人の名前は設計書から外した。端末名 main-mac / ops-mac と workers.dev のサブドメインは残してよいと判断）。
+- [x] Settings → Actions → General で、fork からの pull request の workflow は承認が要る設定にする（"Require approval for all outside collaborators"）。
+- [x] Settings → Branches（または Rulesets）で、`main` への直接 push を自分だけに限定する。
+- [x] 手元で `gitleaks detect --source .` を実行し、検出が 0 であることを確かめる（履歴全体が対象）。
+- [x] `.gitignore` に `.dev.vars`、`*.pem`、`.wrangler/`、`.found/` があることを確かめる（済み）。
+- [x] CI（`.github/workflows/ci.yml`）が main で緑になっていることを確かめる。
+- [x] 上が済んでから、Settings → General → Danger Zone で private を public に切り替え、提出する（2026-11-08 に public 化し、同日提出）。
 
 ## デモ用のお便りについて
 

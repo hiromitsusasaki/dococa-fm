@@ -2,12 +2,13 @@
 
 > 新しいセッションはまずここを読む。更新はタスクの区切りごと（最新を上に）。
 
+- **2026-11-08 提出完了。** Built with Claude: Japan 2026 に提出した（チーム promitsu。デモ動画 https://youtu.be/V7lNffHKgw4 。本番 Version ac78b140、リポは public）。提出後の本人作業: Google OAuth 同意画面のロゴ（Google の審査が要る。`icon/b-oauth-120.png` は private の作業場 `2026-11-07-dococa-fm-submission/`）、SNS の告知（同じ作業場の `sns/`）、下の「既知（提出後）」と「ハッカソン後」。
 - 2026-11-08 14:40 本番 ac78b140: `/privacy`（プライバシーポリシー）と `/terms`（利用規約）を追加し、全ページのフッターからリンク（Google OAuth 同意画面を本番モードにするのに必要。同意画面は本番に切替済み）。アイコンを目盛りと針のダイヤル（`public/icon.svg` + PNG + favicon.ico）に差し替え。`docs/ai.md` の「遠い枠」を「好みから遠いお便り」に。
 - Phase 9 Task 3（「私も」への DJ の反応。branch は司令塔が merge）: 私もが届いたお便りの単位を、1 件目と別々の国からの 3 件目で書き直す（Claude には土地だけ渡す。数は言わない）。**デプロイ: `pnpm db:migrate`（0028 `units.reactions_seen`）→ deploy。** 書き直しは「私も」を返した直後の `defer` で動き、新しい文は音声を作り直してから流れる。
 - 2026-11-08 Phase 9 Task 4（ブランチ `worktree-agent-a70fc139217988674`）: 問いは履歴に無い作品でも出す（`ELICIT_DAILY_LIMIT` 既定 600）。書きかけへの問い返し `POST /put/ask` と `put-page` のボタンを追加。
 - 2026-11-08 Phase 9 Task 2（遠い枠の橋渡し）: 自分のラジオの遠い枠で、聴く人の作品を 1 つ名指しする Claude の 1 文を固定の `bridge.far` の代わりに置く（`program/far-bridge.ts`、D1 `bridges` に作り置き、上限 `BRIDGE_DAILY_LIMIT` 既定 400）。デプロイ: `pnpm db:migrate`（0027_bridges）→ deploy。
 
-## 2026-11-08 提出前の仕上げ（Phase 8。本番は Phase 7 = 71ccfc6d。次は本人のデプロイ → 録画 → 提出）
+## 2026-11-08 提出前の仕上げ（Phase 8。提出は 11-08 に完了）
 
 11-07 深夜から 11-08 の提出（20:00 JST）に向けて、審査員の目のレビュー・仕様と実装の矛盾の監査・本番の画面の総当たり（いずれも `~/agent_workspace/workspace/2026-11-07-dococa-fm-submission/` の `judge-review.md`、`audit-spec.md`、`smoke/report.md`）を元に直した。設計の変更はしない（ダイヤルのロック・選曲・migration・音声の作り直しは触らない）。本人の決定（11-07 深夜）: 画面の変更 1〜6 と、明示的に頼んだお便りは自分のものでも流す、サインイン文言の修正を承認。仕様・UI/UX を大きく変えるときは事前に本人に確認する。
 
@@ -29,11 +30,11 @@
 - [x] `pnpm run deploy`（migration なし。2026-11-08 JST 未明に反映。Version e648ff2f。朝のフィードバック分は Version 105b39d7、スマホのスライダーは Version 8bcf5f8c。`post-deploy-check.sh` 全項目 ok）。main は origin に push 済み。
 - [x] ダイヤルを目覚めさせる: 本人の了承で、司令塔が本人のセッションから他の人のお便り 2 通に「私も」を付けた（ファイト・クラブ、千と千尋）。動画の録画で「Waltz for Debby」のお便りが 1 通増える。不要なら `/me` から非公開に。
 - [x] 動画の撮り直し（本番で録画 → mix → render。`~/agent_workspace/workspace/2026-11-07-dococa-fm-submission/video/draft.mp4`。朝のフィードバック反映後にもう一度撮り直し）。
-- [ ] draft.mp4 を通しで見て、ナレーションの読み（「ドコカ エフエム」、n05 の一人称）を聴く。直すなら `lines.json` → `./make.sh narrate` → `render`。
-- [ ] YouTube に限定公開で上げる（題と説明文は `submission-form.md` §5）。
-- [ ] 提出フォーム（`submission-form.md`。概要は改稿済み 485 字。§7 の【要確認】を本人の言葉で）。
-- [ ] public 化チェックリスト → private → public。
-- [ ] 提出。
+- [x] draft.mp4 を通しで見て、ナレーションの読みを聴く（本人の 8 点 + 文言 5 点を反映した v7、178 秒）。
+- [x] YouTube に上げる（https://youtu.be/V7lNffHKgw4 。題と説明文は `submission-form.md` §5）。
+- [x] 提出フォーム（`submission-form.md`。概要・§7・§9・§10 は本人の言葉で書き直した）。
+- [x] public 化チェックリスト → private → public（`publish-repo.sh`）。
+- [x] 提出（2026-11-08）。
 
 ### 既知（提出後）
 
@@ -94,9 +95,9 @@ Phase 5（TTS の見張りと指示文・ヘッダの言語切替・オンエア
 - [ ] `pnpm seed:reactions`（dry-run → `--per 2`。手順は Phase 6 の本人作業）と、二重読みの 2 クリップの削除。
 - [ ] 確かめる: X の Card Validator での `/letters/<id>` の player カード、iPhone の Safari と X のアプリ内ブラウザでの最初のタップの声、初回チュートリアル、ダイヤルのロックと目覚め、マイページの順。
 - [ ] もう一方の端末（main-mac か ops-mac）の `.dev.vars` と `pnpm db:migrate:local`（下の public 化前チェックリスト）。
-- [ ] 提出物の動画と概要の文章。
+- [x] 提出物の動画と概要の文章。
 - [ ] 提出後: WAF と Bot の Managed Challenge（上の「ハッカソン後」の Cloudflare 側の防御）。
-- [ ] public 化（下の public 化前チェックリストが済んでから、本人が private → public に切り替える）。
+- [x] public 化（2026-11-08）。
 
 | Task | 内容 | 状態 |
 |---|---|---|
