@@ -1,5 +1,5 @@
 import type { Item, Letter, LetterKind } from "../types";
-import { rowToItem } from "./items";
+import { normalise, quantise, rowToItem } from "./items";
 import { jstDayStartIso } from "./episodes";
 
 type Row = Record<string, unknown>;
@@ -242,6 +242,12 @@ export async function countRecentDuplicate(
   return row?.n ?? 0;
 }
 
+/** Stores letters' vectors (unit length, Int8 like `items.vec`) in one batch. */
+export async function setLetterVecs(db: D1Database, entries: Array<[string, Float32Array]>): Promise<void> {
+  if (entries.length === 0) return;
+  await db.batch(entries.map(([id, v]) => db.prepare("UPDATE letters SET vec = ? WHERE id = ?").bind(quantise(normalise(v)), id)));
+}
+
 export async function setLetterStatus(db: D1Database, id: string, status: Letter["status"]): Promise<void> {
   await db.prepare("UPDATE letters SET status = ? WHERE id = ?").bind(status, id).run();
 }
@@ -290,14 +296,15 @@ export async function hasWatashimo(db: D1Database, listenerId: string, parentLet
 }
 
 /**
- * The listener's (?1) own voices, one row per letter with the work it is about (`item_id`, `created_at`): their public
+ * The listener's (?1) own voices, one row per letter with the work it is about (`item_id`, `created_at`) and the vector
+ * of what they spoke to (`vec`: their letter's own, or the letter they answered; null before it is made): their public
  * letters, and their public 私も and 一言 on someone else's public letter or on a found voice (answers on their own letter are
- * not a new voice; a found voice has no listener). The dial's taste is made from these works, and the dial
+ * not a new voice; a found voice has no listener). The dial's taste is made from these, and the dial
  * wakes once there are three. Never a favourite.
  */
-export const OWN_VOICES_SQL = `SELECT l.item_id, l.created_at FROM letters l WHERE l.listener_id = ?1 AND l.status = 'public' AND l.kind = 'letter'
+export const OWN_VOICES_SQL = `SELECT l.item_id, l.created_at, l.vec FROM letters l WHERE l.listener_id = ?1 AND l.status = 'public' AND l.kind = 'letter'
   UNION ALL
-  SELECT p.item_id, r.created_at FROM letters r JOIN letters p ON p.id = r.parent_letter_id
+  SELECT p.item_id, r.created_at, p.vec FROM letters r JOIN letters p ON p.id = r.parent_letter_id
   WHERE r.listener_id = ?1 AND r.status = 'public' AND r.kind IN ('watashimo', 'reply') AND p.status = 'public' AND (p.listener_id IS NULL OR p.listener_id <> ?1)`;
 
 /** How many own voices (`OWN_VOICES_SQL`) the listener has: letters sent and reactions, in one statement. Never shown as a number. */

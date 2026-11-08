@@ -52,6 +52,9 @@ sequenceDiagram
     W->>AI: 作品の題名・作者・年・種類
     AI-->>W: 1024 次元のベクトル
     W->>DB: items.vec
+    W->>AI: 作品の 1 行と本文 (私もは送らない)
+    AI-->>W: お便りのベクトル
+    W->>DB: letters.vec と items.vec_mix
     W->>C: name_readings 作品のデータだけ
     C-->>W: 題名と作者のカタカナ読み
     W->>C: write_unit 作品 1 つとお便り 1 通
@@ -99,6 +102,8 @@ Worker の中の Claude は、どの呼び出しでも道具を 1 つしか持�
 |---|---|---|---|
 | 判定と訳 | D1 `letters` | お便り | 本人が `pnpm rejudge` を回したときだけ |
 | 作品のベクトル | D1 `items.vec` | 作品 | 作らない（作品のデータが変わらないため） |
+| お便りのベクトル | D1 `letters.vec` | お便り | 作らない |
+| 作品の混ぜたベクトル | D1 `items.vec_mix` | 作品 | お便りのベクトルができたとき、お便りが非公開になったとき |
 | 作品の読み | D1 `items.reading_ja` | 作品 | 作らない |
 | 単位 | D1 `units` | お便り × 言語 | 本人が管理画面で 👎 したとき |
 | 音声 | R2 | 言語 × 声 × 読み上げる文の SHA-256 | 鍵の版（`tts/v4/`）を上げたとき |
@@ -163,8 +168,10 @@ flowchart LR
 
 ### 作品のベクトルと、聴く人の好み
 
-- **作品のベクトル。** 作品ごとに、題名・作者・年・種類をつないだ 1 行（例 `題名 — 作者 (年) [music]`）を Workers AI の `@cf/baai/bge-m3` に渡し、1024 次元のベクトルを作ります（`itemText`）。お便りの本文は入れません。多言語のモデルなので、日本語の作品と英語の作品を同じ空間で比べられます。
-- **聴く人の好み。** 自分が送ったお便りと、私も・一言を返したお便りの作品（最大 50、新しい順）のベクトルの平均です。どちらも無ければ、最近聴いたお便りの作品（最大 20）の平均を使います（`standingOf`）。好きなものの登録と Spotify の取り込みは、好みに使いません。
+- **作品のベクトル。** 作品ごとに、題名・作者・年・種類をつないだ 1 行（例 `題名 — 作者 (年) [music]`）を Workers AI の `@cf/baai/bge-m3` に渡し、1024 次元のベクトルを作ります（`itemText`）。多言語のモデルなので、日本語の作品と英語の作品を同じ空間で比べられます。
+- **お便りのベクトル。** 公開のお便りと一言は、作品の 1 行に本文（書いたままの言語）を改行でつないで同じモデルに渡し、お便りごとのベクトルを作ります（`letterText`、`letters.vec`）。同じ作品でも、何を好きと書いたかで位置が変わります。私もと見つけた声には作りません。作るのは、送った直後（応答のあと）と、`/admin/prepare` の回で残りを埋めるとき（`remaining.letterVecs`）。本文もベクトルもログには出しません。
+- **作品の混ぜたベクトル。** 作品のベクトルに、その作品の公開のお便り・一言のベクトルの平均を足して長さ 1 にしたものです（`items.vec_mix`、`refreshItemMix`）。お便りのベクトルができたとき、お便りが取り下げ・非公開になったときに作り直し、漏れは `/admin/prepare` が埋めます。選曲で候補の遠さを測るときは、これがあればこれを、無ければ作品のベクトルを使います。
+- **聴く人の好み。** 自分が送ったお便りと、私も・一言を返したお便り（最大 50、新しい順）のベクトルの平均です。自分のお便りはそのお便りのベクトル、私も・一言は返した先のお便りのベクトルを使い、まだ無ければ作品のベクトル（混ぜたものがあればそれ）で埋めます。どちらも無ければ、最近聴いたお便り（最大 20）のベクトルの平均を、同じ埋め方で使います（`standingOf`）。好きなものの登録と Spotify の取り込みは、好みに使いません。
 - **ダイヤルのロック。** 送ったお便りと、私も・一言を返した人のお便りが合わせて 3 通に達するまで（自分のお便りに自分で返した一言は数えません）、ダイヤルは面に出たまま回せず、「お便りを 3 通送ると、ダイヤルが効きはじめます」と出ます。ロック中は中央の値で選び、保存した値は変えません。
 
 ### 次の 1 枠の選び方
@@ -281,7 +288,8 @@ Gemini-TTS はときどき、指示文そのものを本文の前に読み上げ
 - `src/worker/program/select.ts` `selectProgram`、`pickByDistance`、`seatOrder` — 反響、遠さ、枠の順、初めての人
 - `src/worker/program/select-sql.ts` `ECHO_SQL`、`EXCLUDED_SQL`、`TASTE_OWN_SQL`、`TASTE_HEARD_SQL`、`FRESH_PLACE_LETTERS_SQL` — 候補と除外
 - `src/worker/program/taste.ts` `standingOf`、`farness`、`pickByDial` — 好み、遠さの順位、±0.2 の帯
-- `src/worker/ai/embed.ts` `itemText`、`embedItems` — bge-m3 に渡す文
+- `src/worker/ai/embed.ts` `itemText`、`letterText`、`embedItems`、`embedLetters` — bge-m3 に渡す文
+- `src/worker/db/items.ts` `refreshItemMix` — 作品の混ぜたベクトル
 - `src/worker/db/items.ts` `VEC_DIMS` — 1024 次元
 - `src/worker/tts/google.ts` `spokeThePrompt`、`synthesizeShortTwice`、`synthesizeOnce` — Gemini-TTS と見張り
 - `src/worker/tts/audio.ts` `audioKey`、`ensureAudio`、`MAX_SYNTH_PER_KEY` — 音声の鍵と 1 日の上限

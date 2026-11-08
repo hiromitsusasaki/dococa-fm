@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { insertEpisode } from "../../../src/worker/db/episodes";
 import { upsertHistory } from "../../../src/worker/db/history";
 import { insertItem, setItemVec } from "../../../src/worker/db/items";
-import { countOwnLetters, insertLetter, setLetterStatus } from "../../../src/worker/db/letters";
+import { countOwnLetters, insertLetter, setLetterStatus, setLetterVecs } from "../../../src/worker/db/letters";
 import { createListener } from "../../../src/worker/db/listeners";
 import { recordListen } from "../../../src/worker/db/listens";
 import { seededRng } from "../../../src/worker/program/select";
@@ -112,6 +112,46 @@ describe("tasteOf", () => {
     await insertLetter(env.DB, letterDraft(down.id, { kind: "watashimo", listenerId: me.id, parentLetterId: rejected.id }));
     await setLetterStatus(env.DB, rejected.id, "rejected");
     expect(await standingOf(env.DB, me)).toEqual({ taste: null, blank: true });
+  });
+});
+
+describe("tasteOf with letter vectors", () => {
+  it("hears the text of the listener's own letter, and of the letter they answered, over the work's vector", async () => {
+    const me = await createListener(env.DB);
+    const other = await createListener(env.DB);
+    const a = await insertItem(env.DB, itemDraft({ externalIds: {} }));
+    await setItemVec(env.DB, a.id, angled(0));
+    const mine = await insertLetter(env.DB, letterDraft(a.id, { listenerId: me.id, body: "mine" }));
+    await setLetterVecs(env.DB, [[mine.id, angled(Math.PI / 2)]]);
+    const own = (await tasteOf(env.DB, me))!;
+    expect(own[1]).toBeCloseTo(1, 2);
+
+    // A 私も counts the letter it answered: that letter's vector, not the 私も's work.
+    const fan = await createListener(env.DB);
+    const theirs = await insertLetter(env.DB, letterDraft(a.id, { listenerId: other.id, body: "theirs" }));
+    await setLetterVecs(env.DB, [[theirs.id, angled(1)]]);
+    await insertLetter(env.DB, letterDraft(a.id, { kind: "watashimo", listenerId: fan.id, parentLetterId: theirs.id }));
+    expect((await tasteOf(env.DB, fan))![0]).toBeCloseTo(Math.cos(1), 2);
+  });
+
+  it("fills a letter without a vector with its work's (the mix when there is one)", async () => {
+    const me = await createListener(env.DB);
+    const a = await insertItem(env.DB, itemDraft({ externalIds: {} }));
+    const b = await insertItem(env.DB, itemDraft({ externalIds: {} }));
+    await setItemVec(env.DB, a.id, angled(0));
+    await setItemVec(env.DB, b.id, angled(0));
+    const withVec = await insertLetter(env.DB, letterDraft(a.id, { listenerId: me.id, body: "with" }));
+    await setLetterVecs(env.DB, [[withVec.id, angled(Math.PI / 2)]]);
+    await insertLetter(env.DB, letterDraft(b.id, { listenerId: me.id, body: "without" }));
+    const t = (await tasteOf(env.DB, me))!;
+    expect(t[0]).toBeCloseTo(Math.SQRT1_2, 2);
+    expect(t[1]).toBeCloseTo(Math.SQRT1_2, 2);
+
+    // Heard only: the heard letter's own vector.
+    const listener = await createListener(env.DB);
+    const ep = await insertEpisode(env.DB, { listenerId: listener.id, segments: [], verified: true, report: { verbatim: true, sources: true, topical: true, pii: true, details: [] } });
+    await recordListen(env.DB, { listenerId: listener.id, episodeId: ep.id, letterId: withVec.id, segmentIndex: 0 });
+    expect((await tasteOf(env.DB, listener))![1]).toBeCloseTo(1, 2);
   });
 });
 
