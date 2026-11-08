@@ -1576,6 +1576,7 @@ button:disabled,
 
 .site-footer a {
   color: var(--ink-2);
+  margin-right: var(--sp-4);
 }
 
 .put h1,

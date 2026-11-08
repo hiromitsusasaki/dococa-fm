@@ -149,6 +149,7 @@ export function Layout({ title, children, script, lang = "ja", listener, path, o
         {children}
         {!embed && (
           <footer class="site-footer">
+            <a href="/terms" aria-current={path === "/terms" ? "page" : undefined}>{tFor(lang)("terms.link")}</a>
             <a href="/privacy" aria-current={path === "/privacy" ? "page" : undefined}>{tFor(lang)("privacy.link")}</a>
           </footer>
         )}

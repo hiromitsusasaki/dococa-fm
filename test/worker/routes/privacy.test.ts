@@ -27,9 +27,20 @@ describe("GET /privacy", () => {
     expect(html).toContain("we do not store your email address");
   });
 
+  it("has a terms page built the same way, in both languages", async () => {
+    const ja = await (await SELF.fetch(`${BASE}/terms`)).text();
+    expect(ja).toContain("<h1>利用規約</h1>");
+    for (const h of ["このサービスについて", "アカウント", "お便りの決まり", "お便りの権利", "DJ の言葉", "作品の情報", "してはいけないこと", "変更と連絡先"]) {
+      expect(ja).toContain(`<h2>${h}</h2>`);
+    }
+    const cookie = await newSession();
+    await postForm("/lang", cookie, { lang: "en", next: "/terms" });
+    expect(await (await get("/terms", cookie)).text()).toContain("<h1>Terms of use</h1>");
+  });
+
   it("is linked from the footer of ordinary pages, not from an embedded one", async () => {
     const home = await (await get("/", await newSession())).text();
-    expect(home).toMatch(/<footer class="site-footer">\s*<a href="\/privacy"/);
+    expect(home).toMatch(/<footer class="site-footer">\s*<a href="\/terms"[^>]*>利用規約<\/a>\s*<a href="\/privacy"/);
     const embed = await (await get("/put?embed=1", await newSession())).text();
     expect(embed).not.toContain('href="/privacy"');
   });
