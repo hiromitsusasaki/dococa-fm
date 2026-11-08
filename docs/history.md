@@ -145,7 +145,7 @@ flowchart LR
 
 - 1 日 1 回の放送にして、お便りは翌日に読まれる形にする（[ADR 0013](adr/0013-daily-broadcast-after-hackathon.md)、[docs/broadcast.md](broadcast.md)）。
 - cookie の無い GET でリスナーの行を作らない。いまはクローラーが叩くと行が増えます。
-- Cloudflare 側の防御を足す。WAF のマネージドルール、Bot Fight Mode、書き込みの経路だけのチャレンジ、IP ごとの Rate Limiting ルールです（[ADR 0016](adr/0016-count-then-act-limits.md)）。
+- （11-08 の提出後に済み）Cloudflare 側の防御。Free プランで使える WAF のマネージドルール、IP ごとの Rate Limiting、HTTP ライブラリからの書き込みのブロック、AI クローラーのブロックを入れました。Bot Fight Mode と書き込みへのチャレンジは、運用スクリプトとブラウザの送信を壊すので入れていません（SECURITY.md、[ADR 0016](adr/0016-count-then-act-limits.md)）。
 - 費用を削る。英語の単位を要るときだけ作る、判定と翻訳を小さいモデルに替える、音声の鍵をお便りと DJ の行で分ける、再試行の上限を下げる（[docs/cost.md](cost.md)）。
 - 読みをカスタム発音で渡せる別の TTS を、切り替えの後ろに足す。
 - 冷えた入口（好みが無い人に、お住まいの国を散らす）の効き方を見直す。いまは最初の 1 通を聴いた時点で「冷えた」でなくなるため、ほとんど効きません。

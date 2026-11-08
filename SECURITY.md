@@ -35,6 +35,18 @@
 - `secureHeaders()` で標準のセキュリティヘッダを付けています。CSP は付けていません（プレイヤーが JSON の script ブロックとバンドルを使うため）。例外は共有したお便りのプレイヤー `GET /letters/:id/player` だけで、X の player カードやほかのサイトの iframe に入るよう、`X-Frame-Options` を付けず `Content-Security-Policy: frame-ancestors *` と `Cross-Origin-Resource-Policy: cross-origin` を返します。そのページにはフォームも cookie も無く、再生ボタンと「Dococa FM で聴く」（`target="_top"`）だけなので、枠に入れられても押させて得るものがありません。共有ページ `/letters/:id` 自体と、ほかのページは `SAMEORIGIN` のままです。
 - 共有したお便りの経路（`/letters/:id/player`、`/letters/:id/lines.json`、`/letters/:id/audio/:n`）はセッションの外です（cookie を読まず、リスナーの行を作らず、リスナーのことを何も返しません）。id は UUID の形だけを受け、公開中のお便り（`letter`、出典のある `found`）のときだけ答え、ほか（非公開・反応・不明）はどれも 404 です。`lines.json` は画面の本文だけで、読みの `spoken` は出しません。`audio/:n`（`n` は 0〜4 の決まった位置）は `/tts` と同じ鍵で R2 にある音声だけを返し、無ければ 404 です（合成しません）。IP ごとに 1 分 120 回の別枠です。応答は `Cache-Control: public, max-age=86400` です。
 
+### Cloudflare 側の守り（ゾーンの設定。コードの外）
+
+2026-11-08（提出後）に、dococafm.app のゾーン（Free プラン）に入れました。アプリの外で動くので、Worker のコードやテストには現れません。
+
+- **WAF マネージドルール**: Cloudflare Managed Free Ruleset を `http_request_firewall_managed` に配備（高リスクの脆弱性パターンを遮断）。
+- **Rate Limiting（Free は 1 本）**: `POST` 全部と `/admin/*` を対象に、IP（と colo）ごと 10 秒に 30 リクエストを超えたら 10 秒ブロック（429）。アプリ内の 1 分の制限より緩い洪水止めで、isolate をまたいで効きます。運用スクリプトは順番に呼ぶので当たりません。
+- **カスタムルール（ブロック）**: `/admin/*` 以外への `POST` で、User-Agent が空か HTTP ライブラリの名前（curl・python・Go-http-client・wget・Java/・okhttp・axios・node-fetch・undici・libwww・HttpClient）を含むものを 403 に。ブラウザの `fetch` と、`/admin/*` に Bearer で来る運用スクリプトは当たりません。User-Agent を偽る相手には効かないので、安い悪用だけを止める層です。
+- **AI クローラーのブロック**（`ai_bots_protection: block`）: 既知の AI 学習クローラーを遮断し、`robots.txt` の先頭に Cloudflare の content signals が付きます。ブラウザと、OGP を取りに来るリンク展開のクローラーには影響しません。
+- **入れていないもの**: Bot Fight Mode（Free では除外が作れず、`/admin/*` を叩く運用スクリプトや Playwright の録画がチャレンジされうるため）。書き込み経路への Managed Challenge（JS の `fetch` による `POST` にチャレンジ画面を返すと送信が失敗するため）。ページの初回表示へのチャレンジ（UX が変わるため）。Free では Bot Score と正規表現 `matches` が使えないので、ルールは `contains` で書いています。
+
+設定は API で入れました（Zone WAF: Edit・Bot Management: Edit・Zone: Read のトークン。使い終わったら消します）。確かめたこと: ブラウザ UA の GET と POST はアプリに届く、Slackbot / Twitterbot の GET は 200、curl と空 UA の `POST /listens` は Cloudflare の 403、`POST /admin/*` は curl でもアプリの 401、並列 45 件の POST で 30 件通過・15 件 429・約 12 秒で解除。
+
 ### Google サインインと秘密
 
 - `GOOGLE_OAUTH_CLIENT_ID` と `GOOGLE_OAUTH_CLIENT_SECRET` は Cloudflare secrets と `.dev.vars`（gitignore 済み）にだけ置き、リポジトリには入れません。ID が空のとき `/auth/google` は 503 を返します。
@@ -52,7 +64,7 @@
 
 管理画面の作り直し（👎 と `pnpm eval:units --remake`）も単位の 1 日の上限（`UNIT_DAILY_LIMIT`）に従います。今日作った単位を作り直すと、置き換えた分を `unit_remakes` に残して数えるので、作り直しを繰り返しても上限は進みます。前の単位は、新しい単位が検証を通って保存できるまで残ります。管理トークンはスクリプトに環境変数 `ADMIN_TOKEN` で渡し、`--token` の引数では渡さないでください（実行中はプロセスの一覧から見えるため）。
 
-レート制限のカウンタは Worker の isolate ごとのメモリにあり、isolate をまたいで共有されません。実効の上限は表の値より緩くなりえます。コストに直結する番組作成は、D1 を数える全体の 1 日の上限が最後の歯止めです。Cloudflare 側の Rate Limiting ルールを足すと、isolate をまたいだ上限になります。
+レート制限のカウンタは Worker の isolate ごとのメモリにあり、isolate をまたいで共有されません。実効の上限は表の値より緩くなりえます。コストに直結する番組作成は、D1 を数える全体の 1 日の上限が最後の歯止めです。isolate をまたいだ上限は、上の Cloudflare 側の Rate Limiting（IP ごと 10 秒に 30 回の `POST`）だけです。
 
 同じ作品のベクトルを、投稿のあとの処理と Cron（または `/admin/prepare`）が同時に作ると、Workers AI を 2 回呼ぶことがあります（受け入れた制限。1 回の費用はごく小さく、結果は同じ値で上書きされるだけです）。
 

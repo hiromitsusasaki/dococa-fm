@@ -2,6 +2,7 @@
 
 > 新しいセッションはまずここを読む。更新はタスクの区切りごと（最新を上に）。
 
+- 2026-11-08 夕: Cloudflare 側の守りをゾーンに入れた（Free プラン。WAF の Free マネージドルール、`POST` と `/admin/*` の Rate Limiting 30 回/10 秒/IP、HTTP ライブラリ UA からの `POST` をブロック、AI クローラーのブロック。Bot Fight Mode と書き込みへのチャレンジは入れない）。内容と確かめたことは SECURITY.md「Cloudflare 側の守り」。
 - **2026-11-08 提出完了。** Built with Claude: Japan 2026 に提出した（チーム promitsu。デモ動画 https://youtu.be/V7lNffHKgw4 。本番 Version ac78b140、リポは public）。提出後の本人作業: Google OAuth 同意画面のロゴ（Google の審査が要る。`icon/b-oauth-120.png` は private の作業場 `2026-11-07-dococa-fm-submission/`）、SNS の告知（同じ作業場の `sns/`）、下の「既知（提出後）」と「ハッカソン後」。
 - 2026-11-08 14:40 本番 ac78b140: `/privacy`（プライバシーポリシー）と `/terms`（利用規約）を追加し、全ページのフッターからリンク（Google OAuth 同意画面を本番モードにするのに必要。同意画面は本番に切替済み）。アイコンを目盛りと針のダイヤル（`public/icon.svg` + PNG + favicon.ico）に差し替え。`docs/ai.md` の「遠い枠」を「好みから遠いお便り」に。
 - Phase 9 Task 3（「私も」への DJ の反応。branch は司令塔が merge）: 私もが届いたお便りの単位を、1 件目と別々の国からの 3 件目で書き直す（Claude には土地だけ渡す。数は言わない）。**デプロイ: `pnpm db:migrate`（0028 `units.reactions_seen`）→ deploy。** 書き直しは「私も」を返した直後の `defer` で動き、新しい文は音声を作り直してから流れる。
@@ -62,7 +63,7 @@ Phase 6（ラジオの面・ホームとヘッダ・お便りの直リンクと�
 ### ハッカソン後
 
 - Task 6: cookie の無い GET でリスナー行を作らない（クローラーで行が増える。`SECURITY.md` の既知の制限）。
-- Cloudflare 側の防御: WAF のマネージドルールと Bot Fight Mode（検証済みボットは許可して、OGP のクローラーを通す）、書き込みの経路（`POST /letters`、`/stations/*/next`、`/start`、`/admin/*`）だけ Managed Challenge、IP ごとの Rate Limiting ルール。
+- （済み 2026-11-08）Cloudflare 側の防御。Free プランの制約で、Bot Fight Mode と `POST` への Managed Challenge は入れず、WAF の Free マネージドルール・Rate Limiting・UA によるブロック・AI クローラーのブロックにした（SECURITY.md）。
 - 1 日 1 回の放送（日本時間の深夜の Cron で、お便りは翌日に読まれる）: [docs/broadcast.md](broadcast.md)。
 - 費用の削減: 英語の単位の遅延生成、判定と翻訳を Haiku に（`CLAUDE_MODEL_JUDGE`）、音声の鍵の分割、再試行の上限: [docs/cost.md](cost.md)。
 - Chirp 3 HD を別の TTS として足す（読みを `yomigana` のカスタム発音で渡す）。`TTS_PROVIDER` の切り替えの後ろに置く。
@@ -96,7 +97,7 @@ Phase 5（TTS の見張りと指示文・ヘッダの言語切替・オンエア
 - [ ] 確かめる: X の Card Validator での `/letters/<id>` の player カード、iPhone の Safari と X のアプリ内ブラウザでの最初のタップの声、初回チュートリアル、ダイヤルのロックと目覚め、マイページの順。
 - [ ] もう一方の端末（main-mac か ops-mac）の `.dev.vars` と `pnpm db:migrate:local`（下の public 化前チェックリスト）。
 - [x] 提出物の動画と概要の文章。
-- [ ] 提出後: WAF と Bot の Managed Challenge（上の「ハッカソン後」の Cloudflare 側の防御）。
+- [x] 提出後: Cloudflare 側の防御（2026-11-08。SECURITY.md「Cloudflare 側の守り」）。
 - [x] public 化（2026-11-08）。
 
 | Task | 内容 | 状態 |

@@ -33,7 +33,7 @@
 - 全体の上限は、cookie を捨てながら使う 1 人に使い切られうる。復旧は運営者が上限を上げること。
 - 判定で断ったお便りは保存しないので、お便りの上限に数えられない。
 
-ハッカソンのあとに、Cloudflare 側の Rate Limiting ルール、WAF、書き込みの経路だけのチャレンジを足す予定です（[docs/status.md](../status.md)「ハッカソン後」）。
+2026-11-08 の提出後に、Cloudflare 側の Rate Limiting ルール（IP ごと 10 秒に 30 回の `POST`）と WAF のマネージドルール、HTTP ライブラリからの書き込みのブロックを足しました。書き込みの経路へのチャレンジは、ブラウザの `fetch` を壊すので入れていません（SECURITY.md「Cloudflare 側の守り」）。
 
 ## Related
 
