@@ -308,7 +308,7 @@ export const en: Record<keyof typeof ja, string> = {
   "about.listen.title": "Listen",
   "about.listen.body": "Switch the radio on and letters about what someone, somewhere, loves start playing, each with an introduction. Turn the dial to change how many letters are close to your taste and how many come from a little further away. You can answer the letter that is playing with a \"Me too\" or a short \"reply\".",
   "about.send.title": "Send",
-  "about.send.body": "Paste the link of a work you love, or search for it by title, then write your letter. Your letter is read exactly as you wrote it. Listeners who use another language hear a translation, with the original kept as written.",
+  "about.send.body": "Paste the link of a work you love, or search for it by title, and send a letter about what you love. Your letter is read exactly as you wrote it. Listeners who use another language hear a translation, with the original kept as written.",
   "about.mine.title": "Your own radio",
   "about.mine.body": "Your radio gathers the letters you sent and the letters you replied to. Sign in with Google and make it public on My page, and others can listen to it at your radio's URL.",
   "about.rules.title": "What we do and don't do",
